@@ -29,6 +29,7 @@ restricted_opts = {
 categories.register_category("saving", "Saving images")
 categories.register_category("sd", "Stable Diffusion")
 categories.register_category("ui", "User Interface")
+categories.register_category("presets", "Presets")
 categories.register_category("system", "System")
 categories.register_category("postprocessing", "Postprocessing")
 categories.register_category("training", "Training")
