@@ -92,7 +92,7 @@ def make_checkpoint_manager_ui():
 
     def _on_load_models():
         ckpt_list, vae_list = refresh_models()
-        return (
+        return [
             gr.update(
                 value=shared.opts.sd_model_checkpoint,
                 choices=ckpt_list
@@ -100,7 +100,7 @@ def make_checkpoint_manager_ui():
                 value=[os.path.basename(x) for x in shared.opts.forge_additional_modules],
                 choices=vae_list
             )
-        )
+        ]
 
     Context.root_block.load(
         fn=_on_load_models,
@@ -272,6 +272,7 @@ def modules_change(module_values:list, preset:str, save=True, refresh=True) -> b
     if sorted(modules) == sorted(shared.opts.data.get('forge_additional_modules', [])):
         return False
 
+    shared.opts.set('forge_additional_modules', modules)
     shared.opts.set(f'forge_additional_modules_{preset}', modules)
 
     if save:
@@ -347,14 +348,16 @@ def on_preset_change(preset):
     if model_mem < 0 or model_mem > total_vram:
         model_mem = total_vram - 1024
 
-    show_clip_skip = (preset != "flux")
+    show_clip_skip = (preset == "sd") or (preset == "sdxl" and shared.opts.sdxl_clip_l_skip)
     show_basic_mem = (preset != "sd")
     show_adv_mem = (preset == "flux")
     distilled = (preset == "flux")
 
+    additional_modules = [os.path.basename(x) for x in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]
+
     return [
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),   # ui_checkpoint
-        gr.update(visible=True, value=getattr(shared.opts, f"forge_additional_modules_{preset}", [])),          # ui_vae
+        gr.update(value=additional_modules),                                                                    # ui_vae
         gr.update(visible=show_clip_skip, value=getattr(shared.opts, "CLIP_stop_at_last_layers", 1)),           # ui_clip_skip
         gr.update(visible=show_basic_mem, value=getattr(shared.opts, "forge_unet_storage_dtype", 'Automatic')), # ui_forge_unet_storage_dtype_options
         gr.update(visible=show_adv_mem, value=getattr(shared.opts, "forge_async_loading", 'Queue')),            # ui_forge_async_loading
