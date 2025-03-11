@@ -79,7 +79,6 @@ class DDPM(torch.nn.Module):
         super().__init__()
         assert parameterization in ["eps", "x0", "v"], 'currently only supporting "eps" and "x0" and "v"'
         self.parameterization = parameterization
-        print(f"{self.__class__.__name__}: Running in {self.parameterization}-prediction mode")
         self.cond_stage_model = None
         self.clip_denoised = clip_denoised
         self.log_every_t = log_every_t
@@ -92,7 +91,6 @@ class DDPM(torch.nn.Module):
         self.use_ema = use_ema
         if self.use_ema:
             self.model_ema = LitEma(self.model)
-            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
         self.use_scheduler = scheduler_config is not None
         if self.use_scheduler:
@@ -110,10 +108,8 @@ class DDPM(torch.nn.Module):
             self.init_from_ckpt(ckpt_path, ignore_keys=ignore_keys, only_model=load_only_unet)
             if reset_ema:
                 assert self.use_ema
-                print(f"Resetting ema to pure model weights. This is useful when restoring from an ema-only checkpoint.")
                 self.model_ema = LitEma(self.model)
         if reset_num_ema_updates:
-            print(" +++++++++++ WARNING: RESETTING NUM_EMA UPDATES TO ZERO +++++++++++ ")
             assert self.use_ema
             self.model_ema.reset_num_updates()
 
@@ -192,15 +188,11 @@ class DDPM(torch.nn.Module):
         if self.use_ema:
             self.model_ema.store(self.model.parameters())
             self.model_ema.copy_to(self.model)
-            if context is not None:
-                print(f"{context}: Switched to EMA weights")
         try:
             yield None
         finally:
             if self.use_ema:
                 self.model_ema.restore(self.model.parameters())
-                if context is not None:
-                    print(f"{context}: Restored training weights")
 
     @torch.no_grad()
     def init_from_ckpt(self, path, ignore_keys=list(), only_model=False):
@@ -211,7 +203,6 @@ class DDPM(torch.nn.Module):
         for k in keys:
             for ik in ignore_keys:
                 if k.startswith(ik):
-                    print("Deleting key {} from state_dict.".format(k))
                     del sd[k]
         if self.make_it_fit:
             n_params = len([name for name, _ in
@@ -259,11 +250,6 @@ class DDPM(torch.nn.Module):
 
         missing, unexpected = self.load_state_dict(sd, strict=False) if not only_model else self.model.load_state_dict(
             sd, strict=False)
-        print(f"Restored from {path} with {len(missing)} missing and {len(unexpected)} unexpected keys")
-        if len(missing) > 0:
-            print(f"Missing Keys:\n {missing}")
-        if len(unexpected) > 0:
-            print(f"\nUnexpected Keys:\n {unexpected}")
 
     def q_mean_variance(self, x_start, t):
         """
@@ -569,11 +555,8 @@ class LatentDiffusion(DDPM):
             self.restarted_from_ckpt = True
             if reset_ema:
                 assert self.use_ema
-                print(
-                    f"Resetting ema to pure model weights. This is useful when restoring from an ema-only checkpoint.")
                 self.model_ema = LitEma(self.model)
         if reset_num_ema_updates:
-            print(" +++++++++++ WARNING: RESETTING NUM_EMA UPDATES TO ZERO +++++++++++ ")
             assert self.use_ema
             self.model_ema.reset_num_updates()
 
@@ -589,15 +572,12 @@ class LatentDiffusion(DDPM):
         if self.scale_by_std and self.current_epoch == 0 and self.global_step == 0 and batch_idx == 0 and not self.restarted_from_ckpt:
             assert self.scale_factor == 1., 'rather not use custom rescaling and std-rescaling simultaneously'
             # set rescale weight to 1./std of encodings
-            print("### USING STD-RESCALING ###")
             x = super().get_input(batch, self.first_stage_key)
             x = x.to(self.device)
             encoder_posterior = self.encode_first_stage(x)
             z = self.get_first_stage_encoding(encoder_posterior).detach()
             del self.scale_factor
             self.register_buffer('scale_factor', 1. / z.flatten().std())
-            print(f"setting self.scale_factor to {self.scale_factor}")
-            print("### USING STD-RESCALING ###")
 
     def register_schedule(self,
                           given_betas=None, beta_schedule="linear", timesteps=1000,
@@ -618,10 +598,8 @@ class LatentDiffusion(DDPM):
     def instantiate_cond_stage(self, config):
         if not self.cond_stage_trainable:
             if config == "__is_first_stage__":
-                print("Using first stage also as cond stage.")
                 self.cond_stage_model = self.first_stage_model
             elif config == "__is_unconditional__":
-                print(f"Training {self.__class__.__name__} as an unconditional model.")
                 self.cond_stage_model = None
                 # self.be_unconditional = True
             else:
@@ -1275,17 +1253,14 @@ class LatentDiffusion(DDPM):
         lr = self.learning_rate
         params = list(self.model.parameters())
         if self.cond_stage_trainable:
-            print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
             params = params + list(self.cond_stage_model.parameters())
         if self.learn_logvar:
-            print('Diffusion model optimizing logvar')
             params.append(self.logvar)
         opt = torch.optim.AdamW(params, lr=lr)
         if self.use_scheduler:
             assert 'target' in self.scheduler_config
             scheduler = instantiate_from_config(self.scheduler_config)
 
-            print("Setting up LambdaLR scheduler...")
             scheduler = [
                 {
                     'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
@@ -1528,7 +1503,6 @@ class LatentFinetuneDiffusion(LatentDiffusion):
         for k in keys:
             for ik in ignore_keys:
                 if k.startswith(ik):
-                    print("Deleting key {} from state_dict.".format(k))
                     del sd[k]
 
             # make it explicit, finetune by including extra input channels
@@ -1536,8 +1510,6 @@ class LatentFinetuneDiffusion(LatentDiffusion):
                 new_entry = None
                 for name, param in self.named_parameters():
                     if name in self.finetune_keys:
-                        print(
-                            f"modifying key '{name}' and keeping its original {self.keep_dims} (channels) dimensions only")
                         new_entry = torch.zeros_like(param)  # zero init
                 assert exists(new_entry), 'did not find matching parameter to modify'
                 new_entry[:, :self.keep_dims, ...] = sd[k]
@@ -1545,11 +1517,6 @@ class LatentFinetuneDiffusion(LatentDiffusion):
 
         missing, unexpected = self.load_state_dict(sd, strict=False) if not only_model else self.model.load_state_dict(
             sd, strict=False)
-        print(f"Restored from {path} with {len(missing)} missing and {len(unexpected)} unexpected keys")
-        if len(missing) > 0:
-            print(f"Missing Keys: {missing}")
-        if len(unexpected) > 0:
-            print(f"Unexpected Keys: {unexpected}")
 
     @torch.no_grad()
     def log_images(self, batch, N=8, n_row=4, sample=True, ddim_steps=200, ddim_eta=1., return_keys=None,
@@ -1746,7 +1713,6 @@ class LatentUpscaleFinetuneDiffusion(LatentFinetuneDiffusion):
         self.reshuffle_patch_size = reshuffle_patch_size
         self.low_scale_model = None
         if low_scale_config is not None:
-            print("Initializing a low-scale model")
             assert exists(low_scale_key)
             self.instantiate_low_stage(low_scale_config)
             self.low_scale_key = low_scale_key
