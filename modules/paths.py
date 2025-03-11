@@ -22,15 +22,14 @@ def mute_sdxl_imports():
 
 sys.path.insert(0, script_path)
 
-sd_path = os.path.abspath(os.path.join(script_path, "repositories", "stable-diffusion-stability-ai"))
-assert os.path.exists(sd_path), "Couldn't find Stable Diffusion"
+sd_path = os.path.normpath(os.path.join(script_path, "modules_forge", "diffusion_engine"))
 
 mute_sdxl_imports()
 
 path_dirs = [
     (sd_path, "ldm", "Stable Diffusion", []),
+    (sd_path, "sgm", "Stable Diffusion XL", ["sgm"]),
     ("ldm_patched", "k_diffusion/sampling.py", "k_diffusion", []),
-    (os.path.join(sd_path, "../generative-models"), "sgm", "Stable Diffusion XL", ["sgm"]),
 ]
 
 paths = {}
