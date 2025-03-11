@@ -47,10 +47,10 @@ model:
             params:
               arch: ViT-bigG-14
               version: laion2b_s39b_b160k
-              legacy: False
               freeze: True
               layer: penultimate
               always_return_pooled: True
+              legacy: False
           # vector cond
           - is_trainable: False
             input_key: original_size_as_tuple

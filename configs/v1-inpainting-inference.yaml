@@ -1,5 +1,4 @@
 model:
-  base_learning_rate: 7.5e-05
   target: ldm.models.diffusion.ddpm.LatentInpaintDiffusion
   params:
     linear_start: 0.00085
