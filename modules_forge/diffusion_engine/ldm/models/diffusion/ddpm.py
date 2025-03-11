@@ -18,7 +18,7 @@ from torchvision.utils import make_grid
 from pytorch_lightning.utilities.distributed import rank_zero_only
 from omegaconf import ListConfig
 
-from ldm.util import log_txt_as_img, exists, default, ismap, isimage, mean_flat, count_params, instantiate_from_config
+from ldm.util import log_txt_as_img, exists, default, ismap, isimage, mean_flat, instantiate_from_config
 from ldm.modules.ema import LitEma
 from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianDistribution
 from ldm.models.autoencoder import IdentityFirstStage, AutoencoderKL
@@ -87,7 +87,6 @@ class DDPM(torch.nn.Module):
         self.channels = channels
         self.use_positional_encodings = use_positional_encodings
         self.model = DiffusionWrapper(unet_config, conditioning_key)
-        count_params(self.model, verbose=True)
         self.use_ema = use_ema
         if self.use_ema:
             self.model_ema = LitEma(self.model)
@@ -1283,49 +1282,11 @@ class LatentDiffusion(DDPM):
 class DiffusionWrapper(torch.nn.Module):
     def __init__(self, diff_model_config, conditioning_key):
         super().__init__()
-        self.sequential_cross_attn = diff_model_config.pop("sequential_crossattn", False)
         self.diffusion_model = instantiate_from_config(diff_model_config)
         self.conditioning_key = conditioning_key
-        assert self.conditioning_key in [None, 'concat', 'crossattn', 'hybrid', 'adm', 'hybrid-adm', 'crossattn-adm']
 
-    def forward(self, x, t, c_concat: list = None, c_crossattn: list = None, c_adm=None):
-        if self.conditioning_key is None:
-            out = self.diffusion_model(x, t)
-        elif self.conditioning_key == 'concat':
-            xc = torch.cat([x] + c_concat, dim=1)
-            out = self.diffusion_model(xc, t)
-        elif self.conditioning_key == 'crossattn':
-            if not self.sequential_cross_attn:
-                cc = torch.cat(c_crossattn, 1)
-            else:
-                cc = c_crossattn
-            if hasattr(self, "scripted_diffusion_model"):
-                # TorchScript changes names of the arguments
-                # with argument cc defined as context=cc scripted model will produce
-                # an error: RuntimeError: forward() is missing value for argument 'argument_3'.
-                out = self.scripted_diffusion_model(x, t, cc)
-            else:
-                out = self.diffusion_model(x, t, context=cc)
-        elif self.conditioning_key == 'hybrid':
-            xc = torch.cat([x] + c_concat, dim=1)
-            cc = torch.cat(c_crossattn, 1)
-            out = self.diffusion_model(xc, t, context=cc)
-        elif self.conditioning_key == 'hybrid-adm':
-            assert c_adm is not None
-            xc = torch.cat([x] + c_concat, dim=1)
-            cc = torch.cat(c_crossattn, 1)
-            out = self.diffusion_model(xc, t, context=cc, y=c_adm)
-        elif self.conditioning_key == 'crossattn-adm':
-            assert c_adm is not None
-            cc = torch.cat(c_crossattn, 1)
-            out = self.diffusion_model(x, t, context=cc, y=c_adm)
-        elif self.conditioning_key == 'adm':
-            cc = c_crossattn[0]
-            out = self.diffusion_model(x, t, y=cc)
-        else:
-            raise NotImplementedError()
-
-        return out
+    def forward(self, *args, **kwargs):
+        return None
 
 
 class LatentFinetuneDiffusion(LatentDiffusion):
