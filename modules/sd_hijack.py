@@ -1,93 +1,7 @@
 import torch
-from types import MethodType
 
-from modules import devices, shared, sd_unet, patches, sd_hijack_clip, sd_hijack_open_clip, sd_hijack_unet  # noqa F401
+from modules import devices, sd_hijack_clip, sd_hijack_open_clip  # noqa F401
 from modules.shared import cmd_opts
-
-import ldm.modules.attention
-import ldm.modules.diffusionmodules.model
-import ldm.modules.diffusionmodules.openaimodel
-import ldm.models.diffusion.ddpm
-import ldm.models.diffusion.ddim
-import ldm.models.diffusion.plms
-import ldm.modules.encoders.modules
-
-import sgm.modules.attention
-import sgm.modules.diffusionmodules.model
-import sgm.modules.diffusionmodules.openaimodel
-import sgm.modules.encoders.modules
-
-attention_CrossAttention_forward = ldm.modules.attention.CrossAttention.forward
-diffusionmodules_model_nonlinearity = ldm.modules.diffusionmodules.model.nonlinearity
-diffusionmodules_model_AttnBlock_forward = ldm.modules.diffusionmodules.model.AttnBlock.forward
-
-# we already have memory efficient cross attention anyway,
-# so this disables SD2.0's memory efficient cross attention
-ldm.modules.attention.MemoryEfficientCrossAttention = ldm.modules.attention.CrossAttention
-ldm.modules.attention.BasicTransformerBlock.ATTENTION_MODES["softmax-xformers"] = ldm.modules.attention.CrossAttention
-
-# silence new console spam from SD2
-ldm.modules.attention.print = shared.ldm_print
-ldm.modules.diffusionmodules.model.print = shared.ldm_print
-ldm.util.print = shared.ldm_print
-ldm.models.diffusion.ddpm.print = shared.ldm_print
-
-ldm_patched_forward = sd_unet.create_unet_forward(ldm.modules.diffusionmodules.openaimodel.UNetModel.forward)
-# ldm_original_forward = patches.patch(__file__, ldm.modules.diffusionmodules.openaimodel.UNetModel, "forward", ldm_patched_forward)
-
-sgm_patched_forward = sd_unet.create_unet_forward(sgm.modules.diffusionmodules.openaimodel.UNetModel.forward)
-# sgm_original_forward = patches.patch(__file__, sgm.modules.diffusionmodules.openaimodel.UNetModel, "forward", sgm_patched_forward)
-
-
-def weighted_loss(sd_model, pred, target, mean=True):
-    # Calculate the weight normally, but ignore the mean
-    loss = sd_model._old_get_loss(pred, target, mean=False)
-
-    # Check if we have weights available
-    weight = getattr(sd_model, "_custom_loss_weight", None)
-    if weight is not None:
-        loss *= weight
-
-    # Return the loss, as mean if specified
-    return loss.mean() if mean else loss
-
-
-def weighted_forward(sd_model, x, c, w, *args, **kwargs):
-    try:
-        # Temporarily append weights to a place accessible during loss calc
-        sd_model._custom_loss_weight = w
-
-        # Replace 'get_loss' with a weight-aware one. Otherwise we need to reimplement 'forward' completely
-        # Keep 'get_loss', but don't overwrite the previous old_get_loss if it's already set
-        if not hasattr(sd_model, "_old_get_loss"):
-            sd_model._old_get_loss = sd_model.get_loss
-        sd_model.get_loss = MethodType(weighted_loss, sd_model)
-
-        # Run the standard forward function, but with the patched 'get_loss'
-        return sd_model.forward(x, c, *args, **kwargs)
-    finally:
-        try:
-            # Delete temporary weights if appended
-            del sd_model._custom_loss_weight
-        except AttributeError:
-            pass
-
-        # If we have an old loss function, reset the loss function to the original one
-        if hasattr(sd_model, "_old_get_loss"):
-            sd_model.get_loss = sd_model._old_get_loss
-            del sd_model._old_get_loss
-
-
-def apply_weighted_forward(sd_model):
-    # Add new function 'weighted_forward' that can be called to calc weighted loss
-    sd_model.weighted_forward = MethodType(weighted_forward, sd_model)
-
-
-def undo_weighted_forward(sd_model):
-    try:
-        del sd_model.weighted_forward
-    except AttributeError:
-        pass
 
 
 class StableDiffusionModelHijack:
@@ -173,19 +87,3 @@ def add_circular_option_to_conv_2d():
 
 
 model_hijack = StableDiffusionModelHijack()
-
-
-def register_buffer(self, name, attr):
-    """
-    Fix register buffer bug for Mac OS.
-    """
-
-    if type(attr) == torch.Tensor:
-        if attr.device != devices.device:
-            attr = attr.to(device=devices.device, dtype=(torch.float32 if devices.device.type == "mps" else None))
-
-    setattr(self, name, attr)
-
-
-ldm.models.diffusion.ddim.DDIMSampler.register_buffer = register_buffer
-ldm.models.diffusion.plms.PLMSSampler.register_buffer = register_buffer

@@ -2,7 +2,6 @@ import open_clip.tokenizer
 import torch
 
 from modules import sd_hijack_clip, devices
-from modules.shared import opts
 
 tokenizer = open_clip.tokenizer._tokenizer
 
@@ -11,7 +10,7 @@ class FrozenOpenCLIPEmbedderWithCustomWords(sd_hijack_clip.FrozenCLIPEmbedderWit
     def __init__(self, wrapped, hijack):
         super().__init__(wrapped, hijack)
 
-        self.comma_token = [v for k, v in tokenizer.encoder.items() if k == ',</w>'][0]
+        self.comma_token = [v for k, v in tokenizer.encoder.items() if k == ",</w>"][0]
         self.id_start = tokenizer.encoder["<start_of_text>"]
         self.id_end = tokenizer.encoder["<end_of_text>"]
         self.id_pad = 0
@@ -38,7 +37,7 @@ class FrozenOpenCLIPEmbedder2WithCustomWords(sd_hijack_clip.FrozenCLIPEmbedderWi
     def __init__(self, wrapped, hijack):
         super().__init__(wrapped, hijack)
 
-        self.comma_token = [v for k, v in tokenizer.encoder.items() if k == ',</w>'][0]
+        self.comma_token = [v for k, v in tokenizer.encoder.items() if k == ",</w>"][0]
         self.id_start = tokenizer.encoder["<start_of_text>"]
         self.id_end = tokenizer.encoder["<end_of_text>"]
         self.id_pad = 0

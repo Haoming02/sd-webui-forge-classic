@@ -21,7 +21,7 @@ class PromptChunk:
         self.fixes = []
 
 
-PromptChunkFix = namedtuple('PromptChunkFix', ['offset', 'embedding'])
+PromptChunkFix = namedtuple("PromptChunkFix", ["offset", "embedding"])
 """
 An object of this type is a marker showing that textual inversion embedding's vectors have to placed at offset in the prompt
 chunk. Those objects are found in PromptChunk.fixes and, are placed into FrozenCLIPEmbedderWithCustomWordsBase.hijack.fixes, and finally
@@ -46,8 +46,8 @@ class FrozenCLIPEmbedderWithCustomWordsBase(torch.nn.Module):
         self.hijack: sd_hijack.StableDiffusionModelHijack = hijack
         self.chunk_length = 75
 
-        self.is_trainable = getattr(wrapped, 'is_trainable', False)
-        self.input_key = getattr(wrapped, 'input_key', 'txt')
+        self.is_trainable = getattr(wrapped, "is_trainable", False)
+        self.input_key = getattr(wrapped, "input_key", "txt")
         self.legacy_ucg_val = None
 
     def empty_chunk(self):
@@ -134,7 +134,7 @@ class FrozenCLIPEmbedderWithCustomWordsBase(torch.nn.Module):
             chunk = PromptChunk()
 
         for tokens, (text, weight) in zip(tokenized, parsed):
-            if text == 'BREAK' and weight == -1:
+            if text == "BREAK" and weight == -1:
                 next_chunk()
                 continue
 
@@ -254,7 +254,7 @@ class FrozenCLIPEmbedderWithCustomWordsBase(torch.nn.Module):
                     hashes.append(self.hijack.extra_generation_params.get("TI hashes"))
                 self.hijack.extra_generation_params["TI hashes"] = ", ".join(hashes)
 
-        if getattr(self.wrapped, 'return_pooled', False):
+        if getattr(self.wrapped, "return_pooled", False):
             return torch.hstack(zs), zs[0].pooled
         else:
             return torch.hstack(zs)
@@ -273,11 +273,11 @@ class FrozenCLIPEmbedderWithCustomWordsBase(torch.nn.Module):
         if self.id_end != self.id_pad:
             for batch_pos in range(len(remade_batch_tokens)):
                 index = remade_batch_tokens[batch_pos].index(self.id_end)
-                tokens[batch_pos, index+1:tokens.shape[1]] = self.id_pad
+                tokens[batch_pos, index + 1 : tokens.shape[1]] = self.id_pad
 
         z = self.encode_with_transformers(tokens)
 
-        pooled = getattr(z, 'pooled', None)
+        pooled = getattr(z, "pooled", None)
 
         emphasis = sd_emphasis.get_current_option(opts.emphasis)()
         emphasis.tokens = remade_batch_tokens
@@ -301,20 +301,20 @@ class FrozenCLIPEmbedderWithCustomWords(FrozenCLIPEmbedderWithCustomWordsBase):
 
         vocab = self.tokenizer.get_vocab()
 
-        self.comma_token = vocab.get(',</w>', None)
+        self.comma_token = vocab.get(",</w>", None)
 
         self.token_mults = {}
-        tokens_with_parens = [(k, v) for k, v in vocab.items() if '(' in k or ')' in k or '[' in k or ']' in k]
+        tokens_with_parens = [(k, v) for k, v in vocab.items() if "(" in k or ")" in k or "[" in k or "]" in k]
         for text, ident in tokens_with_parens:
             mult = 1.0
             for c in text:
-                if c == '[':
+                if c == "[":
                     mult /= 1.1
-                if c == ']':
+                if c == "]":
                     mult *= 1.1
-                if c == '(':
+                if c == "(":
                     mult *= 1.1
-                if c == ')':
+                if c == ")":
                     mult /= 1.1
 
             if mult != 1.0:
