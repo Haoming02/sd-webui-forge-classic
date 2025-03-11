@@ -1,4 +1,7 @@
-from .models import AutoencodingEngine, DiffusionEngine
-from .util import get_configs_path, instantiate_from_config
-
-__version__ = "0.1.0"
+# ============================================================ #
+# https://github.com/Stability-AI/generative-models/tree/0.1.0 #
+# Author: Stability-AI                                         #
+# License: MIT                                                 #
+#                                                              #
+#                       Thank you!                             #
+# ============================================================ #
