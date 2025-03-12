@@ -105,13 +105,3 @@ def extend_sdxl(model):
     model.alphas_cumprod = torch.asarray(discretization.alphas_cumprod, device=devices.device, dtype=torch.float32)
 
     model.conditioner.wrapped = torch.nn.Module()
-
-
-sgm.modules.attention.print = shared.ldm_print
-sgm.modules.diffusionmodules.model.print = shared.ldm_print
-sgm.modules.diffusionmodules.openaimodel.print = shared.ldm_print
-sgm.modules.encoders.modules.print = shared.ldm_print
-
-# this gets the code to load the vanilla attention that we override
-sgm.modules.attention.SDP_IS_AVAILABLE = True
-sgm.modules.attention.XFORMERS_IS_AVAILABLE = False

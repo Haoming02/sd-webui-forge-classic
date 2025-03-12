@@ -5,26 +5,10 @@ from modules.paths_internal import models_path, script_path, data_path, extensio
 import modules.safe  # noqa: F401
 
 
-def mute_sdxl_imports():
-    """create fake modules that SDXL wants to import but doesn't actually use for our purposes"""
-
-    class Dummy:
-        pass
-
-    module = Dummy()
-    module.LPIPS = None
-    sys.modules["taming.modules.losses.lpips"] = module
-
-    module = Dummy()
-    module.StableDataModuleFromConfig = None
-    sys.modules["sgm.data"] = module
-
-
 sys.path.insert(0, script_path)
 
 sd_path = os.path.normpath(os.path.join(script_path, "modules_forge", "diffusion_engine"))
 
-mute_sdxl_imports()
 
 path_dirs = [
     (sd_path, "ldm", "Stable Diffusion"),
