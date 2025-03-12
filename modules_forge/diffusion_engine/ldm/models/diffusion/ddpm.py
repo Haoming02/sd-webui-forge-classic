@@ -9,14 +9,15 @@ from functools import partial
 
 import numpy as np
 import torch
-from ldm_patched.modules.model_sampling import make_beta_schedule
 from ldm_patched.ldm.modules.distributions.distributions import DiagonalGaussianDistribution
 from ldm_patched.ldm.util import default, instantiate_from_config
+from ldm_patched.modules.model_sampling import make_beta_schedule
+from lightning_fabric.utilities.device_dtype_mixin import _DeviceDtypeModuleMixin
 
 __conditioning_keys__ = {"concat": "c_concat", "crossattn": "c_crossattn", "adm": "y"}
 
 
-class DDPM(torch.nn.Module):
+class DDPM(_DeviceDtypeModuleMixin, torch.nn.Module):
     """Classic DDPM with Gaussian Diffusion, in image space"""
 
     def __init__(
@@ -92,11 +93,19 @@ class DDPM(torch.nn.Module):
     def forward(self, *args, **kwargs):
         raise NotImplementedError
 
-    @property
-    def dtype(self):  # this property was originally implemented in pytorch_lightning
-        from modules.devices import dtype_unet
+    def apply_model(self, x_noisy, t, cond, return_ids=False):
+        if not isinstance(cond, dict):
+            if not isinstance(cond, list):
+                cond = [cond]
+            key = "c_concat" if self.model.conditioning_key == "concat" else "c_crossattn"
+            cond = {key: cond}
 
-        return dtype_unet
+        x_recon = self.model(x_noisy, t, **cond)
+
+        if isinstance(x_recon, tuple) and not return_ids:
+            return x_recon[0]
+        else:
+            return x_recon
 
 
 class LatentDiffusion(DDPM):
@@ -178,7 +187,7 @@ class LatentDiffusion(DDPM):
         raise NotImplementedError
 
 
-class DiffusionWrapper(torch.nn.Module):
+class DiffusionWrapper(_DeviceDtypeModuleMixin, torch.nn.Module):
     def __init__(self, diff_model_config, conditioning_key):
         super().__init__()
         self.diffusion_model = instantiate_from_config(diff_model_config)
