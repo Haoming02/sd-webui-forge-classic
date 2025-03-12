@@ -1,12 +1,18 @@
 import torch.nn as nn
+from ldm_patched.ldm.util import instantiate_from_config
 
-from ...util import append_dims, instantiate_from_config
+
+def _append_dims(x, target_dims):
+    """Appends dimensions to the end of a tensor until it has target_dims dimensions"""
+    dims_to_append = target_dims - x.ndim
+    if dims_to_append < 0:
+        raise ValueError(f"input has {x.ndim} dims but target_dims is {target_dims}, which is less")
+    return x[(...,) + (None,) * dims_to_append]
 
 
 class Denoiser(nn.Module):
     def __init__(self, weighting_config, scaling_config):
         super().__init__()
-
         self.weighting = instantiate_from_config(weighting_config)
         self.scaling = instantiate_from_config(scaling_config)
 
@@ -22,7 +28,7 @@ class Denoiser(nn.Module):
     def __call__(self, network, input, sigma, cond):
         sigma = self.possibly_quantize_sigma(sigma)
         sigma_shape = sigma.shape
-        sigma = append_dims(sigma, input.ndim)
+        sigma = _append_dims(sigma, input.ndim)
         c_skip, c_out, c_in, c_noise = self.scaling(sigma)
         c_noise = self.possibly_quantize_c_noise(c_noise.reshape(sigma_shape))
         return network(input * c_in, c_noise, cond) * c_out + input * c_skip
@@ -31,18 +37,16 @@ class Denoiser(nn.Module):
 class DiscreteDenoiser(Denoiser):
     def __init__(
         self,
+        num_idx,
         weighting_config,
         scaling_config,
-        num_idx,
         discretization_config,
         do_append_zero=False,
         quantize_c_noise=True,
         flip=True,
     ):
         super().__init__(weighting_config, scaling_config)
-        sigmas = instantiate_from_config(discretization_config)(
-            num_idx, do_append_zero=do_append_zero, flip=flip
-        )
+        sigmas = instantiate_from_config(discretization_config)(num_idx, do_append_zero=do_append_zero, flip=flip)
         self.register_buffer("sigmas", sigmas)
         self.quantize_c_noise = quantize_c_noise
 
