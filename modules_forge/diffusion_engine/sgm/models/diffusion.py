@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Any, Dict, List, Tuple, Union
 
-import pytorch_lightning as pl
+from lightning_fabric.utilities.device_dtype_mixin import _DeviceDtypeModuleMixin
 import torch
 from omegaconf import ListConfig, OmegaConf
 from safetensors.torch import load_file as load_safetensors
@@ -19,7 +19,7 @@ from ..util import (
 )
 
 
-class DiffusionEngine(pl.LightningModule):
+class DiffusionEngine(_DeviceDtypeModuleMixin, torch.nn.Module):
     def __init__(
         self,
         network_config,
