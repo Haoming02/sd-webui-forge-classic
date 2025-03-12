@@ -1,19 +1,13 @@
-import open_clip
 import torch
 import torch.nn as nn
 from einops import rearrange
 from ldm_patched.ldm.modules.diffusionmodules.openaimodel import Timestep
 from ldm_patched.ldm.util import instantiate_from_config
 from omegaconf import ListConfig
+from open_clip import tokenize
 from torch.utils.checkpoint import checkpoint
 
 from . import AbstractEmbModel
-
-
-def _expand_dims_like(x, y):
-    while x.dim() != y.dim():
-        x = x.unsqueeze(-1)
-    return x
 
 
 class GeneralConditioner(nn.Module):
@@ -180,7 +174,7 @@ class FrozenOpenCLIPEmbedder2(AbstractEmbModel):
         self.legacy = legacy
 
     def forward(self, text):
-        tokens = open_clip.tokenize(text)
+        tokens = tokenize(text)
         z = self.encode_with_transformer(tokens.to(self.device))
         if not self.return_pooled and self.legacy:
             return z

@@ -3,7 +3,6 @@ import contextlib
 import ldm_patched.modules.clip_vision
 import ldm_patched.modules.model_patcher
 import ldm_patched.modules.utils
-import open_clip
 import torch
 from ldm_patched.ldm.util import instantiate_from_config
 from ldm_patched.modules import model_detection, model_management
@@ -15,7 +14,6 @@ from modules.sd_models_types import WebuiSdModel
 from modules_forge import forge_clip
 from modules_forge.unet_patcher import UnetPatcher
 from omegaconf import OmegaConf
-from transformers import CLIPTextModel, CLIPTokenizer
 
 
 class FakeObject:

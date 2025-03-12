@@ -1,6 +1,6 @@
 import torch
 
-from modules import devices, sd_hijack_clip, sd_hijack_open_clip  # noqa F401
+from modules import devices, sd_hijack_clip  # noqa F401
 from modules.shared import cmd_opts
 
 
