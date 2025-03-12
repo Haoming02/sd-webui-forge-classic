@@ -7,7 +7,6 @@ import threading
 from os import mkdir
 from urllib import request
 
-import ldm.modules.midas as midas
 import numpy as np
 import safetensors.torch
 import torch
@@ -128,12 +127,7 @@ except Exception:
 
 
 def setup_model():
-    """called once at startup to do various one-time tasks related to SD models"""
-
     os.makedirs(model_path, exist_ok=True)
-
-    enable_midas_autodownload()
-    patch_given_betas()
 
 
 def checkpoint_tiles(use_short=False):
@@ -235,15 +229,9 @@ def get_state_dict_from_checkpoint(pl_sd):
     pl_sd = pl_sd.pop("state_dict", pl_sd)
     pl_sd.pop("state_dict", None)
 
-    is_sd2_turbo = "conditioner.embedders.0.model.ln_final.weight" in pl_sd and pl_sd["conditioner.embedders.0.model.ln_final.weight"].size()[0] == 1024
-
     sd = {}
     for k, v in pl_sd.items():
-        if is_sd2_turbo:
-            new_key = transform_checkpoint_dict_key(k, checkpoint_dict_replacements_sd2_turbo)
-        else:
-            new_key = transform_checkpoint_dict_key(k, checkpoint_dict_replacements_sd1)
-
+        new_key = transform_checkpoint_dict_key(k, checkpoint_dict_replacements_sd1)
         if new_key is not None:
             sd[new_key] = v
 
@@ -328,63 +316,6 @@ class SkipWritingToConfig:
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         SkipWritingToConfig.skip = self.previous
-
-
-def enable_midas_autodownload():
-    """
-    Gives the ldm.modules.midas.api.load_model function automatic downloading.
-
-    When the 512-depth-ema model, and other future models like it, is loaded,
-    it calls midas.api.load_model to load the associated midas depth model.
-    This function applies a wrapper to download the model to the correct
-    location automatically.
-    """
-
-    midas_path = os.path.join(paths.models_path, "midas")
-
-    # stable-diffusion-stability-ai hard-codes the midas model path to
-    # a location that differs from where other scripts using this model look.
-    # HACK: Overriding the path here.
-    for k, v in midas.api.ISL_PATHS.items():
-        file_name = os.path.basename(v)
-        midas.api.ISL_PATHS[k] = os.path.join(midas_path, file_name)
-
-    midas_urls = {
-        "dpt_large": "https://github.com/intel-isl/DPT/releases/download/1_0/dpt_large-midas-2f21e586.pt",
-        "dpt_hybrid": "https://github.com/intel-isl/DPT/releases/download/1_0/dpt_hybrid-midas-501f0c75.pt",
-        "midas_v21": "https://github.com/AlexeyAB/MiDaS/releases/download/midas_dpt/midas_v21-f6b98070.pt",
-        "midas_v21_small": "https://github.com/AlexeyAB/MiDaS/releases/download/midas_dpt/midas_v21_small-70d6b9c8.pt",
-    }
-
-    midas.api.load_model_inner = midas.api.load_model
-
-    def load_model_wrapper(model_type):
-        path = midas.api.ISL_PATHS[model_type]
-        if not os.path.exists(path):
-            if not os.path.exists(midas_path):
-                mkdir(midas_path)
-
-            print(f"Downloading midas model weights for {model_type} to {path}")
-            request.urlretrieve(midas_urls[model_type], path)
-            print(f"{model_type} downloaded")
-
-        return midas.api.load_model_inner(model_type)
-
-    midas.api.load_model = load_model_wrapper
-
-
-def patch_given_betas():
-    import ldm.models.diffusion.ddpm
-
-    def patched_register_schedule(*args, **kwargs):
-        """a modified version of register_schedule function that converts plain list from Omegaconf into numpy"""
-
-        if isinstance(args[1], ListConfig):
-            args = (args[0], np.array(args[1]), *args[2:])
-
-        original_register_schedule(*args, **kwargs)
-
-    original_register_schedule = patches.patch(__name__, ldm.models.diffusion.ddpm.DDPM, "register_schedule", patched_register_schedule)
 
 
 class SdModelData:
