@@ -111,29 +111,16 @@ class LatentDiffusion(DDPM):
                  conditioning_key=None,
                  scale_factor=1.0,
                  scale_by_std=False,
-                 force_null_conditioning=False,
                  *args, **kwargs):
-        self.force_null_conditioning = force_null_conditioning
         self.num_timesteps_cond = default(num_timesteps_cond, 1)
         self.scale_by_std = scale_by_std
-        assert self.num_timesteps_cond <= kwargs['timesteps']
-        # for backwards compatibility after implementation of DiffusionWrapper
         if conditioning_key is None:
             conditioning_key = 'concat' if concat_mode else 'crossattn'
-        if cond_stage_config == '__is_unconditional__' and not self.force_null_conditioning:
-            conditioning_key = None
-        ckpt_path = kwargs.pop("ckpt_path", None)
-        reset_ema = kwargs.pop("reset_ema", False)
-        reset_num_ema_updates = kwargs.pop("reset_num_ema_updates", False)
-        ignore_keys = kwargs.pop("ignore_keys", [])
         super().__init__(conditioning_key=conditioning_key, *args, **kwargs)
         self.concat_mode = concat_mode
         self.cond_stage_trainable = cond_stage_trainable
         self.cond_stage_key = cond_stage_key
-        try:
-            self.num_downs = len(first_stage_config.params.ddconfig.ch_mult) - 1
-        except:
-            self.num_downs = 0
+        self.num_downs = 0
         if not scale_by_std:
             self.scale_factor = scale_factor
         else:
@@ -141,19 +128,6 @@ class LatentDiffusion(DDPM):
         self.instantiate_first_stage(first_stage_config)
         self.instantiate_cond_stage(cond_stage_config)
         self.cond_stage_forward = cond_stage_forward
-        self.clip_denoised = False
-        self.bbox_tokenizer = None
-
-        self.restarted_from_ckpt = False
-        if ckpt_path is not None:
-            self.init_from_ckpt(ckpt_path, ignore_keys)
-            self.restarted_from_ckpt = True
-            if reset_ema:
-                assert self.use_ema
-                self.model_ema = LitEma(self.model)
-        if reset_num_ema_updates:
-            assert self.use_ema
-            self.model_ema.reset_num_updates()
 
     def make_cond_schedule(self, ):
         self.cond_ids = torch.full(size=(self.num_timesteps,), fill_value=self.num_timesteps - 1, dtype=torch.long)
