@@ -12,7 +12,6 @@ from ldm_patched.modules.sd import CLIP, VAE, load_model_weights
 from modules import sd_hijack, shared
 from modules.sd_models_config import find_checkpoint_config
 from modules.sd_models_types import WebuiSdModel
-from modules.sd_models_xl import extend_sdxl
 from modules_forge import forge_clip
 from modules_forge.unet_patcher import UnetPatcher
 from omegaconf import OmegaConf
@@ -21,8 +20,7 @@ from transformers import CLIPTextModel, CLIPTokenizer
 
 class FakeObject:
     def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.visual = None
+        return
 
     def eval(self, *args, **kwargs):
         return self
@@ -213,8 +211,6 @@ def load_model_for_a1111(timer, checkpoint_info=None, state_dict=None) -> WebuiS
         raise NotImplementedError(f"Bad Clip Class Name: {type(sd_model.cond_stage_model).__name__}")
 
     sd_model.is_sdxl = conditioner is not None
-    if sd_model.is_sdxl:
-        extend_sdxl(sd_model)
 
     timer.record("forge set components")
 

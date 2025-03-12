@@ -28,7 +28,7 @@ class GeneralConditioner(nn.Module):
             embedder = instantiate_from_config(embconfig)
             assert isinstance(embedder, AbstractEmbModel)
             embedder.is_trainable = False
-            embedder.ucg_rate = embconfig.get("ucg_rate", 0.0)
+            embedder.ucg_rate = 0.0
 
             if "input_key" in embconfig:
                 embedder.input_key = embconfig["input_key"]
@@ -60,8 +60,6 @@ class GeneralConditioner(nn.Module):
                 emb_out = [emb_out]
             for emb in emb_out:
                 out_key = self.OUTPUT_DIM2KEYS[emb.dim()]
-                if embedder.ucg_rate > 0.0 and embedder.legacy_ucg_val is None:
-                    emb = _expand_dims_like(torch.bernoulli((1.0 - embedder.ucg_rate) * torch.ones(emb.shape[0], device=emb.device)), emb) * emb
                 if hasattr(embedder, "input_key") and embedder.input_key in force_zero_embeddings:
                     emb = torch.zeros_like(emb)
                 if out_key in output:
@@ -69,6 +67,32 @@ class GeneralConditioner(nn.Module):
                 else:
                     output[out_key] = emb
         return output
+
+    # ========== sd_models_xl.py ========== #
+
+    def encode_embedding_init_text(self, init_text, nvpt):
+        res = []
+
+        for embedder in [embedder for embedder in self.embedders if hasattr(embedder, "encode_embedding_init_text")]:
+            encoded = embedder.encode_embedding_init_text(init_text, nvpt)
+            res.append(encoded)
+
+        return torch.cat(res, dim=1)
+
+    def tokenize(self, texts):
+        for embedder in (embedder for embedder in self.embedders if hasattr(embedder, "tokenize")):
+            return embedder.tokenize(texts)
+        raise SystemError
+
+    def process_texts(self, texts):
+        for embedder in (embedder for embedder in self.embedders if hasattr(embedder, "process_texts")):
+            return embedder.process_texts(texts)
+        raise SystemError
+
+    def get_target_prompt_token_count(self, token_count):
+        for embedder in (embedder for embedder in self.embedders if hasattr(embedder, "get_target_prompt_token_count")):
+            return embedder.get_target_prompt_token_count(token_count)
+        raise SystemError
 
 
 class FrozenCLIPEmbedder(AbstractEmbModel):
