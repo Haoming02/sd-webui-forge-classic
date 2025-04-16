@@ -13,21 +13,6 @@ set ERROR_REPORTING=FALSE
 
 mkdir tmp 2>NUL
 
-%PYTHON% -c "" >tmp/stdout.txt 2>tmp/stderr.txt
-if %ERRORLEVEL% == 0 goto :check_pip
-echo Couldn't launch python
-goto :show_stdout_stderr
-
-:check_pip
-%PYTHON% -mpip --help >tmp/stdout.txt 2>tmp/stderr.txt
-if %ERRORLEVEL% == 0 goto :start_venv
-if "%PIP_INSTALLER_LOCATION%" == "" goto :show_stdout_stderr
-%PYTHON% "%PIP_INSTALLER_LOCATION%" >tmp/stdout.txt 2>tmp/stderr.txt
-if %ERRORLEVEL% == 0 goto :start_venv
-echo Couldn't install pip
-goto :show_stdout_stderr
-
-:start_venv
 if ["%VENV_DIR%"] == ["-"] goto :skip_venv
 if ["%SKIP_VENV%"] == ["1"] goto :skip_venv
 
@@ -52,6 +37,22 @@ call "%VENV_DIR%\Scripts\activate.bat"
 echo venv %PYTHON%
 
 :skip_venv
+:check_python
+%PYTHON% -c "" >tmp/stdout.txt 2>tmp/stderr.txt
+if %ERRORLEVEL% == 0 goto :check_pip
+echo Couldn't launch python
+goto :show_stdout_stderr
+
+:check_pip
+%PYTHON% -mpip --help >tmp/stdout.txt 2>tmp/stderr.txt
+if %ERRORLEVEL% == 0 goto :launch_or_accelerate
+if "%PIP_INSTALLER_LOCATION%" == "" goto :show_stdout_stderr
+%PYTHON% "%PIP_INSTALLER_LOCATION%" >tmp/stdout.txt 2>tmp/stderr.txt
+if %ERRORLEVEL% == 0 goto :launch_or_accelerate
+echo Couldn't install pip
+goto :show_stdout_stderr
+
+:launch_or_accelerate
 if [%ACCELERATE%] == ["True"] goto :accelerate
 goto :launch
 
@@ -62,14 +63,14 @@ if EXIST %ACCELERATE% goto :accelerate_launch
 
 :launch
 %PYTHON% launch.py %*
-if EXIST tmp/restart goto :skip_venv
+if EXIST tmp/restart goto :launch_or_accelerate
 pause
 exit /b
 
 :accelerate_launch
 echo Accelerating
 %ACCELERATE% launch --num_cpu_threads_per_process=6 launch.py
-if EXIST tmp/restart goto :skip_venv
+if EXIST tmp/restart goto :launch_or_accelerate
 pause
 exit /b
 
