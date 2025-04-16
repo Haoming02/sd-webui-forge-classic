@@ -234,7 +234,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - Set up **venv**
     ```bash
     cd sd-webui-forge-classic
-    uv venv venv --python 3.11
+    uv venv venv --python 3.11 --seed
     ```
 - Add the `--uv` flag *(see [Commandline](#classic))*
 
