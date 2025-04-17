@@ -13,6 +13,8 @@ set ERROR_REPORTING=FALSE
 
 mkdir tmp 2>NUL
 
+uv help python >tmp/stdout.txt 2>tmp/stderr.txt
+if %ERRORLEVEL% == 0 goto :check_pip
 %PYTHON% -c "" >tmp/stdout.txt 2>tmp/stderr.txt
 if %ERRORLEVEL% == 0 goto :check_pip
 echo Couldn't launch python
