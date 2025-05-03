@@ -35,24 +35,21 @@ warnings.filterwarnings("default" if opts.show_gradio_deprecation_warnings else 
 
 # this is a fix for Windows users. Without it, javascript files will be served with text/html content-type and the browser will not show any UI
 mimetypes.init()
-mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type("application/javascript", ".js")
 
 # Likewise, add explicit content-type header for certain missing image types
-mimetypes.add_type('image/webp', '.webp')
+mimetypes.add_type("image/webp", ".webp")
 
 if not cmd_opts.share and not cmd_opts.listen:
     # fix gradio phoning home
     gradio.utils.version_check = lambda: None
-    gradio.utils.get_local_ip_address = lambda: '127.0.0.1'
+    gradio.utils.get_local_ip_address = lambda: "127.0.0.1"
 
 if cmd_opts.ngrok is not None:
     import modules.ngrok as ngrok
-    print('ngrok authtoken detected, trying to connect...')
-    ngrok.connect(
-        cmd_opts.ngrok,
-        cmd_opts.port if cmd_opts.port is not None else 7860,
-        cmd_opts.ngrok_options
-        )
+
+    print("ngrok authtoken detected, trying to connect...")
+    ngrok.connect(cmd_opts.ngrok, cmd_opts.port if cmd_opts.port is not None else 7860, cmd_opts.ngrok_options)
 
 
 def gr_show(visible=True):
@@ -64,17 +61,17 @@ sample_img2img = sample_img2img if os.path.exists(sample_img2img) else None
 
 # Using constants for these since the variation selector isn't visible.
 # Important that they exactly match script.js for tooltip to work.
-random_symbol = '\U0001f3b2\ufe0f'  # 🎲️
-reuse_symbol = '\u267b\ufe0f'  # ♻️
-paste_symbol = '\u2199\ufe0f'  # ↙
-refresh_symbol = '\U0001f504'  # 🔄
-save_style_symbol = '\U0001f4be'  # 💾
-apply_style_symbol = '\U0001f4cb'  # 📋
-clear_prompt_symbol = '\U0001f5d1\ufe0f'  # 🗑️
-extra_networks_symbol = '\U0001F3B4'  # 🎴
-switch_values_symbol = '\U000021C5' # ⇅
-restore_progress_symbol = '\U0001F300' # 🌀
-detect_image_size_symbol = '\U0001F4D0'  # 📐
+random_symbol = "\U0001f3b2\ufe0f"  # 🎲️
+reuse_symbol = "\u267b\ufe0f"  # ♻️
+paste_symbol = "\u2199\ufe0f"  # ↙
+refresh_symbol = "\U0001f504"  # 🔄
+save_style_symbol = "\U0001f4be"  # 💾
+apply_style_symbol = "\U0001f4cb"  # 📋
+clear_prompt_symbol = "\U0001f5d1\ufe0f"  # 🗑️
+extra_networks_symbol = "\U0001f3b4"  # 🎴
+switch_values_symbol = "\U000021c5"  # ⇅
+restore_progress_symbol = "\U0001f300"  # 🌀
+detect_image_size_symbol = "\U0001f4d0"  # 📐
 
 
 plaintext_to_html = ui_common.plaintext_to_html
@@ -149,7 +146,7 @@ def update_token_counter(text, steps, styles, *, is_positive=True):
     except Exception:
         return f"<span class='gr-box gr-text-input'>?/?</span>"
 
-    flat_prompts = reduce(lambda list1, list2: list1+list2, prompt_schedules)
+    flat_prompts = reduce(lambda list1, list2: list1 + list2, prompt_schedules)
     prompts = [prompt_text for step, prompt_text in flat_prompts]
     token_count, max_length = max([model_hijack.get_prompt_lengths(prompt, cond_stage_model) for prompt in prompts], key=lambda args: args[0])
     return f"<span class='gr-box gr-text-input'>{token_count}/{max_length}</span>"
@@ -183,7 +180,7 @@ def apply_setting(key, value):
             return gr.skip()
 
     comp_args = opts.data_labels[key].component_args
-    if comp_args and isinstance(comp_args, dict) and comp_args.get('visible') is False:
+    if comp_args and isinstance(comp_args, dict) and comp_args.get("visible") is False:
         return
 
     valtype = type(opts.data_labels[key].default)
@@ -244,7 +241,7 @@ def create_ui():
             with ExitStack() as stack:
                 if shared.opts.txt2img_settings_accordion:
                     stack.enter_context(gr.Accordion("Open for Settings", open=False))
-                stack.enter_context(gr.Column(variant='compact', elem_id="txt2img_settings"))
+                stack.enter_context(gr.Column(variant="compact", elem_id="txt2img_settings"))
 
                 scripts.scripts_txt2img.prepare_ui()
 
@@ -263,12 +260,12 @@ def create_ui():
 
                             if opts.dimensions_and_batch_together:
                                 with gr.Column(elem_id="txt2img_column_batch"):
-                                    batch_count = gr.Slider(minimum=1, step=1, label='Batch count', value=1, elem_id="txt2img_batch_count")
-                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label='Batch size', value=1, elem_id="txt2img_batch_size")
+                                    batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="txt2img_batch_count")
+                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="txt2img_batch_size")
 
                     elif category == "cfg":
                         with gr.Row():
-                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.5, label='CFG Scale', value=7.0, elem_id="txt2img_cfg_scale", scale=4)
+                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.5, label="CFG Scale", value=7.0, elem_id="txt2img_cfg_scale", scale=4)
                             scripts.scripts_txt2img.setup_ui_for_section(category)
 
                     elif category == "checkboxes":
@@ -283,8 +280,8 @@ def create_ui():
 
                                 with FormRow(elem_id="txt2img_hires_fix_row1", variant="compact"):
                                     hr_upscaler = gr.Dropdown(label="Upscaler", elem_id="txt2img_hr_upscaler", choices=[*shared.latent_upscale_modes, *[x.name for x in shared.sd_upscalers]], value=shared.latent_upscale_default_mode)
-                                    hr_second_pass_steps = gr.Slider(minimum=0, maximum=150, step=1, label='Hires steps', value=0, elem_id="txt2img_hires_steps")
-                                    denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label='Denoising strength', value=0.7, elem_id="txt2img_denoising_strength")
+                                    hr_second_pass_steps = gr.Slider(minimum=0, maximum=150, step=1, label="Hires steps", value=0, elem_id="txt2img_hires_steps")
+                                    denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.7, elem_id="txt2img_denoising_strength")
 
                                 with FormRow(elem_id="txt2img_hires_fix_row2", variant="compact"):
                                     hr_scale = gr.Slider(minimum=1.0, maximum=4.0, step=0.05, label="Upscale by", value=2.0, elem_id="txt2img_hr_scale")
@@ -293,10 +290,10 @@ def create_ui():
 
                                 with FormRow(elem_id="txt2img_hires_fix_row3", variant="compact", visible=opts.hires_fix_show_sampler) as hr_sampler_container:
 
-                                    hr_checkpoint_name = gr.Dropdown(label='Hires checkpoint', elem_id="hr_checkpoint", choices=["Use same checkpoint"] + modules.sd_models.checkpoint_tiles(use_short=True), value="Use same checkpoint")
+                                    hr_checkpoint_name = gr.Dropdown(label="Hires checkpoint", elem_id="hr_checkpoint", choices=["Use same checkpoint"] + modules.sd_models.checkpoint_tiles(use_short=True), value="Use same checkpoint")
                                     create_refresh_button(hr_checkpoint_name, modules.sd_models.list_models, lambda: {"choices": ["Use same checkpoint"] + modules.sd_models.checkpoint_tiles(use_short=True)}, "hr_checkpoint_refresh")
 
-                                    hr_sampler_name = gr.Dropdown(label='Hires sampling method', elem_id="hr_sampler", choices=["Use same sampler"] + sd_samplers.visible_sampler_names(), value="Use same sampler")
+                                    hr_sampler_name = gr.Dropdown(label="Hires sampling method", elem_id="hr_sampler", choices=["Use same sampler"] + sd_samplers.visible_sampler_names(), value="Use same sampler")
                                     hr_scheduler = gr.Dropdown(label="Hires schedule type", elem_id="hr_scheduler", choices=["Use same scheduler"] + [x.label for x in sd_schedulers.schedulers], value="Use same scheduler")
 
                                 with FormRow(elem_id="txt2img_hires_fix_row4", variant="compact", visible=opts.hires_fix_show_prompts) as hr_prompts_container:
@@ -312,12 +309,12 @@ def create_ui():
                     elif category == "batch":
                         if not opts.dimensions_and_batch_together:
                             with FormRow(elem_id="txt2img_column_batch"):
-                                batch_count = gr.Slider(minimum=1, step=1, label='Batch count', value=1, elem_id="txt2img_batch_count")
-                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label='Batch size', value=1, elem_id="txt2img_batch_size")
+                                batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="txt2img_batch_count")
+                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="txt2img_batch_size")
 
                     elif category == "override_settings":
                         with FormRow(elem_id="txt2img_override_settings_row") as row:
-                            override_settings = create_override_settings_dropdown('txt2img', row)
+                            override_settings = create_override_settings_dropdown("txt2img", row)
 
                     elif category == "scripts":
                         with FormGroup(elem_id="txt2img_script_container"):
@@ -380,7 +377,7 @@ def create_ui():
             ]
 
             txt2img_args = dict(
-                fn=wrap_gradio_gpu_call(modules.txt2img.txt2img, extra_outputs=[None, '', '']),
+                fn=wrap_gradio_gpu_call(modules.txt2img.txt2img, extra_outputs=[None, "", ""]),
                 _js="submit",
                 inputs=txt2img_inputs,
                 outputs=txt2img_outputs,
@@ -391,7 +388,7 @@ def create_ui():
             toprow.submit.click(**txt2img_args)
 
             output_panel.button_upscale.click(
-                fn=wrap_gradio_gpu_call(modules.txt2img.txt2img_upscale, extra_outputs=[None, '', '']),
+                fn=wrap_gradio_gpu_call(modules.txt2img.txt2img_upscale, extra_outputs=[None, "", ""]),
                 _js="submit_txt2img_upscale",
                 inputs=txt2img_inputs[0:1] + [output_panel.gallery, dummy_component, output_panel.generation_info] + txt2img_inputs[1:],
                 outputs=txt2img_outputs,
@@ -435,22 +432,27 @@ def create_ui():
                 PasteField(hr_prompt, "Hires prompt", api="hr_prompt"),
                 PasteField(hr_negative_prompt, "Hires negative prompt", api="hr_negative_prompt"),
                 PasteField(hr_prompts_container, lambda d: gr.update(visible=True) if d.get("Hires prompt", "") != "" or d.get("Hires negative prompt", "") != "" else gr.skip()),
-                *scripts.scripts_txt2img.infotext_fields
+                *scripts.scripts_txt2img.infotext_fields,
             ]
             parameters_copypaste.add_paste_fields("txt2img", None, txt2img_paste_fields, override_settings)
-            parameters_copypaste.register_paste_params_button(parameters_copypaste.ParamBinding(
-                paste_button=toprow.paste, tabname="txt2img", source_text_component=toprow.prompt, source_image_component=None,
-            ))
+            parameters_copypaste.register_paste_params_button(
+                parameters_copypaste.ParamBinding(
+                    paste_button=toprow.paste,
+                    tabname="txt2img",
+                    source_text_component=toprow.prompt,
+                    source_image_component=None,
+                )
+            )
 
-            steps = scripts.scripts_txt2img.script('Sampler').steps
+            steps = scripts.scripts_txt2img.script("Sampler").steps
 
             txt2img_preview_params = [
                 toprow.prompt,
                 toprow.negative_prompt,
                 steps,
-                scripts.scripts_txt2img.script('Sampler').sampler_name,
+                scripts.scripts_txt2img.script("Sampler").sampler_name,
                 cfg_scale,
-                scripts.scripts_txt2img.script('Seed').seed,
+                scripts.scripts_txt2img.script("Seed").seed,
                 width,
                 height,
             ]
@@ -460,7 +462,7 @@ def create_ui():
             toprow.token_button.click(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.negative_token_button.click(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
 
-        extra_networks_ui = ui_extra_networks.create_ui(txt2img_interface, [txt2img_generation_tab], 'txt2img')
+        extra_networks_ui = ui_extra_networks.create_ui(txt2img_interface, [txt2img_generation_tab], "txt2img")
         ui_extra_networks.setup_ui(extra_networks_ui, output_panel.gallery)
 
         extra_tabs.__exit__()
@@ -480,7 +482,7 @@ def create_ui():
             with ExitStack() as stack:
                 if shared.opts.img2img_settings_accordion:
                     stack.enter_context(gr.Accordion("Open for Settings", open=False))
-                stack.enter_context(gr.Column(variant='compact', elem_id="img2img_settings"))
+                stack.enter_context(gr.Column(variant="compact", elem_id="img2img_settings"))
 
                 copy_image_buttons = []
                 copy_image_destinations = {}
@@ -489,7 +491,7 @@ def create_ui():
                     with gr.Row(variant="compact", elem_id=f"img2img_copy_to_{tab_name}"):
                         gr.HTML("Copy image to: ", elem_id=f"img2img_label_copy_to_{tab_name}")
 
-                        for title, name in zip(['img2img', 'sketch', 'inpaint', 'inpaint sketch'], ['img2img', 'sketch', 'inpaint', 'inpaint_sketch']):
+                        for title, name in zip(["img2img", "sketch", "inpaint", "inpaint sketch"], ["img2img", "sketch", "inpaint", "inpaint_sketch"]):
                             if name == tab_name:
                                 gr.Button(title, interactive=False)
                                 copy_image_destinations[name] = elem
@@ -508,22 +510,22 @@ def create_ui():
                         with gr.Tabs(elem_id="mode_img2img"):
                             img2img_selected_tab = gr.Number(value=0, visible=False)
 
-                            with gr.TabItem('img2img', id='img2img', elem_id="img2img_img2img_tab") as tab_img2img:
+                            with gr.TabItem("img2img", id="img2img", elem_id="img2img_img2img_tab") as tab_img2img:
                                 init_img = gr.Image(label="Image for img2img", elem_id="img2img_image", show_label=False, source="upload", interactive=True, type="pil", tool="editor", image_mode="RGBA", height=opts.img2img_editor_height)
-                                add_copy_image_controls('img2img', init_img)
+                                add_copy_image_controls("img2img", init_img)
 
-                            with gr.TabItem('Sketch', id='img2img_sketch', elem_id="img2img_img2img_sketch_tab") as tab_sketch:
+                            with gr.TabItem("Sketch", id="img2img_sketch", elem_id="img2img_img2img_sketch_tab") as tab_sketch:
                                 sketch = gr.Image(label="Image for img2img", elem_id="img2img_sketch", show_label=False, source="upload", interactive=True, type="pil", tool="color-sketch", image_mode="RGB", height=opts.img2img_editor_height, brush_color=opts.img2img_sketch_default_brush_color)
-                                add_copy_image_controls('sketch', sketch)
+                                add_copy_image_controls("sketch", sketch)
 
-                            with gr.TabItem('Inpaint', id='inpaint', elem_id="img2img_inpaint_tab") as tab_inpaint:
+                            with gr.TabItem("Inpaint", id="inpaint", elem_id="img2img_inpaint_tab") as tab_inpaint:
                                 init_img_with_mask = gr.Image(label="Image for inpainting with mask", show_label=False, elem_id="img2maskimg", source="upload", interactive=True, type="pil", tool="sketch", image_mode="RGBA", height=opts.img2img_editor_height, brush_color=opts.img2img_inpaint_mask_brush_color)
-                                add_copy_image_controls('inpaint', init_img_with_mask)
+                                add_copy_image_controls("inpaint", init_img_with_mask)
 
-                            with gr.TabItem('Inpaint sketch', id='inpaint_sketch', elem_id="img2img_inpaint_sketch_tab") as tab_inpaint_color:
+                            with gr.TabItem("Inpaint sketch", id="inpaint_sketch", elem_id="img2img_inpaint_sketch_tab") as tab_inpaint_color:
                                 inpaint_color_sketch = gr.Image(label="Color sketch inpainting", show_label=False, elem_id="inpaint_sketch", source="upload", interactive=True, type="pil", tool="color-sketch", image_mode="RGB", height=opts.img2img_editor_height, brush_color=opts.img2img_inpaint_sketch_default_brush_color)
                                 inpaint_color_sketch_orig = gr.State(None)
-                                add_copy_image_controls('inpaint_sketch', inpaint_color_sketch)
+                                add_copy_image_controls("inpaint_sketch", inpaint_color_sketch)
 
                                 def update_orig(image, state):
                                     if image is not None:
@@ -534,18 +536,13 @@ def create_ui():
 
                                 inpaint_color_sketch.change(update_orig, [inpaint_color_sketch, inpaint_color_sketch_orig], inpaint_color_sketch_orig)
 
-                            with gr.TabItem('Inpaint upload', id='inpaint_upload', elem_id="img2img_inpaint_upload_tab") as tab_inpaint_upload:
+                            with gr.TabItem("Inpaint upload", id="inpaint_upload", elem_id="img2img_inpaint_upload_tab") as tab_inpaint_upload:
                                 init_img_inpaint = gr.Image(label="Image for img2img", show_label=False, source="upload", interactive=True, type="pil", elem_id="img_inpaint_base")
                                 init_mask_inpaint = gr.Image(label="Mask", source="upload", interactive=True, type="pil", image_mode="RGBA", elem_id="img_inpaint_mask")
 
-                            with gr.TabItem('Batch', id='batch', elem_id="img2img_batch_tab") as tab_batch:
-                                hidden = '<br>Disabled when launched with --hide-ui-dir-config.' if shared.cmd_opts.hide_ui_dir_config else ''
-                                gr.HTML(
-                                    "<p style='padding-bottom: 1em;' class=\"text-gray-500\">Process images in a directory on the same machine where the server is running." +
-                                    "<br>Use an empty output directory to save pictures normally instead of writing to the output directory." +
-                                    f"<br>Add inpaint batch mask directory to enable inpaint batch processing."
-                                    f"{hidden}</p>"
-                                )
+                            with gr.TabItem("Batch", id="batch", elem_id="img2img_batch_tab") as tab_batch:
+                                hidden = "<br>Disabled when launched with --hide-ui-dir-config." if shared.cmd_opts.hide_ui_dir_config else ""
+                                gr.HTML("<p style='padding-bottom: 1em;' class=\"text-gray-500\">Process images in a directory on the same machine where the server is running." + "<br>Use an empty output directory to save pictures normally instead of writing to the output directory." + f"<br>Add inpaint batch mask directory to enable inpaint batch processing." f"{hidden}</p>")
                                 img2img_batch_input_dir = gr.Textbox(label="Input directory", **shared.hide_dirs, elem_id="img2img_batch_input_dir")
                                 img2img_batch_output_dir = gr.Textbox(label="Output directory", **shared.hide_dirs, elem_id="img2img_batch_output_dir")
                                 img2img_batch_inpaint_mask_dir = gr.Textbox(label="Inpaint batch mask directory (required for inpaint batch processing only)", **shared.hide_dirs, elem_id="img2img_batch_inpaint_mask_dir")
@@ -560,8 +557,8 @@ def create_ui():
                                 tab.select(fn=lambda tabnum=i: tabnum, inputs=[], outputs=[img2img_selected_tab])
 
                         def copy_image(img):
-                            if isinstance(img, dict) and 'image' in img:
-                                return img['image']
+                            if isinstance(img, dict) and "image" in img:
+                                return img["image"]
 
                             return img
 
@@ -620,17 +617,17 @@ def create_ui():
 
                             if opts.dimensions_and_batch_together:
                                 with gr.Column(elem_id="img2img_column_batch"):
-                                    batch_count = gr.Slider(minimum=1, step=1, label='Batch count', value=1, elem_id="img2img_batch_count")
-                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label='Batch size', value=1, elem_id="img2img_batch_size")
+                                    batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="img2img_batch_count")
+                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="img2img_batch_size")
 
                     elif category == "denoising":
-                        denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label='Denoising strength', value=0.75, elem_id="img2img_denoising_strength")
+                        denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.75, elem_id="img2img_denoising_strength")
 
                     elif category == "cfg":
                         with gr.Row():
-                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.5, label='CFG Scale', value=7.0, elem_id="img2img_cfg_scale", scale=4)
+                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.5, label="CFG Scale", value=7.0, elem_id="img2img_cfg_scale", scale=4)
                             scripts.scripts_img2img.setup_ui_for_section(category)
-                        image_cfg_scale = gr.Slider(minimum=0, maximum=3.0, step=0.05, label='Image CFG Scale', value=1.5, elem_id="img2img_image_cfg_scale", visible=False)
+                        image_cfg_scale = gr.Slider(minimum=0, maximum=3.0, step=0.05, label="Image CFG Scale", value=1.5, elem_id="img2img_image_cfg_scale", visible=False)
 
                     elif category == "checkboxes":
                         with FormRow(elem_classes="checkboxes-row", variant="compact"):
@@ -643,12 +640,12 @@ def create_ui():
                     elif category == "batch":
                         if not opts.dimensions_and_batch_together:
                             with FormRow(elem_id="img2img_column_batch"):
-                                batch_count = gr.Slider(minimum=1, step=1, label='Batch count', value=1, elem_id="img2img_batch_count")
-                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label='Batch size', value=1, elem_id="img2img_batch_size")
+                                batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="img2img_batch_count")
+                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="img2img_batch_size")
 
                     elif category == "override_settings":
                         with FormRow(elem_id="img2img_override_settings_row") as row:
-                            override_settings = create_override_settings_dropdown('img2img', row)
+                            override_settings = create_override_settings_dropdown("img2img", row)
 
                     elif category == "scripts":
                         with FormGroup(elem_id="img2img_script_container"):
@@ -657,21 +654,21 @@ def create_ui():
                     elif category == "inpaint":
                         with FormGroup(elem_id="inpaint_controls", visible=False) as inpaint_controls:
                             with FormRow():
-                                mask_blur = gr.Slider(label='Mask blur', minimum=0, maximum=64, step=1, value=4, elem_id="img2img_mask_blur")
+                                mask_blur = gr.Slider(label="Mask blur", minimum=0, maximum=64, step=1, value=4, elem_id="img2img_mask_blur")
                                 mask_alpha = gr.Slider(label="Mask transparency", visible=False, elem_id="img2img_mask_alpha")
 
                             with FormRow():
-                                inpainting_mask_invert = gr.Radio(label='Mask mode', choices=['Inpaint masked', 'Inpaint not masked'], value='Inpaint masked', type="index", elem_id="img2img_mask_mode")
+                                inpainting_mask_invert = gr.Radio(label="Mask mode", choices=["Inpaint masked", "Inpaint not masked"], value="Inpaint masked", type="index", elem_id="img2img_mask_mode")
 
                             with FormRow():
-                                inpainting_fill = gr.Radio(label='Masked content', choices=['fill', 'original', 'latent noise', 'latent nothing'], value='original', type="index", elem_id="img2img_inpainting_fill")
+                                inpainting_fill = gr.Radio(label="Masked content", choices=["fill", "original", "latent noise", "latent nothing"], value="original", type="index", elem_id="img2img_inpainting_fill")
 
                             with FormRow():
                                 with gr.Column():
                                     inpaint_full_res = gr.Radio(label="Inpaint area", choices=("Whole picture", "Only masked"), type="index", value="Only masked", elem_id="img2img_inpaint_full_res")
 
                                 with gr.Column(scale=4):
-                                    inpaint_full_res_padding = gr.Slider(label='Only masked padding, pixels', minimum=0, maximum=256, step=4, value=32, elem_id="img2img_inpaint_full_res_padding")
+                                    inpaint_full_res_padding = gr.Slider(label="Only masked padding, pixels", minimum=0, maximum=256, step=4, value=32, elem_id="img2img_inpaint_full_res_padding")
 
                     if category not in ("accordions", "cfg"):
                         scripts.scripts_img2img.setup_ui_for_section(category)
@@ -683,7 +680,10 @@ def create_ui():
                 component.change(fn=lambda: None, _js="updateImg2imgResizeToTextAfterChangingImage", inputs=[], outputs=[], show_progress=False)
 
             def select_img2img_tab(tab):
-                return gr.update(visible=tab in [2, 3, 4]), gr.update(visible=tab == 3),
+                return (
+                    gr.update(visible=tab in [2, 3, 4]),
+                    gr.update(visible=tab == 3),
+                )
 
             for i, elem in enumerate(img2img_tabs):
                 elem.select(
@@ -695,7 +695,7 @@ def create_ui():
             output_panel = create_output_panel("img2img", opts.outdir_img2img_samples, toprow)
 
             img2img_args = dict(
-                fn=wrap_gradio_gpu_call(modules.img2img.img2img, extra_outputs=[None, '', '']),
+                fn=wrap_gradio_gpu_call(modules.img2img.img2img, extra_outputs=[None, "", ""]),
                 _js="submit_img2img",
                 inputs=[
                     dummy_component,
@@ -734,7 +734,8 @@ def create_ui():
                     img2img_batch_use_png_info,
                     img2img_batch_png_info_props,
                     img2img_batch_png_info_dir,
-                ] + custom_inputs,
+                ]
+                + custom_inputs,
                 outputs=[
                     output_panel.gallery,
                     output_panel.generation_info,
@@ -770,7 +771,7 @@ def create_ui():
                 show_progress=False,
             )
 
-            steps = scripts.scripts_img2img.script('Sampler').steps
+            steps = scripts.scripts_img2img.script("Sampler").steps
 
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
@@ -788,19 +789,24 @@ def create_ui():
                 (toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.skip()),
                 (denoising_strength, "Denoising strength"),
                 (mask_blur, "Mask blur"),
-                (inpainting_mask_invert, 'Mask mode'),
-                (inpainting_fill, 'Masked content'),
-                (inpaint_full_res, 'Inpaint area'),
-                (inpaint_full_res_padding, 'Masked area padding'),
-                *scripts.scripts_img2img.infotext_fields
+                (inpainting_mask_invert, "Mask mode"),
+                (inpainting_fill, "Masked content"),
+                (inpaint_full_res, "Inpaint area"),
+                (inpaint_full_res_padding, "Masked area padding"),
+                *scripts.scripts_img2img.infotext_fields,
             ]
             parameters_copypaste.add_paste_fields("img2img", init_img, img2img_paste_fields, override_settings)
             parameters_copypaste.add_paste_fields("inpaint", init_img_with_mask, img2img_paste_fields, override_settings)
-            parameters_copypaste.register_paste_params_button(parameters_copypaste.ParamBinding(
-                paste_button=toprow.paste, tabname="img2img", source_text_component=toprow.prompt, source_image_component=None,
-            ))
+            parameters_copypaste.register_paste_params_button(
+                parameters_copypaste.ParamBinding(
+                    paste_button=toprow.paste,
+                    tabname="img2img",
+                    source_text_component=toprow.prompt,
+                    source_image_component=None,
+                )
+            )
 
-        extra_networks_ui_img2img = ui_extra_networks.create_ui(img2img_interface, [img2img_generation_tab], 'img2img')
+        extra_networks_ui_img2img = ui_extra_networks.create_ui(img2img_interface, [img2img_generation_tab], "img2img")
         ui_extra_networks.setup_ui(extra_networks_ui_img2img, output_panel.gallery)
 
         extra_tabs.__exit__()
@@ -812,10 +818,10 @@ def create_ui():
 
     with gr.Blocks(analytics_enabled=False) as pnginfo_interface:
         with ResizeHandleRow(equal_height=False):
-            with gr.Column(variant='panel'):
+            with gr.Column(variant="panel"):
                 image = gr.Image(elem_id="pnginfo_image", label="Source", source="upload", interactive=True, type="pil")
 
-            with gr.Column(variant='panel'):
+            with gr.Column(variant="panel"):
                 html = gr.HTML()
                 generation_info = gr.Textbox(visible=False, elem_id="pnginfo_generation_info")
                 html2 = gr.HTML()
@@ -823,9 +829,14 @@ def create_ui():
                     buttons = parameters_copypaste.create_buttons(["txt2img", "img2img", "inpaint", "extras"])
 
                 for tabname, button in buttons.items():
-                    parameters_copypaste.register_paste_params_button(parameters_copypaste.ParamBinding(
-                        paste_button=button, tabname=tabname, source_text_component=generation_info, source_image_component=image,
-                    ))
+                    parameters_copypaste.register_paste_params_button(
+                        parameters_copypaste.ParamBinding(
+                            paste_button=button,
+                            tabname=tabname,
+                            source_text_component=generation_info,
+                            source_image_component=image,
+                        )
+                    )
 
         image.change(
             fn=wrap_gradio_call(extras.run_pnginfo),
@@ -905,6 +916,7 @@ def versions_html():
 
     if shared.xformers_available:
         import xformers
+
         xformers_version = xformers.__version__
     else:
         xformers_version = "N/A"
@@ -946,10 +958,11 @@ def setup_ui_api(app):
         text = sysinfo.get()
         filename = f"sysinfo-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')}.json"
 
-        return PlainTextResponse(text, headers={'Content-Disposition': f'{"attachment" if attachment else "inline"}; filename="{filename}"'})
+        return PlainTextResponse(text, headers={"Content-Disposition": f'{"attachment" if attachment else "inline"}; filename="{filename}"'})
 
     app.add_api_route("/internal/sysinfo", download_sysinfo, methods=["GET"])
     app.add_api_route("/internal/sysinfo-download", lambda: download_sysinfo(attachment=True), methods=["GET"])
 
     import fastapi.staticfiles
+
     app.mount("/webui-assets", fastapi.staticfiles.StaticFiles(directory=os.path.join(paths_internal.modules_path, "web")), name="webui-assets")
