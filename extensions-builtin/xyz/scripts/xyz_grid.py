@@ -540,15 +540,11 @@ class XYZ(scripts.Script):
         # this could be moved to common code, but unlikely to be ever triggered anywhere else
         Image.MAX_IMAGE_PIXELS = None  # disable check in Pillow and rely on check below to allow large custom image sizes
         grid_mp = round(len(xs) * len(ys) * len(zs) * p.width * p.height / 1000000)
-        assert (
-            grid_mp < opts.img_max_size_mp
-        ), f"Error: Resulting grid would be too large ({grid_mp} MPixels) (max configured size is {opts.img_max_size_mp} MPixels)"
+        assert grid_mp < opts.img_max_size_mp, f"Error: Resulting grid would be too large ({grid_mp} MPixels) (max configured size is {opts.img_max_size_mp} MPixels)"
 
         def fix_axis_seeds(axis_opt, axis_list):
             if axis_opt.label in ["Seed", "Var. seed"]:
-                return [
-                    (int(random.randrange(4294967294)) if val is None or val == "" or val == -1 else val) for val in axis_list
-                ]
+                return [(int(random.randrange(4294967294)) if val is None or val == "" or val == -1 else val) for val in axis_list]
             else:
                 return axis_list
 
