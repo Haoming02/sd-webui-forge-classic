@@ -147,6 +147,7 @@ class StableDiffusionProcessing:
     seed_resize_from_w: int = -1
     seed_enable_extras: bool = True
     sampler_name: str = None
+    scheduler: str = None
     batch_size: int = 1
     n_iter: int = 1
     steps: int = 50
@@ -660,6 +661,7 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
     generation_params = {
         "Steps": p.steps,
         "Sampler": p.sampler_name,
+        "Schedule type": p.scheduler,
         "CFG scale": p.cfg_scale,
         "Image CFG scale": getattr(p, 'image_cfg_scale', None),
         "Seed": p.all_seeds[0] if use_main_prompt else all_seeds[index],
@@ -727,6 +729,8 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 
             if k == 'sd_vae':
                 sd_vae.reload_vae_weights()
+
+        sd_samplers.fix_p_invalid_sampler_and_scheduler(p)
 
         res = process_images_inner(p)
 
@@ -1049,6 +1053,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
     hr_resize_y: int = 0
     hr_checkpoint_name: str = None
     hr_sampler_name: str = None
+    hr_scheduler: str = None
     hr_prompt: str = ''
     hr_negative_prompt: str = ''
     force_task_id: str = None
@@ -1139,6 +1144,11 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
             if self.hr_sampler_name is not None and self.hr_sampler_name != self.sampler_name:
                 self.extra_generation_params["Hires sampler"] = self.hr_sampler_name
+
+            self.extra_generation_params["Hires schedule type"] = None  # to be set in sd_samplers_kdiffusion.py
+ 
+            if self.hr_scheduler is None:
+                self.hr_scheduler = self.scheduler
 
             if tuple(self.hr_prompt) != tuple(self.prompt):
                 self.extra_generation_params["Hires prompt"] = self.hr_prompt
