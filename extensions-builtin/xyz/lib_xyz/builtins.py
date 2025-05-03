@@ -1,4 +1,4 @@
-from modules import sd_models, sd_samplers, sd_samplers_kdiffusion, sd_vae, shared
+from modules import sd_models, sd_samplers, sd_schedulers, sd_vae, shared
 
 from .axis_application import (
     apply_checkpoint,
@@ -78,8 +78,8 @@ builtin_options = [
     AxisOption(
         "Schedule type",
         str,
-        apply_override("k_sched_type"),
-        choices=lambda: list(sd_samplers_kdiffusion.k_diffusion_scheduler),
+        apply_field("scheduler"),
+        choices=lambda: [x.label for x in sd_schedulers.schedulers],
     ),
     AxisOption("Schedule min sigma", float, apply_override("sigma_min")),
     AxisOption("Schedule max sigma", float, apply_override("sigma_max")),
