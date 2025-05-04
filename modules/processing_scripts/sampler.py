@@ -21,8 +21,8 @@ class ScriptSampler(scripts.ScriptBuiltinUI):
         return scripts.AlwaysVisible
 
     def ui(self, is_img2img):
-        sampler_names = [x.name for x in sd_samplers.visible_samplers()]
-        scheduler_names = [x.label for x in sd_schedulers.schedulers]
+        sampler_names: list[str] = sd_samplers.visible_sampler_names()
+        scheduler_names: list[str] = [x.label for x in sd_schedulers.schedulers]
 
         with FormRow(elem_id=f"sampler_selection_{self.tabname}"):
             self.sampler_name = gr.Dropdown(

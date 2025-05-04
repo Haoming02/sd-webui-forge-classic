@@ -57,14 +57,14 @@ def create_sampler(name, model):
 def set_samplers():
     global samplers, samplers_for_img2img, samplers_hidden
 
-    _samplers_hidden = set(shared.opts.hide_samplers)
-    if shared.opts.hide_samplers_invert:
-        samplers_hidden = set(x.name for x in samplers if x.name in _samplers_hidden)
-    else:
-        samplers_hidden = _samplers_hidden
-
     samplers = all_samplers
     samplers_for_img2img = all_samplers
+
+    _samplers_hidden = set(shared.opts.hide_samplers)
+    if shared.opts.hide_samplers_invert:
+        samplers_hidden = set(x.name for x in samplers if x.name not in _samplers_hidden)
+    else:
+        samplers_hidden = _samplers_hidden
 
     samplers_map.clear()
     for sampler in all_samplers:
