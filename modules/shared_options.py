@@ -346,10 +346,10 @@ options_templates.update(
     options_section(
         ("ui_alternatives", "UI alternatives", "ui"),
         {
-            "show_scheduler": OptionInfo(False, "Display the Scheduler Options").needs_reload_ui(),
+            "show_scheduler": OptionInfo(True, "Display the Scheduler Options").needs_reload_ui(),
             "show_refiner": OptionInfo(False, "Display the Refiner Accordions").info("(deprecated) feature for SDXL").needs_reload_ui(),
             "show_rescale_cfg": OptionInfo(True, "Display the Rescale CFG Slider").info("feature for v-pred checkpoints").needs_reload_ui(),
-            "show_mahiro": OptionInfo(False, "Display the MaHiRo toggle").info('see <a href="https://huggingface.co/spaces/yoinked/blue-arxiv">blue-arxiv</a> - <b>id:</b> <ins>2024-1208.1</ins>').needs_reload_ui(),
+            "show_mahiro": OptionInfo(True, "Display the MaHiRo toggle").info('see <a href="https://huggingface.co/spaces/yoinked/blue-arxiv">blue-arxiv</a> - <b>id:</b> <ins>2024-1208.1</ins>').needs_reload_ui(),
             "compact_prompt_box": OptionInfo(False, "Compact prompt layout").info("puts prompt and negative prompt inside the Generate tab, leaving more vertical space for the image on the right").needs_reload_ui(),
             "dimensions_and_batch_together": OptionInfo(True, "Show Width/Height and Batch sliders in same row").needs_reload_ui(),
             "sd_checkpoint_dropdown_use_short": OptionInfo(False, "Checkpoint dropdown: use filenames without paths").info("models in subdirectories like photo/sd15.ckpt will be listed as just sd15.ckpt"),
@@ -447,7 +447,6 @@ options_templates.update(
             "s_tmin": OptionInfo(0.0, "sigma tmin", gr.Slider, {"minimum": 0.0, "maximum": 10.0, "step": 0.01}, infotext="Sigma tmin").info("enable stochasticity; start value of the sigma range; only applies to Euler, Heun, and DPM2"),
             "s_tmax": OptionInfo(0.0, "sigma tmax", gr.Slider, {"minimum": 0.0, "maximum": 999.0, "step": 0.01}, infotext="Sigma tmax").info("0 = inf; end value of the sigma range; only applies to Euler, Heun, and DPM2"),
             "s_noise": OptionInfo(1.0, "sigma noise", gr.Slider, {"minimum": 0.0, "maximum": 1.1, "step": 0.001}, infotext="Sigma noise").info("amount of additional noise to counteract loss of detail during sampling"),
-            "k_sched_type": OptionInfo("Automatic", "Scheduler type", gr.Dropdown, {"choices": ["Automatic", "karras", "exponential", "polyexponential"]}, infotext="Schedule type").info("lets you override the noise schedule for k-diffusion samplers; choosing Automatic disables the three parameters below"),
             "sigma_min": OptionInfo(0.0, "sigma min", gr.Number, infotext="Schedule min sigma").info("0 = default (~0.03); minimum noise strength for k-diffusion noise scheduler"),
             "sigma_max": OptionInfo(0.0, "sigma max", gr.Number, infotext="Schedule max sigma").info("0 = default (~14.6); maximum noise strength for k-diffusion noise scheduler"),
             "rho": OptionInfo(0.0, "rho", gr.Number, infotext="Schedule rho").info("0 = default (7 for karras, 1 for polyexponential); higher values result in a steeper noise schedule (decreases faster)"),

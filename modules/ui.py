@@ -710,7 +710,6 @@ def create_ui():
                     inpaint_color_sketch_orig,
                     init_img_inpaint,
                     init_mask_inpaint,
-                    steps,
                     mask_blur,
                     mask_alpha,
                     inpainting_fill,

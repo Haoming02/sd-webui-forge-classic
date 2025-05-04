@@ -75,10 +75,7 @@ class CFGDenoiser(torch.nn.Module):
 
         for i, conds in enumerate(conds_list):
             for cond_index, weight in conds:
-                if "CFG++" in self.sampler.config.name:
-                    denoised[i] += (x_out[cond_index] - self.last_noise_uncond[i]) * (weight * cond_scale / 12.5)
-                else:
-                    denoised[i] += (x_out[cond_index] - denoised_uncond[i]) * (weight * cond_scale)
+                denoised[i] += (x_out[cond_index] - denoised_uncond[i]) * (weight * cond_scale)
 
         return denoised
 
