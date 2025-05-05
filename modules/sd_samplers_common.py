@@ -246,13 +246,17 @@ class Sampler:
         self.sampler_noises = None
         self.stop_at = None
         self.eta = None
-        self.config: SamplerData = None  # set by the function calling the constructor
+        self.config: SamplerData = None
         self.last_latent = None
         self.s_min_uncond = None
+
+        # Default values for sampler parameters
         self.s_churn = 0.0
         self.s_tmin = 0.0
         self.s_tmax = float("inf")
         self.s_noise = 1.0
+        self.dpmpp_sde_r = 0.5
+        self.dpmpp_2m_sde_solver = "midpoint"
 
         self.eta_option_field = "eta_ancestral"
         self.eta_infotext_field = "Eta"
@@ -353,14 +357,16 @@ class Sampler:
         return BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=current_iter_seeds)
 
     def sample(self, p, x, conditioning, unconditional_conditioning, steps=None, image_conditioning=None):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def sample_img2img(self, p, x, noise, conditioning, unconditional_conditioning, steps=None, image_conditioning=None):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def add_infotext(self, p):
-        if self.model_wrap_cfg.padded_cond_uncond:
-            p.extra_generation_params["Pad conds"] = True
+        pass
 
-        if self.model_wrap_cfg.padded_cond_uncond_v0:
-            p.extra_generation_params["Pad conds v0"] = True
+        # if self.model_wrap_cfg.padded_cond_uncond:
+        #     p.extra_generation_params["Pad conds"] = True
+
+        # if self.model_wrap_cfg.padded_cond_uncond_v0:
+        #     p.extra_generation_params["Pad conds v0"] = True
