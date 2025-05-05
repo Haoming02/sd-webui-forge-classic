@@ -250,7 +250,7 @@ options_templates.update(
             "token_merging_explanation": OptionHTML(
                 """
 <b>Token Merging</b> speeds up the diffusion process by fusing "redundant" tokens together, but also reduces quality as a result.
-[<a href="https://github.com/dbolya/tomesd">GitHub</a>] <br> 
+[<a href="https://github.com/dbolya/tomesd">GitHub</a>] <br>
 <b>Note:</b> Has no effect on SDXL when Max Downsample is set to 1
                 """
             ),
@@ -458,6 +458,8 @@ options_templates.update(
             "uni_pc_order": OptionInfo(3, "UniPC order", gr.Slider, {"minimum": 1, "maximum": 50, "step": 1}, infotext="UniPC order").info("must be < sampling steps"),
             "uni_pc_lower_order_final": OptionInfo(True, "UniPC lower order final", infotext="UniPC lower order final"),
             "sd_noise_schedule": OptionInfo("Default", "Noise schedule for sampling", gr.Radio, {"choices": ["Default", "Zero Terminal SNR"]}, infotext="Noise Schedule").info("for use with zero terminal SNR trained models"),
+            "beta_dist_alpha": OptionInfo(0.6, "Beta scheduler - alpha", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler alpha").info("Default = 0.6; the alpha parameter of the beta distribution used in Beta sampling"),
+            "beta_dist_beta": OptionInfo(0.6, "Beta scheduler - beta", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler beta").info("Default = 0.6; the beta parameter of the beta distribution used in Beta sampling"),
         },
     )
 )
