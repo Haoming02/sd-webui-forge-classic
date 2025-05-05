@@ -11,16 +11,13 @@ from modules_forge.forge_sampler import sampling_prepare, sampling_cleanup
 
 
 samplers_timesteps = [
-    ('DDIM', sd_samplers_timesteps_impl.ddim, ['ddim'], {}),
-    ('PLMS', sd_samplers_timesteps_impl.plms, ['plms'], {}),
-    ('UniPC', sd_samplers_timesteps_impl.unipc, ['unipc'], {}),
+    ("DDIM", sd_samplers_timesteps_impl.ddim, ["ddim"], {}),
+    ("PLMS", sd_samplers_timesteps_impl.plms, ["plms"], {}),
+    ("UniPC", sd_samplers_timesteps_impl.unipc, ["unipc"], {}),
 ]
 
 
-samplers_data_timesteps = [
-    sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: CompVisSampler(funcname, model), aliases, options)
-    for label, funcname, aliases, options in samplers_timesteps
-]
+samplers_data_timesteps = [sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: CompVisSampler(funcname, model), aliases, options) for label, funcname, aliases, options in samplers_timesteps]
 
 
 class CompVisTimestepsDenoiser(torch.nn.Module):
@@ -78,15 +75,15 @@ class CompVisSampler(sd_samplers_common.Sampler):
     def __init__(self, funcname, sd_model):
         super().__init__(funcname)
 
-        self.eta_option_field = 'eta_ddim'
-        self.eta_infotext_field = 'Eta DDIM'
+        self.eta_option_field = "eta_ddim"
+        self.eta_infotext_field = "Eta DDIM"
         self.eta_default = 0.0
 
         self.model_wrap_cfg = CFGDenoiserTimesteps(self)
         self.model_wrap = self.model_wrap_cfg.inner_model
 
     def get_timesteps(self, p, steps):
-        discard_next_to_last_sigma = self.config is not None and self.config.options.get('discard_next_to_last_sigma', False)
+        discard_next_to_last_sigma = self.config is not None and self.config.options.get("discard_next_to_last_sigma", False)
         if opts.always_discard_next_to_last_sigma and not discard_next_to_last_sigma:
             discard_next_to_last_sigma = True
             p.extra_generation_params["Discard penultimate sigma"] = True
@@ -124,19 +121,19 @@ class CompVisSampler(sd_samplers_common.Sampler):
         extra_params_kwargs = self.initialize(p)
         parameters = inspect.signature(self.func).parameters
 
-        if 'timesteps' in parameters:
-            extra_params_kwargs['timesteps'] = timesteps_sched
-        if 'is_img2img' in parameters:
-            extra_params_kwargs['is_img2img'] = True
+        if "timesteps" in parameters:
+            extra_params_kwargs["timesteps"] = timesteps_sched
+        if "is_img2img" in parameters:
+            extra_params_kwargs["is_img2img"] = True
 
         self.model_wrap_cfg.init_latent = x
         self.last_latent = x
         self.sampler_extra_args = {
-            'cond': conditioning,
-            'image_cond': image_conditioning,
-            'uncond': unconditional_conditioning,
-            'cond_scale': p.cfg_scale,
-            's_min_uncond': self.s_min_uncond
+            "cond": conditioning,
+            "image_cond": image_conditioning,
+            "uncond": unconditional_conditioning,
+            "cond_scale": p.cfg_scale,
+            "s_min_uncond": self.s_min_uncond,
         }
 
         samples = self.launch_sampling(t_enc + 1, lambda: self.func(self.model_wrap_cfg, xi, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
@@ -159,16 +156,16 @@ class CompVisSampler(sd_samplers_common.Sampler):
         extra_params_kwargs = self.initialize(p)
         parameters = inspect.signature(self.func).parameters
 
-        if 'timesteps' in parameters:
-            extra_params_kwargs['timesteps'] = timesteps
+        if "timesteps" in parameters:
+            extra_params_kwargs["timesteps"] = timesteps
 
         self.last_latent = x
         self.sampler_extra_args = {
-            'cond': conditioning,
-            'image_cond': image_conditioning,
-            'uncond': unconditional_conditioning,
-            'cond_scale': p.cfg_scale,
-            's_min_uncond': self.s_min_uncond
+            "cond": conditioning,
+            "image_cond": image_conditioning,
+            "uncond": unconditional_conditioning,
+            "cond_scale": p.cfg_scale,
+            "s_min_uncond": self.s_min_uncond,
         }
         samples = self.launch_sampling(steps, lambda: self.func(self.model_wrap_cfg, x, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
 
@@ -179,5 +176,5 @@ class CompVisSampler(sd_samplers_common.Sampler):
         return samples
 
 
-sys.modules['modules.sd_samplers_compvis'] = sys.modules[__name__]
-VanillaStableDiffusionSampler = CompVisSampler  # temp. compatibility with older extensions
+sys.modules["modules.sd_samplers_compvis"] = sys.modules[__name__]
+VanillaStableDiffusionSampler = CompVisSampler  # backward compatibility
