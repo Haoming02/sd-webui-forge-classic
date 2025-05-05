@@ -290,6 +290,14 @@ class SamplerItem(BaseModel):
     options: dict[str, str] = Field(title="Options")
 
 
+class SchedulerItem(BaseModel):
+    name: str = Field(title="Name")
+    label: str = Field(title="Label")
+    aliases: Optional[list[str]] = Field(title="Aliases")
+    default_rho: Optional[float] = Field(title="Default Rho")
+    need_inner_model: Optional[bool] = Field(title="Needs Inner Model")
+
+
 class UpscalerItem(BaseModel):
     name: str = Field(title="Name")
     model_name: Optional[str] = Field(title="Model Name")

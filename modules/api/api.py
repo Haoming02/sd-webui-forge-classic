@@ -34,6 +34,7 @@ from modules import (
     sd_hijack,
     sd_models,
     sd_samplers,
+    sd_schedulers,
     shared_items,
     ui,
 )
@@ -246,6 +247,7 @@ class Api:
         self.add_api_route("/sdapi/v1/options", self.set_config, methods=["POST"])
         self.add_api_route("/sdapi/v1/cmd-flags", self.get_cmd_flags, methods=["GET"], response_model=models.FlagsModel)
         self.add_api_route("/sdapi/v1/samplers", self.get_samplers, methods=["GET"], response_model=list[models.SamplerItem])
+        self.add_api_route("/sdapi/v1/schedulers", self.get_schedulers, methods=["GET"], response_model=list[models.SchedulerItem])
         self.add_api_route("/sdapi/v1/upscalers", self.get_upscalers, methods=["GET"], response_model=list[models.UpscalerItem])
         self.add_api_route("/sdapi/v1/latent-upscale-modes", self.get_latent_upscale_modes, methods=["GET"], response_model=list[models.LatentUpscalerModeItem])
         self.add_api_route("/sdapi/v1/sd-models", self.get_sd_models, methods=["GET"], response_model=list[models.SDModelItem])
@@ -683,6 +685,18 @@ class Api:
 
     def get_samplers(self):
         return [{"name": sampler[0], "aliases": sampler[2], "options": sampler[3]} for sampler in sd_samplers.all_samplers]
+
+    def get_schedulers(self):
+        return [
+            {
+                "name": scheduler.name,
+                "label": scheduler.label,
+                "aliases": scheduler.aliases,
+                "default_rho": scheduler.default_rho,
+                "need_inner_model": scheduler.need_inner_model,
+            }
+            for scheduler in sd_schedulers.schedulers
+        ]
 
     def get_upscalers(self):
         return [
