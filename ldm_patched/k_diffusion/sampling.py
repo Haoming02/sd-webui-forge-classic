@@ -42,21 +42,16 @@ def get_sigmas_polyexponential(n, sigma_min, sigma_max, rho=1.0, device="cpu"):
     return append_zero(sigmas)
 
 
-def get_sigmas_vp(n, beta_d=19.9, beta_min=0.1, eps_s=1e-3, device="cpu"):
-    """Constructs a continuous VP noise schedule"""
-    t = torch.linspace(1, eps_s, n, device=device)
-    sigmas = torch.sqrt((beta_d * t**2 / 2 + beta_min * t).expm1())
-    return append_zero(sigmas)
-
-
 def to_d(x, sigma, denoised):
     """Converts a denoiser output to a Karras ODE derivative"""
     return (x - denoised) / utils.append_dims(sigma, x.ndim)
 
 
 def get_ancestral_step(sigma_from, sigma_to, eta=1.0):
-    """Calculates the noise level (sigma_down) to step down to and the amount
-    of noise to add (sigma_up) when doing an ancestral sampling step"""
+    """
+    Calculates the noise level (sigma_down) to step down to and the
+    amount of noise to add (sigma_up) when doing an ancestral sampling step
+    """
     if not eta:
         return sigma_to, 0.0
     sigma_up = min(
@@ -67,7 +62,7 @@ def get_ancestral_step(sigma_from, sigma_to, eta=1.0):
     return sigma_down, sigma_up
 
 
-def default_noise_sampler(x):
+def default_noise_sampler(x, seed=None):
     return lambda sigma, sigma_next: torch.randn_like(x)
 
 
