@@ -48,7 +48,7 @@ def cond_from_a1111_to_patched_ldm_weighted(cond, weights):
     return results
 
 
-def forge_sample(self, denoiser_params, cond_scale, cond_composition):
+def forge_sample(self, denoiser_params, cond_scale, cond_composition, skip_uncond=False, options=None):
     model = self.inner_model.inner_model.forge_objects.unet.model
     control = self.inner_model.inner_model.forge_objects.unet.controlnet_linked_list
     extra_concat_condition = self.inner_model.inner_model.forge_objects.unet.extra_concat_condition
@@ -57,6 +57,9 @@ def forge_sample(self, denoiser_params, cond_scale, cond_composition):
     uncond = cond_from_a1111_to_patched_ldm(denoiser_params.text_uncond)
     cond = cond_from_a1111_to_patched_ldm_weighted(denoiser_params.text_cond, cond_composition)
     model_options = self.inner_model.inner_model.forge_objects.unet.model_options
+    if options is not None:
+        model_options = model_options.copy()
+        model_options.update(options)
     seed = self.p.seeds[0]
 
     if extra_concat_condition is not None:
@@ -78,7 +81,7 @@ def forge_sample(self, denoiser_params, cond_scale, cond_composition):
     for modifier in model_options.get("conditioning_modifiers", []):
         model, x, timestep, uncond, cond, cond_scale, model_options, seed = modifier(model, x, timestep, uncond, cond, cond_scale, model_options, seed)
 
-    denoised = sampling_function(model, x, timestep, uncond, cond, cond_scale, model_options, seed)
+    denoised = sampling_function(model, x, timestep, None if skip_uncond else uncond, cond, cond_scale, model_options, seed)
     return denoised
 
 
