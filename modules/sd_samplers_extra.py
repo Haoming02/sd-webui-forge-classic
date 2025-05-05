@@ -4,8 +4,9 @@ import k_diffusion.sampling
 
 
 @torch.no_grad()
-def restart_sampler(model, x, sigmas, extra_args=None, callback=None, disable=None, s_noise=1., restart_list=None):
-    """Implements restart sampling in Restart Sampling for Improving Generative Processes (2023)
+def restart_sampler(model, x, sigmas, extra_args=None, callback=None, disable=None, s_noise=1.0, restart_list=None):
+    """
+    Implements restart sampling in Restart Sampling for Improving Generative Processes (2023)
     Restart_list format: {min_sigma: [ restart_steps, restart_times, max_sigma]}
     If restart_list is None: will choose restart_list automatically, otherwise will use the given restart_list
     """
@@ -19,7 +20,7 @@ def restart_sampler(model, x, sigmas, extra_args=None, callback=None, disable=No
         denoised = model(x, old_sigma * s_in, **extra_args)
         d = to_d(x, old_sigma, denoised)
         if callback is not None:
-            callback({'x': x, 'i': step_id, 'sigma': new_sigma, 'sigma_hat': old_sigma, 'denoised': denoised})
+            callback({"x": x, "i": step_id, "sigma": new_sigma, "sigma_hat": old_sigma, "denoised": denoised})
         dt = new_sigma - old_sigma
         if new_sigma == 0 or not second_order:
             # Euler method
@@ -67,7 +68,7 @@ def restart_sampler(model, x, sigmas, extra_args=None, callback=None, disable=No
         if last_sigma is None:
             last_sigma = old_sigma
         elif last_sigma < old_sigma:
-            x = x + k_diffusion.sampling.torch.randn_like(x) * s_noise * (old_sigma ** 2 - last_sigma ** 2) ** 0.5
+            x = x + k_diffusion.sampling.torch.randn_like(x) * s_noise * (old_sigma**2 - last_sigma**2) ** 0.5
         x = heun_step(x, old_sigma, new_sigma)
         last_sigma = new_sigma
 
