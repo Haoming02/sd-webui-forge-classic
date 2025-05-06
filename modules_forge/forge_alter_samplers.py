@@ -1,3 +1,5 @@
+import logging
+
 import k_diffusion.sampling
 
 from modules import sd_samplers_cfgpp, sd_samplers_common, sd_samplers_kdiffusion
@@ -28,10 +30,14 @@ class AlterSampler(sd_samplers_kdiffusion.KDiffusionSampler):
         super().__init__(sampler_function, sd_model, None)
 
     def sample(self, p, x, conditioning, unconditional_conditioning, steps=None, image_conditioning=None):
+        if p.cfg_scale > 2.0:
+            logging.warning("Low CFG is recommended when using CFG++ samplers")
         self.scheduler_name = p.scheduler
         return super().sample(p, x, conditioning, unconditional_conditioning, steps, image_conditioning)
 
     def sample_img2img(self, p, x, noise, conditioning, unconditional_conditioning, steps=None, image_conditioning=None):
+        if p.cfg_scale > 2.0:
+            logging.warning("Low CFG is recommended when using CFG++ samplers")
         self.scheduler_name = p.scheduler
         return super().sample_img2img(p, x, noise, conditioning, unconditional_conditioning, steps, image_conditioning)
 
@@ -44,10 +50,10 @@ def build_constructor(sampler_name):
 
 
 samplers_data_alter = [
-    sd_samplers_common.SamplerData("DDPM", build_constructor(sampler_name="ddpm"), ["ddpm"], {}),
-    # sd_samplers_common.SamplerData("Euler CFG++", build_constructor(sampler_name="euler_cfg_pp"), ["euler_cfg_pp"], {}),
-    # sd_samplers_common.SamplerData("Euler a CFG++", build_constructor(sampler_name="euler_ancestral_cfg_pp"), ["euler_ancestral_cfg_pp"], {}),
-    # sd_samplers_common.SamplerData("DPM++ SDE CFG++", build_constructor(sampler_name="dpmpp_sde_cfg_pp"), ["dpmpp_sde_cfg_pp"], {}),
     sd_samplers_common.SamplerData("DPM++ 2M CFG++", build_constructor(sampler_name="dpmpp_2m_cfg_pp"), ["dpmpp_2m_cfg_pp"], {}),
-    # sd_samplers_common.SamplerData("DPM++ 3M SDE CFG++", build_constructor(sampler_name="dpmpp_3m_sde_cfg_pp"), ["dpmpp_3m_sde_cfg_pp"], {}),
+    sd_samplers_common.SamplerData("DPM++ SDE CFG++", build_constructor(sampler_name="dpmpp_sde_cfg_pp"), ["dpmpp_sde_cfg_pp"], {}),
+    sd_samplers_common.SamplerData("DPM++ 3M SDE CFG++", build_constructor(sampler_name="dpmpp_3m_sde_cfg_pp"), ["dpmpp_3m_sde_cfg_pp"], {}),
+    sd_samplers_common.SamplerData("Euler a CFG++", build_constructor(sampler_name="euler_ancestral_cfg_pp"), ["euler_ancestral_cfg_pp"], {}),
+    sd_samplers_common.SamplerData("Euler CFG++", build_constructor(sampler_name="euler_cfg_pp"), ["euler_cfg_pp"], {}),
+    sd_samplers_common.SamplerData("DDPM", build_constructor(sampler_name="ddpm"), ["ddpm"], {}),
 ]

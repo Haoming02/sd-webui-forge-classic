@@ -34,9 +34,7 @@ def sample_euler_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disabl
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
-    extra_args["model_options"] = _set_model_options_post_cfg_function(
-        model_options, post_cfg_function, disable_cfg1_optimization=True
-    )
+    extra_args["model_options"] = _set_model_options_post_cfg_function(model_options, post_cfg_function, disable_cfg1_optimization=True)
 
     s_in = x.new_ones([x.shape[0]])
     for i in trange(len(sigmas) - 1, disable=disable):
@@ -72,9 +70,7 @@ def sample_euler_ancestral_cfg_pp(model, x, sigmas, extra_args=None, callback=No
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
-    extra_args["model_options"] = _set_model_options_post_cfg_function(
-        model_options, post_cfg_function, disable_cfg1_optimization=True
-    )
+    extra_args["model_options"] = _set_model_options_post_cfg_function(model_options, post_cfg_function, disable_cfg1_optimization=True)
 
     s_in = x.new_ones([x.shape[0]])
     for i in trange(len(sigmas) - 1, disable=disable):
@@ -107,11 +103,7 @@ def sample_dpmpp_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, di
         return x
 
     sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
-    noise_sampler = (
-        BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=extra_args.get("seed", None), cpu=True)
-        if noise_sampler is None
-        else noise_sampler
-    )
+    noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=extra_args.get("seed", None), cpu=True) if noise_sampler is None else noise_sampler
     extra_args = {} if extra_args is None else extra_args
 
     temp = [0]
@@ -121,9 +113,7 @@ def sample_dpmpp_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, di
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
-    extra_args["model_options"] = _set_model_options_post_cfg_function(
-        model_options, post_cfg_function, disable_cfg1_optimization=True
-    )
+    extra_args["model_options"] = _set_model_options_post_cfg_function(model_options, post_cfg_function, disable_cfg1_optimization=True)
 
     s_in = x.new_ones([x.shape[0]])
 
@@ -142,7 +132,6 @@ def sample_dpmpp_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, di
 
         if sigmas[i + 1] == 0:
             d = to_d(x, sigmas[i], temp[0])
-            # dt = sigmas[i + 1] - sigmas[i]
             x = denoised + d * sigmas[i + 1]
         else:
             t, t_next = _t_fn(sigmas[i]), _t_fn(sigmas[i + 1])
@@ -157,7 +146,6 @@ def sample_dpmpp_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, di
             denoised_2 = model(x_2, _sigma_fn(s) * s_in, **extra_args)
 
             sd, su = get_ancestral_step(_sigma_fn(t), _sigma_fn(t_next), eta)
-            # t_next_ = t_fn(sd)
             denoised_d = (1 - fac) * temp[0] + fac * temp[0]
             x = denoised_2 + to_d(x, sigmas[i], denoised_d) * sd
             x = x + noise_sampler(_sigma_fn(t), _sigma_fn(t_next)) * s_noise * su
@@ -166,22 +154,22 @@ def sample_dpmpp_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, di
 
 @torch.no_grad()
 def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None):
-    """
-    DPM-Solver++(2M) CFG++
-    https://github.com/Panchovix/stable-diffusion-webui-reForge/blob/main/modules/sd_samplers_extra.py#L84
-    """
-    model.cond_scale_miltiplier = 1 / 12.5
-    model.need_last_noise_uncond = True
-
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
 
-    old_denoised = None
-    old_noise_uncond = None
+    old_uncond_denoised = None
+    uncond_denoised = None
+
+    def post_cfg_function(args):
+        nonlocal uncond_denoised
+        uncond_denoised = args["uncond_denoised"]
+        return args["denoised"]
+
+    model_options = extra_args.get("model_options", {}).copy()
+    extra_args["model_options"] = _set_model_options_post_cfg_function(model_options, post_cfg_function, disable_cfg1_optimization=True)
 
     for i in trange(len(sigmas) - 1, disable=disable):
         denoised = model(x, sigmas[i] * s_in, **extra_args)
-        noise_uncond = model.last_noise_uncond
         if callback is not None:
             callback(
                 {
@@ -194,30 +182,19 @@ def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
             )
         t, t_next = _t_fn(sigmas[i]), _t_fn(sigmas[i + 1])
         h = t_next - t
-        if old_denoised is None or old_noise_uncond is None or sigmas[i + 1] == 0:
-            x = (_sigma_fn(t_next) / _sigma_fn(t)) * x - (-h).expm1() * denoised
+        if old_uncond_denoised is None or sigmas[i + 1] == 0:
+            denoised_mix = -torch.exp(-h) * uncond_denoised
         else:
             h_last = t - _t_fn(sigmas[i - 1])
             r = h_last / h
-            denoised_d = (1 + 1 / (2 * r)) * denoised - (1 / (2 * r)) * old_noise_uncond
-            x = (_sigma_fn(t_next) / _sigma_fn(t)) * x - (-h).expm1() * denoised_d
-        old_denoised = denoised
-        old_noise_uncond = noise_uncond
+            denoised_mix = -torch.exp(-h) * uncond_denoised - torch.expm1(-h) * (1 / (2 * r)) * (denoised - old_uncond_denoised)
+        x = denoised + denoised_mix + torch.exp(-h) * x
+        old_uncond_denoised = uncond_denoised
     return x
 
 
 @torch.no_grad()
-def sample_dpmpp_3m_sde_cfg_pp(
-    model,
-    x,
-    sigmas,
-    extra_args=None,
-    callback=None,
-    disable=None,
-    eta=None,
-    s_noise=None,
-    noise_sampler=None,
-):
+def sample_dpmpp_3m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None, eta=None, s_noise=None, noise_sampler=None):
     eta = 1.0 if eta is None else eta
     s_noise = 1.0 if s_noise is None else s_noise
 
@@ -226,9 +203,7 @@ def sample_dpmpp_3m_sde_cfg_pp(
 
     seed = extra_args.get("seed", None)
     sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
-    noise_sampler = (
-        BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
-    )
+    noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
 
@@ -242,9 +217,7 @@ def sample_dpmpp_3m_sde_cfg_pp(
         return args["denoised"]
 
     model_options = extra_args.get("model_options", {}).copy()
-    extra_args["model_options"] = _set_model_options_post_cfg_function(
-        model_options, post_cfg_function, disable_cfg1_optimization=True
-    )
+    extra_args["model_options"] = _set_model_options_post_cfg_function(model_options, post_cfg_function, disable_cfg1_optimization=True)
 
     for i in trange(len(sigmas) - 1, disable=disable):
         denoised = model(x, sigmas[i] * s_in, **extra_args)
