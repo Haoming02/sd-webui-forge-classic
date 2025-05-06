@@ -1,9 +1,8 @@
 import torch
 import inspect
 import k_diffusion
-from k_diffusion import sampling
 
-from modules import sd_samplers_common, sd_samplers_extra, sd_samplers_cfg_denoiser, sd_schedulers, sd_samplers_smea
+from modules import sd_samplers_common, sd_samplers_extra, sd_samplers_cfg_denoiser, sd_schedulers
 from modules.sd_samplers_cfg_denoiser import CFGDenoiser  # noqa: F401
 from modules.script_callbacks import ExtraNoiseParams, extra_noise_callback
 
@@ -28,10 +27,6 @@ samplers_k_diffusion = [
     ("DPM fast", "sample_dpm_fast", ["k_dpm_fast"], {"uses_ensd": True}),
     ("DPM adaptive", "sample_dpm_adaptive", ["k_dpm_ad"], {"uses_ensd": True}),
     ("Restart", sd_samplers_extra.restart_sampler, ["restart"], {"scheduler": "karras", "second_order": True}),
-    ("Euler Dy", sd_samplers_smea.sample_euler_dy, ["k_euler_dy"], {}),
-    ("Euler SMEA Dy", sd_samplers_smea.sample_euler_smea_dy, ["k_euler_smea_dy"], {}),
-    ("Euler Negative", sd_samplers_smea.sample_euler_negative, ["k_euler_negative"], {}),
-    ("Euler Negative Dy", sd_samplers_smea.sample_euler_dy_negative, ["k_euler_dy_negative"], {}),
 ]
 
 
