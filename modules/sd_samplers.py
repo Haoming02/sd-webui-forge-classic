@@ -108,7 +108,7 @@ def get_hr_scheduler_from_infotext(d: dict):
 
 
 @functools.lru_cache(maxsize=10, typed=False)
-def get_sampler_and_scheduler(sampler_name: str, scheduler_name: str):
+def get_sampler_and_scheduler(sampler_name: str, scheduler_name: str, *, status: bool = False):
     default_sampler = samplers[0]
     found_scheduler = sd_schedulers.schedulers_map.get(scheduler_name, sd_schedulers.schedulers[0])
 
@@ -125,15 +125,21 @@ def get_sampler_and_scheduler(sampler_name: str, scheduler_name: str):
 
     sampler = all_samplers_map.get(name, default_sampler)
 
-    # revert back to Automatic if it's the default scheduler for the selected sampler
+    _automatic = False
     if sampler.options.get("scheduler", None) == found_scheduler.name:
         found_scheduler = sd_schedulers.schedulers[0]
+        _automatic = True
 
-    return sampler.name, found_scheduler.label
+    if not status:
+        return sampler.name, found_scheduler.label
+    else:
+        return sampler.name, found_scheduler.label, _automatic
 
 
 def fix_p_invalid_sampler_and_scheduler(p):
     i_sampler_name, i_scheduler = p.sampler_name, p.scheduler
-    p.sampler_name, p.scheduler = get_sampler_and_scheduler(p.sampler_name, p.scheduler)
-    if p.sampler_name != i_sampler_name or i_scheduler != p.scheduler:
-        logging.warning(f'Sampler Scheduler autocorrection: "{i_sampler_name}" -> "{p.sampler_name}", "{i_scheduler}" -> "{p.scheduler}"')
+    p.sampler_name, p.scheduler, _automatic = get_sampler_and_scheduler(p.sampler_name, p.scheduler, status=True)
+    if i_sampler_name != p.sampler_name:
+        logging.warning(f'Sampler Correction: "{i_sampler_name}" -> "{p.sampler_name}"')
+    if i_scheduler != p.scheduler and not _automatic:
+        logging.warning(f'Scheduler Correction: "{i_scheduler}" -> "{p.scheduler}"')
