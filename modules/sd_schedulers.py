@@ -4,9 +4,8 @@ from typing import Callable
 import k_diffusion
 import numpy as np
 import torch
-from scipy import stats
-
 from modules import shared
+from scipy import stats
 
 
 def to_d(x: torch.Tensor, sigma: float, denoised: torch.Tensor):

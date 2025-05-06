@@ -1,16 +1,25 @@
 import inspect
 from collections import namedtuple
-from typing import Callable
 from functools import lru_cache
+from typing import Callable
+
+import k_diffusion.sampling
 import numpy as np
 import torch
-from PIL import Image
-from modules import devices, images, sd_vae_approx, sd_samplers, sd_vae_taesd, sd_vae_rgb, shared, sd_models
+from modules import (
+    devices,
+    extra_networks,
+    images,
+    sd_models,
+    sd_samplers,
+    sd_vae_approx,
+    sd_vae_rgb,
+    sd_vae_taesd,
+    shared,
+)
 from modules.shared import opts, state
-from modules_forge.forge_sampler import sampling_prepare, sampling_cleanup
-from modules import extra_networks
-import k_diffusion.sampling
-
+from modules_forge.forge_sampler import sampling_cleanup, sampling_prepare
+from PIL import Image
 
 SamplerDataTuple = namedtuple("SamplerData", ["name", "constructor", "aliases", "options"])
 
@@ -35,7 +44,13 @@ def setup_img2img_steps(p, steps=None):
     return steps, t_enc
 
 
-approximation_indexes = {"Full": 0, "Approx NN": 1, "Approx cheap": 2, "TAESD": 3, "RGB": 4}
+approximation_indexes = {
+    "Full": 0,
+    "Approx NN": 1,
+    "Approx cheap": 2,
+    "TAESD": 3,
+    "RGB": 4,
+}
 
 
 @lru_cache(maxsize=(shared.opts.sd_vae_checkpoint_cache), typed=False)
@@ -121,7 +136,9 @@ def images_tensor_to_samples(image, approximation=None, model=None):
         image = image.to(shared.device, dtype=devices.dtype_vae)
         image = image * 2 - 1
         if len(image) > 1:
-            x_latent = torch.stack([model.get_first_stage_encoding(model.encode_first_stage(torch.unsqueeze(img, 0)))[0] for img in image])
+            x_latent = torch.stack(
+                [model.get_first_stage_encoding(model.encode_first_stage(torch.unsqueeze(img, 0)))[0] for img in image]
+            )
         else:
             x_latent = model.get_first_stage_encoding(model.encode_first_stage(image))
 
@@ -131,7 +148,11 @@ def images_tensor_to_samples(image, approximation=None, model=None):
 def store_latent(decoded):
     state.current_latent = decoded
 
-    if (opts.live_previews_enable and opts.show_progress_every_n_steps > 0) and (shared.state.sampling_steps - shared.state.sampling_step > opts.show_progress_every_n_steps) and (shared.state.sampling_step % opts.show_progress_every_n_steps == 0):
+    if (
+        (opts.live_previews_enable and opts.show_progress_every_n_steps > 0)
+        and (shared.state.sampling_steps - shared.state.sampling_step > opts.show_progress_every_n_steps)
+        and (shared.state.sampling_step % opts.show_progress_every_n_steps == 0)
+    ):
         if not shared.parallel_processing_allowed:
             shared.state.assign_current_image(sample_to_image(decoded))
 

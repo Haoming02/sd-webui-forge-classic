@@ -1,10 +1,13 @@
 import torch
-
-from k_diffusion import utils, sampling
+from k_diffusion import sampling, utils
 from k_diffusion.external import DiscreteEpsDDPMDenoiser
 from k_diffusion.sampling import default_noise_sampler, trange
-
-from modules import shared, sd_samplers_cfg_denoiser, sd_samplers_kdiffusion, sd_samplers_common
+from modules import (
+    sd_samplers_cfg_denoiser,
+    sd_samplers_common,
+    sd_samplers_kdiffusion,
+    shared,
+)
 
 
 class LCMCompVisDenoiser(DiscreteEpsDDPMDenoiser):
@@ -36,7 +39,11 @@ class LCMCompVisDenoiser(DiscreteEpsDDPMDenoiser):
         return dists.abs().argmin(dim=0).view(sigma.shape) * self.skip_steps + (self.skip_steps - 1)
 
     def t_to_sigma(self, timestep):
-        t = torch.clamp(((timestep - (self.skip_steps - 1)) / self.skip_steps).float(), min=0, max=(len(self.sigmas) - 1))
+        t = torch.clamp(
+            ((timestep - (self.skip_steps - 1)) / self.skip_steps).float(),
+            min=0,
+            max=(len(self.sigmas) - 1),
+        )
         return super().t_to_sigma(t)
 
     def get_eps(self, *args, **kwargs):
@@ -66,7 +73,15 @@ def sample_lcm(model, x, sigmas, extra_args=None, callback=None, disable=None, n
         denoised = model(x, sigmas[i] * s_in, **extra_args)
 
         if callback is not None:
-            callback({"x": x, "i": i, "sigma": sigmas[i], "sigma_hat": sigmas[i], "denoised": denoised})
+            callback(
+                {
+                    "x": x,
+                    "i": i,
+                    "sigma": sigmas[i],
+                    "sigma_hat": sigmas[i],
+                    "denoised": denoised,
+                }
+            )
 
         x = denoised
         if sigmas[i + 1] > 0:
@@ -92,4 +107,12 @@ class LCMSampler(sd_samplers_kdiffusion.KDiffusionSampler):
 
 
 samplers_lcm = [("LCM", sample_lcm, ["k_lcm"], {})]
-samplers_data_lcm = [sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: LCMSampler(funcname, model), aliases, options) for label, funcname, aliases, options in samplers_lcm]
+samplers_data_lcm = [
+    sd_samplers_common.SamplerData(
+        label,
+        lambda model, funcname=funcname: LCMSampler(funcname, model),
+        aliases,
+        options,
+    )
+    for label, funcname, aliases, options in samplers_lcm
+]

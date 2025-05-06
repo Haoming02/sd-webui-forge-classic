@@ -1,11 +1,13 @@
 import torch
 from modules import prompt_parser, sd_samplers_common
-
+from modules.script_callbacks import (
+    AfterCFGCallbackParams,
+    CFGDenoiserParams,
+    cfg_after_cfg_callback,
+    cfg_denoiser_callback,
+)
 from modules.shared import opts, state
 from modules_forge import forge_sampler
-
-from modules.script_callbacks import CFGDenoiserParams, cfg_denoiser_callback
-from modules.script_callbacks import AfterCFGCallbackParams, cfg_after_cfg_callback
 
 
 def catenate_conds(conds):
@@ -142,7 +144,16 @@ class CFGDenoiser(torch.nn.Module):
             ] * torch.randn_like(self.init_latent)
             x = apply_blend(x, noisy_initial_latent.to(self.init_latent))
 
-        denoiser_params = CFGDenoiserParams(x, image_cond, sigma, state.sampling_step, state.sampling_steps, cond, uncond, self)
+        denoiser_params = CFGDenoiserParams(
+            x,
+            image_cond,
+            sigma,
+            state.sampling_step,
+            state.sampling_steps,
+            cond,
+            uncond,
+            self,
+        )
         cfg_denoiser_callback(denoiser_params)
 
         if 0.0 <= self.step / self.total_steps <= opts.skip_early_cond:
@@ -168,7 +179,12 @@ class CFGDenoiser(torch.nn.Module):
         if getattr(self.p.sd_model, "cond_stage_key", None) == "edit" and getattr(self, "image_cfg_scale", 1.0) != 1.0:
             denoised = self.combine_denoised_for_edit_model(denoised, cond_scale * self.cond_scale_miltiplier)
         elif not skip_uncond:
-            denoised = self.combine_denoised(denoised, cond_composition, uncond, cond_scale * self.cond_scale_miltiplier)
+            denoised = self.combine_denoised(
+                denoised,
+                cond_composition,
+                uncond,
+                cond_scale * self.cond_scale_miltiplier,
+            )
 
         if not self.mask_before_denoising and self.mask is not None:
             denoised = apply_blend(denoised)

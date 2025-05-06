@@ -5,8 +5,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from modules.sd_samplers_common import SamplerData
 
-from modules import sd_samplers_kdiffusion, sd_samplers_timesteps, sd_samplers_lcm, shared, sd_schedulers
-from modules.sd_samplers_common import samples_to_image_grid, sample_to_image  # noqa: F401
+from modules import (
+    sd_samplers_kdiffusion,
+    sd_samplers_lcm,
+    sd_samplers_timesteps,
+    sd_schedulers,
+    shared,
+)
+from modules.sd_samplers_common import (  # noqa: F401
+    sample_to_image,
+    samples_to_image_grid,
+)
 from modules_forge import forge_alter_samplers
 
 all_samplers = [

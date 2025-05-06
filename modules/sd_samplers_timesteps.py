@@ -1,14 +1,13 @@
-import torch
 import inspect
 import sys
-from modules import devices, sd_samplers_common, sd_samplers_timesteps_impl
-from modules.sd_samplers_cfg_denoiser import CFGDenoiser
-from modules.script_callbacks import ExtraNoiseParams, extra_noise_callback
 
-from modules.shared import opts
 import modules.shared as shared
-from modules_forge.forge_sampler import sampling_prepare, sampling_cleanup
-
+import torch
+from modules import devices, sd_samplers_common, sd_samplers_timesteps_impl
+from modules.script_callbacks import ExtraNoiseParams, extra_noise_callback
+from modules.sd_samplers_cfg_denoiser import CFGDenoiser
+from modules.shared import opts
+from modules_forge.forge_sampler import sampling_cleanup, sampling_prepare
 
 samplers_timesteps = [
     ("DDIM", sd_samplers_timesteps_impl.ddim, ["ddim"], {}),
@@ -17,7 +16,15 @@ samplers_timesteps = [
 ]
 
 
-samplers_data_timesteps = [sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: CompVisSampler(funcname, model), aliases, options) for label, funcname, aliases, options in samplers_timesteps]
+samplers_data_timesteps = [
+    sd_samplers_common.SamplerData(
+        label,
+        lambda model, funcname=funcname: CompVisSampler(funcname, model),
+        aliases,
+        options,
+    )
+    for label, funcname, aliases, options in samplers_timesteps
+]
 
 
 class CompVisTimestepsDenoiser(torch.nn.Module):
@@ -35,7 +42,10 @@ class CompVisTimestepsVDenoiser(torch.nn.Module):
         self.inner_model = model
 
     def predict_eps_from_z_and_v(self, x_t, t, v):
-        return torch.sqrt(self.inner_model.alphas_cumprod)[t.to(torch.int), None, None, None] * v + torch.sqrt(1 - self.inner_model.alphas_cumprod)[t.to(torch.int), None, None, None] * x_t
+        return (
+            torch.sqrt(self.inner_model.alphas_cumprod)[t.to(torch.int), None, None, None] * v
+            + torch.sqrt(1 - self.inner_model.alphas_cumprod)[t.to(torch.int), None, None, None] * x_t
+        )
 
     def forward(self, input, timesteps, **kwargs):
         model_output = self.inner_model.apply_model(input, timesteps, **kwargs)
@@ -44,7 +54,6 @@ class CompVisTimestepsVDenoiser(torch.nn.Module):
 
 
 class CFGDenoiserTimesteps(CFGDenoiser):
-
     def __init__(self, sampler):
         super().__init__(sampler)
 
@@ -136,7 +145,17 @@ class CompVisSampler(sd_samplers_common.Sampler):
             "s_min_uncond": self.s_min_uncond,
         }
 
-        samples = self.launch_sampling(t_enc + 1, lambda: self.func(self.model_wrap_cfg, xi, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
+        samples = self.launch_sampling(
+            t_enc + 1,
+            lambda: self.func(
+                self.model_wrap_cfg,
+                xi,
+                extra_args=self.sampler_extra_args,
+                disable=False,
+                callback=self.callback_state,
+                **extra_params_kwargs,
+            ),
+        )
 
         self.add_infotext(p)
 
@@ -167,7 +186,17 @@ class CompVisSampler(sd_samplers_common.Sampler):
             "cond_scale": p.cfg_scale,
             "s_min_uncond": self.s_min_uncond,
         }
-        samples = self.launch_sampling(steps, lambda: self.func(self.model_wrap_cfg, x, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
+        samples = self.launch_sampling(
+            steps,
+            lambda: self.func(
+                self.model_wrap_cfg,
+                x,
+                extra_args=self.sampler_extra_args,
+                disable=False,
+                callback=self.callback_state,
+                **extra_params_kwargs,
+            ),
+        )
 
         self.add_infotext(p)
 

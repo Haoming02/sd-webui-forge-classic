@@ -1,8 +1,7 @@
-import torch
-import tqdm
 import k_diffusion.sampling as sampling
 import numpy as np
-
+import torch
+import tqdm
 from modules import shared
 from modules.uni_pc import uni_pc
 
@@ -11,9 +10,13 @@ from modules.uni_pc import uni_pc
 def ddim(model, x, timesteps, extra_args=None, callback=None, disable=None, eta=0.0):
     alphas_cumprod = model.inner_model.inner_model.alphas_cumprod
     alphas = alphas_cumprod[timesteps]
-    alphas_prev = alphas_cumprod[torch.nn.functional.pad(timesteps[:-1], pad=(1, 0))].to(torch.float64 if x.device.type != "mps" and x.device.type != "xpu" else torch.float32)
+    alphas_prev = alphas_cumprod[torch.nn.functional.pad(timesteps[:-1], pad=(1, 0))].to(
+        torch.float64 if x.device.type != "mps" and x.device.type != "xpu" else torch.float32
+    )
     sqrt_one_minus_alphas = torch.sqrt(1 - alphas)
-    sigmas = eta * np.sqrt((1 - alphas_prev.cpu().numpy()) / (1 - alphas.cpu()) * (1 - alphas.cpu() / alphas_prev.cpu().numpy()))
+    sigmas = eta * np.sqrt(
+        (1 - alphas_prev.cpu().numpy()) / (1 - alphas.cpu()) * (1 - alphas.cpu() / alphas_prev.cpu().numpy())
+    )
 
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones((x.shape[0]))
@@ -43,7 +46,9 @@ def ddim(model, x, timesteps, extra_args=None, callback=None, disable=None, eta=
 def plms(model, x, timesteps, extra_args=None, callback=None, disable=None):
     alphas_cumprod = model.inner_model.inner_model.alphas_cumprod
     alphas = alphas_cumprod[timesteps]
-    alphas_prev = alphas_cumprod[torch.nn.functional.pad(timesteps[:-1], pad=(1, 0))].to(torch.float64 if x.device.type != "mps" and x.device.type != "xpu" else torch.float32)
+    alphas_prev = alphas_cumprod[torch.nn.functional.pad(timesteps[:-1], pad=(1, 0))].to(
+        torch.float64 if x.device.type != "mps" and x.device.type != "xpu" else torch.float32
+    )
     sqrt_one_minus_alphas = torch.sqrt(1 - alphas)
 
     extra_args = {} if extra_args is None else extra_args
@@ -106,7 +111,15 @@ class UniPCCFG(uni_pc.UniPC):
         super().__init__(None, *args, **kwargs)
 
         def after_update(x, model_x):
-            callback({"x": x, "i": self.index, "sigma": 0, "sigma_hat": 0, "denoised": model_x})
+            callback(
+                {
+                    "x": x,
+                    "i": self.index,
+                    "sigma": 0,
+                    "sigma_hat": 0,
+                    "denoised": model_x,
+                }
+            )
             self.index += 1
 
         self.cfg_model = cfg_model
@@ -130,8 +143,26 @@ def unipc(model, x, timesteps, extra_args=None, callback=None, disable=None, is_
     alphas_cumprod = model.inner_model.inner_model.alphas_cumprod
 
     ns = uni_pc.NoiseScheduleVP("discrete", alphas_cumprod=alphas_cumprod)
-    t_start = timesteps[-1] / 1000 + 1 / 1000 if is_img2img else None  # this is likely off by a bit - if someone wants to fix it please by all means
-    unipc_sampler = UniPCCFG(model, extra_args, callback, ns, predict_x0=True, thresholding=False, variant=shared.opts.uni_pc_variant)
-    x = unipc_sampler.sample(x, steps=len(timesteps), t_start=t_start, skip_type=shared.opts.uni_pc_skip_type, method="multistep", order=shared.opts.uni_pc_order, lower_order_final=shared.opts.uni_pc_lower_order_final)
+    t_start = (
+        timesteps[-1] / 1000 + 1 / 1000 if is_img2img else None
+    )  # this is likely off by a bit - if someone wants to fix it please by all means
+    unipc_sampler = UniPCCFG(
+        model,
+        extra_args,
+        callback,
+        ns,
+        predict_x0=True,
+        thresholding=False,
+        variant=shared.opts.uni_pc_variant,
+    )
+    x = unipc_sampler.sample(
+        x,
+        steps=len(timesteps),
+        t_start=t_start,
+        skip_type=shared.opts.uni_pc_skip_type,
+        method="multistep",
+        order=shared.opts.uni_pc_order,
+        lower_order_final=shared.opts.uni_pc_lower_order_final,
+    )
 
     return x

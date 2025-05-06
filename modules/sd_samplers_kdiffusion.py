@@ -1,15 +1,18 @@
-import torch
 import inspect
+
 import k_diffusion
-
-from modules import sd_samplers_common, sd_samplers_extra, sd_samplers_cfg_denoiser, sd_schedulers
-from modules.sd_samplers_cfg_denoiser import CFGDenoiser  # noqa: F401
-from modules.script_callbacks import ExtraNoiseParams, extra_noise_callback
-
-from modules.shared import opts
 import modules.shared as shared
-from modules_forge.forge_sampler import sampling_prepare, sampling_cleanup
-
+import torch
+from modules import (
+    sd_samplers_cfg_denoiser,
+    sd_samplers_common,
+    sd_samplers_extra,
+    sd_schedulers,
+)
+from modules.script_callbacks import ExtraNoiseParams, extra_noise_callback
+from modules.sd_samplers_cfg_denoiser import CFGDenoiser  # noqa: F401
+from modules.shared import opts
+from modules_forge.forge_sampler import sampling_cleanup, sampling_prepare
 
 samplers_k_diffusion = [
     ("DPM++ 2M", "sample_dpmpp_2m", ["k_dpmpp_2m"], {"scheduler": "karras"}),
@@ -24,7 +27,16 @@ samplers_k_diffusion = [
 ]
 
 
-samplers_data_k_diffusion = [sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: KDiffusionSampler(funcname, model), aliases, options) for label, funcname, aliases, options in samplers_k_diffusion if callable(funcname) or hasattr(k_diffusion.sampling, funcname)]
+samplers_data_k_diffusion = [
+    sd_samplers_common.SamplerData(
+        label,
+        lambda model, funcname=funcname: KDiffusionSampler(funcname, model),
+        aliases,
+        options,
+    )
+    for label, funcname, aliases, options in samplers_k_diffusion
+    if callable(funcname) or hasattr(k_diffusion.sampling, funcname)
+]
 
 sampler_extra_params = {
     "sample_dpmpp_sde": ["eta", "s_noise", "r"],
@@ -43,7 +55,11 @@ class CFGDenoiserKDiffusion(sd_samplers_cfg_denoiser.CFGDenoiser):
     @property
     def inner_model(self):
         if self.model_wrap is None:
-            denoiser = k_diffusion.external.CompVisVDenoiser if shared.sd_model.parameterization == "v" else k_diffusion.external.CompVisDenoiser
+            denoiser = (
+                k_diffusion.external.CompVisVDenoiser
+                if shared.sd_model.parameterization == "v"
+                else k_diffusion.external.CompVisDenoiser
+            )
             self.model_wrap = denoiser(shared.sd_model, quantize=True)
 
         return self.model_wrap
@@ -101,7 +117,10 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
 
         scheduler = sd_schedulers.schedulers_map.get(scheduler_name)
 
-        m_sigma_min, m_sigma_max = self.model_wrap.sigmas[0].item(), self.model_wrap.sigmas[-1].item()
+        m_sigma_min, m_sigma_max = (
+            self.model_wrap.sigmas[0].item(),
+            self.model_wrap.sigmas[-1].item(),
+        )
         sigma_min, sigma_max = (0.1, 10) if opts.use_old_karras_scheduler_sigmas else (m_sigma_min, m_sigma_max)
 
         if p.sampler_noise_scheduler_override:
@@ -192,7 +211,17 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
             "s_min_uncond": self.s_min_uncond,
         }
 
-        samples = self.launch_sampling(t_enc + 1, lambda: self.func(self.model_wrap_cfg, xi, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
+        samples = self.launch_sampling(
+            t_enc + 1,
+            lambda: self.func(
+                self.model_wrap_cfg,
+                xi,
+                extra_args=self.sampler_extra_args,
+                disable=False,
+                callback=self.callback_state,
+                **extra_params_kwargs,
+            ),
+        )
 
         self.add_infotext(p)
 
@@ -243,7 +272,17 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
             "s_min_uncond": self.s_min_uncond,
         }
 
-        samples = self.launch_sampling(steps, lambda: self.func(self.model_wrap_cfg, x, extra_args=self.sampler_extra_args, disable=False, callback=self.callback_state, **extra_params_kwargs))
+        samples = self.launch_sampling(
+            steps,
+            lambda: self.func(
+                self.model_wrap_cfg,
+                x,
+                extra_args=self.sampler_extra_args,
+                disable=False,
+                callback=self.callback_state,
+                **extra_params_kwargs,
+            ),
+        )
 
         self.add_infotext(p)
 
