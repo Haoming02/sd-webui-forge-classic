@@ -14,18 +14,12 @@ from modules_forge.forge_sampler import sampling_prepare, sampling_cleanup
 samplers_k_diffusion = [
     ("DPM++ 2M", "sample_dpmpp_2m", ["k_dpmpp_2m"], {"scheduler": "karras"}),
     ("DPM++ SDE", "sample_dpmpp_sde", ["k_dpmpp_sde"], {"scheduler": "karras", "second_order": True, "brownian_noise": True}),
-    ("DPM++ 2M SDE", "sample_dpmpp_2m_sde", ["k_dpmpp_2m_sde"], {"scheduler": "exponential", "brownian_noise": True}),
-    ("DPM++ 2M SDE Heun", "sample_dpmpp_2m_sde", ["k_dpmpp_2m_sde_heun"], {"scheduler": "exponential", "brownian_noise": True, "solver_type": "heun"}),
-    ("DPM++ 2S a", "sample_dpmpp_2s_ancestral", ["k_dpmpp_2s_a"], {"scheduler": "karras", "uses_ensd": True, "second_order": True}),
     ("DPM++ 3M SDE", "sample_dpmpp_3m_sde", ["k_dpmpp_3m_sde"], {"scheduler": "exponential", "discard_next_to_last_sigma": True, "brownian_noise": True}),
     ("Euler a", "sample_euler_ancestral", ["k_euler_a", "k_euler_ancestral"], {"uses_ensd": True}),
     ("Euler", "sample_euler", ["k_euler"], {}),
     ("LMS", "sample_lms", ["k_lms"], {}),
     ("Heun", "sample_heun", ["k_heun"], {"second_order": True}),
     ("DPM2", "sample_dpm_2", ["k_dpm_2"], {"scheduler": "karras", "discard_next_to_last_sigma": True, "second_order": True}),
-    ("DPM2 a", "sample_dpm_2_ancestral", ["k_dpm_2_a"], {"scheduler": "karras", "discard_next_to_last_sigma": True, "uses_ensd": True, "second_order": True}),
-    ("DPM fast", "sample_dpm_fast", ["k_dpm_fast"], {"uses_ensd": True}),
-    ("DPM adaptive", "sample_dpm_adaptive", ["k_dpm_ad"], {"uses_ensd": True}),
     ("Restart", sd_samplers_extra.restart_sampler, ["restart"], {"scheduler": "karras", "second_order": True}),
 ]
 
@@ -33,21 +27,12 @@ samplers_k_diffusion = [
 samplers_data_k_diffusion = [sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: KDiffusionSampler(funcname, model), aliases, options) for label, funcname, aliases, options in samplers_k_diffusion if callable(funcname) or hasattr(k_diffusion.sampling, funcname)]
 
 sampler_extra_params = {
-    "sample_euler": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
+    "sample_dpmpp_sde": ["eta", "s_noise", "r"],
+    "sample_dpmpp_3m_sde": ["eta", "s_noise"],
     "sample_euler_ancestral": ["eta", "s_noise"],
+    "sample_euler": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
     "sample_heun": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
     "sample_dpm_2": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
-    "sample_dpm_fast": ["s_noise"],
-    "sample_dpm_2_ancestral": ["s_noise"],
-    "sample_dpmpp_2s_ancestral": ["eta", "s_noise"],
-    "sample_dpmpp_sde": ["eta", "s_noise", "r"],
-    "sample_dpmpp_2m_sde": ["eta", "s_noise", "solver_type"],
-    "sample_dpmpp_3m_sde": ["eta", "s_noise"],
-    # additional_sampler #
-    "sample_euler_dy": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
-    "sample_euler_smea_dy": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
-    "sample_euler_negative": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
-    "sample_euler_dy_negative": ["s_churn", "s_tmin", "s_tmax", "s_noise"],
 }
 
 k_diffusion_samplers_map = {x.name: x for x in samplers_data_k_diffusion}
