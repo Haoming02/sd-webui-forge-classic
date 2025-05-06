@@ -151,23 +151,24 @@ def sample_dpmpp_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, di
 
 @torch.no_grad()
 def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None):
+    """
+    DPM-Solver++(2M) CFG++
+    https://github.com/Panchovix/stable-diffusion-webui-reForge/blob/main/modules/sd_samplers_extra.py#L84
+    """
+    model.cond_scale_miltiplier = 1 / 12.5
+    model.need_last_noise_uncond = True
+
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
+    sigma_fn = lambda t: t.neg().exp()
     t_fn = lambda sigma: sigma.log().neg()
 
-    old_uncond_denoised = None
-    uncond_denoised = None
-
-    def post_cfg_function(args):
-        nonlocal uncond_denoised
-        uncond_denoised = args["uncond_denoised"]
-        return args["denoised"]
-
-    model_options = extra_args.get("model_options", {}).copy()
-    extra_args["model_options"] = set_model_options_post_cfg_function(model_options, post_cfg_function, disable_cfg1_optimization=True)
+    old_denoised = None
+    old_noise_uncond = None
 
     for i in trange(len(sigmas) - 1, disable=disable):
         denoised = model(x, sigmas[i] * s_in, **extra_args)
+        noise_uncond = model.last_noise_uncond
         if callback is not None:
             callback(
                 {
@@ -180,14 +181,15 @@ def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
             )
         t, t_next = t_fn(sigmas[i]), t_fn(sigmas[i + 1])
         h = t_next - t
-        if old_uncond_denoised is None or sigmas[i + 1] == 0:
-            denoised_mix = -torch.exp(-h) * uncond_denoised
+        if old_denoised is None or old_noise_uncond is None or sigmas[i + 1] == 0:
+            x = (sigma_fn(t_next) / sigma_fn(t)) * x - (-h).expm1() * denoised
         else:
             h_last = t - t_fn(sigmas[i - 1])
             r = h_last / h
-            denoised_mix = -torch.exp(-h) * uncond_denoised - torch.expm1(-h) * (1 / (2 * r)) * (denoised - old_uncond_denoised)
-        x = denoised + denoised_mix + torch.exp(-h) * x
-        old_uncond_denoised = uncond_denoised
+            denoised_d = (1 + 1 / (2 * r)) * denoised - (1 / (2 * r)) * old_noise_uncond
+            x = (sigma_fn(t_next) / sigma_fn(t)) * x - (-h).expm1() * denoised_d
+        old_denoised = denoised
+        old_noise_uncond = noise_uncond
     return x
 
 
