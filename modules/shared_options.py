@@ -346,10 +346,10 @@ options_templates.update(
     options_section(
         ("ui_alternatives", "UI alternatives", "ui"),
         {
-            "show_scheduler": OptionInfo(True, "Display the Scheduler Options").needs_reload_ui(),
+            "show_scheduler": OptionInfo(False, "Display the Scheduler Options").needs_reload_ui(),
             "show_refiner": OptionInfo(False, "Display the Refiner Accordions").info("(deprecated) feature for SDXL").needs_reload_ui(),
-            "show_rescale_cfg": OptionInfo(True, "Display the Rescale CFG Slider").info("feature for v-pred checkpoints").needs_reload_ui(),
-            "show_mahiro": OptionInfo(True, "Display the MaHiRo toggle").info('see <a href="https://huggingface.co/spaces/yoinked/blue-arxiv">blue-arxiv</a> - <b>id:</b> <ins>2024-1208.1</ins>').needs_reload_ui(),
+            "show_rescale_cfg": OptionInfo(False, "Display the Rescale CFG Slider").info("feature for v-pred checkpoints").needs_reload_ui(),
+            "show_mahiro": OptionInfo(False, "Display the MaHiRo toggle").info('see <a href="https://huggingface.co/spaces/yoinked/blue-arxiv">blue-arxiv</a> - <b>id:</b> <ins>2024-1208.1</ins>').needs_reload_ui(),
             "compact_prompt_box": OptionInfo(False, "Compact prompt layout").info("puts prompt and negative prompt inside the Generate tab, leaving more vertical space for the image on the right").needs_reload_ui(),
             "dimensions_and_batch_together": OptionInfo(True, "Show Width/Height and Batch sliders in same row").needs_reload_ui(),
             "sd_checkpoint_dropdown_use_short": OptionInfo(False, "Checkpoint dropdown: use filenames without paths").info("models in subdirectories like photo/sd15.ckpt will be listed as just sd15.ckpt"),
