@@ -1,5 +1,6 @@
 GitPython==3.1.44
 Pillow==11.2.1
+albumentations==1.4.3  # insightface
 clean-fid==0.1.35
 diskcache==5.6.3
 einops==0.8.1
@@ -18,7 +19,7 @@ open-clip-torch==1.3.0
 opencv-python==4.8.1.78
 piexif==1.1.3
 pillow-heif==0.22.0
-protobuf==6.30.2
+protobuf==4.25.7  # controlnet
 psutil==5.9.8
 pydantic==1.10.22
 pytorch_lightning==1.9.5
