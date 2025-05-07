@@ -1,6 +1,8 @@
+addict
 fvcore
 mediapipe
 onnx
 onnxruntime
 opencv-python
 svglib
+yapf
