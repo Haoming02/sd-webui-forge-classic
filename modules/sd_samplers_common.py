@@ -276,8 +276,6 @@ class Sampler:
         self.s_tmin = 0.0
         self.s_tmax = float("inf")
         self.s_noise = 1.0
-        self.dpmpp_sde_r = 0.5
-        self.dpmpp_2m_sde_solver = "midpoint"
 
         self.eta_option_field = "eta_ancestral"
         self.eta_infotext_field = "Eta"
