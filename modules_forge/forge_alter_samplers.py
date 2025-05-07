@@ -1,7 +1,5 @@
 import logging
 
-import k_diffusion.sampling
-
 from modules import sd_samplers_cfgpp, sd_samplers_common, sd_samplers_kdiffusion
 
 
@@ -12,8 +10,6 @@ class AlterSampler(sd_samplers_kdiffusion.KDiffusionSampler):
         self.unet = sd_model.forge_objects.unet
 
         match self.sampler_name:
-            case "ddpm":
-                sampler_function = k_diffusion.sampling.sample_ddpm
             case "euler_cfg_pp":
                 sampler_function = sd_samplers_cfgpp.sample_euler_cfg_pp
             case "euler_ancestral_cfg_pp":
@@ -55,5 +51,4 @@ samplers_data_alter = [
     sd_samplers_common.SamplerData("DPM++ 3M SDE CFG++", build_constructor(sampler_name="dpmpp_3m_sde_cfg_pp"), ["dpmpp_3m_sde_cfg_pp"], {}),
     sd_samplers_common.SamplerData("Euler a CFG++", build_constructor(sampler_name="euler_ancestral_cfg_pp"), ["euler_ancestral_cfg_pp"], {}),
     sd_samplers_common.SamplerData("Euler CFG++", build_constructor(sampler_name="euler_cfg_pp"), ["euler_cfg_pp"], {}),
-    sd_samplers_common.SamplerData("DDPM", build_constructor(sampler_name="ddpm"), ["ddpm"], {}),
 ]
