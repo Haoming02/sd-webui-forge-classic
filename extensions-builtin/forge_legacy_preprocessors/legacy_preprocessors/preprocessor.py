@@ -613,46 +613,6 @@ def unload_normal_bae():
     pass
 
 
-model_oneformer_coco = None
-
-
-def oneformer_coco(img, res=512, **kwargs):
-    img, remove_pad = resize_image_with_pad(img, res)
-    global model_oneformer_coco
-    if model_oneformer_coco is None:
-        from annotator.oneformer import OneformerDetector
-
-        model_oneformer_coco = OneformerDetector(OneformerDetector.configs["coco"])
-    result = model_oneformer_coco(img)
-    return remove_pad(result), True
-
-
-def unload_oneformer_coco():
-    global model_oneformer_coco
-    if model_oneformer_coco is not None:
-        model_oneformer_coco.unload_model()
-
-
-model_oneformer_ade20k = None
-
-
-def oneformer_ade20k(img, res=512, **kwargs):
-    img, remove_pad = resize_image_with_pad(img, res)
-    global model_oneformer_ade20k
-    if model_oneformer_ade20k is None:
-        from annotator.oneformer import OneformerDetector
-
-        model_oneformer_ade20k = OneformerDetector(OneformerDetector.configs["ade20k"])
-    result = model_oneformer_ade20k(img)
-    return remove_pad(result), True
-
-
-def unload_oneformer_ade20k():
-    global model_oneformer_ade20k
-    if model_oneformer_ade20k is not None:
-        model_oneformer_ade20k.unload_model()
-
-
 model_shuffle = None
 
 
