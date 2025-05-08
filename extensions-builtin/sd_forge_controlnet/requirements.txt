@@ -1,5 +1,0 @@
-fvcore
-mediapipe
-onnxruntime
-opencv-python
-svglib
