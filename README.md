@@ -97,6 +97,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Most built-in Extensions
 - [X] Some built-in Scripts
 - [X] Some Samplers
+- [X] Some Preprocessors
 - [X] Sampler in RadioGroup
 - [X] `test` scripts
 - [X] `Photopea` and `openpose_editor` *(ControlNet)*
