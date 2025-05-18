@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from ldm_patched.modules import model_management
 from torch import einsum, nn
+from modules.shared import opts
 
 from .diffusionmodules.util import AlphaBlender, checkpoint, timestep_embedding
 
@@ -21,6 +22,14 @@ if model_management.sage_enabled():
     from sageattention import sageattn
 
     isSage2 = importlib.metadata.version("sageattention").startswith("2")
+
+    if isSage2:
+        from sageattention import sageattn_qk_int8_pv_fp16_triton, sageattn_qk_int8_pv_fp16_cuda, sageattn_qk_int8_pv_fp8_cuda
+        sage2api_dispatch = {
+            "Triton fp16": lambda q, k, v: sageattn_qk_int8_pv_fp16_triton(q, k, v, tensor_layout="NHD", is_causal=False),
+            "CUDA fp16": lambda q, k, v: sageattn_qk_int8_pv_fp16_cuda(q, k, v, tensor_layout="NHD", is_causal=False, qk_quant_gran="per_warp", pv_accum_dtype="fp16+fp32"),
+            "CUDA fp8": lambda q, k, v: sageattn_qk_int8_pv_fp8_cuda(q, k, v, tensor_layout="NHD", is_causal=False, qk_quant_gran="per_warp", pv_accum_dtype="fp32+fp32")
+        }
 
 if model_management.xformers_enabled():
     import xformers
@@ -222,8 +231,9 @@ def attention_sage(q, k, v, heads, mask=None):
 
     b, _, dim_head = q.shape
     dim_head //= heads
+    sage2Api = opts.sageattn2_api
 
-    if (isSage2 and dim_head > 128) or ((not isSage2) and (dim_head not in (64, 96, 128))):
+    if (isSage2 and (sage2Api == "Disabled" or dim_head > 128)) or ((not isSage2) and (dim_head not in (64, 96, 128))):
         if model_management.xformers_enabled():
             return attention_xformers(q, k, v, heads, mask)
         else:
@@ -240,7 +250,10 @@ def attention_sage(q, k, v, heads, mask=None):
         if mask.ndim == 3:
             mask = mask.unsqueeze(1)
 
-    out = sageattn(q, k, v, attn_mask=mask, is_causal=False, tensor_layout="NHD")
+    if isSage2 and sage2Api != "Automatic":
+        out = sage2api_dispatch.get(sage2Api)(q, k, v)
+    else:
+        out = sageattn(q, k, v, attn_mask=mask, is_causal=False, tensor_layout="NHD")
     return out.reshape(b, -1, heads * dim_head)
 
 
