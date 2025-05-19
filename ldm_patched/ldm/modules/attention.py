@@ -283,7 +283,16 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
 
 
 if model_management.sage_enabled():
-    print("Using sage attention")
+    match args.sageattn2_api:
+        case SageAttentionAPIs.Automatic:
+            print("Using sage attention")
+        case SageAttentionAPIs.Triton16:
+            print("Using sage attention (Triton fp16)")
+        case SageAttentionAPIs.CUDA16:
+            print("Using sage attention (CUDA fp16)")
+        case SageAttentionAPIs.CUDA8:
+            print("Using sage attention (CUDA fp8)")
+
     optimized_attention = attention_sage
 elif model_management.flash_enabled():
     print("Using flash attention")
