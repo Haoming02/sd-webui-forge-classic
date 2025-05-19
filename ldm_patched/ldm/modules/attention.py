@@ -208,11 +208,11 @@ if isSage2 and args.sageattn2_api is not SageAttentionAPIs.Automatic:
     from functools import partial
     from sageattention import sageattn_qk_int8_pv_fp16_triton, sageattn_qk_int8_pv_fp16_cuda, sageattn_qk_int8_pv_fp8_cuda
 
-    if args.sageattn2_api is SageAttentionAPIs.fp16Triton:
+    if args.sageattn2_api is SageAttentionAPIs.Triton16:
         sageattn = sageattn_qk_int8_pv_fp16_triton
-    if args.sageattn2_api is SageAttentionAPIs.fp16CUDA:
+    if args.sageattn2_api is SageAttentionAPIs.CUDA16:
         sageattn = partial(sageattn_qk_int8_pv_fp16_cuda, qk_quant_gran="per_warp", pv_accum_dtype="fp16+fp32")
-    if args.sageattn2_api is SageAttentionAPIs.fp8CUDA:
+    if args.sageattn2_api is SageAttentionAPIs.CUDA8:
         sageattn = partial(sageattn_qk_int8_pv_fp8_cuda, qk_quant_gran="per_warp", pv_accum_dtype="fp16+fp32")
 
 

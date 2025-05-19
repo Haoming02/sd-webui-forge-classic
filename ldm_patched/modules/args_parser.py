@@ -81,9 +81,9 @@ parser.add_argument("--fast-fp16", action="store_true")
 
 class SageAttentionAPIs(enum.Enum):
     Automatic = "auto"
-    fp16Triton = "triton-fp16"
-    fp16CUDA = "cuda-fp16"
-    fp8CUDA = "cuda-fp8"
+    Triton16 = "triton-fp16"
+    CUDA16 = "cuda-fp16"
+    CUDA8 = "cuda-fp8"
 
 
 parser.add_argument("--sageattn2-api", type=SageAttentionAPIs, default=SageAttentionAPIs.Automatic, action=EnumAction)

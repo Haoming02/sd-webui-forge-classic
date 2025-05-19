@@ -145,6 +145,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update to latest PyTorch
     - `torch==2.7.0+cu128`
     - `xformers==0.0.30`
+
+> [!Tip]
+> If your GPU does not support the latest PyTorch, manually [install](#install-older-pytorch) older version of PyTorch
+
 - [X] No longer install `open-clip` twice
 - [X] Update some packages to newer versions
 - [X] Update recommended Python to `3.11.9`
@@ -194,6 +198,12 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > Using `symlink` means it will directly access the packages from the cache folders; refrain from clearing the cache when setting this option
 
+- `--model-ref`: Points to a central `models` folder that contains all your models
+    - said folder should contain subfolders like `Stable-diffusion`, `Lora`, `VAE`, `ESRGAN`, etc.
+
+> [!Important]
+> This simply **replaces** the `models` folder, rather than adding on top of it
+
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
     - requires PyTorch **2.7.0** +
 - `--sage`: Install the `sageattention` package to speed up generation
@@ -201,14 +211,21 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - requires RTX **30** +
     - only affects **SDXL**
 
-> [!Tip]
-> `--xformers` is still recommended even if you already have `--sage`, as `sageattention` does not speed up **VAE** while `xformers` does
+> [!Note]
+> For RTX **50** users, you may need to manually [install](#install-sageattention-2) `sageattention 2` instead
 
-- `--model-ref`: Points to a central `models` folder that contains all your models
-    - said folder should contain subfolders like `Stable-diffusion`, `Lora`, `VAE`, `ESRGAN`, etc.
+<details>
+<summary>with SageAttention 2</summary>
 
-> [!Important]
-> This simply **replaces** the `models` folder, rather than adding on top of it
+- `--sageattn2-api`: Select the function used by **SageAttention 2**
+    - **options:**
+        - `auto` (default)
+        - `triton-fp16`
+        - `cuda-fp16`
+        - `cuda-fp8`
+    - try the `fp16` options if you get `NaN` *(black images)* on `auto`
+
+</details>
 
 <br>
 
@@ -342,7 +359,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 </details>
 
 ### Install sageattention 2
-> If you only use **SDXL**, then `1.x` is already enough; `2.x` simply has partial support for **SD1** checkpoints
 
 <details>
 <summary>Expand</summary>
@@ -376,10 +392,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 </details>
 
-<br>
-
 ### Install older PyTorch
-> Read this if your GPU does not support the latest PyTorch
 
 <details>
 <summary>Expand</summary>
@@ -398,7 +411,7 @@ set TORCH_COMMAND=pip install torch==2.1.2 torchvision==0.16.2 --extra-index-url
 ## Attention
 
 > [!Important]
-> The `--xformers` and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used; This also means you can remove them once they are successfully installed
+> The `--xformers` and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used *(this also means you can remove them once the packages are successfully installed)*
 
 **Forge Classic** tries to import the packages and automatically choose the first available attention function in the following order:
 
@@ -408,8 +421,11 @@ set TORCH_COMMAND=pip install torch==2.1.2 torchvision==0.16.2 --extra-index-url
 4. `PyTorch`
 5. `Basic`
 
+> [!Tip]
+> To skip a specific attention, add the respective disable arg such as `--disable-sage`
+
 > [!Note]
-> The VAE only checks for `xformers`
+> The **VAE** only checks for `xformers`, so `--xformers` is still recommended even if you already have `--sage`
 
 In my experience, the speed of each attention function for SDXL is ranked in the following order:
 
@@ -417,6 +433,8 @@ In my experience, the speed of each attention function for SDXL is ranked in the
 
 > [!Note]
 > `SageAttention` is based on quantization, so its quality might be slightly worse than others
+
+<br>
 
 ## Issues & Requests
 
