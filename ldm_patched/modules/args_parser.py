@@ -2,6 +2,26 @@
 
 
 import argparse
+import enum
+
+
+class EnumAction(argparse.Action):
+    """Argparse `action` for handling Enum"""
+
+    def __init__(self, **kwargs):
+        enum_type = kwargs.pop("type", None)
+        assert issubclass(enum_type, enum.Enum)
+
+        choices = tuple(e.value for e in enum_type)
+        kwargs.setdefault("choices", choices)
+        kwargs.setdefault("metavar", f"[{','.join(list(choices))}]")
+
+        super(EnumAction, self).__init__(**kwargs)
+        self._enum = enum_type
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        value = self._enum(values)
+        setattr(namespace, self.dest, value)
 
 
 parser = argparse.ArgumentParser()
@@ -57,5 +77,16 @@ parser.add_argument("--cuda-stream", action="store_true")
 parser.add_argument("--pin-shared-memory", action="store_true")
 
 parser.add_argument("--fast-fp16", action="store_true")
+
+
+class SageAttentionAPIs(enum.Enum):
+    Automatic = "auto"
+    fp16Triton = "triton-fp16"
+    fp16CUDA = "cuda-fp16"
+    fp8CUDA = "cuda-fp8"
+
+
+parser.add_argument("--sageattn2-api", type=SageAttentionAPIs, default=SageAttentionAPIs.Automatic, action=EnumAction)
+
 
 args = parser.parse_args([])

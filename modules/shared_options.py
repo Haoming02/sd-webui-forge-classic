@@ -241,7 +241,6 @@ options_templates.update(
         ("optimizations", "Optimizations", "sd"),
         {
             "cross_attention_optimization": OptionInfo("Automatic", "Cross attention optimization", gr.Dropdown, lambda: {"choices": ["Automatic"], "interactive": False}),
-            "sageattn2_api": OptionInfo("Automatic", "SageAttention2 API", gr.Radio, {"choices": ["Automatic", "Triton fp16", "CUDA fp16", "CUDA fp8", "Disabled"]}).info("function used by <b>SageAttention2</b> if installed and enabled; try the fp16 options if you get black images; disabled will use PyTorch/xFormers"),
             "s_min_uncond": OptionInfo(0.0, "Negative Guidance minimum sigma", gr.Slider, {"minimum": 0.0, "maximum": 8.0, "step": 0.05}).link("PR", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/9177").info("skip negative prompt for some steps when the image is almost ready; 0=disable; higher=faster"),
             "skip_early_cond": OptionInfo(0.0, "Ignore negative prompt during early steps", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Skip Early CFG").info("disables CFG on a proportion of steps at the beginning of generation; 0=disable; 1=skip all; can both improve sample diversity/quality and speed up sampling"),
             "persistent_cond_cache": OptionInfo(True, "Persistent cond cache").info("do not recalculate conds from prompts if prompts have not changed since previous calculation"),
