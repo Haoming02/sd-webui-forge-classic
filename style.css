@@ -538,6 +538,10 @@ table.popup-table .link {
     padding: 1em;
 }
 
+#settings .settings-div {
+    padding: 1em;
+}
+
 .progressDiv {
     position: absolute;
     height: 20px;

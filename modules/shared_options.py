@@ -1,33 +1,41 @@
 import os
+
 import gradio as gr
 
-from modules import localization, ui_components, shared_items, shared, shared_gradio_themes, util, sd_emphasis
+from modules import (
+    localization,
+    sd_emphasis,
+    shared,
+    shared_gradio_themes,
+    shared_items,
+    ui_components,
+    util,
+)
+from modules.options import OptionHTML, OptionDiv, OptionInfo, categories, options_section
 from modules.paths_internal import data_path, default_output_dir
 from modules.shared_cmd_options import cmd_opts
-from modules.options import options_section, OptionInfo, OptionHTML, categories
 
 options_templates = {}
 hide_dirs = shared.hide_dirs
 
 restricted_opts = {
-    "samples_filename_pattern",
     "directories_filename_pattern",
-    "outdir_samples",
-    "outdir_txt2img_samples",
-    "outdir_img2img_samples",
     "outdir_extras_samples",
     "outdir_grids",
-    "outdir_txt2img_grids",
-    "outdir_save",
+    "outdir_img2img_samples",
     "outdir_init_images",
+    "outdir_samples",
+    "outdir_save",
+    "outdir_txt2img_grids",
+    "outdir_txt2img_samples",
+    "samples_filename_pattern",
 }
 
-categories.register_category("saving", "Saving images")
+categories.register_category("saving", "Saving Images")
 categories.register_category("sd", "Stable Diffusion")
 categories.register_category("ui", "User Interface")
 categories.register_category("system", "System")
 categories.register_category("postprocessing", "Postprocessing")
-categories.register_category("training", "Training")
 
 options_templates.update(
     options_section(
