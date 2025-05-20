@@ -51,13 +51,6 @@ def walk_files(path, allowed_extensions=None):
             yield os.path.join(root, filename)
 
 
-def ldm_print(*args, **kwargs):
-    if shared.opts.hide_ldm_prints:
-        return
-
-    print(*args, **kwargs)
-
-
 def truncate_path(target_path, base_path=cwd):
     abs_target, abs_base = os.path.abspath(target_path), os.path.abspath(base_path)
     try:

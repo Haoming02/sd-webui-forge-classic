@@ -139,18 +139,17 @@ options_templates.update(
     options_section(
         ("system", "System", "system"),
         {
-            "auto_launch_browser": OptionInfo("Local", "Automatically open webui in browser on startup", gr.Radio, lambda: {"choices": ["Disable", "Local", "Remote"]}),
-            "enable_console_prompts": OptionInfo(False, "Print prompts to console when generating with txt2img and img2img."),
-            "show_warnings": OptionInfo(False, "Show warnings in console.").needs_reload_ui(),
-            "show_gradio_deprecation_warnings": OptionInfo(True, "Show gradio deprecation warnings in console.").needs_reload_ui(),
-            "memmon_poll_rate": OptionInfo(8, "VRAM usage polls per second during generation.", gr.Slider, {"minimum": 0, "maximum": 40, "step": 1}).info("0 = disable"),
-            "samples_log_stdout": OptionInfo(False, "Always print all generation info to standard output"),
-            "multiple_tqdm": OptionInfo(True, "Add a second progress bar to the console that shows progress for an entire job."),
-            "enable_upscale_progressbar": OptionInfo(True, "Show a progress bar in the console for tiled upscaling."),
-            "list_hidden_files": OptionInfo(True, "Load models/files in hidden directories").info('directory is hidden if its name starts with "."'),
-            "disable_mmap_load_safetensors": OptionInfo(False, "Disable memmapping for loading .safetensors files.").info("fixes very slow loading speed in some cases"),
-            "hide_ldm_prints": OptionInfo(True, "Prevent Stability-AI's ldm/sgm modules from printing noise to console."),
-            "dump_stacks_on_signal": OptionInfo(False, "Print stack traces before exiting the program with ctrl+c."),
+            "auto_launch_browser": OptionInfo("Local", "Launch the webui in browser on startup", gr.Radio, {"choices": ("Disable", "Local", "Remote")}).info("Remote = always automatically start; Local = only when not sharing the server, such as <b>--share</b>"),
+            "enable_console_prompts": OptionInfo(False, "Print the generation prompts to console"),
+            "samples_log_stdout": OptionInfo(False, "Print the generation infotxt to console"),
+            "show_warnings": OptionInfo(False, "Show warnings in console").needs_reload_ui(),
+            "show_gradio_deprecation_warnings": OptionInfo(False, "Show gradio deprecation warnings in console").needs_reload_ui(),
+            "memmon_poll_rate": OptionInfo(5, "VRAM usage polls per second during generation", gr.Slider, {"minimum": 0, "maximum": 50, "step": 1}).info("0 = disable"),
+            "multiple_tqdm": OptionInfo(True, "Add an additional progress bar to the console to show the total progress of an entire job"),
+            "enable_upscale_progressbar": OptionInfo(True, "Show a progress bar in the console for tiled upscaling"),
+            "list_hidden_files": OptionInfo(True, "List the models/files under hidden directories").info('directory is hidden if its name starts with "."'),
+            "disable_mmap_load_safetensors": OptionInfo(False, "Disable memmapping when loading .safetensors").info("fix slow loading speed in certain cases"),
+            "dump_stacks_on_signal": OptionInfo(False, "Print the stack trace before terminating the webui via Ctrl + C"),
         },
     )
 )
@@ -159,9 +158,9 @@ options_templates.update(
     options_section(
         ("API", "API", "system"),
         {
-            "api_enable_requests": OptionInfo(True, "Allow http:// and https:// URLs for input images in API", restrict_api=True),
+            "api_enable_requests": OptionInfo(True, 'Allow "http://" and "https://" URLs as input images', restrict_api=True),
             "api_forbid_local_requests": OptionInfo(True, "Forbid URLs to local resources", restrict_api=True),
-            "api_useragent": OptionInfo("", "User agent for requests", restrict_api=True),
+            "api_useragent": OptionInfo("", "User Agent for Requests", restrict_api=True),
         },
     )
 )
