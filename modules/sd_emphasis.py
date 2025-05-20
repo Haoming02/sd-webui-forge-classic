@@ -48,7 +48,7 @@ class EmphasisOriginal(Emphasis):
 
 class EmphasisOriginalNoNorm(EmphasisOriginal):
     name = "No norm"
-    description = "implementation without normalization to fix certain issues for SDXL"
+    description = "implementation without normalization (fix certain issues for SDXL)"
 
     def after_transformers(self):
         self.z = self.z * self.multipliers.reshape(self.multipliers.shape + (1,)).expand(self.z.shape)
@@ -59,7 +59,11 @@ def get_current_option(emphasis_option_name):
 
 
 def get_options_descriptions():
-    return "; ".join(f"<b>{x.name}</b>: {x.description}" for x in options)
+    return f"""
+        <ul style='margin-left: 1.5em'><li>
+            {"</li><li>".join(f"<b>{x.name}</b>: {x.description}" for x in options)}
+        </li></ul>
+            """
 
 
 options = [
