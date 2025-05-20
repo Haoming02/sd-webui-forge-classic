@@ -21,7 +21,6 @@ metadata_tags_order = {
 class SDVersion(enum.Enum):
     Unknown = -1
     SD1 = 1
-    SD2 = 2
     SDXL = 3
 
 
@@ -61,8 +60,6 @@ class NetworkOnDisk:
     def detect_version(self):
         if str(self.metadata.get("ss_base_model_version", "")).startswith("sdxl_"):
             return SDVersion.SDXL
-        elif str(self.metadata.get("ss_v2", "")) == "True":
-            return SDVersion.SD2
         elif len(self.metadata):
             return SDVersion.SD1
 

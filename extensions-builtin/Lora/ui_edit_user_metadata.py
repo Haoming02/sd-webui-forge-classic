@@ -147,7 +147,7 @@ class LoraUserMetadataEditor(UserMetadataEditor):
 
     def create_extra_default_items_in_left_column(self):
         self.select_sd_version = gr.Dropdown(
-            choices=("SD1", "SD2", "SDXL", "Unknown"),
+            choices=("SD1", "SDXL", "Unknown"),
             value="Unknown",
             label="Stable Diffusion Version",
             interactive=True,

@@ -53,13 +53,7 @@ class ExtraNetworksPageLora(ExtraNetworksPage):
             sd_version = lora_on_disk.sd_version
 
         if enable_filter and not shared.opts.lora_show_all:
-            if sd_version is network.SDVersion.Unknown:
-                model_version = network.SDVersion.SDXL if shared.sd_model.is_sdxl else network.SDVersion.SD1
-                if model_version.name in shared.opts.lora_hide_unknown_for_versions:
-                    return None
-            elif shared.sd_model.is_sdxl and sd_version != network.SDVersion.SDXL:
-                return None
-            elif shared.sd_model.is_sd2 and sd_version != network.SDVersion.SD2:
+            if shared.sd_model.is_sdxl and sd_version != network.SDVersion.SDXL:
                 return None
             elif shared.sd_model.is_sd1 and sd_version != network.SDVersion.SD1:
                 return None
