@@ -438,30 +438,38 @@ options_templates.update(
 
 options_templates.update(
     options_section(
-        ("sampler-params", "Sampler parameters", "sd"),
+        ("sampler-params", "Sampler Parameters", "sd"),
         {
-            "hide_samplers": OptionInfo([], "Hide samplers in user interface", ui_components.DropdownMulti, lambda: {"choices": [x.name for x in shared_items.list_samplers()]}).needs_reload_ui(),
-            "hide_samplers_invert": OptionInfo(False, "Invert the above setting").info("<b>ie.</b> it is now a whitelist instead of a blacklist").needs_reload_ui(),
-            "eta_ddim": OptionInfo(0.0, "Eta for DDIM", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.01}, infotext="Eta DDIM").info("noise multiplier; higher = more unpredictable results"),
-            "eta_ancestral": OptionInfo(1.0, "Eta for k-diffusion samplers", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.01}, infotext="Eta").info("noise multiplier; currently only applies to ancestral samplers (i.e. Euler a) and SDE samplers"),
-            "ddim_discretize": OptionInfo("uniform", "img2img DDIM discretize", gr.Radio, {"choices": ["uniform", "quad"]}),
-            "s_churn": OptionInfo(0.0, "sigma churn", gr.Slider, {"minimum": 0.0, "maximum": 100.0, "step": 0.01}, infotext="Sigma churn").info("amount of stochasticity; only applies to Euler, Heun, and DPM2"),
-            "s_tmin": OptionInfo(0.0, "sigma tmin", gr.Slider, {"minimum": 0.0, "maximum": 10.0, "step": 0.01}, infotext="Sigma tmin").info("enable stochasticity; start value of the sigma range; only applies to Euler, Heun, and DPM2"),
-            "s_tmax": OptionInfo(0.0, "sigma tmax", gr.Slider, {"minimum": 0.0, "maximum": 999.0, "step": 0.01}, infotext="Sigma tmax").info("0 = inf; end value of the sigma range; only applies to Euler, Heun, and DPM2"),
-            "s_noise": OptionInfo(1.0, "sigma noise", gr.Slider, {"minimum": 0.0, "maximum": 1.1, "step": 0.001}, infotext="Sigma noise").info("amount of additional noise to counteract loss of detail during sampling"),
-            "sigma_min": OptionInfo(0.0, "sigma min", gr.Number, infotext="Schedule min sigma").info("0 = default (~0.03); minimum noise strength for k-diffusion noise scheduler"),
-            "sigma_max": OptionInfo(0.0, "sigma max", gr.Number, infotext="Schedule max sigma").info("0 = default (~14.6); maximum noise strength for k-diffusion noise scheduler"),
-            "rho": OptionInfo(0.0, "rho", gr.Number, infotext="Schedule rho").info("0 = default (7 for karras, 1 for polyexponential); higher values result in a steeper noise schedule (decreases faster)"),
-            "eta_noise_seed_delta": OptionInfo(0, "Eta noise seed delta", gr.Number, {"precision": 0}, infotext="ENSD").info("ENSD; does not improve anything, just produces different results for ancestral samplers - only useful for reproducing images"),
-            "always_discard_next_to_last_sigma": OptionInfo(False, "Always discard next-to-last sigma", infotext="Discard penultimate sigma").link("PR", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/6044"),
-            "sgm_noise_multiplier": OptionInfo(False, "SGM noise multiplier", infotext="SGM noise multiplier").link("PR", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/12818").info("Match initial noise to official SDXL implementation - only useful for reproducing images"),
-            "uni_pc_variant": OptionInfo("bh1", "UniPC variant", gr.Radio, {"choices": ["bh1", "bh2", "vary_coeff"]}, infotext="UniPC variant"),
-            "uni_pc_skip_type": OptionInfo("time_uniform", "UniPC skip type", gr.Radio, {"choices": ["time_uniform", "time_quadratic", "logSNR"]}, infotext="UniPC skip type"),
-            "uni_pc_order": OptionInfo(3, "UniPC order", gr.Slider, {"minimum": 1, "maximum": 50, "step": 1}, infotext="UniPC order").info("must be < sampling steps"),
+            "hide_samplers": OptionInfo([], "Hide Samplers", ui_components.DropdownMulti, lambda: {"choices": [x.name for x in shared_items.list_samplers()]}).needs_reload_ui(),
+            "hide_samplers_invert": OptionInfo(False, "Invert the above setting").info("<b>i.e.</b> it is now a whitelist instead of a blacklist").needs_reload_ui(),
+        },
+    )
+)
+
+options_templates.update(
+    options_section(
+        ("sampler-params", "Sampler Parameters", "sd") if cmd_opts.adv_samplers else (None, "Sampler Parameters"),
+        {
+            "eta_ddim": OptionInfo(0.0, "Eta for DDIM", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.01}, infotext="Eta DDIM"),
+            "eta_ancestral": OptionInfo(1.0, "Eta for k-diffusion samplers", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.01}, infotext="Eta"),
+            "ddim_discretize": OptionInfo("uniform", "img2img DDIM discretize", gr.Radio, {"choices": ("uniform", "quad")}),
+            "s_churn": OptionInfo(0.0, "sigma churn", gr.Slider, {"minimum": 0.0, "maximum": 100.0, "step": 0.01}, infotext="Sigma churn"),
+            "s_tmin": OptionInfo(0.0, "sigma tmin", gr.Slider, {"minimum": 0.0, "maximum": 10.0, "step": 0.01}, infotext="Sigma tmin"),
+            "s_tmax": OptionInfo(0.0, "sigma tmax", gr.Slider, {"minimum": 0.0, "maximum": 999.0, "step": 0.01}, infotext="Sigma tmax"),
+            "s_noise": OptionInfo(1.0, "sigma noise", gr.Slider, {"minimum": 0.0, "maximum": 1.1, "step": 0.001}, infotext="Sigma noise"),
+            "sigma_min": OptionInfo(0.0, "sigma min", gr.Number, infotext="Schedule min sigma"),
+            "sigma_max": OptionInfo(0.0, "sigma max", gr.Number, infotext="Schedule max sigma"),
+            "rho": OptionInfo(0.0, "rho", gr.Number, infotext="Schedule rho"),
+            "eta_noise_seed_delta": OptionInfo(0, "Eta noise seed delta", gr.Number, {"precision": 0}, infotext="ENSD"),
+            "always_discard_next_to_last_sigma": OptionInfo(False, "Always discard next-to-last sigma", infotext="Discard penultimate sigma"),
+            "sgm_noise_multiplier": OptionInfo(False, "SGM noise multiplier", infotext="SGM noise multiplier"),
+            "uni_pc_variant": OptionInfo("bh1", "UniPC variant", gr.Radio, {"choices": ("bh1", "bh2", "vary_coeff")}, infotext="UniPC variant"),
+            "uni_pc_skip_type": OptionInfo("time_uniform", "UniPC skip type", gr.Radio, {"choices": ("time_uniform", "time_quadratic", "logSNR")}, infotext="UniPC skip type"),
+            "uni_pc_order": OptionInfo(3, "UniPC order", gr.Slider, {"minimum": 1, "maximum": 50, "step": 1}, infotext="UniPC order"),
             "uni_pc_lower_order_final": OptionInfo(True, "UniPC lower order final", infotext="UniPC lower order final"),
-            "sd_noise_schedule": OptionInfo("Default", "Noise schedule for sampling", gr.Radio, {"choices": ["Default", "Zero Terminal SNR"]}, infotext="Noise Schedule").info("for use with zero terminal SNR trained models"),
-            "beta_dist_alpha": OptionInfo(0.6, "Beta scheduler - alpha", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler alpha").info("Default = 0.6; the alpha parameter of the beta distribution used in Beta sampling"),
-            "beta_dist_beta": OptionInfo(0.6, "Beta scheduler - beta", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler beta").info("Default = 0.6; the beta parameter of the beta distribution used in Beta sampling"),
+            "sd_noise_schedule": OptionInfo("Default", "Noise schedule for sampling", gr.Radio, {"choices": ("Default", "Zero Terminal SNR")}, infotext="Noise Schedule"),
+            "beta_dist_alpha": OptionInfo(0.6, "Beta scheduler - alpha", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler alpha"),
+            "beta_dist_beta": OptionInfo(0.6, "Beta scheduler - beta", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler beta"),
         },
     )
 )
