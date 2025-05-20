@@ -235,13 +235,15 @@ options_templates.update(
     options_section(
         ("optimizations", "Optimizations", "sd"),
         {
-            "cross_attention_optimization": OptionInfo("Automatic", "Cross attention optimization", gr.Dropdown, lambda: {"choices": ["Automatic"], "interactive": False}),
-            "s_min_uncond": OptionInfo(0.0, "Negative Guidance minimum sigma", gr.Slider, {"minimum": 0.0, "maximum": 8.0, "step": 0.05}).link("PR", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/9177").info("skip negative prompt for some steps when the image is almost ready; 0=disable; higher=faster"),
-            "skip_early_cond": OptionInfo(0.0, "Ignore negative prompt during early steps", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Skip Early CFG").info("disables CFG on a proportion of steps at the beginning of generation; 0=disable; 1=skip all; can both improve sample diversity/quality and speed up sampling"),
-            "persistent_cond_cache": OptionInfo(True, "Persistent cond cache").info("do not recalculate conds from prompts if prompts have not changed since previous calculation"),
+            "cross_attention_optimization": OptionInfo("Automatic", "Cross Attention Optimization", gr.Dropdown, {"choices": ("Automatic",), "interactive": False}),
+            "skip_early_cond": OptionInfo(0.0, "Ignore Negative Prompt during Early Steps", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Skip Early CFG").info("in percentage of total steps; 0 = disable; higher = faster"),
+            "s_min_uncond": OptionInfo(0.0, "Skip Negative Prompt during Later Steps", gr.Slider, {"minimum": 0.0, "maximum": 8.0, "step": 0.05}).info('in "sigma"; 0 = disable; higher = faster'),
+            "persistent_cond_cache": OptionInfo(True, "Persistent Cond Cache").info("do not recalculate conds if the prompts and parameters have not changed since previous generation"),
+            "div_precision": OptionDiv(),
             "fp8_storage": OptionInfo(False, "Store UNet Weights in fp8").info("store the weights in fp8; inference in fp16; reduce memory usage; reduce speed; reduce quality").needs_restart(),
-            "fp8_fast": OptionInfo(False, "Inference UNet in fast fp8 operations").info("inference in fp8 using <b>torch._scaled_mm</b>; increase speed; reduce quality; require <b>RTX 40</b> or later").needs_restart(),
-            "cublas_fast": OptionInfo(False, "Inference UNet in fast cublas operations").info("inference using <b>CublasLinear</b>; increase speed; require <b>manual</b> installation first").needs_restart(),
+            "fp8_fast": OptionInfo(False, "Inference UNet in fast fp8 operations").info("inference in fp8 using <b>torch._scaled_mm</b>; increase speed; reduce quality; require <b>RTX 40</b> or newer").needs_restart(),
+            "cublas_fast": OptionInfo(False, "Inference UNet in fast cublas operations").info('inference using <b>CublasLinear</b>; increase speed; require fp16; require <b><a href="https://github.com/Haoming02/sd-webui-forge-classic#install-cublas">manual installation</a></b>').needs_restart(),
+            "div_tome": OptionDiv(),
             "token_merging_explanation": OptionHTML(
                 """
 <b>Token Merging</b> speeds up the diffusion process by fusing "redundant" tokens together, but also reduces quality as a result.
@@ -249,12 +251,12 @@ options_templates.update(
 <b>Note:</b> Has no effect on SDXL when Max Downsample is set to 1
                 """
             ),
-            "token_merging_ratio": OptionInfo(0.0, "Token merging ratio", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}, infotext="Token merging ratio").info("0=disable; higher=faster"),
-            "token_merging_ratio_img2img": OptionInfo(0.0, "Token merging ratio for img2img", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}).info("overrides base ratio if non-zero"),
-            "token_merging_ratio_hr": OptionInfo(0.0, "Token merging ratio for Hires. fix", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}, infotext="Token merging ratio hr").info("overrides base ratio if non-zero"),
-            "token_merging_stride": OptionInfo(2, "Token merging - Stride", gr.Slider, {"minimum": 1, "maximum": 8, "step": 1}).info("higher=faster"),
-            "token_merging_downsample": OptionInfo(1, "Token merging - Max Downsample", gr.Slider, {"minimum": 1, "maximum": 4, "step": 1}).info("higher=faster"),
-            "token_merging_no_rand": OptionInfo(False, "Token merging - No random").info("reduce randomness by always selecting the same corner"),
+            "token_merging_ratio": OptionInfo(0.0, "Token Merging Ratio", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}, infotext="Token merging ratio").info("0 = disable; higher = faster"),
+            "token_merging_ratio_img2img": OptionInfo(0.0, "Token Merging Ratio for img2img", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}).info("overrides base ratio if non-zero"),
+            "token_merging_ratio_hr": OptionInfo(0.0, "Token Merging Ratio for Hires. fix", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}, infotext="Token merging ratio hr").info("overrides base ratio if non-zero"),
+            "token_merging_stride": OptionInfo(2, "Token Merging - Stride", gr.Slider, {"minimum": 1, "maximum": 8, "step": 1}).info("higher = faster"),
+            "token_merging_downsample": OptionInfo(1, "Token Merging - Max Downsample", gr.Slider, {"minimum": 1, "maximum": 4, "step": 1}).info("higher = faster"),
+            "token_merging_no_rand": OptionInfo(False, "Token Merging - No Random").info("reduce randomness by always fusing the same regions"),
         },
     )
 )
@@ -263,12 +265,13 @@ options_templates.update(
     options_section(
         ("compatibility", "Compatibility", "sd"),
         {
-            "use_old_karras_scheduler_sigmas": OptionInfo(False, "Use old karras scheduler sigmas (0.1 to 10)."),
-            "no_dpmpp_sde_batch_determinism": OptionInfo(False, "Do not make DPM++ SDE deterministic across different batch sizes."),
-            "use_old_hires_fix_width_height": OptionInfo(False, "For hires fix, use width/height sliders to set final resolution rather than first pass (disables Upscale by, Resize width/height to)."),
-            "hires_fix_use_firstpass_conds": OptionInfo(False, "For hires fix, calculate conds of second pass using extra networks of first pass."),
-            "use_old_scheduling": OptionInfo(False, "Use old prompt editing timelines.", infotext="Old prompt editing timelines").info("For [red:green:N]; old: If N < 1, it's a fraction of steps (and hires fix uses range from 0 to 1), if N >= 1, it's an absolute number of steps; new: If N has a decimal point in it, it's a fraction of steps (and hires fix uses range from 1 to 2), othewrwise it's an absolute number of steps"),
-            "use_downcasted_alpha_bar": OptionInfo(False, "Downcast model alphas_cumprod to fp16 before sampling. For reproducing old seeds.", infotext="Downcast alphas_cumprod"),
+            "compatibility_explanation": OptionHTML("Don't touch these unless you know what you are doing..."),
+            "use_old_karras_scheduler_sigmas": OptionInfo(False, "Use the old karras scheduler sigmas"),
+            "no_dpmpp_sde_batch_determinism": OptionInfo(False, "Do not make DPM++ SDE deterministic across different batch sizes"),
+            "use_old_hires_fix_width_height": OptionInfo(False, "For Hires. fix, use width/height sliders to set final resolution rather than first pass"),
+            "hires_fix_use_firstpass_conds": OptionInfo(False, "For Hires. fix, calculate conds of second pass using extra networks of first pass"),
+            "use_old_scheduling": OptionInfo(False, "Use the old prompt editing timelines implementation", infotext="Old prompt editing timelines"),
+            "use_downcasted_alpha_bar": OptionInfo(False, "Downcast alphas_cumprod to fp16 before sampling", infotext="Downcast alphas_cumprod"),
         },
     )
 )
