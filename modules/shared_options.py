@@ -194,20 +194,17 @@ options_templates.update(
         {
             "sd_vae_explanation": OptionHTML(
                 """
-<abbr title='Variational autoencoder'>VAE</abbr> is a neural network that transforms a standard <abbr title='red/green/blue'>RGB</abbr>
-image into latent space representation and back. Latent space representation is what stable diffusion is working on during sampling
-(i.e. when the progress bar is between empty and full). For txt2img, VAE is used to create a resulting image after the sampling is finished.
-For img2img, VAE is used to process user's input image before the sampling, and to create an image after sampling.
-"""
+<abbr title='Variational AutoEncoder'>VAE</abbr> is a neural network that transforms a standard <abbr title='Red/Green/Blue'>RGB</abbr>
+image to and from latent space representation. Latent space is what Stable Diffusion works on during generation. For txt2img, VAE is used
+to create the resulting image after the sampling is finished. For img2img, VAE is additionally used to process user's input image before the sampling.
+                """
             ),
-            "sd_vae_checkpoint_cache": OptionInfo(0, "VAE Checkpoints to cache in RAM", gr.Slider, {"minimum": 0, "maximum": 10, "step": 1}).needs_restart(),
-            "sd_vae": OptionInfo("Automatic", "SD VAE", gr.Dropdown, lambda: {"choices": shared_items.sd_vae_items()}, refresh=shared_items.refresh_vae_list, infotext="VAE").info("choose VAE model: Automatic = use one with same filename as checkpoint; None = use VAE from checkpoint"),
-            "sd_vae_overrides_per_model_preferences": OptionInfo(True, "Selected VAE overrides per-model preferences").info("you can set per-model VAE either by editing user metadata for checkpoints, or by making the VAE have same name as checkpoint"),
-            "prefer_vae_precision_float16": OptionInfo(False, "Prefer VAE in float16 precision").info("most VAE at half precision produces NaNs; <b>enable with caution</b>"),
-            "auto_vae_precision_bfloat16": OptionInfo(False, "Automatically convert VAE to bfloat16").info("triggers when a tensor with NaNs is produced in VAE; disabling the option in this case will result in a black square image; if enabled, overrides the option below"),
-            "auto_vae_precision": OptionInfo(True, "Automatically revert VAE to 32-bit floats").info("triggers when a tensor with NaNs is produced in VAE; disabling the option in this case will result in a black square image"),
-            "sd_vae_encode_method": OptionInfo("Full", "VAE type for encode", gr.Radio, {"choices": ["Full", "TAESD"]}, infotext="VAE Encoder").info("method to encode image to latent (use in img2img, hires-fix or inpaint mask)"),
-            "sd_vae_decode_method": OptionInfo("Full", "VAE type for decode", gr.Radio, {"choices": ["Full", "TAESD"]}, infotext="VAE Decoder").info("method to decode latent to image"),
+            "sd_vae_checkpoint_cache": OptionInfo(0, "Number of VAE to cache in RAM", gr.Slider, {"minimum": 0, "maximum": 10, "step": 1}).info("also affect the VAE used for previews").needs_restart(),
+            "sd_vae": OptionInfo("Automatic", "SD VAE", gr.Dropdown, lambda: {"choices": shared_items.sd_vae_items()}, refresh=shared_items.refresh_vae_list, infotext="VAE").info("None = always use VAE from checkpoint; Automatic = use VAE with the same filename as checkpoint"),
+            "sd_vae_overrides_per_model_preferences": OptionInfo(True, '"SD VAE" option overrides per-model preference'),
+            "prefer_vae_precision_float16": OptionInfo(False, "Prefer VAE in float16 precision").info("VAE at fp16 tends to cause NaNs; <b>enable with caution!</b>"),
+            "sd_vae_encode_method": OptionInfo("Full", "VAE for Encoding", gr.Radio, {"choices": ("Full", "TAESD")}, infotext="VAE Encoder").info("method to encode image to latent (img2img / Hires. fix / inpaint)"),
+            "sd_vae_decode_method": OptionInfo("Full", "VAE for Decoding", gr.Radio, {"choices": ("Full", "TAESD")}, infotext="VAE Decoder").info("method to decode latent to image"),
         },
     )
 )
@@ -216,20 +213,20 @@ options_templates.update(
     options_section(
         ("img2img", "img2img", "sd"),
         {
-            "inpainting_mask_weight": OptionInfo(1.0, "Inpainting conditioning mask strength", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.01}, infotext="Conditional mask weight"),
-            "initial_noise_multiplier": OptionInfo(1.0, "Noise multiplier for img2img", gr.Slider, {"minimum": 0.0, "maximum": 1.5, "step": 0.001}, infotext="Noise multiplier"),
-            "img2img_extra_noise": OptionInfo(0.0, "Extra noise multiplier for img2img and hires fix", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.01}, infotext="Extra noise").info("0 = disabled (default); should be lower than denoising strength"),
-            "img2img_color_correction": OptionInfo(False, "Apply color correction to img2img results to match original colors."),
-            "img2img_fix_steps": OptionInfo(False, "With img2img, do exactly the amount of steps the slider specifies.").info("normally you'd do less with less denoising"),
-            "img2img_background_color": OptionInfo("#ffffff", "With img2img, fill transparent parts of the input image with this color.", ui_components.FormColorPicker, {}),
-            "img2img_editor_height": OptionInfo(720, "Height of the image editor", gr.Slider, {"minimum": 80, "maximum": 1600, "step": 1}).info("in pixels").needs_reload_ui(),
-            "img2img_sketch_default_brush_color": OptionInfo("#ffffff", "Sketch initial brush color", ui_components.FormColorPicker, {}).info("default brush color of img2img sketch").needs_reload_ui(),
-            "img2img_inpaint_mask_brush_color": OptionInfo("#ffffff", "Inpaint mask brush color", ui_components.FormColorPicker, {}).info("brush color of inpaint mask").needs_reload_ui(),
-            "img2img_inpaint_sketch_default_brush_color": OptionInfo("#ffffff", "Inpaint sketch initial brush color", ui_components.FormColorPicker, {}).info("default brush color of img2img inpaint sketch").needs_reload_ui(),
-            "return_mask": OptionInfo(False, "For inpainting, include the greyscale mask in results for web"),
-            "return_mask_composite": OptionInfo(False, "For inpainting, include masked composite in results for web"),
-            "img2img_batch_show_results_limit": OptionInfo(32, "Show the first N batch img2img results in UI", gr.Slider, {"minimum": -1, "maximum": 1000, "step": 1}).info("0: disable, -1: show all images. Too many images can cause lag"),
-            "overlay_inpaint": OptionInfo(True, "Overlay original for inpaint").info("when inpainting, overlay the original image over the areas that weren't inpainted."),
+            "inpainting_mask_weight": OptionInfo(1.0, "Inpainting Conditioning Mask Strength", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Conditional mask weight"),
+            "initial_noise_multiplier": OptionInfo(1.0, "Noise Multiplier for img2img", gr.Slider, {"minimum": 0.0, "maximum": 1.5, "step": 0.05}, infotext="Noise multiplier"),
+            "img2img_extra_noise": OptionInfo(0.0, "Extra Noise Multiplier for img2img and Hires. fix", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Extra noise").info("0 = disabled; higher = more details in generation"),
+            "img2img_color_correction": OptionInfo(False, "Apply color correction to img2img results to match original colors"),
+            "img2img_fix_steps": OptionInfo(False, "During img2img, do exactly the number of Steps the slider specifies").info("otherwise, only process <b>Sampling steps</b> x <b>Denoising strength</b> steps"),
+            "img2img_editor_height": OptionInfo(720, "Height of the Image Editor", gr.Slider, {"minimum": 80, "maximum": 1600, "step": 20}).info("in pixels").needs_reload_ui(),
+            "img2img_background_color": OptionInfo("#808080", "For img2img, fill the transparent parts of the input image with this color", ui_components.FormColorPicker, {}),
+            "img2img_inpaint_mask_brush_color": OptionInfo("#808080", "Brush Color for Inpaint Mask", ui_components.FormColorPicker, {}).needs_reload_ui(),
+            "img2img_sketch_default_brush_color": OptionInfo("#ff0000", "Initial Brush Color for Sketch", ui_components.FormColorPicker, {}).needs_reload_ui(),
+            "img2img_inpaint_sketch_default_brush_color": OptionInfo("#ff0000", "Initial Brush Color for Inpaint Sketch", ui_components.FormColorPicker, {}).needs_reload_ui(),
+            "return_mask": OptionInfo(False, "For inpainting, append the greyscale mask to results"),
+            "return_mask_composite": OptionInfo(False, "For inpainting, append the masked composite to results"),
+            "overlay_inpaint": OptionInfo(True, "For inpainting, overlay the original image over the areas that were untouched"),
+            "img2img_batch_show_results_limit": OptionInfo(32, "Show the first N batch of img2img results in UI", gr.Slider, {"minimum": -1, "maximum": 256, "step": 1}).info("0 = disable; -1 = show all; too many images causes severe lag"),
         },
     )
 )
