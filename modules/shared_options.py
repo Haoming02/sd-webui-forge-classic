@@ -308,15 +308,15 @@ However, the resulting UI is quite... sluggish.
 
 options_templates.update(
     options_section(
-        ("ui_prompt_editing", "Prompt editing", "ui"),
+        ("ui_prompt_editing", "Prompt Editing", "ui"),
         {
-            "keyedit_precision_attention": OptionInfo(0.1, "Precision for (attention:1.1) when editing the prompt with Ctrl+up/down", gr.Slider, {"minimum": 0.01, "maximum": 0.2, "step": 0.001}),
-            "keyedit_precision_extra": OptionInfo(0.05, "Precision for <extra networks:0.9> when editing the prompt with Ctrl+up/down", gr.Slider, {"minimum": 0.01, "maximum": 0.2, "step": 0.001}),
-            "keyedit_delimiters": OptionInfo(r".,\/!?%^*;:{}=`~() ", "Word delimiters when editing the prompt with Ctrl+up/down"),
-            "keyedit_delimiters_whitespace": OptionInfo(["Tab", "Carriage Return", "Line Feed"], "Ctrl+up/down whitespace delimiters", gr.CheckboxGroup, lambda: {"choices": ["Tab", "Carriage Return", "Line Feed"]}),
-            "keyedit_move": OptionInfo(True, "Alt+left/right moves prompt elements"),
-            "disable_token_counters": OptionInfo(False, "Disable prompt token counters"),
-            "include_styles_into_token_counters": OptionInfo(True, "Count tokens of enabled styles").info("When calculating how many tokens the prompt has, also consider tokens added by enabled styles."),
+            "keyedit_precision_attention": OptionInfo(0.1, "Precision for (attention:1.1) when editing the prompt with Ctrl + Up/Down", gr.Slider, {"minimum": 0.05, "maximum": 0.25, "step": 0.05}),
+            "keyedit_precision_extra": OptionInfo(0.05, "Precision for <lora:0.9> when editing the prompt with Ctrl + Up/Down", gr.Slider, {"minimum": 0.05, "maximum": 0.25, "step": 0.05}),
+            "keyedit_delimiters": OptionInfo(r".,\/!?%^*;:{}=`~() ", "RegEx Delimiters when editing the prompt with Ctrl + Up/Down"),
+            "keyedit_delimiters_whitespace": OptionInfo(["Tab", "Carriage Return", "Line Feed"], "Whitespace Delimiters when editing the prompt with Ctrl + Up/Down", gr.CheckboxGroup, {"choices": ("Tab", "Carriage Return", "Line Feed")}),
+            "keyedit_move": OptionInfo(True, "Alt + Left/Right moves prompt chunks"),
+            "disable_token_counters": OptionInfo(False, "Disable Token Counter"),
+            "include_styles_into_token_counters": OptionInfo(True, "Include enabled Styles in Token Count"),
         },
     )
 )
@@ -325,36 +325,37 @@ options_templates.update(
     options_section(
         ("ui_gallery", "Gallery", "ui"),
         {
-            "return_grid": OptionInfo(True, "Show grid in gallery"),
-            "do_not_show_images": OptionInfo(False, "Do not show any images in gallery"),
-            "js_modal_lightbox": OptionInfo(True, "Full page image viewer: enable"),
-            "js_modal_lightbox_initially_zoomed": OptionInfo(True, "Full page image viewer: show images zoomed in by default"),
-            "js_modal_lightbox_gamepad": OptionInfo(False, "Full page image viewer: navigate with gamepad"),
-            "js_modal_lightbox_gamepad_repeat": OptionInfo(250, "Full page image viewer: gamepad repeat period").info("in milliseconds"),
-            "sd_webui_modal_lightbox_icon_opacity": OptionInfo(1, "Full page image viewer: control icon unfocused opacity", gr.Slider, {"minimum": 0.0, "maximum": 1, "step": 0.01}, onchange=shared.reload_gradio_theme).info("for mouse only").needs_reload_ui(),
-            "sd_webui_modal_lightbox_toolbar_opacity": OptionInfo(0.9, "Full page image viewer: tool bar opacity", gr.Slider, {"minimum": 0.0, "maximum": 1, "step": 0.01}, onchange=shared.reload_gradio_theme).info("for mouse only").needs_reload_ui(),
-            "gallery_height": OptionInfo("", "Gallery height", gr.Textbox).info("can be any valid CSS value, for example 768px or 20em").needs_reload_ui(),
-            "open_dir_button_choice": OptionInfo("Subdirectory", "What directory the [📂] button opens", gr.Radio, {"choices": ["Output Root", "Subdirectory", "Subdirectory (even temp dir)"]}),
+            "do_not_show_images": OptionInfo(False, "Do not show any image in gallery"),
+            "gallery_height": OptionInfo("", "Gallery Height", gr.Textbox).info("in CSS value; <b>e.g.</b> 768px or 20em").needs_reload_ui(),
+            "return_grid": OptionInfo(True, "Show Grids in gallery").info("<b>e.g.</b> for <b>X/Y/Z Plot</b>"),
+            "js_modal_lightbox": OptionInfo(True, 'Enable "Lightbox"').info("Full Page Image Viewer"),
+            "js_modal_lightbox_initially_zoomed": OptionInfo(True, "[Lightbox]: show images zoomed in by default"),
+            "js_modal_lightbox_gamepad": OptionInfo(False, "[Lightbox]: navigate with gamepad"),
+            "js_modal_lightbox_gamepad_repeat": OptionInfo(250, "[Lightbox]: gamepad repeat period").info("in ms"),
+            "sd_webui_modal_lightbox_icon_opacity": OptionInfo(1.0, "[Lightbox]: control icon unfocused opacity", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, onchange=shared.reload_gradio_theme).info("for mouse only").needs_reload_ui(),
+            "sd_webui_modal_lightbox_toolbar_opacity": OptionInfo(0.9, "[Lightbox]: tool bar opacity", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, onchange=shared.reload_gradio_theme).info("for mouse only").needs_reload_ui(),
+            "open_dir_button_choice": OptionInfo("Subdirectory", "What directory the [📂] button opens", gr.Radio, {"choices": ("Output Root", "Subdirectory", "Subdirectory (even temp dir)")}),
         },
     )
 )
 
 options_templates.update(
     options_section(
-        ("ui_alternatives", "UI alternatives", "ui"),
+        ("ui_alternatives", "UI Alternatives", "ui"),
         {
-            "show_scheduler": OptionInfo(False, "Display the Scheduler Options").needs_reload_ui(),
-            "show_refiner": OptionInfo(False, "Display the Refiner Accordions").info("(deprecated) feature for SDXL").needs_reload_ui(),
+            "show_scheduler": OptionInfo(False, "Display the Scheduler Dropdown").needs_reload_ui(),
+            "show_refiner": OptionInfo(False, "Display the Refiner Accordion").info('"deprecated" feature for SDXL').needs_reload_ui(),
             "show_rescale_cfg": OptionInfo(False, "Display the Rescale CFG Slider").info("feature for v-pred checkpoints").needs_reload_ui(),
-            "show_mahiro": OptionInfo(False, "Display the MaHiRo toggle").info('see <a href="https://huggingface.co/spaces/yoinked/blue-arxiv">blue-arxiv</a> - <b>id:</b> <ins>2024-1208.1</ins>').needs_reload_ui(),
-            "compact_prompt_box": OptionInfo(False, "Compact prompt layout").info("puts prompt and negative prompt inside the Generate tab, leaving more vertical space for the image on the right").needs_reload_ui(),
+            "show_mahiro": OptionInfo(False, "Display the MaHiRo Toggle").info('see <a href="https://huggingface.co/spaces/yoinked/blue-arxiv">blue-arxiv</a> - <b>id:</b> <ins>2024-1208.1</ins>').needs_reload_ui(),
+            "div_classic": OptionDiv(),
+            "compact_prompt_box": OptionInfo(False, "Compact prompt layout").info("put prompts inside the Generate tab, leaving more space for the gallery").needs_reload_ui(),
             "dimensions_and_batch_together": OptionInfo(True, "Show Width/Height and Batch sliders in same row").needs_reload_ui(),
-            "sd_checkpoint_dropdown_use_short": OptionInfo(False, "Checkpoint dropdown: use filenames without paths").info("models in subdirectories like photo/sd15.ckpt will be listed as just sd15.ckpt"),
-            "hires_fix_show_sampler": OptionInfo(False, "Hires fix: show hires checkpoint and sampler selection").needs_reload_ui(),
-            "hires_fix_show_prompts": OptionInfo(False, "Hires fix: show hires prompt and negative prompt").needs_reload_ui(),
-            "txt2img_settings_accordion": OptionInfo(False, "Settings in txt2img hidden under Accordion").needs_reload_ui(),
-            "img2img_settings_accordion": OptionInfo(False, "Settings in img2img hidden under Accordion").needs_reload_ui(),
-            "interrupt_after_current": OptionInfo(True, "Don't Interrupt in the middle").info("when using Interrupt button, if generating more than one image, stop after the generation of an image has finished, instead of immediately"),
+            "sd_checkpoint_dropdown_use_short": OptionInfo(False, "Show filenames without folder in the Checkpoint dropdown").info("if disabled, models under subdirectories will be listed like sdxl/anime.safetensors"),
+            "hires_fix_show_prompts": OptionInfo(False, "[Hires. fix]: Show prompt and negative prompt").needs_reload_ui(),
+            "hires_fix_show_sampler": OptionInfo(False, "[Hires. fix]: Show checkpoint and sampler selection").needs_reload_ui(),
+            "txt2img_settings_accordion": OptionInfo(False, "Put txt2img parameters under Accordion").needs_reload_ui(),
+            "img2img_settings_accordion": OptionInfo(False, "Put img2img parameters under Accordion").needs_reload_ui(),
+            "interrupt_after_current": OptionInfo(False, "Don't Interrupt in the middle").info("when using the Interrupt button, if generating more than one image, stop after the current generation of an image has finished instead of immediately"),
         },
     )
 )
