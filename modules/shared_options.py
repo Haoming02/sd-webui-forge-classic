@@ -117,20 +117,20 @@ options_templates.update(
         ("upscaling", "Upscaling", "postprocessing"),
         {
             "ESRGAN_tile": OptionInfo(256, "Tile Size for Upscalers", gr.Slider, {"minimum": 0, "maximum": 512, "step": 16}).info("0 = no tiling"),
-            "ESRGAN_tile_overlap": OptionInfo(16, "Tile Overlap for Upscalers", gr.Slider, {"minimum": 0, "maximum": 64, "step": 4}).info("Low values = visible seam"),
-            "upscaler_for_img2img": OptionInfo(None, "Upscaler for img2img", gr.Dropdown, lambda: {"choices": [x.name for x in shared.sd_upscalers]}),
+            "ESRGAN_tile_overlap": OptionInfo(16, "Tile Overlap for Upscalers", gr.Slider, {"minimum": 0, "maximum": 64, "step": 4}).info("low values = visible seam"),
+            "upscaler_for_img2img": OptionInfo("None", "Upscaler for img2img", gr.Dropdown, lambda: {"choices": [x.name for x in shared.sd_upscalers]}).info("for resizing the input image if the image resolution is smaller than the generation resolution"),
         },
     )
 )
 
 options_templates.update(
     options_section(
-        ("face-restoration", "Face restoration", "postprocessing"),
+        ("face-restoration", "Face Restoration", "postprocessing"),
         {
-            "face_restoration": OptionInfo(False, "Restore faces", infotext="Face restoration").info("will use a third-party model on generation result to reconstruct faces"),
-            "face_restoration_model": OptionInfo("CodeFormer", "Face restoration model", gr.Radio, lambda: {"choices": [x.name() for x in shared.face_restorers]}),
-            "code_former_weight": OptionInfo(0.5, "CodeFormer weight", gr.Slider, {"minimum": 0, "maximum": 1, "step": 0.01}).info("0 = maximum effect; 1 = minimum effect"),
-            "face_restoration_unload": OptionInfo(False, "Move face restoration model from VRAM into RAM after processing"),
+            "face_restoration": OptionInfo(False, "Restore Faces", infotext="Face restoration").info("after each generation, process the face(s) with a 3rd-party model"),
+            "face_restoration_model": OptionInfo("CodeFormer", "Face Restoration Model", gr.Radio, lambda: {"choices": [x.name() for x in shared.face_restorers]}),
+            "code_former_weight": OptionInfo(0.5, "CodeFormer Strength", gr.Slider, {"minimum": 0, "maximum": 1, "step": 0.05}).info("0 = max effect; 1 = min effect"),
+            "face_restoration_unload": OptionInfo(False, "Move the model to CPU after restoration"),
         },
     )
 )
