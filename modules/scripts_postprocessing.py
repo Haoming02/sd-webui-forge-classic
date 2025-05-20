@@ -19,7 +19,6 @@ class PostprocessedImage:
         self.extra_images = []
         self.nametags = []
         self.disable_processing = False
-        self.caption = None
 
     def get_suffix(self, used_suffixes=None):
         used_suffixes = {} if used_suffixes is None else used_suffixes

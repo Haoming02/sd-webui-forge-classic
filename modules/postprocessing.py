@@ -95,30 +95,6 @@ def run_postprocessing(extras_mode, image, image_folder, input_dir, output_dir, 
             if save_output:
                 fullfn, _ = images.save_image(pp.image, path=outpath, basename=basename, extension=opts.samples_format, info=infotext, short_filename=True, no_prompt=True, grid=False, pnginfo_section_name="extras", existing_info=existing_pnginfo, forced_filename=forced_filename, suffix=suffix)
 
-                if pp.caption:
-                    caption_filename = os.path.splitext(fullfn)[0] + ".txt"
-                    existing_caption = ""
-                    try:
-                        with open(caption_filename, encoding="utf8") as file:
-                            existing_caption = file.read().strip()
-                    except FileNotFoundError:
-                        pass
-
-                    action = shared.opts.postprocessing_existing_caption_action
-                    if action == 'Prepend' and existing_caption:
-                        caption = f"{existing_caption} {pp.caption}"
-                    elif action == 'Append' and existing_caption:
-                        caption = f"{pp.caption} {existing_caption}"
-                    elif action == 'Keep' and existing_caption:
-                        caption = existing_caption
-                    else:
-                        caption = pp.caption
-
-                    caption = caption.strip()
-                    if caption:
-                        with open(caption_filename, "w", encoding="utf8") as file:
-                            file.write(caption)
-
             if extras_mode != 2 or show_extras_results:
                 outputs.append(pp.image)
 

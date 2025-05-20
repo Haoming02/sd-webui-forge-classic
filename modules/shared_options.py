@@ -119,6 +119,7 @@ options_templates.update(
             "ESRGAN_tile": OptionInfo(256, "Tile Size for Upscalers", gr.Slider, {"minimum": 0, "maximum": 512, "step": 16}).info("0 = no tiling"),
             "ESRGAN_tile_overlap": OptionInfo(16, "Tile Overlap for Upscalers", gr.Slider, {"minimum": 0, "maximum": 64, "step": 4}).info("low values = visible seam"),
             "upscaler_for_img2img": OptionInfo("None", "Upscaler for img2img", gr.Dropdown, lambda: {"choices": [x.name for x in shared.sd_upscalers]}).info("for resizing the input image if the image resolution is smaller than the generation resolution"),
+            "upscaling_max_images_in_cache": OptionInfo(4, "Number of upscaled images to cache", gr.Slider, {"minimum": 0, "maximum": 8, "step": 1}),
         },
     )
 )
@@ -290,7 +291,7 @@ However, the resulting UI is quite... sluggish.
             "extra_networks_tree_view_enable": OptionInfo(False, "Enable the Tree View").needs_reload_ui(),
             "extra_networks_tree_view_default_enabled": OptionInfo(False, "Show the Tree View by default").needs_reload_ui(),
             "div_tree": OptionDiv(),
-            "extra_networks_hidden_models": OptionInfo("When searched", "Show the Extra Networks in hidden directories", gr.Radio, {"choices": ["Always", "When searched", "Never"]}).info('"When searched" option will only show the item when the search string contains 4 characters or more'),
+            "extra_networks_hidden_models": OptionInfo("When searched", "Show the Extra Networks in hidden directories", gr.Radio, {"choices": ("Always", "When searched", "Never")}).info('"When searched" option will only show the item when the search string contains 4 characters or more'),
             "extra_networks_default_multiplier": OptionInfo(1.0, "Default Weight for Extra Networks", gr.Slider, {"minimum": 0.0, "maximum": 2.0, "step": 0.05}),
             "extra_networks_card_width": OptionInfo(0, "Card Width for Extra Networks").info("in pixels; 0 = auto"),
             "extra_networks_card_height": OptionInfo(0, "Card Height for Extra Networks").info("in pixels; 0 = auto"),
@@ -478,21 +479,19 @@ options_templates.update(
     options_section(
         ("postprocessing", "Postprocessing", "postprocessing"),
         {
-            "postprocessing_enable_in_main_ui": OptionInfo([], "Enable postprocessing operations in txt2img and img2img tabs", ui_components.DropdownMulti, lambda: {"choices": [x.name for x in shared_items.postprocessing_scripts()]}),
-            "postprocessing_operation_order": OptionInfo([], "Postprocessing operation order", ui_components.DropdownMulti, lambda: {"choices": [x.name for x in shared_items.postprocessing_scripts()]}),
-            "upscaling_max_images_in_cache": OptionInfo(5, "Maximum number of images in upscaling cache", gr.Slider, {"minimum": 0, "maximum": 10, "step": 1}),
-            "postprocessing_existing_caption_action": OptionInfo("Ignore", "Action for existing captions", gr.Radio, {"choices": ["Ignore", "Keep", "Prepend", "Append"]}).info("when generating captions using postprocessing; Ignore = use generated; Keep = use original; Prepend/Append = combine both"),
+            "postprocessing_enable_in_main_ui": OptionInfo([], "Enable Postprocessing operations in txt2img and img2img", ui_components.DropdownMulti, lambda: {"choices": [x.name for x in shared_items.postprocessing_scripts()]}),
+            "postprocessing_operation_order": OptionInfo([], "Order of Postprocessing operations", ui_components.DropdownMulti, lambda: {"choices": [x.name for x in shared_items.postprocessing_scripts()]}),
         },
     )
 )
 
 options_templates.update(
     options_section(
-        (None, "Hidden options"),
+        (None, "Hidden Options"),
         {
             "disabled_extensions": OptionInfo([], "Disable these extensions"),
-            "disable_all_extensions": OptionInfo("none", "Disable all extensions (preserves the list of disabled extensions)", gr.Radio, {"choices": ["none", "extra", "all"]}),
-            "restore_config_state_file": OptionInfo("", "Config state file to restore from, under 'config-states/' folder"),
+            "disable_all_extensions": OptionInfo("none", "Disable all extensions (preserves the list of disabled extensions)", gr.Radio, {"choices": ("none", "extra", "all")}),
+            "restore_config_state_file": OptionInfo("", 'Config state file to restore from, under "config-states/" folder'),
             "sd_checkpoint_hash": OptionInfo("", "SHA256 hash of the current checkpoint"),
         },
     )
