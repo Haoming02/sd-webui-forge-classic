@@ -169,30 +169,21 @@ options_templates.update(
     options_section(
         ("sd", "Stable Diffusion", "sd"),
         {
-            "sd_model_checkpoint": OptionInfo(None, "Stable Diffusion checkpoint", gr.Dropdown, lambda: {"choices": shared_items.list_checkpoint_tiles(shared.opts.sd_checkpoint_dropdown_use_short)}, refresh=shared_items.refresh_checkpoints, infotext="Model hash"),
-            "sd_checkpoint_cache": OptionInfo(0, "Number of checkpoints to cache in RAM", gr.Slider, {"minimum": 0, "maximum": 10, "step": 1}),
-            "sd_unet": OptionInfo("Automatic", "SD Unet", gr.Dropdown, lambda: {"choices": shared_items.sd_unet_items()}, refresh=shared_items.refresh_unet_list).info("choose Unet model: Automatic = use one with same filename as checkpoint; None = use Unet from checkpoint"),
-            "emphasis": OptionInfo("Original", "Emphasis mode", gr.Radio, lambda: {"choices": [x.name for x in sd_emphasis.options]}, infotext="Emphasis").info("makes it possible to make model to pay (more:1.1) or (less:0.9) attention to text when you use the syntax in prompt; " + sd_emphasis.get_options_descriptions()),
-            "enable_batch_seeds": OptionInfo(True, "Make K-diffusion samplers produce same images in a batch as when making a single image"),
-            "comma_padding_backtrack": OptionInfo(20, "Prompt word wrap length limit", gr.Slider, {"minimum": 0, "maximum": 74, "step": 1}).info("in tokens - for texts shorter than specified, if they don't fit into 75 token limit, move them to the next 75 token chunk"),
-            "CLIP_stop_at_last_layers": OptionInfo(1, "Clip skip", gr.Slider, {"minimum": 1, "maximum": 12, "step": 1}, infotext="Clip skip").link("wiki", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#clip-skip").info("ignore last layers of CLIP network; 1 = disable, 2 = skip one layer, etc."),
-            "clip_skip_sdxl": OptionInfo(False, "Override Clip Skip for SDXL"),
-            "upcast_attn": OptionInfo(False, "Upcast cross attention layer to float32"),
-            "randn_source": OptionInfo("GPU", "Random number generator source.", gr.Radio, {"choices": ["GPU", "CPU", "NV"]}, infotext="RNG").info("changes seeds drastically; use CPU to produce the same picture across different videocard vendors; use NV to produce same picture as on NVidia videocards"),
-            "tiling": OptionInfo(False, "Tiling", infotext="Tiling").info("produce a tileable picture"),
-            "hires_fix_refiner_pass": OptionInfo("second pass", "Hires fix: which pass to enable refiner for", gr.Radio, {"choices": ["first pass", "second pass", "both passes"]}, infotext="Hires refiner"),
-        },
-    )
-)
-
-options_templates.update(
-    options_section(
-        ("sdxl", "Stable Diffusion XL", "sd"),
-        {
-            "sdxl_crop_top": OptionInfo(0, "crop top coordinate"),
-            "sdxl_crop_left": OptionInfo(0, "crop left coordinate"),
-            "sdxl_refiner_low_aesthetic_score": OptionInfo(2.5, "SDXL low aesthetic score", gr.Number).info("used for refiner model negative prompt"),
-            "sdxl_refiner_high_aesthetic_score": OptionInfo(6.0, "SDXL high aesthetic score", gr.Number).info("used for refiner model prompt"),
+            "sd_model_checkpoint": OptionInfo(None, "Stable Diffusion Checkpoint", gr.Dropdown, lambda: {"choices": shared_items.list_checkpoint_tiles(shared.opts.sd_checkpoint_dropdown_use_short)}, refresh=shared_items.refresh_checkpoints, infotext="Model hash"),
+            "sd_checkpoint_cache": OptionInfo(0, "Number of Checkpoints to cache in RAM", gr.Slider, {"minimum": 0, "maximum": 10, "step": 1}).info("only cache the state_dict, not the actual weights; <b>ie.</b> doesn't do much"),
+            "sd_unet": OptionInfo("Automatic", "SD UNet", gr.Dropdown, lambda: {"choices": shared_items.sd_unet_items()}, refresh=shared_items.refresh_unet_list),
+            "emphasis": OptionInfo("Original", "Emphasis Mode", gr.Radio, lambda: {"choices": [x.name for x in sd_emphasis.options]}, infotext="Emphasis").info("pay (more:1.1) or (less:0.9) attention to prompts; " + sd_emphasis.get_options_descriptions()),
+            "CLIP_stop_at_last_layers": OptionInfo(1, "Clip Skip", gr.Slider, {"minimum": 1, "maximum": 12, "step": 1}, infotext="Clip skip").link("wiki", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#clip-skip").info("1 = disable, 2 = skip one layer, etc."),
+            "clip_skip_sdxl": OptionInfo(False, "Force Clip Skip for SDXL").info("certain SDXL checkpoints already contain their own clip skip information"),
+            "comma_padding_backtrack": OptionInfo(16, "Token Wrap Length", gr.Slider, {"minimum": 0, "maximum": 74, "step": 1}).info("for prompts shorter than the threshold, move them to the next chunk of 75 tokens if they do not fit inside the current chunk"),
+            "tiling": OptionInfo(False, "Tiling", infotext="Tiling").info("produce a tileable image"),
+            "hires_fix_refiner_pass": OptionInfo("second pass", "Which pass during Hires. fix to enable Refiner", gr.Radio, {"choices": ("first pass", "second pass", "both passes")}, infotext="Hires refiner"),
+            "randn_source": OptionInfo("CPU", "Random Number Generator", gr.Radio, {"choices": ("CPU", "GPU", "NV")}, infotext="RNG").info("use <b>CPU</b> for the maximum recreatability across different systems"),
+            "divxl": OptionDiv(),
+            "sdxl_crop_top": OptionInfo(0, "[SDXL] Crop-Top Coordinate"),
+            "sdxl_crop_left": OptionInfo(0, "[SDXL] Crop-Left Coordinate"),
+            "sdxl_refiner_low_aesthetic_score": OptionInfo(2.5, "[SDXL] Low Aesthetic Score", gr.Number),
+            "sdxl_refiner_high_aesthetic_score": OptionInfo(6.0, "[SDXL] High Aesthetic Score", gr.Number),
         },
     )
 )
