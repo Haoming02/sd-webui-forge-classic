@@ -47,9 +47,8 @@ def setup_img2img_steps(p, steps=None):
 approximation_indexes = {
     "Full": 0,
     "Approx NN": 1,
-    "Approx cheap": 2,
-    "TAESD": 3,
-    "RGB": 4,
+    "TAESD": 2,
+    "RGB": 3,
 }
 
 
@@ -59,10 +58,8 @@ def get_decoder(approximation: int) -> Callable:
         case 1:
             vae = sd_vae_approx.model()
         case 2:
-            vae = sd_vae_approx.cheap_approximation
-        case 3:
             vae = sd_vae_taesd.decoder_model()
-        case 4:
+        case 3:
             vae = sd_vae_rgb.model()
         case _:
             return None
@@ -90,11 +87,9 @@ def samples_to_images_tensor(sample, approximation=None, model=None):
         case 1:
             return vae(sample.to(devices.device, devices.dtype)).detach()
         case 2:
-            return vae(sample)
-        case 3:
             x_sample = vae(sample.to(devices.device, devices.dtype)).detach()
             return x_sample * 2 - 1
-        case 4:
+        case 3:
             return vae(sample.to(devices.cpu, devices.dtype)).detach()
 
 
@@ -136,9 +131,7 @@ def images_tensor_to_samples(image, approximation=None, model=None):
         image = image.to(shared.device, dtype=devices.dtype_vae)
         image = image * 2 - 1
         if len(image) > 1:
-            x_latent = torch.stack(
-                [model.get_first_stage_encoding(model.encode_first_stage(torch.unsqueeze(img, 0)))[0] for img in image]
-            )
+            x_latent = torch.stack([model.get_first_stage_encoding(model.encode_first_stage(torch.unsqueeze(img, 0)))[0] for img in image])
         else:
             x_latent = model.get_first_stage_encoding(model.encode_first_stage(image))
 
@@ -148,11 +141,7 @@ def images_tensor_to_samples(image, approximation=None, model=None):
 def store_latent(decoded):
     state.current_latent = decoded
 
-    if (
-        (opts.live_previews_enable and opts.show_progress_every_n_steps > 0)
-        and (shared.state.sampling_steps - shared.state.sampling_step > opts.show_progress_every_n_steps)
-        and (shared.state.sampling_step % opts.show_progress_every_n_steps == 0)
-    ):
+    if (opts.live_previews_enable and opts.show_progress_every_n_steps > 0) and (shared.state.sampling_step % opts.show_progress_every_n_steps == 0):
         if not shared.parallel_processing_allowed:
             shared.state.assign_current_image(sample_to_image(decoded))
 

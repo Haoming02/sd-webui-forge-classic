@@ -411,18 +411,27 @@ options_templates.update(
 
 options_templates.update(
     options_section(
-        ("ui", "Live previews", "ui"),
+        ("preview", "Live Previews", "ui"),
         {
-            "show_progressbar": OptionInfo(True, "Show progressbar"),
-            "live_previews_enable": OptionInfo(True, "Show live previews of the created image"),
-            "live_previews_image_format": OptionInfo("jpeg", "Live preview file format", gr.Radio, {"choices": ["jpeg", "png", "webp"]}),
-            "show_progress_grid": OptionInfo(True, "Show previews of all images generated in a batch as a grid"),
-            "show_progress_every_n_steps": OptionInfo(10, "Live preview display period", gr.Slider, {"minimum": -1, "maximum": 32, "step": 1}).info("in sampling steps - show new live preview image every N sampling steps; -1 = only show after completion of batch"),
-            "show_progress_type": OptionInfo("TAESD", "Live preview method", gr.Radio, {"choices": ["Approx NN", "Approx cheap", "TAESD", "RGB"]}).info("<b>Approx NN</b>: legacy preview method; <b>TAESD</b>: high quality preview method; <b>Approx cheap</b> / <b>RGB</b>: fast but low quality preview method").info("<b>Approx NN</b> and <b>TAESD</b> will download additional model"),
-            "live_preview_content": OptionInfo("Prompt", "Live preview subject", gr.Radio, {"choices": ["Combined", "Prompt", "Negative prompt"]}),
-            "live_preview_refresh_period": OptionInfo(1000, "Progressbar and preview update period").info("in milliseconds"),
-            "live_preview_fast_interrupt": OptionInfo(False, "Return image with chosen live preview method on interrupt").info("makes interrupts faster"),
-            "js_live_preview_in_modal_lightbox": OptionInfo(False, "Show Live preview in full page image viewer"),
+            "show_progressbar": OptionInfo(True, "Show Progress Bar"),
+            "live_previews_enable": OptionInfo(True, "Show live previews of images during sampling"),
+            "live_previews_image_format": OptionInfo("jpeg", "Live Preview Format", gr.Radio, {"choices": ("jpeg", "png", "webp")}),
+            "show_progress_grid": OptionInfo(True, "Show previews of all images in a batch as a grid"),
+            "show_progress_type": OptionInfo("TAESD", "Live Preview Method", gr.Radio, {"choices": ("Approx NN", "TAESD", "RGB")})
+            .info("<b>Approx NN</b> and <b>TAESD</b> will download additional model")
+            .html(
+                """
+<ul style='margin-left: 1.5em'>
+<li><b>Approx NN</b>: legacy preview method</li>
+<li><b>TAESD</b>: high quality preview method</li>
+<li><b>RGB</b>: fast but low quality preview method</li>
+</ul>
+                """
+            ),
+            "live_preview_fast_interrupt": OptionInfo(False, "Return image with the selected preview method on interruption").info("speed up interruption"),
+            "js_live_preview_in_modal_lightbox": OptionInfo(False, "Show the live previews in full page image viewer"),
+            "show_progress_every_n_steps": OptionInfo(10, "Generate live preview every N step", gr.Slider, {"minimum": -1, "maximum": 32, "step": 1}).info("-1 = only after completion of a batch"),
+            "live_preview_refresh_period": OptionInfo(1000, "Progress Bar and Preview update interval").info("in ms"),
         },
     )
 )
