@@ -9,19 +9,9 @@ import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 import torch
 import hashlib
-import struct
 
 extra_weight_calculators = {}
 
-
-def rolling_md5(key, a, b, prev_digest):
-    h = hashlib.md5()
-    if prev_digest is None:
-        prev_digest = "DEADBEEF" * 16
-    h.update(bytes.fromhex(prev_digest))
-    h.update(key.encode('utf-8'))
-    h.update(struct.pack('>dd', a, b))
-    return h.hexdigest()
 
 class ModelPatcher:
     def __init__(self, model, load_device, offload_device, size=0, current_device=None, weight_inplace_update=False):
@@ -214,10 +204,10 @@ class ModelPatcher:
                 current_patches.append((strength_patch, patches[k], strength_model))
                 self.patches[k] = current_patches
 
-        self.running_patches_hash = rolling_md5(
-            prev_digest=self.running_patches_hash,
-            key=patch_key, a=strength_patch, b=strength_model
-        )
+        h = hashlib.md5()
+        h.update(bytes.fromhex(self.running_patches_hash or "DEADBEEF" * 16))
+        h.update(f"{patch_key}|{strength_patch!r}|{strength_model!r}".encode())
+        self.running_patches_hash = h.hexdigest()
 
         return list(p)
 
