@@ -205,7 +205,7 @@ class ModelPatcher:
                 self.patches[k] = current_patches
 
         h = hashlib.md5()
-        h.update(bytes.fromhex(self.running_patches_hash or "DEADBEEF" * 16))
+        h.update(bytes.fromhex(self.running_patches_hash or "DEADBEEF" * 4))
         h.update(f"{patch_key}|{strength_patch!r}|{strength_model!r}".encode())
         self.running_patches_hash = h.hexdigest()
 
