@@ -33,6 +33,9 @@ class UnetPatcher(ModelPatcher):
         n.extra_preserved_memory_during_sampling = self.extra_preserved_memory_during_sampling
         n.extra_model_patchers_during_sampling = self.extra_model_patchers_during_sampling.copy()
         n.extra_concat_condition = self.extra_concat_condition
+
+        super().on_cloned(n)
+
         return n
 
     def add_extra_preserved_memory_during_sampling(self, memory_in_bytes: int):

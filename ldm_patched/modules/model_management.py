@@ -369,7 +369,7 @@ class LoadedModel:
     def model_memory_required(self, device: torch.device) -> int:
         return module_size(self.model.model, exclude_device=device)
 
-    def model_load(self, async_kept_memory: int = -1):
+    def model_load(self, async_kept_memory: int = -1, allow_persistent_loras: bool = False):
         patch_model_to = None
         disable_async_load = async_kept_memory < 0
 
@@ -381,7 +381,7 @@ class LoadedModel:
 
         try:
             # TODO: do something with loras and offloading to CPU
-            self.real_model = self.model.patch_model(device_to=patch_model_to)
+            self.real_model = self.model.patch_model(device_to=patch_model_to, allow_persistent_loras=allow_persistent_loras)
         except Exception as e:
             self.model.unpatch_model(self.model.offload_device)
             self.model_unload()
@@ -434,7 +434,7 @@ class LoadedModel:
 
         return self.real_model
 
-    def model_unload(self, avoid_model_moving: bool = False):
+    def model_unload(self, avoid_model_moving: bool = False, allow_persistent_loras: bool = False):
         if self.model_accelerated:
             for m in self.real_model.modules():
                 if hasattr(m, "prev_ldm_patched_cast_weights"):
@@ -444,9 +444,9 @@ class LoadedModel:
             self.model_accelerated = False
 
         if avoid_model_moving:
-            self.model.unpatch_model()
+            self.model.unpatch_model(allow_persistent_loras=allow_persistent_loras)
         else:
-            self.model.unpatch_model(self.model.offload_device)
+            self.model.unpatch_model(self.model.offload_device, allow_persistent_loras=allow_persistent_loras)
             self.model.model_patches_to(self.model.offload_device)
 
     def __eq__(self, other: "LoadedModel"):
@@ -460,18 +460,17 @@ def minimum_inference_memory():
     return 1024 * 1024 * 1024
 
 
-def unload_model_clones(model):
+def unload_model_clones(model, allow_persistent_loras=False):
     to_unload = [i for i in range(len(current_loaded_models)) if model.is_clone(current_loaded_models[i].model)]
 
     for i in reversed(to_unload):
         m = current_loaded_models.pop(i)
-        m.model_unload(avoid_model_moving=True)
+        m.model_unload(avoid_model_moving=True, allow_persistent_loras=allow_persistent_loras)
         del m
 
     if len(to_unload) > 0:
         print(f"Reusing {len(to_unload)} loaded model{'s' if len(to_unload) > 1 else ''}")
         soft_empty_cache()
-        gc.collect()
 
 
 def free_memory(memory_required, device, keep_loaded=[]):
@@ -505,6 +504,16 @@ def load_models_gpu(models, memory_required=0):
     models_to_load = []
     models_already_loaded = []
 
+    from modules import shared
+    allow_persistent_loras = shared.opts.persistent_patches
+
+    if allow_persistent_loras:
+        # Disable persistent patches if no LoRAs are active, so model is unpatched correctly. We do
+        # because add_patches is not called otherwise, and our rolling hash will be incorrect.
+        from modules import sd_models
+        current_sd = sd_models.model_data.get_sd_model()
+        allow_persistent_loras = current_sd is not None and current_sd.current_lora_hash != '[]'
+
     for x in models:
         load_model = LoadedModel(x, memory_required=memory_required)
 
@@ -534,7 +543,7 @@ def load_models_gpu(models, memory_required=0):
 
     total_memory_required = {}
     for loaded_model in models_to_load:
-        unload_model_clones(loaded_model.model)
+        unload_model_clones(loaded_model.model, allow_persistent_loras=allow_persistent_loras)
         mem = total_memory_required.get(loaded_model.device, 0) + loaded_model.model_memory_required(loaded_model.device)
         total_memory_required[loaded_model.device] = mem
 
@@ -575,7 +584,7 @@ def load_models_gpu(models, memory_required=0):
         if vram_set_state is VRAMState.NO_VRAM:
             async_kept_memory = 0
 
-        loaded_model.model_load(async_kept_memory)
+        loaded_model.model_load(async_kept_memory, allow_persistent_loras=allow_persistent_loras)
         current_loaded_models.insert(0, loaded_model)
 
     moving_time = time.perf_counter() - execution_start_time

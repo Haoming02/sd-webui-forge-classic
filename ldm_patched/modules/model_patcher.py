@@ -8,16 +8,26 @@ import inspect
 import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 import torch
+import hashlib
+import struct
 
 extra_weight_calculators = {}
 
+
+def rolling_md5(key, a, b, prev_digest):
+    h = hashlib.md5()
+    if prev_digest is None:
+        prev_digest = "DEADBEEF" * 16
+    h.update(bytes.fromhex(prev_digest))
+    h.update(key.encode('utf-8'))
+    h.update(struct.pack('>dd', a, b))
+    return h.hexdigest()
 
 class ModelPatcher:
     def __init__(self, model, load_device, offload_device, size=0, current_device=None, weight_inplace_update=False):
         self.size = size
         self.model = model
         self.patches = {}
-        self.backup = {}
         self.object_patches = {}
         self.object_patches_backup = {}
         self.model_options = {"transformer_options": {}}
@@ -30,6 +40,35 @@ class ModelPatcher:
             self.current_device = current_device
 
         self.weight_inplace_update = weight_inplace_update
+        self.patches_hash_info = {
+            "running_patches_hash": None,
+            "current_patches_hash": None,
+            "backup": {}
+        }
+
+    @property
+    def running_patches_hash(self):
+        return self.patches_hash_info["running_patches_hash"]
+
+    @running_patches_hash.setter
+    def running_patches_hash(self, value):
+        self.patches_hash_info["running_patches_hash"] = value
+
+    @property
+    def current_patches_hash(self):
+        return self.patches_hash_info["current_patches_hash"]
+
+    @current_patches_hash.setter
+    def current_patches_hash(self, value):
+        self.patches_hash_info["current_patches_hash"] = value
+
+    @property
+    def backup(self):
+        return self.patches_hash_info["backup"]
+
+    @backup.setter
+    def backup(self, value):
+        self.patches_hash_info["backup"] = value
 
     def model_size(self):
         if self.size > 0:
@@ -55,7 +94,13 @@ class ModelPatcher:
         n.object_patches = self.object_patches.copy()
         n.model_options = copy.deepcopy(self.model_options)
         n.model_keys = self.model_keys
+
+        self.on_cloned(n)
+
         return n
+
+    def on_cloned(self, n):
+        n.patches_hash_info = self.patches_hash_info
 
     def is_clone(self, other):
         if hasattr(other, "model") and self.model is other.model:
@@ -160,7 +205,7 @@ class ModelPatcher:
         if hasattr(self.model, "get_dtype"):
             return self.model.get_dtype()
 
-    def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
+    def add_patches(self, patches, patch_key, strength_patch=1.0, strength_model=1.0):
         p = set()
         for k in patches:
             if k in self.model_keys:
@@ -168,6 +213,11 @@ class ModelPatcher:
                 current_patches = self.patches.get(k, [])
                 current_patches.append((strength_patch, patches[k], strength_model))
                 self.patches[k] = current_patches
+
+        self.running_patches_hash = rolling_md5(
+            prev_digest=self.running_patches_hash,
+            key=patch_key, a=strength_patch, b=strength_model
+        )
 
         return list(p)
 
@@ -194,7 +244,7 @@ class ModelPatcher:
                     sd.pop(k)
         return sd
 
-    def patch_model(self, device_to=None, patch_weights=True):
+    def patch_model(self, device_to=None, patch_weights=True, allow_persistent_loras=False):
         for k in self.object_patches:
             old = ldm_patched.modules.utils.get_attr(self.model, k)
             if k not in self.object_patches_backup:
@@ -202,29 +252,40 @@ class ModelPatcher:
             ldm_patched.modules.utils.set_attr_raw(self.model, k, self.object_patches[k])
 
         if patch_weights:
-            model_sd = self.model_state_dict()
-            for key in self.patches:
-                if key not in model_sd:
-                    print(f'Could not patch as "{key}" does not exist in model...')
-                    continue
+            do_patch = (
+                (not allow_persistent_loras) or
+                (len(self.patches) > 0 and self.current_patches_hash is None)
+            )
 
-                weight = model_sd[key]
+            if do_patch:
+                backup = self.backup
+                model_sd = self.model_state_dict()
+                
+                for key in self.patches:
+                    if key not in model_sd:
+                        print(f'Could not patch as "{key}" does not exist in model...')
+                        continue
 
-                inplace_update = self.weight_inplace_update
+                    weight = model_sd[key]
 
-                if key not in self.backup:
-                    self.backup[key] = weight.to(device=self.offload_device, copy=inplace_update)
+                    inplace_update = self.weight_inplace_update
 
-                if device_to is not None:
-                    temp_weight = ldm_patched.modules.model_management.cast_to_device(weight, device_to, torch.float32, copy=True)
-                else:
-                    temp_weight = weight.to(torch.float32, copy=True)
-                out_weight = self.calculate_weight(self.patches[key], temp_weight, key).to(weight.dtype)
-                if inplace_update:
-                    ldm_patched.modules.utils.copy_to_param(self.model, key, out_weight)
-                else:
-                    ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
-                del temp_weight
+                    if key not in backup:
+                        backup[key] = weight.to(device=self.offload_device, copy=inplace_update)
+
+                    if device_to is not None:
+                        temp_weight = ldm_patched.modules.model_management.cast_to_device(weight, device_to, torch.float32, copy=True)
+                    else:
+                        temp_weight = weight.to(torch.float32, copy=True)
+                    out_weight = self.calculate_weight(self.patches[key], temp_weight, key).to(weight.dtype)
+                    if inplace_update:
+                        ldm_patched.modules.utils.copy_to_param(self.model, key, out_weight)
+                    else:
+                        ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
+                    del temp_weight
+
+                if len(self.patches) > 0 and self.running_patches_hash is not None:
+                    self.current_patches_hash = self.running_patches_hash
 
             if device_to is not None:
                 self.model.to(device_to)
@@ -402,17 +463,27 @@ class ModelPatcher:
 
         return weight
 
-    def unpatch_model(self, device_to=None):
-        keys = list(self.backup.keys())
+    def unpatch_model(self, device_to=None, allow_persistent_loras=False):
+        backup = self.backup
 
-        if self.weight_inplace_update:
-            for k in keys:
-                ldm_patched.modules.utils.copy_to_param(self.model, k, self.backup[k])
-        else:
-            for k in keys:
-                ldm_patched.modules.utils.set_attr(self.model, k, self.backup[k])
+        do_unpatch = (
+            (not allow_persistent_loras) or 
+            (len(backup) > 0 and self.current_patches_hash is not None and self.running_patches_hash != self.current_patches_hash) or
+            (len(backup) > 0 and self.current_patches_hash is None)
+        )
 
-        self.backup = {}
+        if do_unpatch:
+            keys = list(backup.keys())
+
+            if self.weight_inplace_update:
+                for k in keys:
+                    ldm_patched.modules.utils.copy_to_param(self.model, k, backup[k])
+            else:
+                for k in keys:
+                    ldm_patched.modules.utils.set_attr(self.model, k, backup[k])
+
+            self.backup = {}
+            self.current_patches_hash = None
 
         if device_to is not None:
             self.model.to(device_to)
