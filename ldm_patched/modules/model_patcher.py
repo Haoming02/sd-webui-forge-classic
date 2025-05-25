@@ -8,7 +8,6 @@ import inspect
 import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 import torch
-import hashlib
 
 extra_weight_calculators = {}
 
@@ -30,35 +29,35 @@ class ModelPatcher:
             self.current_device = current_device
 
         self.weight_inplace_update = weight_inplace_update
-        self.patches_hash_info = {
-            "running_patches_hash": None,
-            "current_patches_hash": None,
+        self.patches_version_info = {
+            "running_patches_version": 0,
+            "current_patches_version": 0,
             "backup": {}
         }
 
     @property
-    def running_patches_hash(self):
-        return self.patches_hash_info["running_patches_hash"]
+    def running_patches_version(self):
+        return self.patches_version_info["running_patches_version"]
 
-    @running_patches_hash.setter
-    def running_patches_hash(self, value):
-        self.patches_hash_info["running_patches_hash"] = value
+    @running_patches_version.setter
+    def running_patches_version(self, value):
+        self.patches_version_info["running_patches_version"] = value
 
     @property
-    def current_patches_hash(self):
-        return self.patches_hash_info["current_patches_hash"]
+    def current_patches_version(self):
+        return self.patches_version_info["current_patches_version"]
 
-    @current_patches_hash.setter
-    def current_patches_hash(self, value):
-        self.patches_hash_info["current_patches_hash"] = value
+    @current_patches_version.setter
+    def current_patches_version(self, value):
+        self.patches_version_info["current_patches_version"] = value
 
     @property
     def backup(self):
-        return self.patches_hash_info["backup"]
+        return self.patches_version_info["backup"]
 
     @backup.setter
     def backup(self, value):
-        self.patches_hash_info["backup"] = value
+        self.patches_version_info["backup"] = value
 
     def model_size(self):
         if self.size > 0:
@@ -90,7 +89,7 @@ class ModelPatcher:
         return n
 
     def on_cloned(self, n):
-        n.patches_hash_info = self.patches_hash_info
+        n.patches_version_info = self.patches_version_info
 
     def is_clone(self, other):
         if hasattr(other, "model") and self.model is other.model:
@@ -195,7 +194,7 @@ class ModelPatcher:
         if hasattr(self.model, "get_dtype"):
             return self.model.get_dtype()
 
-    def add_patches(self, patches, patch_key, strength_patch=1.0, strength_model=1.0):
+    def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
         p = set()
         for k in patches:
             if k in self.model_keys:
@@ -204,11 +203,7 @@ class ModelPatcher:
                 current_patches.append((strength_patch, patches[k], strength_model))
                 self.patches[k] = current_patches
 
-        h = hashlib.md5()
-        h.update(bytes.fromhex(self.running_patches_hash or "DEADBEEF" * 4))
-        h.update(f"{patch_key}|{strength_patch!r}|{strength_model!r}".encode())
-        self.running_patches_hash = h.hexdigest()
-
+        self.running_patches_version += 1
         return list(p)
 
     def get_key_patches(self, filter_prefix=None):
@@ -244,7 +239,7 @@ class ModelPatcher:
         if patch_weights:
             do_patch = (
                 (not allow_persistent_loras) or
-                (len(self.patches) > 0 and self.current_patches_hash is None)
+                (len(self.patches) > 0 and self.current_patches_version == 0)
             )
 
             if do_patch:
@@ -274,8 +269,8 @@ class ModelPatcher:
                         ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
                     del temp_weight
 
-                if len(self.patches) > 0 and self.running_patches_hash is not None:
-                    self.current_patches_hash = self.running_patches_hash
+                if len(self.patches) > 0 and self.running_patches_version != 0:
+                    self.current_patches_version = self.running_patches_version
 
             if device_to is not None:
                 self.model.to(device_to)
@@ -457,9 +452,8 @@ class ModelPatcher:
         backup = self.backup
 
         do_unpatch = (
-            (not allow_persistent_loras) or 
-            (len(backup) > 0 and self.current_patches_hash is not None and self.running_patches_hash != self.current_patches_hash) or
-            (len(backup) > 0 and self.current_patches_hash is None)
+            (not allow_persistent_loras) or
+            (len(backup) > 0 and self.current_patches_version != self.running_patches_version)
         )
 
         if do_unpatch:
@@ -473,7 +467,7 @@ class ModelPatcher:
                     ldm_patched.modules.utils.set_attr(self.model, k, backup[k])
 
             self.backup = {}
-            self.current_patches_hash = None
+            self.current_patches_version = 0
 
         if device_to is not None:
             self.model.to(device_to)
