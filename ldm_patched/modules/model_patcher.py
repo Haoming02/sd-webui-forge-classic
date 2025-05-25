@@ -17,6 +17,7 @@ class ModelPatcher:
         self.size = size
         self.model = model
         self.patches = {}
+        self.backup = {}
         self.object_patches = {}
         self.object_patches_backup = {}
         self.model_options = {"transformer_options": {}}
@@ -29,35 +30,7 @@ class ModelPatcher:
             self.current_device = current_device
 
         self.weight_inplace_update = weight_inplace_update
-        self.patches_version_info = {
-            "running_patches_version": 0,
-            "current_patches_version": 0,
-            "backup": {}
-        }
-
-    @property
-    def running_patches_version(self):
-        return self.patches_version_info["running_patches_version"]
-
-    @running_patches_version.setter
-    def running_patches_version(self, value):
-        self.patches_version_info["running_patches_version"] = value
-
-    @property
-    def current_patches_version(self):
-        return self.patches_version_info["current_patches_version"]
-
-    @current_patches_version.setter
-    def current_patches_version(self, value):
-        self.patches_version_info["current_patches_version"] = value
-
-    @property
-    def backup(self):
-        return self.patches_version_info["backup"]
-
-    @backup.setter
-    def backup(self, value):
-        self.patches_version_info["backup"] = value
+        self.patches_version = { "running": 0, "current": 0 }
 
     def model_size(self):
         if self.size > 0:
@@ -80,16 +53,13 @@ class ModelPatcher:
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
 
+        n.backup = self.backup
         n.object_patches = self.object_patches.copy()
         n.model_options = copy.deepcopy(self.model_options)
         n.model_keys = self.model_keys
-
-        self.on_cloned(n)
+        n.patches_version = self.patches_version
 
         return n
-
-    def on_cloned(self, n):
-        n.patches_version_info = self.patches_version_info
 
     def is_clone(self, other):
         if hasattr(other, "model") and self.model is other.model:
@@ -203,7 +173,7 @@ class ModelPatcher:
                 current_patches.append((strength_patch, patches[k], strength_model))
                 self.patches[k] = current_patches
 
-        self.running_patches_version += 1
+        self.patches_version["running"] += 1
         return list(p)
 
     def get_key_patches(self, filter_prefix=None):
@@ -239,11 +209,10 @@ class ModelPatcher:
         if patch_weights:
             do_patch = (
                 (not allow_persistent_loras) or
-                (len(self.patches) > 0 and self.current_patches_version == 0)
+                (self.patches and self.patches_version["current"] == 0)
             )
 
             if do_patch:
-                backup = self.backup
                 model_sd = self.model_state_dict()
                 
                 for key in self.patches:
@@ -255,8 +224,8 @@ class ModelPatcher:
 
                     inplace_update = self.weight_inplace_update
 
-                    if key not in backup:
-                        backup[key] = weight.to(device=self.offload_device, copy=inplace_update)
+                    if key not in self.backup:
+                        self.backup[key] = weight.to(device=self.offload_device, copy=inplace_update)
 
                     if device_to is not None:
                         temp_weight = ldm_patched.modules.model_management.cast_to_device(weight, device_to, torch.float32, copy=True)
@@ -269,8 +238,8 @@ class ModelPatcher:
                         ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
                     del temp_weight
 
-                if len(self.patches) > 0 and self.running_patches_version != 0:
-                    self.current_patches_version = self.running_patches_version
+                if self.patches and self.patches_version["running"] != 0:
+                    self.patches_version["current"] = self.patches_version["running"]
 
             if device_to is not None:
                 self.model.to(device_to)
@@ -449,25 +418,23 @@ class ModelPatcher:
         return weight
 
     def unpatch_model(self, device_to=None, allow_persistent_loras=False):
-        backup = self.backup
-
         do_unpatch = (
             (not allow_persistent_loras) or
-            (len(backup) > 0 and self.current_patches_version != self.running_patches_version)
+            (self.backup and self.patches_version["current"] != self.patches_version["running"])
         )
 
         if do_unpatch:
-            keys = list(backup.keys())
+            keys = list(self.backup.keys())
 
             if self.weight_inplace_update:
                 for k in keys:
-                    ldm_patched.modules.utils.copy_to_param(self.model, k, backup[k])
+                    ldm_patched.modules.utils.copy_to_param(self.model, k, self.backup[k])
             else:
                 for k in keys:
-                    ldm_patched.modules.utils.set_attr(self.model, k, backup[k])
+                    ldm_patched.modules.utils.set_attr(self.model, k, self.backup[k])
 
-            self.backup = {}
-            self.current_patches_version = 0
+            self.backup.clear()
+            self.patches_version["current"] = 0
 
         if device_to is not None:
             self.model.to(device_to)

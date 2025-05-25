@@ -26,6 +26,7 @@ class UnetPatcher(ModelPatcher):
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
 
+        n.backup = self.backup
         n.object_patches = self.object_patches.copy()
         n.model_options = copy.deepcopy(self.model_options)
         n.model_keys = self.model_keys
@@ -33,8 +34,7 @@ class UnetPatcher(ModelPatcher):
         n.extra_preserved_memory_during_sampling = self.extra_preserved_memory_during_sampling
         n.extra_model_patchers_during_sampling = self.extra_model_patchers_during_sampling.copy()
         n.extra_concat_condition = self.extra_concat_condition
-
-        super().on_cloned(n)
+        n.patches_version = self.patches_version
 
         return n
 
