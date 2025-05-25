@@ -1078,6 +1078,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
     hr_checkpoint_name: str = None
     hr_sampler_name: str = None
     hr_scheduler: str = None
+    hr_cfg_scale: float = None
+    hr_rescale_cfg: float = None
     hr_prompt: str = ''
     hr_negative_prompt: str = ''
     force_task_id: str = None
@@ -1173,6 +1175,15 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
             if self.hr_scheduler is None:
                 self.hr_scheduler = self.scheduler
+
+            if self.hr_cfg_scale != self.cfg_scale:
+                self.extra_generation_params["Hires CFG Scale"] = self.hr_cfg_scale
+
+            if self.hr_rescale_cfg:
+                from modules.processing_scripts.rescale_cfg import ScriptRescaleCFG
+
+                ScriptRescaleCFG.apply_rescale_cfg(self, self.hr_rescale_cfg)
+                self.extra_generation_params["Hires Rescale CFG"] = self.hr_rescale_cfg
 
             if tuple(self.hr_prompt) != tuple(self.prompt):
                 self.extra_generation_params["Hires prompt"] = self.hr_prompt

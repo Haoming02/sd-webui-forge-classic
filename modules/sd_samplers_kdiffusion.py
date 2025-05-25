@@ -206,7 +206,7 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
             "cond": conditioning,
             "image_cond": image_conditioning,
             "uncond": unconditional_conditioning,
-            "cond_scale": p.cfg_scale,
+            "cond_scale": p.hr_cfg_scale if p.is_hr_pass else p.cfg_scale,
             "s_min_uncond": self.s_min_uncond,
         }
 
@@ -267,7 +267,7 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
             "cond": conditioning,
             "image_cond": image_conditioning,
             "uncond": unconditional_conditioning,
-            "cond_scale": p.cfg_scale,
+            "cond_scale": p.hr_cfg_scale if p.is_hr_pass else p.cfg_scale,
             "s_min_uncond": self.s_min_uncond,
         }
 

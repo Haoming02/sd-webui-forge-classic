@@ -43,6 +43,13 @@ class ScriptRescaleCFG(scripts.ScriptBuiltinUI):
     def process_before_every_sampling(self, p, cfg, *args, **kwargs):
         if not opts.show_rescale_cfg or cfg < 0.05:
             return
+        if p.is_hr_pass:
+            return
+
+        self.apply_rescale_cfg(p, cfg)
+
+    @staticmethod
+    def apply_rescale_cfg(p, cfg):
 
         @torch.inference_mode()
         def rescale_cfg(args):
