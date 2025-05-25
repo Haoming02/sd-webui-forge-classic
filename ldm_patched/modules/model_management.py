@@ -509,7 +509,7 @@ def load_models_gpu(models, memory_required=0):
 
     if allow_persistent_loras:
         # Disable persistent patches if no LoRAs are active, so model is unpatched correctly. We do
-        # because add_patches is not called otherwise, and our rolling hash will be incorrect.
+        # this because add_patches won't be called, and the incrementing version will be incorrect.
         from modules import sd_models
         current_sd = sd_models.model_data.get_sd_model()
         allow_persistent_loras = current_sd is not None and current_sd.current_lora_hash != '[]'
