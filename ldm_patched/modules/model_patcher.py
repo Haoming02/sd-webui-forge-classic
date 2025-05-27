@@ -30,7 +30,7 @@ class ModelPatcher:
             self.current_device = current_device
 
         self.weight_inplace_update = weight_inplace_update
-        self.patches_version = { "running": 0, "current": 0 }
+        self.patches_version = {"running": 0, "current": 0}
 
     def model_size(self):
         if self.size > 0:
@@ -206,44 +206,42 @@ class ModelPatcher:
                 self.object_patches_backup[k] = old
             ldm_patched.modules.utils.set_attr_raw(self.model, k, self.object_patches[k])
 
-        if patch_weights:
-            do_patch = (
-                (not allow_persistent_loras) or
-                (self.patches and self.patches_version["current"] == 0)
-            )
+        if not patch_weights:
+            return self.model
 
-            if do_patch:
-                model_sd = self.model_state_dict()
-                
-                for key in self.patches:
-                    if key not in model_sd:
-                        print(f'Could not patch as "{key}" does not exist in model...')
-                        continue
+        do_patch = (not allow_persistent_loras) or (self.patches and self.patches_version["current"] == 0)
 
-                    weight = model_sd[key]
+        if do_patch:
+            model_sd = self.model_state_dict()
+            for key in self.patches:
+                if key not in model_sd:
+                    print(f'Could not patch as "{key}" does not exist in model...')
+                    continue
 
-                    inplace_update = self.weight_inplace_update
+                weight = model_sd[key]
 
-                    if key not in self.backup:
-                        self.backup[key] = weight.to(device=self.offload_device, copy=inplace_update)
+                inplace_update = self.weight_inplace_update
 
-                    if device_to is not None:
-                        temp_weight = ldm_patched.modules.model_management.cast_to_device(weight, device_to, torch.float32, copy=True)
-                    else:
-                        temp_weight = weight.to(torch.float32, copy=True)
-                    out_weight = self.calculate_weight(self.patches[key], temp_weight, key).to(weight.dtype)
-                    if inplace_update:
-                        ldm_patched.modules.utils.copy_to_param(self.model, key, out_weight)
-                    else:
-                        ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
-                    del temp_weight
+                if key not in self.backup:
+                    self.backup[key] = weight.to(device=self.offload_device, copy=inplace_update)
 
-                if self.patches and self.patches_version["running"] != 0:
-                    self.patches_version["current"] = self.patches_version["running"]
+                if device_to is not None:
+                    temp_weight = ldm_patched.modules.model_management.cast_to_device(weight, device_to, torch.float32, copy=True)
+                else:
+                    temp_weight = weight.to(torch.float32, copy=True)
+                out_weight = self.calculate_weight(self.patches[key], temp_weight, key).to(weight.dtype)
+                if inplace_update:
+                    ldm_patched.modules.utils.copy_to_param(self.model, key, out_weight)
+                else:
+                    ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
+                del temp_weight
 
-            if device_to is not None:
-                self.model.to(device_to)
-                self.current_device = device_to
+            if self.patches and self.patches_version["running"] != 0:
+                self.patches_version["current"] = self.patches_version["running"]
+
+        if device_to is not None:
+            self.model.to(device_to)
+            self.current_device = device_to
 
         return self.model
 
@@ -418,10 +416,7 @@ class ModelPatcher:
         return weight
 
     def unpatch_model(self, device_to=None, allow_persistent_loras=False):
-        do_unpatch = (
-            (not allow_persistent_loras) or
-            (self.backup and self.patches_version["current"] != self.patches_version["running"])
-        )
+        do_unpatch = (not allow_persistent_loras) or (self.backup and self.patches_version["current"] != self.patches_version["running"])
 
         if do_unpatch:
             keys = list(self.backup.keys())
