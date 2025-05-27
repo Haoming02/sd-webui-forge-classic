@@ -15,12 +15,12 @@ import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 from ldm_patched.modules.args_parser import args
 
+extra_weight_calculators = {}  # backward compatibility
+
 
 PERSISTENT_PATCHES = args.persistent_patches
 if PERSISTENT_PATCHES:
     print("[Experimental] Persistent Patches:", PERSISTENT_PATCHES)
-
-extra_weight_calculators = {}  # backward compatibility
 
 
 class PatchStatus:
@@ -44,7 +44,8 @@ class PatchStatus:
         return self.current != self.updated
 
     def patch(self):
-        self.current = self.updated
+        if self.updated > 0:
+            self.current = self.updated
 
     def unpatch(self):
         self.current = 0
@@ -276,8 +277,7 @@ class ModelPatcher:
                     ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
                 del temp_weight
 
-            if self.patch_status.updated > 0:
-                self.patch_status.patch()
+            self.patch_status.patch()
 
         if device_to is not None:
             self.model.to(device_to)
@@ -466,7 +466,7 @@ class ModelPatcher:
                 for k in keys:
                     ldm_patched.modules.utils.set_attr(self.model, k, self.backup[k])
 
-            self.backup.clear()
+            self.backup = {}
             self.patch_status.unpatch()
 
         if device_to is not None:
