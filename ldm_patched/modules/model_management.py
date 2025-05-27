@@ -6,7 +6,6 @@ https://github.com/comfyanonymous/ComfyUI
 - Edited by. Haoming02
 """
 
-import gc
 import time
 from enum import Enum
 from functools import lru_cache
@@ -473,7 +472,6 @@ def unload_model_clones(model):
     if len(to_unload) > 0:
         print(f"Reusing {len(to_unload)} loaded model{'s' if len(to_unload) > 1 else ''}")
         soft_empty_cache()
-        gc.collect()
 
 
 def free_memory(memory_required, device, keep_loaded=[]):
