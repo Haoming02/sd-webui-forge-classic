@@ -16,11 +16,47 @@ import ldm_patched.modules.utils
 from ldm_patched.modules.args_parser import args
 
 
-allow_persistent_loras = args.persistent_patches
-if allow_persistent_loras:
-    print("[Experimental] Persistent Patches:", allow_persistent_loras)
+PERSISTENT_PATCHES = args.persistent_patches
+if PERSISTENT_PATCHES:
+    print("[Experimental] Persistent Patches:", PERSISTENT_PATCHES)
 
 extra_weight_calculators = {}  # backward compatibility
+
+
+class PatchStatus:
+    def __init__(self):
+        self.current = 0  # the current status of the ModelPatcher
+        self.updated = 0  # the last time a patch was modified
+
+    def require_patch(self) -> bool:
+        if not PERSISTENT_PATCHES:
+            return True
+
+        return self.current == 0
+
+    def require_unpatch(self) -> bool:
+        if not PERSISTENT_PATCHES:
+            return True
+
+        if not PatchStatus.has_lora():
+            return True
+
+        return self.current != self.updated
+
+    def patch(self):
+        self.current = self.updated
+
+    def unpatch(self):
+        self.current = 0
+
+    def update(self):
+        self.updated += 1
+
+    @staticmethod
+    def has_lora() -> bool:
+        from modules.shared import sd_model
+
+        return sd_model.current_lora_hash != str([])
 
 
 class ModelPatcher:
@@ -35,13 +71,10 @@ class ModelPatcher:
         self.model_size()
         self.load_device = load_device
         self.offload_device = offload_device
-        if current_device is None:
-            self.current_device = self.offload_device
-        else:
-            self.current_device = current_device
-
+        self.current_device = self.offload_device if current_device is None else current_device
         self.weight_inplace_update = weight_inplace_update
-        self.patches_version = {"running": 0, "current": 0}
+
+        self.patch_status = PatchStatus()
 
     def model_size(self):
         if self.size > 0:
@@ -58,9 +91,9 @@ class ModelPatcher:
             self.offload_device,
             self.size,
             self.current_device,
-            weight_inplace_update=self.weight_inplace_update,
+            self.weight_inplace_update,
         )
-        n.patches = {}
+
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
 
@@ -68,14 +101,12 @@ class ModelPatcher:
         n.object_patches = self.object_patches.copy()
         n.model_options = copy.deepcopy(self.model_options)
         n.model_keys = self.model_keys
-        n.patches_version = self.patches_version
+        n.patch_status = self.patch_status
 
         return n
 
     def is_clone(self, other):
-        if hasattr(other, "model") and self.model is other.model:
-            return True
-        return False
+        return getattr(other, "model", None) is self.model
 
     def memory_required(self, input_shape):
         return self.model.memory_required(input_shape=input_shape)
@@ -184,7 +215,7 @@ class ModelPatcher:
                 current_patches.append((strength_patch, patches[k], strength_model))
                 self.patches[k] = current_patches
 
-        self.patches_version["running"] += 1
+        self.patch_status.update()
         return list(p)
 
     def get_key_patches(self, filter_prefix=None):
@@ -220,9 +251,7 @@ class ModelPatcher:
         if not patch_weights:
             return self.model
 
-        do_patch = (not allow_persistent_loras) or (self.patches and self.patches_version["current"] == 0)
-
-        if do_patch:
+        if self.patches and self.patch_status.require_patch():
             model_sd = self.model_state_dict()
             for key in self.patches:
                 if key not in model_sd:
@@ -247,8 +276,8 @@ class ModelPatcher:
                     ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
                 del temp_weight
 
-            if self.patches and self.patches_version["running"] != 0:
-                self.patches_version["current"] = self.patches_version["running"]
+            if self.patch_status.updated > 0:
+                self.patch_status.patch()
 
         if device_to is not None:
             self.model.to(device_to)
@@ -427,9 +456,7 @@ class ModelPatcher:
         return weight
 
     def unpatch_model(self, device_to=None):
-        do_unpatch = (not allow_persistent_loras) or (self.backup and self.patches_version["current"] != self.patches_version["running"])
-
-        if do_unpatch:
+        if self.backup and self.patch_status.require_unpatch():
             keys = list(self.backup.keys())
 
             if self.weight_inplace_update:
@@ -440,7 +467,7 @@ class ModelPatcher:
                     ldm_patched.modules.utils.set_attr(self.model, k, self.backup[k])
 
             self.backup.clear()
-            self.patches_version["current"] = 0
+            self.patch_status.unpatch()
 
         if device_to is not None:
             self.model.to(device_to)

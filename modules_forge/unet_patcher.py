@@ -19,10 +19,9 @@ class UnetPatcher(ModelPatcher):
             self.offload_device,
             self.size,
             self.current_device,
-            weight_inplace_update=self.weight_inplace_update,
+            self.weight_inplace_update,
         )
 
-        n.patches = {}
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
 
@@ -34,7 +33,7 @@ class UnetPatcher(ModelPatcher):
         n.extra_preserved_memory_during_sampling = self.extra_preserved_memory_during_sampling
         n.extra_model_patchers_during_sampling = self.extra_model_patchers_during_sampling.copy()
         n.extra_concat_condition = self.extra_concat_condition
-        n.patches_version = self.patches_version
+        n.patch_status = self.patch_status
 
         return n
 
