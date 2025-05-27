@@ -5,11 +5,18 @@
 import copy
 import inspect
 
-import ldm_patched.modules.model_management
-import ldm_patched.modules.utils
 import torch
 
-extra_weight_calculators = {}
+import ldm_patched.modules.model_management
+import ldm_patched.modules.utils
+from ldm_patched.modules.args_parser import args
+
+
+allow_persistent_loras = args.persistent_patches
+if allow_persistent_loras:
+    print("[Experimental] Persistent Patches:", allow_persistent_loras)
+
+extra_weight_calculators = {}  # backward compatibility
 
 
 class ModelPatcher:
@@ -140,7 +147,7 @@ class ModelPatcher:
         self.object_patches[name] = obj
 
     def model_patches_to(self, device, *, dtype=None):
-        to: dict[str, dict[str, list["torch.nn.Module"] | dict[str, "torch.nn.Module"]]] = self.model_options["transformer_options"]
+        to: dict[str, dict[str, list["torch.Tensor"] | dict[str, "torch.Tensor"]]] = self.model_options["transformer_options"]
         if "patches" in to:
             patches = to["patches"]
             for name in patches:
@@ -156,7 +163,7 @@ class ModelPatcher:
                     if hasattr(patch_list[k], "to"):
                         patch_list[k] = patch_list[k].to(device=device, dtype=dtype)
         if "model_function_wrapper" in self.model_options:
-            wrap_func: "torch.nn.Module" = self.model_options["model_function_wrapper"]
+            wrap_func: "torch.Tensor" = self.model_options["model_function_wrapper"]
             if hasattr(wrap_func, "to"):
                 self.model_options["model_function_wrapper"] = wrap_func.to(device=device, dtype=dtype)
 
@@ -199,7 +206,7 @@ class ModelPatcher:
                     sd.pop(k)
         return sd
 
-    def patch_model(self, device_to=None, patch_weights=True, allow_persistent_loras=False):
+    def patch_model(self, device_to=None, patch_weights=True):
         for k in self.object_patches:
             old = ldm_patched.modules.utils.get_attr(self.model, k)
             if k not in self.object_patches_backup:
@@ -415,7 +422,7 @@ class ModelPatcher:
 
         return weight
 
-    def unpatch_model(self, device_to=None, allow_persistent_loras=False):
+    def unpatch_model(self, device_to=None):
         do_unpatch = (not allow_persistent_loras) or (self.backup and self.patches_version["current"] != self.patches_version["running"])
 
         if do_unpatch:

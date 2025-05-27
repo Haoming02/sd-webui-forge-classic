@@ -242,7 +242,6 @@ options_templates.update(
             "skip_early_cond": OptionInfo(0.0, "Ignore Negative Prompt during Early Steps", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Skip Early CFG").info("in percentage of total steps; 0 = disable; higher = faster"),
             "s_min_uncond": OptionInfo(0.0, "Skip Negative Prompt during Later Steps", gr.Slider, {"minimum": 0.0, "maximum": 8.0, "step": 0.05}).info('in "sigma"; 0 = disable; higher = faster'),
             "persistent_cond_cache": OptionInfo(True, "Persistent Cond Cache").info("do not recalculate conds if the prompts and parameters have not changed since previous generation"),
-            "persistent_patches": OptionInfo(True, "Persistent LoRA Patches").info("skip model patching and unpatching if the model, specified LoRAs or their weights have not changed since previous generation"),
             "div_precision": OptionDiv(),
             "fp8_storage": OptionInfo(False, "Store UNet Weights in fp8").info("store the weights in fp8; inference in fp16; reduce memory usage; reduce speed; reduce quality").needs_restart(),
             "fp8_fast": OptionInfo(False, "Inference UNet in fast fp8 operations").info("inference in fp8 using <b>torch._scaled_mm</b>; increase speed; reduce quality; require <b>RTX 40</b> or newer").needs_restart(),
