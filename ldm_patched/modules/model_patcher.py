@@ -466,7 +466,7 @@ class ModelPatcher:
                 for k in keys:
                     ldm_patched.modules.utils.set_attr(self.model, k, self.backup[k])
 
-            self.backup = {}
+            self.backup.clear()
             self.patch_status.unpatch()
 
         if device_to is not None:
@@ -477,7 +477,7 @@ class ModelPatcher:
         for k in keys:
             ldm_patched.modules.utils.set_attr_raw(self.model, k, self.object_patches_backup[k])
 
-        self.object_patches_backup = {}
+        self.object_patches_backup.clear()
 
     def __del__(self):
         del self.patches
