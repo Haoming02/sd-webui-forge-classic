@@ -1,6 +1,10 @@
-# 1st edit by https://github.com/comfyanonymous/ComfyUI
-# 2nd edit by Forge Official
+"""
+Credit: ComfyUI
+https://github.com/comfyanonymous/ComfyUI
 
+- Edited by. Forge Official
+- Edited by. Haoming02
+"""
 
 import gc
 import time

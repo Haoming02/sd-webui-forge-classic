@@ -1,5 +1,10 @@
-# Reference: https://github.com/comfyanonymous/ComfyUI
+"""
+Credit: ComfyUI
+https://github.com/comfyanonymous/ComfyUI
 
+- Edited by. Forge Official
+- Edited by. Haoming02
+"""
 
 import argparse
 import enum
