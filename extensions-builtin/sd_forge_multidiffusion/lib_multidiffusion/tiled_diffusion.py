@@ -7,7 +7,6 @@
 from enum import Enum
 from math import pi
 from typing import Callable, Final, Union
-from weakref import WeakSet
 
 import torch
 from torch import Tensor
@@ -723,56 +722,32 @@ class MixtureOfDiffusers(AbstractDiffusion):
         return x_out
 
 
-MAX_RESOLUTION = 8192
-
-
 class TiledDiffusion:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "model": ("MODEL",),
-                "method": (["MultiDiffusion", "Mixture of Diffusers", "SpotDiffusion"], {"default": "Mixture of Diffusers"}),
-                "tile_width": ("INT", {"default": 96 * opt_f, "min": 16, "max": MAX_RESOLUTION, "step": 16}),
-                "tile_height": ("INT", {"default": 96 * opt_f, "min": 16, "max": MAX_RESOLUTION, "step": 16}),
-                "tile_overlap": ("INT", {"default": 8 * opt_f, "min": 0, "max": 256 * opt_f, "step": 4 * opt_f}),
-                "tile_batch_size": ("INT", {"default": 4, "min": 1, "max": MAX_RESOLUTION, "step": 1}),
-            }
-        }
 
-    RETURN_TYPES = ("MODEL",)
-    FUNCTION = "apply"
-    CATEGORY = "_for_testing"
-    instances = WeakSet()
+    @staticmethod
+    def apply(model: ModelPatcher, method: str, tile_width: int, tile_height: int, tile_overlap: int, tile_batch_size: int):
+        match method:
+            case "MultiDiffusion":
+                impl = MultiDiffusion()
+            case "Mixture of Diffusers":
+                impl = MixtureOfDiffusers()
+            case "SpotDiffusion":
+                impl = SpotDiffusion()
+            case _:
+                raise SystemError
 
-    @classmethod
-    def IS_CHANGED(s, *args, **kwargs):
-        for o in s.instances:
-            o.impl.reset()
-        return ""
+        compression = 8
+        impl.tile_width = tile_width // compression
+        impl.tile_height = tile_height // compression
+        impl.tile_overlap = tile_overlap // compression
+        impl.tile_batch_size = tile_batch_size
 
-    def __init__(self) -> None:
-        self.__class__.instances.add(self)
+        impl.compression = compression
+        impl.width = tile_width
+        impl.height = tile_height
+        impl.overlap = tile_overlap
 
-    def apply(self, model: ModelPatcher, method, tile_width, tile_height, tile_overlap, tile_batch_size):
-        if method == "Mixture of Diffusers":
-            self.impl = MixtureOfDiffusers()
-        elif method == "MultiDiffusion":
-            self.impl = MultiDiffusion()
-        else:
-            self.impl = SpotDiffusion()
-
-        compression = 4 if "CASCADE" in str(model.model.model_type) else 8
-        self.impl.tile_width = tile_width // compression
-        self.impl.tile_height = tile_height // compression
-        self.impl.tile_overlap = tile_overlap // compression
-        self.impl.tile_batch_size = tile_batch_size
-
-        self.impl.compression = compression
-        self.impl.width = tile_width
-        self.impl.height = tile_height
-        self.impl.overlap = tile_overlap
         model = model.clone()
-        model.set_model_unet_function_wrapper(self.impl)
-        model.model_options["tiled_diffusion"] = True
-        return (model,)
+        model.set_model_unet_function_wrapper(impl)
+
+        return model

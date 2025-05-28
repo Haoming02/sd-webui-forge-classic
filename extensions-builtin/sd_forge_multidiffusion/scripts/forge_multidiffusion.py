@@ -4,8 +4,6 @@ from lib_multidiffusion.tiled_diffusion import TiledDiffusion
 from modules import scripts
 from modules.ui_components import InputAccordion
 
-opTiledDiffusion = TiledDiffusion().apply
-
 
 class MultiDiffusionForForge(scripts.Script):
     sorting_priority = 16
@@ -41,7 +39,7 @@ class MultiDiffusionForForge(scripts.Script):
         unet.model_options["tiled_diffusion_shift_method"] = shift_method
         unet.model_options["tiled_diffusion_seed"] = getattr(p, "seed", 0)
 
-        unet = opTiledDiffusion(unet, method, tile_width, tile_height, tile_overlap, tile_batch_size)[0]
+        unet = TiledDiffusion.apply(unet, method, tile_width, tile_height, tile_overlap, tile_batch_size)
 
         p.sd_model.forge_objects.unet = unet
         params = {
