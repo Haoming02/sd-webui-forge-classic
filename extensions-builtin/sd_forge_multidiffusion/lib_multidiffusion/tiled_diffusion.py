@@ -4,35 +4,24 @@
 # 4th Edit by. Haoming02
 # - Based on: https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111
 
+from enum import Enum
 from math import pi
-from typing import Callable, Dict, List, Tuple, Union
+from typing import Callable, Final, Union
 from weakref import WeakSet
 
 import torch
 from torch import Tensor
 
-import ldm_patched.modules.model_management
 from ldm_patched.modules.controlnet import ControlNet, T2IAdapter
 from ldm_patched.modules.model_base import BaseModel
-from ldm_patched.modules.model_management import current_loaded_models, load_models_gpu
+from ldm_patched.modules.model_management import current_loaded_models, get_torch_device, load_models_gpu
 from ldm_patched.modules.model_patcher import ModelPatcher
 from ldm_patched.modules.utils import common_upscale
 
-opt_C = 4
-opt_f = 8
 
-
-def processing_interrupted():
-    from modules import shared
-
-    return shared.state.interrupted or shared.state.skipped
-
-
-def ceildiv(big, small):
-    return -(big // -small)
-
-
-from enum import Enum
+opt_C: Final[int] = 4
+opt_f: Final[int] = 8
+device: Final[torch.device] = get_torch_device()
 
 
 class BlendMode(Enum):
@@ -40,34 +29,7 @@ class BlendMode(Enum):
     BACKGROUND = "Background"
 
 
-class Processing: ...
-
-
-class Device: ...
-
-
-devices = Device()
-devices.device = ldm_patched.modules.model_management.get_torch_device()
-
-
-def null_decorator(fn):
-    def wrapper(*args, **kwargs):
-        return fn(*args, **kwargs)
-
-    return wrapper
-
-
-keep_signature = null_decorator
-controlnet = null_decorator
-stablesr = null_decorator
-grid_bbox = null_decorator
-custom_bbox = null_decorator
-noise_inverse = null_decorator
-
-
 class BBox:
-    """grid bbox"""
-
     def __init__(self, x: int, y: int, w: int, h: int):
         self.x = x
         self.y = y
@@ -80,6 +42,16 @@ class BBox:
         return self.box[idx]
 
 
+def processing_interrupted():
+    from modules import shared
+
+    return shared.state.interrupted or shared.state.skipped
+
+
+def ceildiv(big, small):
+    return -(big // -small)
+
+
 def repeat_to_batch_size(tensor, batch_size, dim=0):
     if dim == 0 and tensor.shape[dim] == 1:
         return tensor.expand([batch_size] + [-1] * (len(tensor.shape) - 1))
@@ -90,14 +62,14 @@ def repeat_to_batch_size(tensor, batch_size, dim=0):
     return tensor
 
 
-def split_bboxes(w: int, h: int, tile_w: int, tile_h: int, overlap: int = 16, init_weight: Union[Tensor, float] = 1.0) -> Tuple[List[BBox], Tensor]:
+def split_bboxes(w: int, h: int, tile_w: int, tile_h: int, overlap: int = 16, init_weight: Union[Tensor, float] = 1.0) -> tuple[list[BBox], Tensor]:
     cols = ceildiv((w - overlap), (tile_w - overlap))
     rows = ceildiv((h - overlap), (tile_h - overlap))
     dx = (w - tile_w) / (cols - 1) if cols > 1 else 0
     dy = (h - tile_h) / (rows - 1) if rows > 1 else 0
 
-    bbox_list: List[BBox] = []
-    weight = torch.zeros((1, 1, h, w), device=devices.device, dtype=torch.float32)
+    bbox_list: list[BBox] = []
+    weight = torch.zeros((1, 1, h, w), device=device, dtype=torch.float32)
     for row in range(rows):
         y = min(int(row * dy), h - tile_h)
         for col in range(cols):
@@ -108,12 +80,6 @@ def split_bboxes(w: int, h: int, tile_w: int, tile_h: int, overlap: int = 16, in
             weight[bbox.slicer] += init_weight
 
     return bbox_list, weight
-
-
-class CustomBBox(BBox):
-    """region control bbox"""
-
-    pass
 
 
 class AbstractDiffusion:
@@ -143,17 +109,17 @@ class AbstractDiffusion:
         self.tile_bs: int = None
         self.num_tiles: int = None
         self.num_batches: int = None
-        self.batched_bboxes: List[List[BBox]] = []
+        self.batched_bboxes: list[list[BBox]] = []
 
         self.enable_custom_bbox: bool = False
-        self.custom_bboxes: List[CustomBBox] = []
+        self.custom_bboxes: list[BBox] = []
 
         self.enable_controlnet: bool = False
         self.control_tensor_batch_dict = {}
-        self.control_tensor_batch: List[List[Tensor]] = [[]]
-        self.control_params: Dict[Tuple, List[List[Tensor]]] = {}
+        self.control_tensor_batch: list[list[Tensor]] = [[]]
+        self.control_params: dict[tuple, list[list[Tensor]]] = {}
         self.control_tensor_cpu: bool = None
-        self.control_tensor_custom: List[List[Tensor]] = []
+        self.control_tensor_custom: list[list[Tensor]] = []
 
         self.draw_background: bool = True
         self.control_tensor_cpu = False
@@ -214,9 +180,8 @@ class AbstractDiffusion:
         else:
             self.x_buffer.zero_()
 
-    @grid_bbox
     def init_grid_bbox(self, tile_w: int, tile_h: int, overlap: int, tile_bs: int):
-        self.weights = torch.zeros((1, 1, self.h, self.w), device=devices.device, dtype=torch.float32)
+        self.weights = torch.zeros((1, 1, self.h, self.w), device=device, dtype=torch.float32)
         self.enable_grid_bbox = True
 
         self.tile_w = min(tile_w, self.w)
@@ -229,8 +194,7 @@ class AbstractDiffusion:
         self.tile_bs = ceildiv(len(bboxes), self.num_batches)
         self.batched_bboxes = [bboxes[i * self.tile_bs : (i + 1) * self.tile_bs] for i in range(self.num_batches)]
 
-    @grid_bbox
-    def get_grid_bbox(self, tile_w: int, tile_h: int, overlap: int, tile_bs: int, w: int, h: int, device: torch.device, get_tile_weights: Callable = lambda: 1.0) -> List[List[BBox]]:
+    def get_grid_bbox(self, tile_w: int, tile_h: int, overlap: int, tile_bs: int, w: int, h: int, device: torch.device, get_tile_weights: Callable = lambda: 1.0) -> list[list[BBox]]:
         weights = torch.zeros((1, 1, h, w), device=device, dtype=torch.float32)
 
         tile_w = min(tile_w, w)
@@ -244,11 +208,9 @@ class AbstractDiffusion:
         batched_bboxes = [bboxes[i * tile_bs : (i + 1) * tile_bs] for i in range(num_batches)]
         return batched_bboxes
 
-    @grid_bbox
     def get_tile_weights(self) -> Union[Tensor, float]:
         return 1.0
 
-    @noise_inverse
     def init_noise_inverse(self, steps: int, retouch: float, get_cache_callback, set_cache_callback, renoise_strength: float, renoise_kernel: int):
         self.noise_inverse_enabled = True
         self.noise_inverse_steps = steps
@@ -273,7 +235,6 @@ class AbstractDiffusion:
             self.total_bboxes += len(self.custom_bboxes)
         assert self.total_bboxes > 0, "Nothing to paint! No background to draw and no custom bboxes were provided."
 
-    @controlnet
     def prepare_controlnet_tensors(self, refresh: bool = False, tensor=None):
         """Crop the control tensor into tiles and cache them"""
         if not refresh:
@@ -309,7 +270,6 @@ class AbstractDiffusion:
                     custom_control_tile_list.append(control_tile)
                 self.control_tensor_custom.append(custom_control_tile_list)
 
-    @controlnet
     def switch_controlnet_tensors(self, batch_id: int, x_batch_size: int, tile_batch_size: int, is_denoise=False):
         if self.control_tensor_batch is None:
             return
@@ -324,7 +284,7 @@ class AbstractDiffusion:
                 control_tile = torch.cat(all_control_tile, dim=0)
                 self.control_tensor_batch[param_id][batch_id] = control_tile
 
-    def process_controlnet(self, x_noisy, c_in: dict, cond_or_uncond: List, bboxes, batch_size: int, batch_id: int, shifts=None, shift_condition=None):
+    def process_controlnet(self, x_noisy, c_in: dict, cond_or_uncond: list, bboxes, batch_size: int, batch_id: int, shifts=None, shift_condition=None):
         control: ControlNet = c_in["control"]
         param_id = -1
         tuple_key = tuple(cond_or_uncond) + tuple(x_noisy.shape)
@@ -447,10 +407,10 @@ def gaussian_weights(tile_w: int, tile_h: int) -> Tensor:
     y_probs = [f(y, tile_h / 2) for y in range(tile_h)]
 
     w = np.outer(y_probs, x_probs)
-    return torch.from_numpy(w).to(devices.device, dtype=torch.float32)
+    return torch.from_numpy(w).to(device, dtype=torch.float32)
 
 
-class CondDict: ...
+class Conddict: ...
 
 
 class MultiDiffusion(AbstractDiffusion):
@@ -460,7 +420,7 @@ class MultiDiffusion(AbstractDiffusion):
         x_in: Tensor = args["input"]
         t_in: Tensor = args["timestep"]
         c_in: dict = args["c"]
-        cond_or_uncond: List = args["cond_or_uncond"]
+        cond_or_uncond: list = args["cond_or_uncond"]
 
         N, C, H, W = x_in.shape
 
@@ -563,7 +523,7 @@ class SpotDiffusion(AbstractDiffusion):
         x_in: Tensor = args["input"]
         t_in: Tensor = args["timestep"]
         c_in: dict = args["c"]
-        cond_or_uncond: List = args["cond_or_uncond"]
+        cond_or_uncond: list = args["cond_or_uncond"]
 
         N, C, H, W = x_in.shape
 
@@ -683,7 +643,7 @@ class MixtureOfDiffusers(AbstractDiffusion):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.custom_weights: List[Tensor] = []
+        self.custom_weights: list[Tensor] = []
         self.get_weight = gaussian_weights
 
     def init_done(self):
@@ -693,7 +653,6 @@ class MixtureOfDiffusers(AbstractDiffusion):
             if bbox.blend_mode == BlendMode.BACKGROUND:
                 self.custom_weights[bbox_id] *= self.rescale_factor[bbox.slicer]
 
-    @grid_bbox
     def get_tile_weights(self) -> Tensor:
         self.tile_weights = self.get_weight(self.tile_w, self.tile_h)
         return self.tile_weights
@@ -703,7 +662,7 @@ class MixtureOfDiffusers(AbstractDiffusion):
         x_in: Tensor = args["input"]
         t_in: Tensor = args["timestep"]
         c_in: dict = args["c"]
-        cond_or_uncond: List = args["cond_or_uncond"]
+        cond_or_uncond: list = args["cond_or_uncond"]
 
         N, C, H, W = x_in.shape
 
