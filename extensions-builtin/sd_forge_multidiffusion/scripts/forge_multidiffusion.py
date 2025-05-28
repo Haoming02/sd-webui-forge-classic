@@ -1,8 +1,7 @@
 import gradio as gr
-from modules import scripts
-
 from lib_multidiffusion.tiled_diffusion import TiledDiffusion
 
+from modules import scripts
 
 opTiledDiffusion = TiledDiffusion().apply
 

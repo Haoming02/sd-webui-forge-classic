@@ -5,23 +5,29 @@
 # - Based on: https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111
 
 from __future__ import division
+
+from math import pi
+from typing import Callable, Dict, List, Tuple, Union
+from weakref import WeakSet
+
 import torch
 from torch import Tensor
-from typing import List, Union, Tuple, Callable, Dict
-from weakref import WeakSet
-import ldm_patched.modules.utils
-import ldm_patched.modules.model_patcher
+
 import ldm_patched.modules.model_management
-from ldm_patched.contrib.external import ImageScale
-from ldm_patched.modules.model_base import BaseModel
-from ldm_patched.modules.model_patcher import ModelPatcher
 from ldm_patched.modules.controlnet import ControlNet, T2IAdapter
+from ldm_patched.modules.model_base import BaseModel
+from ldm_patched.modules.model_management import current_loaded_models, load_models_gpu
+from ldm_patched.modules.model_patcher import ModelPatcher
 from ldm_patched.modules.utils import common_upscale
-from ldm_patched.modules.model_management import processing_interrupted, loaded_models, load_models_gpu
-from math import pi
 
 opt_C = 4
 opt_f = 8
+
+
+def processing_interrupted():
+    from modules import shared
+
+    return shared.state.interrupted or shared.state.skipped
 
 
 def ceildiv(big, small):
@@ -171,7 +177,6 @@ class AbstractDiffusion:
         self.draw_background: bool = True  # by default we draw major prompts in grid tiles
         self.control_tensor_cpu = False
         self.weights = None
-        self.imagescale = ImageScale()
         self.uniform_distribution = None
         self.sigmas = None
 
@@ -411,7 +416,7 @@ class AbstractDiffusion:
                 else:
                     cns = common_upscale(control.cond_hint_original, PW, PH, control.upscale_algorithm, "center").to(dtype=dtype, device=device)
                     if getattr(control, "vae", None) is not None:
-                        loaded_models_ = loaded_models(only_currently_used=True)
+                        loaded_models_ = current_loaded_models(only_currently_used=True)
                         cns = control.vae.encode(cns.movedim(1, -1))
                         load_models_gpu(loaded_models_)
                     if getattr(control, "latent_format", None) is not None:
@@ -478,7 +483,7 @@ class AbstractDiffusion:
 
 
 import numpy as np
-from numpy import pi, exp, sqrt
+from numpy import exp, pi, sqrt
 
 
 def gaussian_weights(tile_w: int, tile_h: int) -> Tensor:
@@ -780,7 +785,7 @@ class MixtureOfDiffusers(AbstractDiffusion):
     def get_tile_weights(self) -> Tensor:
         # weights for grid bboxes
         # if not hasattr(self, 'tile_weights'):
-        # x_in can change sizes cause of ConditioningSetArea, so we have to recalcualte each time
+        # x_in can change sizes cause of ConditioningSetArea, so we have to recalculate each time
         self.tile_weights = self.get_weight(self.tile_w, self.tile_h)
         return self.tile_weights
 
@@ -857,7 +862,7 @@ class MixtureOfDiffusers(AbstractDiffusion):
 
                 # de-batching
                 for i, bbox in enumerate(bboxes):
-                    # These weights can be calcluated in advance, but will cost a lot of vram
+                    # These weights can be calculated in advance, but will cost a lot of vram
                     # when you have many tiles. So we calculate it here.
                     w = self.tile_weights * self.rescale_factor[bbox.slicer]
                     self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :] * w
