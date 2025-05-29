@@ -5,7 +5,6 @@
 # - Based on: https://github.com/pkuliyi2015/multidiffusion-upscaler-for-automatic1111
 
 from enum import Enum
-from math import pi
 from typing import Callable, Final, Union
 
 import numpy as np
@@ -117,9 +116,8 @@ class AbstractDiffusion:
         self.control_tensor_cpu: bool = False
         self.control_tensor_custom: list[list[Tensor]] = []
 
-        self.draw_background: bool = True
-        self.weights = None
         self.refresh = False
+        self.weights = None
 
     def reset(self):
         tile_width = self.tile_width
@@ -359,21 +357,6 @@ class AbstractDiffusion:
             control = control.previous_controlnet
 
 
-def gaussian_weights(tile_w: int, tile_h: int) -> Tensor:
-    """
-    Copy from the original implementation of Mixture of Diffusers
-    https://github.com/albarji/mixture-of-diffusers/blob/master/mixdiff/tiling.py
-    This generates gaussian weights to smooth the noise of each tile.
-    This is critical for this method to work.
-    """
-    f = lambda x, midpoint, var=0.01: exp(-(x - midpoint) * (x - midpoint) / (tile_w * tile_w) / (2 * var)) / sqrt(2 * pi * var)
-    x_probs = [f(x, (tile_w - 1) / 2) for x in range(tile_w)]
-    y_probs = [f(y, tile_h / 2) for y in range(tile_h)]
-
-    w = np.outer(y_probs, x_probs)
-    return torch.from_numpy(w).to(device, dtype=torch.float32)
-
-
 class MultiDiffusion(AbstractDiffusion):
 
     @torch.inference_mode()
@@ -394,48 +377,45 @@ class MultiDiffusion(AbstractDiffusion):
         self.h, self.w = H, W
         self.reset_buffer(x_in)
 
-        if self.draw_background:
-            for batch_id, bboxes in enumerate(self.batched_bboxes):
-                if processing_interrupted():
-                    return x_in
+        for batch_id, bboxes in enumerate(self.batched_bboxes):
+            if processing_interrupted():
+                return x_in
 
-                x_tile = torch.cat([x_in[bbox.slicer] for bbox in bboxes], dim=0)
-                t_tile = repeat_to_batch_size(t_in, x_tile.shape[0])
-                c_tile = {}
-                for k, v in c_in.items():
-                    if isinstance(v, torch.Tensor):
-                        if len(v.shape) == len(x_tile.shape):
-                            bboxes_ = bboxes
-                            if v.shape[-2:] != x_in.shape[-2:]:
-                                cf = x_in.shape[-1] * self.compression // v.shape[-1]
-                                bboxes_ = self.get_grid_bbox(
-                                    self.width // cf,
-                                    self.height // cf,
-                                    self.overlap // cf,
-                                    self.tile_batch_size,
-                                    v.shape[-1],
-                                    v.shape[-2],
-                                    x_in.device,
-                                    self.get_tile_weights,
-                                )
-                            v = torch.cat([v[bbox_.slicer] for bbox_ in bboxes_[batch_id]])
-                        if v.shape[0] != x_tile.shape[0]:
-                            v = repeat_to_batch_size(v, x_tile.shape[0])
-                    c_tile[k] = v
+            x_tile = torch.cat([x_in[bbox.slicer] for bbox in bboxes], dim=0)
+            t_tile = repeat_to_batch_size(t_in, x_tile.shape[0])
+            c_tile = {}
+            for k, v in c_in.items():
+                if isinstance(v, torch.Tensor):
+                    if len(v.shape) == len(x_tile.shape):
+                        bboxes_ = bboxes
+                        if v.shape[-2:] != x_in.shape[-2:]:
+                            cf = x_in.shape[-1] * self.compression // v.shape[-1]
+                            bboxes_ = self.get_grid_bbox(
+                                self.width // cf,
+                                self.height // cf,
+                                self.overlap // cf,
+                                self.tile_batch_size,
+                                v.shape[-1],
+                                v.shape[-2],
+                                x_in.device,
+                                self.get_tile_weights,
+                            )
+                        v = torch.cat([v[bbox_.slicer] for bbox_ in bboxes_[batch_id]])
+                    if v.shape[0] != x_tile.shape[0]:
+                        v = repeat_to_batch_size(v, x_tile.shape[0])
+                c_tile[k] = v
 
-                if "control" in c_in:
-                    self.process_controlnet(x_tile, c_in, cond_or_uncond, bboxes, N, batch_id)
-                    c_tile["control"] = c_in["control"].get_control_orig(x_tile, t_tile, c_tile, len(cond_or_uncond))
+            if "control" in c_in:
+                self.process_controlnet(x_tile, c_in, cond_or_uncond, bboxes, N, batch_id)
+                c_tile["control"] = c_in["control"].get_control_orig(x_tile, t_tile, c_tile, len(cond_or_uncond))
 
-                x_tile_out = model_function(x_tile, t_tile, **c_tile)
+            x_tile_out = model_function(x_tile, t_tile, **c_tile)
 
-                for i, bbox in enumerate(bboxes):
-                    self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :]
-                del x_tile_out, x_tile, t_tile, c_tile
+            for i, bbox in enumerate(bboxes):
+                self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :]
+            del x_tile_out, x_tile, t_tile, c_tile
 
-        x_out = torch.where(self.weights > 1, self.x_buffer / self.weights, self.x_buffer)
-
-        return x_out
+        return torch.where(self.weights > 1, self.x_buffer / self.weights, self.x_buffer)
 
 
 class MixtureOfDiffusers(AbstractDiffusion):
@@ -444,15 +424,24 @@ class MixtureOfDiffusers(AbstractDiffusion):
     https://github.com/albarji/mixture-of-diffusers
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.custom_weights: list[Tensor] = []
-        self.get_weight = gaussian_weights
-
     def init_done(self):
         super().init_done()
         self.rescale_factor = 1 / self.weights
+
+    @staticmethod
+    def get_weight(tile_w: int, tile_h: int) -> Tensor:
+        """
+        Copy from the original implementation of Mixture of Diffusers
+        https://github.com/albarji/mixture-of-diffusers/blob/master/mixdiff/tiling.py
+        This generates gaussian weights to smooth the noise of each tile.
+        This is critical for this method to work.
+        """
+        f = lambda x, midpoint, var=0.01: exp(-(x - midpoint) * (x - midpoint) / (tile_w * tile_w) / (2 * var)) / sqrt(2 * pi * var)
+        x_probs = [f(x, (tile_w - 1) / 2) for x in range(tile_w)]
+        y_probs = [f(y, tile_h / 2) for y in range(tile_h)]
+
+        w = np.outer(y_probs, x_probs)
+        return torch.from_numpy(w).to(device, dtype=torch.float32)
 
     def get_tile_weights(self) -> Tensor:
         self.tile_weights = self.get_weight(self.tile_w, self.tile_h)
@@ -476,52 +465,49 @@ class MixtureOfDiffusers(AbstractDiffusion):
         self.h, self.w = H, W
         self.reset_buffer(x_in)
 
-        if self.draw_background:
-            for batch_id, bboxes in enumerate(self.batched_bboxes):
-                if processing_interrupted():
-                    return x_in
-                x_tile_list = []
-                for bbox in bboxes:
-                    x_tile_list.append(x_in[bbox.slicer])
+        for batch_id, bboxes in enumerate(self.batched_bboxes):
+            if processing_interrupted():
+                return x_in
+            x_tile_list = []
+            for bbox in bboxes:
+                x_tile_list.append(x_in[bbox.slicer])
 
-                x_tile = torch.cat(x_tile_list, dim=0)
-                t_tile = repeat_to_batch_size(t_in, x_tile.shape[0])
-                c_tile = {}
-                for k, v in c_in.items():
-                    if isinstance(v, torch.Tensor):
-                        if len(v.shape) == len(x_tile.shape):
-                            bboxes_ = bboxes
-                            if v.shape[-2:] != x_in.shape[-2:]:
-                                cf = x_in.shape[-1] * self.compression // v.shape[-1]
-                                bboxes_ = self.get_grid_bbox(
-                                    (tile_w := self.width // cf),
-                                    (tile_h := self.height // cf),
-                                    self.overlap // cf,
-                                    self.tile_batch_size,
-                                    v.shape[-1],
-                                    v.shape[-2],
-                                    x_in.device,
-                                    lambda: self.get_weight(tile_w, tile_h),
-                                )
-                            v = torch.cat([v[bbox_.slicer] for bbox_ in bboxes_[batch_id]])
-                        if v.shape[0] != x_tile.shape[0]:
-                            v = repeat_to_batch_size(v, x_tile.shape[0])
-                    c_tile[k] = v
+            x_tile = torch.cat(x_tile_list, dim=0)
+            t_tile = repeat_to_batch_size(t_in, x_tile.shape[0])
+            c_tile = {}
+            for k, v in c_in.items():
+                if isinstance(v, torch.Tensor):
+                    if len(v.shape) == len(x_tile.shape):
+                        bboxes_ = bboxes
+                        if v.shape[-2:] != x_in.shape[-2:]:
+                            cf = x_in.shape[-1] * self.compression // v.shape[-1]
+                            bboxes_ = self.get_grid_bbox(
+                                (tile_w := self.width // cf),
+                                (tile_h := self.height // cf),
+                                self.overlap // cf,
+                                self.tile_batch_size,
+                                v.shape[-1],
+                                v.shape[-2],
+                                x_in.device,
+                                lambda: self.get_weight(tile_w, tile_h),
+                            )
+                        v = torch.cat([v[bbox_.slicer] for bbox_ in bboxes_[batch_id]])
+                    if v.shape[0] != x_tile.shape[0]:
+                        v = repeat_to_batch_size(v, x_tile.shape[0])
+                c_tile[k] = v
 
-                if "control" in c_in:
-                    self.process_controlnet(x_tile, c_in, cond_or_uncond, bboxes, N, batch_id)
-                    c_tile["control"] = c_in["control"].get_control_orig(x_tile, t_tile, c_tile, len(cond_or_uncond))
+            if "control" in c_in:
+                self.process_controlnet(x_tile, c_in, cond_or_uncond, bboxes, N, batch_id)
+                c_tile["control"] = c_in["control"].get_control_orig(x_tile, t_tile, c_tile, len(cond_or_uncond))
 
-                x_tile_out = model_function(x_tile, t_tile, **c_tile)
+            x_tile_out = model_function(x_tile, t_tile, **c_tile)
 
-                for i, bbox in enumerate(bboxes):
-                    w = self.tile_weights * self.rescale_factor[bbox.slicer]
-                    self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :] * w
-                del x_tile_out, x_tile, t_tile, c_tile
+            for i, bbox in enumerate(bboxes):
+                w = self.tile_weights * self.rescale_factor[bbox.slicer]
+                self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :] * w
+            del x_tile_out, x_tile, t_tile, c_tile
 
-        x_out = self.x_buffer
-
-        return x_out
+        return self.x_buffer
 
 
 class TiledDiffusion:

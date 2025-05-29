@@ -31,17 +31,16 @@ class MultiDiffusionForForge(scripts.Script):
             return
 
         unet = p.sd_model.forge_objects.unet
-
         unet = TiledDiffusion.apply(unet, method, tile_width, tile_height, tile_overlap, tile_batch_size)
-
         p.sd_model.forge_objects.unet = unet
-        params = {
-            "multidiffusion_enabled": enabled,
-            "multidiffusion_method": method,
-            "multidiffusion_tile_width": tile_width,
-            "multidiffusion_tile_height": tile_height,
-            "multidiffusion_tile_overlap": tile_overlap,
-            "multidiffusion_tile_batch_size": tile_batch_size,
-        }
 
-        p.extra_generation_params = params
+        p.extra_generation_params.update(
+            {
+                "multidiffusion_enabled": enabled,
+                "multidiffusion_method": method,
+                "multidiffusion_tile_width": tile_width,
+                "multidiffusion_tile_height": tile_height,
+                "multidiffusion_tile_overlap": tile_overlap,
+                "multidiffusion_tile_batch_size": tile_batch_size,
+            }
+        )
