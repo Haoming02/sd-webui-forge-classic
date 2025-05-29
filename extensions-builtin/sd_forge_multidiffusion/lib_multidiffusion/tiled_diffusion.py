@@ -48,11 +48,11 @@ def processing_interrupted():
     return shared.state.interrupted or shared.state.skipped
 
 
-def ceildiv(big, small):
+def ceildiv(big: int, small: int) -> int:
     return -(big // -small)
 
 
-def repeat_to_batch_size(tensor, batch_size, dim=0):
+def repeat_to_batch_size(tensor: torch.Tensor, batch_size: int, dim: int = 0):
     if dim == 0 and tensor.shape[dim] == 1:
         return tensor.expand([batch_size] + [-1] * (len(tensor.shape) - 1))
     if tensor.shape[dim] > batch_size:
@@ -85,7 +85,6 @@ def split_bboxes(w: int, h: int, tile_w: int, tile_h: int, overlap: int = 16, in
 class AbstractDiffusion:
     def __init__(self):
         self.method = self.__class__.__name__
-        self.pbar = None
 
         self.w: int = 0
         self.h: int = 0
@@ -111,21 +110,16 @@ class AbstractDiffusion:
         self.num_batches: int = None
         self.batched_bboxes: list[list[BBox]] = []
 
-        self.enable_custom_bbox: bool = False
-        self.custom_bboxes: list[BBox] = []
-
         self.enable_controlnet: bool = False
         self.control_tensor_batch_dict = {}
         self.control_tensor_batch: list[list[Tensor]] = [[]]
         self.control_params: dict[tuple, list[list[Tensor]]] = {}
-        self.control_tensor_cpu: bool = None
+        self.control_tensor_cpu: bool = False
         self.control_tensor_custom: list[list[Tensor]] = []
 
         self.draw_background: bool = True
-        self.control_tensor_cpu = False
         self.weights = None
-        self.uniform_distribution = None
-        self.sigmas = None
+        self.refresh = False
 
     def reset(self):
         tile_width = self.tile_width
@@ -160,19 +154,6 @@ class AbstractDiffusion:
                 return torch.cat([x for _ in range(n)], dim=0)[:concat_to]
             shape = [n] + [1] * r_dims
             return x.repeat(shape)
-
-    def update_pbar(self):
-        if self.pbar.n >= self.pbar.total:
-            self.pbar.close()
-        else:
-            sampling_step = 20
-            if self.step_count == sampling_step:
-                self.inner_loop_count += 1
-                if self.inner_loop_count < self.total_bboxes:
-                    self.pbar.update()
-            else:
-                self.step_count = sampling_step
-                self.inner_loop_count = 0
 
     def reset_buffer(self, x_in: Tensor):
         if self.x_buffer is None or self.x_buffer.shape != x_in.shape:
@@ -231,8 +212,6 @@ class AbstractDiffusion:
         self.total_bboxes = 0
         if self.enable_grid_bbox:
             self.total_bboxes += self.num_batches
-        if self.enable_custom_bbox:
-            self.total_bboxes += len(self.custom_bboxes)
         assert self.total_bboxes > 0, "Nothing to paint! No background to draw and no custom bboxes were provided."
 
     def prepare_controlnet_tensors(self, refresh: bool = False, tensor=None):
@@ -258,17 +237,6 @@ class AbstractDiffusion:
                     control_tile = control_tile.cpu()
                 control_tile_list.append(control_tile)
             self.control_tensor_batch.append(control_tile_list)
-
-            if len(self.custom_bboxes) > 0:
-                custom_control_tile_list = []
-                for bbox in self.custom_bboxes:
-                    if len(control_tensor.shape) == 3:
-                        control_tensor.unsqueeze_(0)
-                    control_tile = control_tensor[:, :, bbox[1] * opt_f : bbox[3] * opt_f, bbox[0] * opt_f : bbox[2] * opt_f]
-                    if self.control_tensor_cpu:
-                        control_tile = control_tile.cpu()
-                    custom_control_tile_list.append(control_tile)
-                self.control_tensor_custom.append(custom_control_tile_list)
 
     def switch_controlnet_tensors(self, batch_id: int, x_batch_size: int, tile_batch_size: int, is_denoise=False):
         if self.control_tensor_batch is None:
@@ -485,9 +453,6 @@ class MixtureOfDiffusers(AbstractDiffusion):
     def init_done(self):
         super().init_done()
         self.rescale_factor = 1 / self.weights
-        for bbox_id, bbox in enumerate(self.custom_bboxes):
-            if bbox.blend_mode == BlendMode.BACKGROUND:
-                self.custom_weights[bbox_id] *= self.rescale_factor[bbox.slicer]
 
     def get_tile_weights(self) -> Tensor:
         self.tile_weights = self.get_weight(self.tile_w, self.tile_h)
