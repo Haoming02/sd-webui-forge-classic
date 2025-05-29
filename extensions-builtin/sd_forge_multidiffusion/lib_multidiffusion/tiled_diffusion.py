@@ -8,7 +8,9 @@ from enum import Enum
 from math import pi
 from typing import Callable, Final, Union
 
+import numpy as np
 import torch
+from numpy import exp, pi, sqrt
 from torch import Tensor
 
 from ldm_patched.modules.controlnet import ControlNet, T2IAdapter
@@ -16,7 +18,6 @@ from ldm_patched.modules.model_base import BaseModel
 from ldm_patched.modules.model_management import current_loaded_models, get_torch_device, load_models_gpu
 from ldm_patched.modules.model_patcher import ModelPatcher
 from ldm_patched.modules.utils import common_upscale
-
 
 opt_C: Final[int] = 4
 opt_f: Final[int] = 8
@@ -390,10 +391,6 @@ class AbstractDiffusion:
             control = control.previous_controlnet
 
 
-import numpy as np
-from numpy import exp, pi, sqrt
-
-
 def gaussian_weights(tile_w: int, tile_h: int) -> Tensor:
     """
     Copy from the original implementation of Mixture of Diffusers
@@ -407,9 +404,6 @@ def gaussian_weights(tile_w: int, tile_h: int) -> Tensor:
 
     w = np.outer(y_probs, x_probs)
     return torch.from_numpy(w).to(device, dtype=torch.float32)
-
-
-class Conddict: ...
 
 
 class MultiDiffusion(AbstractDiffusion):
@@ -474,163 +468,6 @@ class MultiDiffusion(AbstractDiffusion):
         x_out = torch.where(self.weights > 1, self.x_buffer / self.weights, self.x_buffer)
 
         return x_out
-
-
-class Store:
-    def __repr__(self):
-        keys = sorted(self.__dict__)
-        items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
-        return "{}({})".format(type(self).__name__, ", ".join(items))
-
-    def __eq__(self, other):
-        return self.__dict__ == other.__dict__
-
-
-store = Store()
-
-
-def fibonacci_spacing(x):
-    result = torch.zeros_like(x)
-    fib = [0, 1]
-    while fib[-1] < len(x):
-        fib.append(fib[-1] + fib[-2])
-
-    used_indices = set()
-    for i, val in enumerate(x):
-        fib_index = i % len(fib)
-        target_index = fib[fib_index] % len(x)
-        while target_index in used_indices:
-            target_index = (target_index + 1) % len(x)
-        result[target_index] = val
-        used_indices.add(target_index)
-
-    return result
-
-
-def find_nearest(a, b):
-    diff = (a - b).abs()
-
-    nearest_indices = diff.argmin()
-
-    return b[nearest_indices]
-
-
-class SpotDiffusion(AbstractDiffusion):
-
-    @torch.inference_mode()
-    def __call__(self, model_function: BaseModel.apply_model, args: dict):
-        x_in: Tensor = args["input"]
-        t_in: Tensor = args["timestep"]
-        c_in: dict = args["c"]
-        cond_or_uncond: list = args["cond_or_uncond"]
-
-        N, C, H, W = x_in.shape
-
-        self.refresh = False
-        if self.weights is None or self.h != H or self.w != W:
-            self.h, self.w = H, W
-            self.refresh = True
-            self.init_grid_bbox(self.tile_width, self.tile_height, self.tile_overlap, self.tile_batch_size)
-            self.init_done()
-        self.h, self.w = H, W
-        self.reset_buffer(x_in)
-
-        if self.uniform_distribution is None:
-            sigmas = self.sigmas = store.sigmas
-            shift_method = store.model_options.get("tiled_diffusion_shift_method", "random")
-            seed = store.model_options.get("tiled_diffusion_seed", store.extra_args.get("seed", 0))
-            th = self.tile_height
-            tw = self.tile_width
-            cf = self.compression
-            if "effnet" in c_in:
-                cf = x_in.shape[-1] * self.compression // c_in["effnet"].shape[-1]
-                th = self.height // cf
-                tw = self.width // cf
-            shift_height = torch.randint(0, th, (len(sigmas) - 1,), generator=torch.Generator(device="cpu").manual_seed(seed), device="cpu")
-            shift_height = (shift_height * cf / self.compression).round().to(torch.int32)
-            shift_width = torch.randint(0, tw, (len(sigmas) - 1,), generator=torch.Generator(device="cpu").manual_seed(seed), device="cpu")
-            shift_width = (shift_width * cf / self.compression).round().to(torch.int32)
-            if shift_method == "sorted":
-                shift_height = shift_height.sort().values
-                shift_width = shift_width.sort().values
-            elif shift_method == "fibonacci":
-                shift_height = fibonacci_spacing(shift_height.sort().values)
-                shift_width = fibonacci_spacing(shift_width.sort().values)
-            self.uniform_distribution = (shift_height, shift_width)
-
-        sigmas = self.sigmas
-        ts_in = find_nearest(t_in[0], sigmas)
-        cur_i = ss.item() if (ss := (sigmas == ts_in).nonzero()).shape[0] != 0 else 0
-
-        sh_h = self.uniform_distribution[0][cur_i].item()
-        sh_w = self.uniform_distribution[1][cur_i].item()
-        if min(self.tile_height, x_in.shape[-2]) == x_in.shape[-2]:
-            sh_h = 0
-        if min(self.tile_width, x_in.shape[-1]) == x_in.shape[-1]:
-            sh_w = 0
-        condition = cur_i % 2 == 0 if self.tile_height > self.tile_width else cur_i % 2 != 0
-        if (sh_h, sh_w) != (0, 0):
-            if sh_h == 0 or sh_w == 0:
-                x_in = x_in.roll(shifts=(sh_h, sh_w), dims=(-2, -1))
-            else:
-                if condition:
-                    x_in = x_in.roll(shifts=sh_h, dims=-2)
-                else:
-                    x_in = x_in.roll(shifts=sh_w, dims=-1)
-
-        if self.draw_background:
-            for batch_id, bboxes in enumerate(self.batched_bboxes):
-                if processing_interrupted():
-                    return x_in
-
-                x_tile = torch.cat([x_in[bbox.slicer] for bbox in bboxes], dim=0)
-                t_tile = repeat_to_batch_size(t_in, x_tile.shape[0])
-                c_tile = {}
-                for k, v in c_in.items():
-                    if isinstance(v, torch.Tensor):
-                        if len(v.shape) == len(x_tile.shape):
-                            bboxes_ = bboxes
-                            sh_h_new, sh_w_new = sh_h, sh_w
-                            if v.shape[-2:] != x_in.shape[-2:]:
-                                cf = x_in.shape[-1] * self.compression // v.shape[-1]
-                                bboxes_ = self.get_grid_bbox(
-                                    self.width // cf,
-                                    self.height // cf,
-                                    self.overlap // cf,
-                                    self.tile_batch_size,
-                                    v.shape[-1],
-                                    v.shape[-2],
-                                    x_in.device,
-                                    self.get_tile_weights,
-                                )
-                                sh_h_new, sh_w_new = round(sh_h * self.compression / cf), round(sh_w * self.compression / cf)
-                            v = v.roll(shifts=(sh_h_new, sh_w_new), dims=(-2, -1))
-                            v = torch.cat([v[bbox_.slicer] for bbox_ in bboxes_[batch_id]])
-                        if v.shape[0] != x_tile.shape[0]:
-                            v = repeat_to_batch_size(v, x_tile.shape[0])
-                    c_tile[k] = v
-
-                if "control" in c_in:
-                    self.process_controlnet(x_tile, c_in, cond_or_uncond, bboxes, N, batch_id, (sh_h, sh_w), condition)
-                    c_tile["control"] = c_in["control"].get_control_orig(x_tile, t_tile, c_tile, len(cond_or_uncond))
-
-                x_tile_out = model_function(x_tile, t_tile, **c_tile)
-
-                for i, bbox in enumerate(bboxes):
-                    self.x_buffer[bbox.slicer] = x_tile_out[i * N : (i + 1) * N, :, :, :]
-
-                del x_tile_out, x_tile, t_tile, c_tile
-
-        if (sh_h, sh_w) != (0, 0):
-            if sh_h == 0 or sh_w == 0:
-                self.x_buffer = self.x_buffer.roll(shifts=(-sh_h, -sh_w), dims=(-2, -1))
-            else:
-                if condition:
-                    self.x_buffer = self.x_buffer.roll(shifts=-sh_h, dims=-2)
-                else:
-                    self.x_buffer = self.x_buffer.roll(shifts=-sh_w, dims=-1)
-
-        return self.x_buffer
 
 
 class MixtureOfDiffusers(AbstractDiffusion):
@@ -731,8 +568,6 @@ class TiledDiffusion:
                 impl = MultiDiffusion()
             case "Mixture of Diffusers":
                 impl = MixtureOfDiffusers()
-            case "SpotDiffusion":
-                impl = SpotDiffusion()
             case _:
                 raise SystemError
 
