@@ -696,13 +696,11 @@ const tabNameToElementId = {
                 const canvas = document.querySelector(`${elemId} canvas[key="interface"]`);
                 if (canvas) {
                     if (hasHorizontalScrollbar(targetElement) && targetElement.isExpanded === false) {
-                        targetElement.style.visibility = "hidden";
                         setTimeout(() => {
                             fitToScreen();
                             resetZoom();
-                            targetElement.style.visibility = "visible";
                             targetElement.isExpanded = true;
-                        }, 10);
+                        }, 25);
                     }
                 }
             }
@@ -927,5 +925,5 @@ function trigger_zoom_resize(tabname) {
         setTimeout(() => { img.querySelector("button[aria-label='Clear']").click(); }, 50);
     }
 
-    setTimeout(_reset, 50);
+    setTimeout(_reset, 500);
 }
