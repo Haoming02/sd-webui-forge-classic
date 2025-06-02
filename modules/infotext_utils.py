@@ -129,6 +129,10 @@ def register_paste_params_button(binding: ParamBinding):
     registered_param_bindings.append(binding)
 
 
+def _zoom() -> bool:
+    return "canvas-zoom-and-pan" not in shared.opts.disabled_extensions
+
+
 def connect_paste_params_buttons():
     for binding in registered_param_bindings:
         if binding.tabname not in paste_fields:
@@ -176,7 +180,10 @@ def connect_paste_params_buttons():
             fn=lambda: None,
             _js=f"switch_to_{binding.tabname}",
             show_progress=False,
-        ).then(fn=None, _js="trigger_zoom_resize")
+        ).then(
+            fn=None,
+            _js=f'() => {{ trigger_zoom_resize("{binding.tabname}"); }}' if _zoom() else None,
+        )
 
 
 def send_image_and_dimensions(x):

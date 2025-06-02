@@ -1,19 +1,20 @@
+const elementIDs = {
+    img2imgTabs: "#mode_img2img .tab-nav",
+    inpaint: "#img2maskimg",
+    inpaintSketch: "#inpaint_sketch",
+    rangeGroup: "#img2img_column_size",
+    sketch: "#img2img_sketch"
+};
+
+const tabNameToElementId = {
+    "Inpaint sketch": elementIDs.inpaintSketch,
+    "Inpaint": elementIDs.inpaint,
+    "Sketch": elementIDs.sketch
+};
+
 (function () {
 
     onUiLoaded(async () => {
-        const elementIDs = {
-            img2imgTabs: "#mode_img2img .tab-nav",
-            inpaint: "#img2maskimg",
-            inpaintSketch: "#inpaint_sketch",
-            rangeGroup: "#img2img_column_size",
-            sketch: "#img2img_sketch"
-        };
-
-        const tabNameToElementId = {
-            "Inpaint sketch": elementIDs.inpaintSketch,
-            "Inpaint": elementIDs.inpaint,
-            "Sketch": elementIDs.sketch
-        };
 
         /** Waits for an element to be present in the DOM */
         const waitForElement = (id) => new Promise(resolve => {
@@ -871,8 +872,6 @@
             });
 
             gradioApp().addEventListener("mousemove", handleMoveByKey);
-
-
         }
 
         applyZoomAndPan(elementIDs.sketch, false);
@@ -907,10 +906,21 @@
 
 })();
 
-function trigger_zoom_resize() {
-    setTimeout(() => {
-        const images = gradioApp().getElementById("mode_img2img").querySelectorAll("div.gradio-image");
-        for (const img of images)
-            img.dispatchEvent(new Event("mousemove"));
-    }, 250);
+function trigger_zoom_resize(tabname) {
+    const id = elementIDs[tabname];
+    if (id == undefined) return;
+
+    const img = gradioApp().querySelector(id);
+
+    function _reset() {
+        if (img.querySelector("img") == undefined) {
+            setTimeout(_reset, 50);
+            return;
+        }
+
+        img.dispatchEvent(new Event("mousemove"));
+        setTimeout(() => { img.querySelector("button[aria-label='Clear']").click(); }, 50);
+    }
+
+    setTimeout(_reset, 50);
 }
