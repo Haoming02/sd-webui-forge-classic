@@ -5,28 +5,27 @@ const elementIDs = {
     inpaint: "#img2maskimg",
     inpaintSketch: "#inpaint_sketch",
     rangeGroup: "#img2img_column_size",
-    sketch: "#img2img_sketch"
+    sketch: "#img2img_sketch",
 };
 
 const tabNameToElementId = {
     "Inpaint sketch": elementIDs.inpaintSketch,
     "Inpaint": elementIDs.inpaint,
-    "Sketch": elementIDs.sketch
+    "Sketch": elementIDs.sketch,
 };
 
 (function () {
-
     onUiLoaded(async () => {
-
         /** Waits for an element to be present in the DOM */
-        const waitForElement = (id) => new Promise(resolve => {
-            const checkForElement = () => {
-                const element = document.querySelector(id);
-                if (element) return resolve(element);
-                setTimeout(checkForElement, 100);
-            };
-            checkForElement();
-        });
+        const waitForElement = (id) =>
+            new Promise((resolve) => {
+                const checkForElement = () => {
+                    const element = document.querySelector(id);
+                    if (element) return resolve(element);
+                    setTimeout(checkForElement, 100);
+                };
+                checkForElement();
+            });
 
         function getActiveTab(elements, all = false) {
             if (!elements.img2imgTabs) return null;
@@ -35,8 +34,7 @@ const tabNameToElementId = {
             if (all) return tabs;
 
             for (let tab of tabs) {
-                if (tab.classList.contains("selected"))
-                    return tab;
+                if (tab.classList.contains("selected")) return tab;
             }
         }
 
@@ -51,7 +49,7 @@ const tabNameToElementId = {
         async function waitForOpts() {
             for (; ;) {
                 if (window.opts && Object.keys(window.opts).length) return window.opts;
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise((resolve) => setTimeout(resolve, 100));
             }
         }
 
@@ -112,8 +110,7 @@ const tabNameToElementId = {
                     typeof userValue === "object" ||
                     userValue === "disable"
                 ) {
-                    result[key] =
-                        userValue === undefined ? defaultValue : userValue;
+                    result[key] = userValue === undefined ? defaultValue : userValue;
                 } else if (isValidHotkey(userValue)) {
                     const normalizedUserValue = normalizeHotkey(userValue);
 
@@ -124,20 +121,20 @@ const tabNameToElementId = {
                     } else {
                         console.error(
                             `Hotkey: ${formatHotkeyForDisplay(
-                                userValue
+                                userValue,
                             )} for ${key} is repeated and conflicts with another hotkey. The default hotkey is used: ${formatHotkeyForDisplay(
-                                defaultValue
-                            )}`
+                                defaultValue,
+                            )}`,
                         );
                         result[key] = defaultValue;
                     }
                 } else {
                     console.error(
                         `Hotkey: ${formatHotkeyForDisplay(
-                            userValue
+                            userValue,
                         )} for ${key} is not valid. The default hotkey is used: ${formatHotkeyForDisplay(
-                            defaultValue
-                        )}`
+                            defaultValue,
+                        )}`,
                     );
                     result[key] = defaultValue;
                 }
@@ -149,11 +146,10 @@ const tabNameToElementId = {
         // Disables functions in the config object based on the provided list of function names
         function disableFunctions(config, disabledFunctions) {
             // Bind the hasOwnProperty method to the functionMap object to avoid errors
-            const hasOwnProperty =
-                Object.prototype.hasOwnProperty.bind(functionMap);
+            const hasOwnProperty = Object.prototype.hasOwnProperty.bind(functionMap);
 
             // Loop through the disabledFunctions array and disable the corresponding functions in the config object
-            disabledFunctions.forEach(funcName => {
+            disabledFunctions.forEach((funcName) => {
                 if (hasOwnProperty(funcName)) {
                     const key = functionMap[funcName];
                     config[key] = "disable";
@@ -186,7 +182,7 @@ const tabNameToElementId = {
             if (parseFloat(mainTab.style.width) > 865) {
                 const transformString = mainTab.style.transform;
                 const scaleMatch = transformString.match(
-                    /scale\(([-+]?[0-9]*\.?[0-9]+)\)/
+                    /scale\(([-+]?[0-9]*\.?[0-9]+)\)/,
                 );
                 let zoom = 1; // default zoom
 
@@ -200,7 +196,9 @@ const tabNameToElementId = {
 
             img.style.display = "block";
 
-            setTimeout(() => { img.style.display = "none"; }, 500);
+            setTimeout(() => {
+                img.style.display = "none";
+            }, 500);
         }
 
         const hotkeysConfigOpts = await waitForOpts();
@@ -229,19 +227,19 @@ const tabNameToElementId = {
             "Moving canvas": "canvas_hotkey_move",
             "Fullscreen": "canvas_hotkey_fullscreen",
             "Reset Zoom": "canvas_hotkey_reset",
-            "Overlap": "canvas_hotkey_overlap"
+            "Overlap": "canvas_hotkey_overlap",
         };
 
         // Loading the configuration from opts
         const preHotkeysConfig = createHotkeyConfig(
             defaultHotkeysConfig,
-            hotkeysConfigOpts
+            hotkeysConfigOpts,
         );
 
         // Disable functions that are not needed by the user
         const hotkeysConfig = disableFunctions(
             preHotkeysConfig,
-            preHotkeysConfig.canvas_disabled_functions
+            preHotkeysConfig.canvas_disabled_functions,
         );
 
         let isMoving = false;
@@ -249,19 +247,19 @@ const tabNameToElementId = {
         let interactedWithAltKey = false;
 
         const elements = Object.fromEntries(
-            Object.keys(elementIDs).map(id => [
+            Object.keys(elementIDs).map((id) => [
                 id,
-                gradioApp().querySelector(elementIDs[id])
-            ])
+                gradioApp().querySelector(elementIDs[id]),
+            ]),
         );
         const elemData = {};
 
         // Apply functionality to the range inputs. Restore redmask and correct for long images.
-        const rangeInputs = elements.rangeGroup ?
-            Array.from(elements.rangeGroup.querySelectorAll("input")) :
-            [
+        const rangeInputs = elements.rangeGroup
+            ? Array.from(elements.rangeGroup.querySelectorAll("input"))
+            : [
                 gradioApp().querySelector("#img2img_width input[type='range']"),
-                gradioApp().querySelector("#img2img_height input[type='range']")
+                gradioApp().querySelector("#img2img_height input[type='range']"),
             ];
 
         for (const input of rangeInputs) {
@@ -281,14 +279,13 @@ const tabNameToElementId = {
             elemData[elemId] = {
                 zoom: 1,
                 panX: 0,
-                panY: 0
+                panY: 0,
             };
             let fullScreenMode = false;
 
             // Create tooltip
             function createTooltip() {
-                const toolTipElement =
-                    targetElement.querySelector(".image-container");
+                const toolTipElement = targetElement.querySelector(".image-container");
                 const tooltip = document.createElement("div");
                 tooltip.className = "canvas-tooltip";
 
@@ -306,32 +303,32 @@ const tabNameToElementId = {
                     {
                         configKey: "canvas_hotkey_zoom",
                         action: "Zoom canvas",
-                        keySuffix: " + wheel"
+                        keySuffix: " + wheel",
                     },
                     {
                         configKey: "canvas_hotkey_adjust",
                         action: "Adjust brush size",
-                        keySuffix: " + wheel"
+                        keySuffix: " + wheel",
                     },
                     { configKey: "canvas_hotkey_reset", action: "Reset zoom" },
                     {
                         configKey: "canvas_hotkey_fullscreen",
-                        action: "Fullscreen mode"
+                        action: "Fullscreen mode",
                     },
                     { configKey: "canvas_hotkey_move", action: "Move canvas" },
-                    { configKey: "canvas_hotkey_overlap", action: "Overlap" }
+                    { configKey: "canvas_hotkey_overlap", action: "Overlap" },
                 ];
 
                 // Create hotkeys array with disabled property based on the config values
-                const hotkeys = hotkeysInfo.map(info => {
+                const hotkeys = hotkeysInfo.map((info) => {
                     const configValue = hotkeysConfig[info.configKey];
-                    const key = info.keySuffix ?
-                        `${configValue}${info.keySuffix}` :
-                        configValue.charAt(configValue.length - 1);
+                    const key = info.keySuffix
+                        ? `${configValue}${info.keySuffix}`
+                        : configValue.charAt(configValue.length - 1);
                     return {
                         key,
                         action: info.action,
-                        disabled: configValue === "disable"
+                        disabled: configValue === "disable",
                     };
                 });
 
@@ -373,7 +370,7 @@ const tabNameToElementId = {
                 elemData[elemId] = {
                     zoomLevel: 1,
                     panX: 0,
-                    panY: 0
+                    panY: 0,
                 };
 
                 if (isExtension) targetElement.style.overflow = "hidden";
@@ -384,13 +381,15 @@ const tabNameToElementId = {
                 targetElement.style.transform = `scale(${elemData[elemId].zoomLevel}) translate(${elemData[elemId].panX}px, ${elemData[elemId].panY}px)`;
 
                 const canvas = gradioApp().querySelector(
-                    `${elemId} canvas[key="interface"]`
+                    `${elemId} canvas[key="interface"]`,
                 );
 
                 toggleOverlap("off");
                 fullScreenMode = false;
 
-                const closeBtn = targetElement.querySelector("button[aria-label='Remove Image']");
+                const closeBtn = targetElement.querySelector(
+                    "button[aria-label='Remove Image']",
+                );
                 if (closeBtn) closeBtn.addEventListener("click", resetZoom);
 
                 if (canvas && isExtension) {
@@ -403,7 +402,6 @@ const tabNameToElementId = {
                         fitToElement();
                         return;
                     }
-
                 }
 
                 if (
@@ -438,21 +436,18 @@ const tabNameToElementId = {
                 elemId,
                 deltaY,
                 withoutValue = false,
-                percentage = 5
+                percentage = 5,
             ) {
                 const input =
                     gradioApp().querySelector(
-                        `${elemId} input[aria-label='Brush radius']`
+                        `${elemId} input[aria-label='Brush radius']`,
                     ) ||
-                    gradioApp().querySelector(
-                        `${elemId} button[aria-label="Use brush"]`
-                    );
+                    gradioApp().querySelector(`${elemId} button[aria-label="Use brush"]`);
 
                 if (input) {
                     input.click();
                     if (!withoutValue) {
-                        const maxValue =
-                            parseFloat(input.getAttribute("max")) || 100;
+                        const maxValue = parseFloat(input.getAttribute("max")) || 100;
                         const changeAmount = maxValue * (percentage / 100);
                         const newValue =
                             parseFloat(input.value) +
@@ -465,7 +460,7 @@ const tabNameToElementId = {
 
             // Reset zoom when uploading a new image
             const fileInput = gradioApp().querySelector(
-                `${elemId} input[type="file"][accept="image/*"].svelte-116rqfv`
+                `${elemId} input[type="file"][accept="image/*"].svelte-116rqfv`,
             );
             fileInput.addEventListener("click", resetZoom);
 
@@ -511,13 +506,13 @@ const tabNameToElementId = {
 
                     fullScreenMode = false;
                     elemData[elemId].zoomLevel = updateZoom(
-                        elemData[elemId].zoomLevel +
-                        (operation === "+" ? delta : -delta),
+                        elemData[elemId].zoomLevel + (operation === "+" ? delta : -delta),
                         zoomPosX - targetElement.getBoundingClientRect().left,
-                        zoomPosY - targetElement.getBoundingClientRect().top
+                        zoomPosY - targetElement.getBoundingClientRect().top,
                     );
 
-                    targetElement.isZoomed = Math.abs(elemData[elemId].zoomLevel - 1.0) > 0.01;
+                    targetElement.isZoomed =
+                        Math.abs(elemData[elemId].zoomLevel - 1.0) > 0.01;
                 }
             }
 
@@ -533,7 +528,8 @@ const tabNameToElementId = {
 
                 let parentElement;
 
-                if (isExtension) parentElement = targetElement.closest('[id^="component-"]');
+                if (isExtension)
+                    parentElement = targetElement.closest('[id^="component-"]');
                 else parentElement = targetElement.parentElement;
 
                 // Get element and screen dimensions
@@ -560,8 +556,7 @@ const tabNameToElementId = {
                 const originYValue = parseFloat(originY);
 
                 const offsetX =
-                    (screenWidth - elementWidth * scale) / 2 -
-                    originXValue * (1 - scale);
+                    (screenWidth - elementWidth * scale) / 2 - originXValue * (1 - scale);
                 const offsetY =
                     (screenHeight - elementHeight * scale) / 2.5 -
                     originYValue * (1 - scale);
@@ -587,12 +582,13 @@ const tabNameToElementId = {
             // Fullscreen mode
             function fitToScreen() {
                 const canvas = gradioApp().querySelector(
-                    `${elemId} canvas[key="interface"]`
+                    `${elemId} canvas[key="interface"]`,
                 );
 
                 if (!canvas) return;
 
-                if (canvas.offsetWidth > 862 || isExtension) targetElement.style.width = (canvas.offsetWidth + 2) + "px";
+                if (canvas.offsetWidth > 862 || isExtension)
+                    targetElement.style.width = canvas.offsetWidth + 2 + "px";
 
                 if (isExtension) targetElement.style.overflow = "visible";
 
@@ -657,13 +653,20 @@ const tabNameToElementId = {
             // Handle keydown events
             function handleKeyDown(event) {
                 // Disable key locks to make pasting from the buffer work correctly
-                if ((event.ctrlKey && event.code === 'KeyV') || (event.ctrlKey && event.code === 'KeyC') || event.code === "F5") {
+                if (
+                    (event.ctrlKey && event.code === "KeyV") ||
+                    (event.ctrlKey && event.code === "KeyC") ||
+                    event.code === "F5"
+                ) {
                     return;
                 }
 
                 // before activating shortcut, ensure user is not actively typing in an input field
                 if (!hotkeysConfig.canvas_blur_prompt) {
-                    if (event.target.nodeName === 'TEXTAREA' || event.target.nodeName === 'INPUT')
+                    if (
+                        event.target.nodeName === "TEXTAREA" ||
+                        event.target.nodeName === "INPUT"
+                    )
                         return;
                 }
 
@@ -671,8 +674,10 @@ const tabNameToElementId = {
                     [hotkeysConfig.canvas_hotkey_reset]: resetZoom,
                     [hotkeysConfig.canvas_hotkey_overlap]: toggleOverlap,
                     [hotkeysConfig.canvas_hotkey_fullscreen]: fitToScreen,
-                    [hotkeysConfig.canvas_hotkey_shrink_brush]: () => adjustBrushSize(elemId, 10),
-                    [hotkeysConfig.canvas_hotkey_grow_brush]: () => adjustBrushSize(elemId, -10)
+                    [hotkeysConfig.canvas_hotkey_shrink_brush]: () =>
+                        adjustBrushSize(elemId, 10),
+                    [hotkeysConfig.canvas_hotkey_grow_brush]: () =>
+                        adjustBrushSize(elemId, -10),
                 };
 
                 const action = hotkeyActions[event.code];
@@ -684,7 +689,8 @@ const tabNameToElementId = {
                 if (
                     isModifierKey(event, hotkeysConfig.canvas_hotkey_zoom) ||
                     isModifierKey(event, hotkeysConfig.canvas_hotkey_adjust)
-                ) event.preventDefault();
+                )
+                    event.preventDefault();
             }
 
             // Simulation of the function to put a long image into the screen.
@@ -693,9 +699,14 @@ const tabNameToElementId = {
 
             targetElement.isExpanded = false;
             function autoExpand() {
-                const canvas = document.querySelector(`${elemId} canvas[key="interface"]`);
+                const canvas = document.querySelector(
+                    `${elemId} canvas[key="interface"]`,
+                );
                 if (canvas) {
-                    if (hasHorizontalScrollbar(targetElement) && targetElement.isExpanded === false) {
+                    if (
+                        hasHorizontalScrollbar(targetElement) &&
+                        targetElement.isExpanded === false
+                    ) {
                         setTimeout(() => {
                             fitToScreen();
                             resetZoom();
@@ -710,8 +721,11 @@ const tabNameToElementId = {
             const observer = new MutationObserver((mutationsList, observer) => {
                 for (let mutation of mutationsList) {
                     // If the style attribute of the canvas has changed, by observation it happens only when the picture changes
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'style' &&
-                        mutation.target.tagName.toLowerCase() === 'canvas') {
+                    if (
+                        mutation.type === "attributes" &&
+                        mutation.attributeName === "style" &&
+                        mutation.target.tagName.toLowerCase() === "canvas"
+                    ) {
                         targetElement.isExpanded = false;
                         setTimeout(resetZoom, 10);
                     }
@@ -722,7 +736,11 @@ const tabNameToElementId = {
             if (hotkeysConfig.canvas_auto_expand) {
                 targetElement.addEventListener("mousemove", autoExpand);
                 // Set up an observer to track attribute changes
-                observer.observe(targetElement, { attributes: true, childList: true, subtree: true });
+                observer.observe(targetElement, {
+                    attributes: true,
+                    childList: true,
+                    subtree: true,
+                });
             }
 
             // Handle events only inside the targetElement
@@ -755,38 +773,46 @@ const tabNameToElementId = {
                 elements.img2imgTabs.addEventListener("click", resetZoom);
                 elements.img2imgTabs.addEventListener("click", () => {
                     // targetElement.style.width = "";
-                    if (parseInt(targetElement.style.width) > 865) setTimeout(fitToElement, 0);
+                    if (parseInt(targetElement.style.width) > 865)
+                        setTimeout(fitToElement, 0);
                 });
             }
 
-            targetElement.addEventListener("wheel", e => {
-                // change zoom level
-                const operation = (e.deltaY || -e.wheelDelta) > 0 ? "-" : "+";
-                changeZoomLevel(operation, e);
+            targetElement.addEventListener(
+                "wheel",
+                (e) => {
+                    // change zoom level
+                    const operation = (e.deltaY || -e.wheelDelta) > 0 ? "-" : "+";
+                    changeZoomLevel(operation, e);
 
-                // Handle brush size adjustment with ctrl key pressed
-                if (isModifierKey(e, hotkeysConfig.canvas_hotkey_adjust)) {
-                    e.preventDefault();
+                    // Handle brush size adjustment with ctrl key pressed
+                    if (isModifierKey(e, hotkeysConfig.canvas_hotkey_adjust)) {
+                        e.preventDefault();
 
-                    if (hotkeysConfig.canvas_hotkey_adjust === "Alt")
-                        interactedWithAltKey = true;
+                        if (hotkeysConfig.canvas_hotkey_adjust === "Alt")
+                            interactedWithAltKey = true;
 
-                    // Increase or decrease brush size based on scroll direction
-                    adjustBrushSize(elemId, e.deltaY);
-                }
-            }, { passive: false });
+                        // Increase or decrease brush size based on scroll direction
+                        adjustBrushSize(elemId, e.deltaY);
+                    }
+                },
+                { passive: false },
+            );
 
             // Handle the move event for pan functionality. Updates the panX and panY variables and applies the new transform to the target element.
             function handleMoveKeyDown(e) {
-
                 // Disable key locks to make pasting from the buffer work correctly
-                if ((e.ctrlKey && e.code === 'KeyV') || (e.ctrlKey && event.code === 'KeyC') || e.code === "F5") {
+                if (
+                    (e.ctrlKey && e.code === "KeyV") ||
+                    (e.ctrlKey && event.code === "KeyC") ||
+                    e.code === "F5"
+                ) {
                     return;
                 }
 
                 // before activating shortcut, ensure user is not actively typing in an input field
                 if (!hotkeysConfig.canvas_blur_prompt) {
-                    if (e.target.nodeName === 'TEXTAREA' || e.target.nodeName === 'INPUT')
+                    if (e.target.nodeName === "TEXTAREA" || e.target.nodeName === "INPUT")
                         return;
                 }
 
@@ -843,28 +869,43 @@ const tabNameToElementId = {
             }
 
             // Prevents sticking to the mouse
-            window.onblur = function () { isMoving = false; };
+            window.onblur = function () {
+                isMoving = false;
+            };
 
             // Checks for extension
             function checkForOutBox() {
                 const parentElement = targetElement.closest('[id^="component-"]');
-                if (parentElement.offsetWidth < targetElement.offsetWidth && !targetElement.isExpanded) {
+                if (
+                    parentElement.offsetWidth < targetElement.offsetWidth &&
+                    !targetElement.isExpanded
+                ) {
                     resetZoom();
                     targetElement.isExpanded = true;
                 }
 
-                if (parentElement.offsetWidth < targetElement.offsetWidth && elemData[elemId].zoomLevel == 1) {
+                if (
+                    parentElement.offsetWidth < targetElement.offsetWidth &&
+                    elemData[elemId].zoomLevel == 1
+                ) {
                     resetZoom();
                 }
 
-                if (parentElement.offsetWidth < targetElement.offsetWidth && targetElement.offsetWidth * elemData[elemId].zoomLevel > parentElement.offsetWidth && elemData[elemId].zoomLevel < 1 && !targetElement.isZoomed) {
+                if (
+                    parentElement.offsetWidth < targetElement.offsetWidth &&
+                    targetElement.offsetWidth * elemData[elemId].zoomLevel >
+                    parentElement.offsetWidth &&
+                    elemData[elemId].zoomLevel < 1 &&
+                    !targetElement.isZoomed
+                ) {
                     resetZoom();
                 }
             }
 
-            if (isExtension) targetElement.addEventListener("mousemove", checkForOutBox);
+            if (isExtension)
+                targetElement.addEventListener("mousemove", checkForOutBox);
 
-            window.addEventListener('resize', (e) => {
+            window.addEventListener("resize", (e) => {
                 resetZoom();
 
                 if (isExtension) {
@@ -893,19 +934,22 @@ const tabNameToElementId = {
             }
 
             if (!mainEl) return;
-            mainEl.addEventListener("click", async () => {
-                for (const elementID of elementIDs) {
-                    const el = await waitForElement(elementID);
-                    if (!el) break;
-                    applyZoomAndPan(elementID);
-                }
-            }, { once: true });
+            mainEl.addEventListener(
+                "click",
+                async () => {
+                    for (const elementID of elementIDs) {
+                        const el = await waitForElement(elementID);
+                        if (!el) break;
+                        applyZoomAndPan(elementID);
+                    }
+                },
+                { once: true },
+            );
         };
 
         window.applyZoomAndPan = applyZoomAndPan; // Only 1 elements, argument elementID, for example applyZoomAndPan("#txt2img_controlnet_ControlNet_input_image")
         window.applyZoomAndPanIntegration = applyZoomAndPanIntegration; // for any extension
     });
-
 })();
 
 function trigger_zoom_resize(tabname) {
@@ -922,7 +966,9 @@ function trigger_zoom_resize(tabname) {
         }
 
         img.dispatchEvent(new Event("mousemove"));
-        setTimeout(() => { img.querySelector("button[aria-label='Clear']").click(); }, 50);
+        setTimeout(() => {
+            img.querySelector("button[aria-label='Clear']").click();
+        }, 50);
     }
 
     setTimeout(_reset, 500);
