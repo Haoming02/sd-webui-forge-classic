@@ -26,6 +26,8 @@
         });
 
         function getActiveTab(elements, all = false) {
+            if (!elements.img2imgTabs) return null;
+
             const tabs = elements.img2imgTabs.querySelectorAll("button");
             if (all) return tabs;
 
@@ -38,6 +40,7 @@
         // Get tab ID
         function getTabId(elements) {
             const activeTab = getActiveTab(elements);
+            if (!activeTab) return null;
             return tabNameToElementId[activeTab.innerText];
         }
 
@@ -245,8 +248,8 @@
         );
 
         let isMoving = false;
-        let mouseX, mouseY;
         let activeElement;
+        let interactedWithAltKey = false;
 
         const elements = Object.fromEntries(
             Object.keys(elementIDs).map(id => [
@@ -272,7 +275,7 @@
             const targetElement = gradioApp().querySelector(elemId);
 
             if (!targetElement) {
-                console.log("Element not found");
+                console.log(`Element ${elemId} not found...`);
                 return;
             }
 
@@ -360,9 +363,9 @@
 
             // In the course of research, it was found that the tag img is very harmful when zooming and creates white canvases. This hack allows you to almost never think about this problem, it has no effect on webui.
             function fixCanvas() {
-                const activeTab = getActiveTab(elements).textContent.trim();
+                const activeTab = getActiveTab(elements)?.textContent.trim();
 
-                if (activeTab !== "img2img") {
+                if (activeTab && activeTab !== "img2img") {
                     const img = targetElement.querySelector(`${elemId} img`);
 
                     if (img && img.style.display !== "none") {
@@ -482,10 +485,17 @@
             function updateZoom(newZoomLevel, mouseX, mouseY) {
                 newZoomLevel = Math.max(0.1, Math.min(newZoomLevel, 15));
 
-                elemData[elemId].panX +=
-                    mouseX - (mouseX * newZoomLevel) / elemData[elemId].zoomLevel;
-                elemData[elemId].panY +=
-                    mouseY - (mouseY * newZoomLevel) / elemData[elemId].zoomLevel;
+                // Check if we're close to the original zoom level (1.0)
+                if (Math.abs(newZoomLevel - 1.0) < 0.01) {
+                    newZoomLevel = 1;
+                    elemData[elemId].panX = 0;
+                    elemData[elemId].panY = 0;
+                } else {
+                    elemData[elemId].panX +=
+                        mouseX - (mouseX * newZoomLevel) / elemData[elemId].zoomLevel;
+                    elemData[elemId].panY +=
+                        mouseY - (mouseY * newZoomLevel) / elemData[elemId].zoomLevel;
+                }
 
                 targetElement.style.transformOrigin = "0 0";
                 targetElement.style.transform = `translate(${elemData[elemId].panX}px, ${elemData[elemId].panY}px) scale(${newZoomLevel})`;
@@ -502,6 +512,8 @@
             function changeZoomLevel(operation, e) {
                 if (isModifierKey(e, hotkeysConfig.canvas_hotkey_zoom)) {
                     e.preventDefault();
+                    if (hotkeysConfig.canvas_hotkey_zoom === "Alt")
+                        interactedWithAltKey = true;
 
                     let zoomPosX, zoomPosY;
                     let delta = 0.2;
@@ -522,7 +534,7 @@
                         zoomPosY - targetElement.getBoundingClientRect().top
                     );
 
-                    targetElement.isZoomed = true;
+                    targetElement.isZoomed = Math.abs(elemData[elemId].zoomLevel - 1.0) > 0.01;
                 }
             }
 
@@ -704,12 +716,6 @@
                 }
             }
 
-            // Get Mouse position
-            function getMousePosition(e) {
-                mouseX = e.offsetX;
-                mouseY = e.offsetY;
-            }
-
             // Simulation of the function to put a long image into the screen.
             // We detect if an image has a scroll bar or not, make a fullscreen to reveal the image, then reduce it to fit into the element.
             // We hide the image and show it to the user when it is ready.
@@ -729,8 +735,6 @@
                     }
                 }
             }
-
-            targetElement.addEventListener("mousemove", getMousePosition);
 
             //observers
             // Creating an observer with a callback function to handle DOM changes
@@ -778,27 +782,32 @@
             targetElement.addEventListener("mouseleave", handleMouseLeave);
 
             // Reset zoom when click on another tab
-            elements.img2imgTabs.addEventListener("click", resetZoom);
-            elements.img2imgTabs.addEventListener("click", () => {
-                // targetElement.style.width = "";
-                if (parseInt(targetElement.style.width) > 865) {
-                    setTimeout(fitToElement, 0);
-                }
-            });
+            if (elements.img2imgTabs) {
+                elements.img2imgTabs.addEventListener("click", resetZoom);
+                elements.img2imgTabs.addEventListener("click", () => {
+                    // targetElement.style.width = "";
+                    if (parseInt(targetElement.style.width) > 865) {
+                        setTimeout(fitToElement, 0);
+                    }
+                });
+            }
 
             targetElement.addEventListener("wheel", e => {
                 // change zoom level
-                const operation = e.deltaY > 0 ? "-" : "+";
+                const operation = (e.deltaY || -e.wheelDelta) > 0 ? "-" : "+";
                 changeZoomLevel(operation, e);
 
                 // Handle brush size adjustment with ctrl key pressed
                 if (isModifierKey(e, hotkeysConfig.canvas_hotkey_adjust)) {
                     e.preventDefault();
 
+                    if (hotkeysConfig.canvas_hotkey_adjust === "Alt")
+                        interactedWithAltKey = true;
+
                     // Increase or decrease brush size based on scroll direction
                     adjustBrushSize(elemId, e.deltaY);
                 }
-            });
+            }, { passive: false });
 
             // Handle the move event for pan functionality. Updates the panX and panY variables and applies the new transform to the target element.
             function handleMoveKeyDown(e) {
@@ -833,6 +842,15 @@
 
             document.addEventListener("keydown", handleMoveKeyDown);
             document.addEventListener("keyup", handleMoveKeyUp);
+
+            /** Prevent firefox from opening main menu when alt is used as a hotkey for zoom or brush size */
+            function handleAltKeyUp(e) {
+                if (e.key !== "Alt" || !interactedWithAltKey) return;
+                e.preventDefault();
+                interactedWithAltKey = false;
+            }
+
+            document.addEventListener("keyup", handleAltKeyUp);
 
             // Detect zoom level and update the pan speed.
             function updatePanPosition(movementX, movementY) {
