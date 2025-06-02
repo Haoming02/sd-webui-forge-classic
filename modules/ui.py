@@ -416,6 +416,7 @@ def create_ui():
                     tabname="txt2img",
                     source_text_component=toprow.prompt,
                     source_image_component=None,
+                    is_paste=True,
                 )
             )
 
@@ -767,6 +768,7 @@ def create_ui():
                     tabname="img2img",
                     source_text_component=toprow.prompt,
                     source_image_component=None,
+                    is_paste=True,
                 )
             )
 

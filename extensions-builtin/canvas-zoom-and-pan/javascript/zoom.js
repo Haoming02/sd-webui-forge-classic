@@ -956,3 +956,11 @@
     });
 
 })();
+
+function trigger_zoom_resize() {
+    setTimeout(() => {
+        const images = gradioApp().getElementById("mode_img2img").querySelectorAll("div.gradio-image");
+        for (const img of images)
+            img.dispatchEvent(new Event("mousemove"));
+    }, 250);
+}

@@ -17,7 +17,7 @@ type_of_gr_update = type(gr.skip())
 
 
 class ParamBinding:
-    def __init__(self, paste_button, tabname, source_text_component=None, source_image_component=None, source_tabname=None, override_settings_component=None, paste_field_names=None):
+    def __init__(self, paste_button, tabname, source_text_component=None, source_image_component=None, source_tabname=None, override_settings_component=None, paste_field_names=None, *, is_paste=False):
         self.paste_button = paste_button
         self.tabname = tabname
         self.source_text_component = source_text_component
@@ -25,6 +25,7 @@ class ParamBinding:
         self.source_tabname = source_tabname
         self.override_settings_component = override_settings_component
         self.paste_field_names = paste_field_names or []
+        self.is_paste = is_paste
 
 
 class PasteField(tuple):
@@ -120,13 +121,8 @@ def create_buttons(tabs_list):
     return buttons
 
 
-def bind_buttons(buttons, send_image, send_generate_info):
-    """old function for backwards compatibility; do not use this, use register_paste_params_button"""
-    for tabname, button in buttons.items():
-        source_text_component = send_generate_info if isinstance(send_generate_info, gr.components.Component) else None
-        source_tabname = send_generate_info if isinstance(send_generate_info, str) else None
-
-        register_paste_params_button(ParamBinding(paste_button=button, tabname=tabname, source_text_component=source_text_component, source_image_component=send_image, source_tabname=source_tabname))
+def bind_buttons(*args, **kwargs):
+    raise NotImplementedError("use register_paste_params_button instead")
 
 
 def register_paste_params_button(binding: ParamBinding):
@@ -153,6 +149,10 @@ def connect_paste_params_buttons():
                 jsfunc = None
 
             binding.paste_button.click(
+                fn=lambda: gr.update(value=None),
+                outputs=[destination_image_component],
+                show_progress=False,
+            ).then(
                 fn=func,
                 _js=jsfunc,
                 inputs=[binding.source_image_component],
@@ -161,7 +161,7 @@ def connect_paste_params_buttons():
             )
 
         if binding.source_text_component is not None and fields is not None:
-            connect_paste(binding.paste_button, fields, binding.source_text_component, override_settings_component, binding.tabname)
+            connect_paste(binding.paste_button, fields, binding.source_text_component, override_settings_component, binding.tabname, is_paste=binding.is_paste)
 
         if binding.source_tabname is not None and fields is not None:
             paste_field_names = ["Prompt", "Negative prompt", "Steps", "Face restoration"] + (["Seed"] if shared.opts.send_seed else []) + binding.paste_field_names
@@ -173,12 +173,10 @@ def connect_paste_params_buttons():
             )
 
         binding.paste_button.click(
-            fn=None,
+            fn=lambda: None,
             _js=f"switch_to_{binding.tabname}",
-            inputs=None,
-            outputs=None,
             show_progress=False,
-        )
+        ).then(fn=None, _js="trigger_zoom_resize")
 
 
 def send_image_and_dimensions(x):
@@ -450,19 +448,25 @@ def get_override_settings(params, *, skip_fields=None):
     return res
 
 
-def connect_paste(button, paste_fields, input_comp, override_settings_component, tabname):
+def connect_paste(button, paste_fields, input_comp, override_settings_component, tabname, *, is_paste=False):
     def paste_func(prompt):
-        if not prompt and not shared.cmd_opts.hide_ui_dir_config:
+        res = []
+
+        if is_paste and not prompt:
             filename = os.path.join(data_path, "params.txt")
             try:
                 with open(filename, "r", encoding="utf8") as file:
                     prompt = file.read()
             except OSError:
-                pass
+                prompt = None
+
+        if not prompt:
+            for _, _ in paste_fields:
+                res.append(gr.skip())
+            return res
 
         params = parse_generation_parameters(prompt)
         script_callbacks.infotext_pasted_callback(prompt, params)
-        res = []
 
         for output, key in paste_fields:
             if callable(key):
@@ -511,9 +515,7 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
     )
     button.click(
         fn=None,
-        _js=f"recalculate_prompts_{tabname}",
-        inputs=[],
-        outputs=[],
+        _js=f"recalculate_prompts_{'txt2img' if tabname == 'txt2img' else 'img2img'}",
         show_progress=False,
     )
 
