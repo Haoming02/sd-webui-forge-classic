@@ -50,7 +50,7 @@ def reset():
 
 
 def quote(text):
-    if ',' not in str(text) and '\n' not in str(text) and ':' not in str(text):
+    if "," not in str(text) and "\n" not in str(text) and ":" not in str(text):
         return text
 
     return json.dumps(text, ensure_ascii=False)
@@ -76,9 +76,9 @@ def image_from_url_text(filedata):
     if type(filedata) == dict and filedata.get("is_file", False):
         filename = filedata["name"]
         is_in_right_dir = ui_tempdir.check_tmp_file(shared.demo, filename)
-        assert is_in_right_dir, 'trying to open image file outside of allowed directories'
+        assert is_in_right_dir, "trying to open image file outside of allowed directories"
 
-        filename = filename.rsplit('?', 1)[0]
+        filename = filename.rsplit("?", 1)[0]
         return Image.open(filename)
 
     if type(filedata) == list:
@@ -88,9 +88,9 @@ def image_from_url_text(filedata):
         filedata = filedata[0]
 
     if filedata.startswith("data:image/png;base64,"):
-        filedata = filedata[len("data:image/png;base64,"):]
+        filedata = filedata[len("data:image/png;base64,") :]
 
-    filedata = base64.decodebytes(filedata.encode('utf-8'))
+    filedata = base64.decodebytes(filedata.encode("utf-8"))
     image = Image.open(io.BytesIO(filedata))
     return image
 
@@ -106,9 +106,10 @@ def add_paste_fields(tabname, init_img, fields, override_settings_component=None
 
     # backwards compatibility for existing extensions
     import modules.ui
-    if tabname == 'txt2img':
+
+    if tabname == "txt2img":
         modules.ui.txt2img_paste_fields = fields
-    elif tabname == 'img2img':
+    elif tabname == "img2img":
         modules.ui.img2img_paste_fields = fields
 
 
@@ -163,7 +164,7 @@ def connect_paste_params_buttons():
             connect_paste(binding.paste_button, fields, binding.source_text_component, override_settings_component, binding.tabname)
 
         if binding.source_tabname is not None and fields is not None:
-            paste_field_names = ['Prompt', 'Negative prompt', 'Steps', 'Face restoration'] + (["Seed"] if shared.opts.send_seed else []) + binding.paste_field_names
+            paste_field_names = ["Prompt", "Negative prompt", "Steps", "Face restoration"] + (["Seed"] if shared.opts.send_seed else []) + binding.paste_field_names
             binding.paste_button.click(
                 fn=lambda *x: x,
                 inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
@@ -200,16 +201,16 @@ def restore_old_hires_fix_params(res):
     """for infotexts that specify old First pass size parameter, convert it into
     width, height, and hr scale"""
 
-    firstpass_width = res.get('First pass size-1', None)
-    firstpass_height = res.get('First pass size-2', None)
+    firstpass_width = res.get("First pass size-1", None)
+    firstpass_height = res.get("First pass size-2", None)
 
     if shared.opts.use_old_hires_fix_width_height:
         hires_width = int(res.get("Hires resize-1", 0))
         hires_height = int(res.get("Hires resize-2", 0))
 
         if hires_width and hires_height:
-            res['Size-1'] = hires_width
-            res['Size-2'] = hires_height
+            res["Size-1"] = hires_width
+            res["Size-2"] = hires_height
             return
 
     if firstpass_width is None or firstpass_height is None:
@@ -222,21 +223,21 @@ def restore_old_hires_fix_params(res):
     if firstpass_width == 0 or firstpass_height == 0:
         firstpass_width, firstpass_height = processing.old_hires_fix_first_pass_dimensions(width, height)
 
-    res['Size-1'] = firstpass_width
-    res['Size-2'] = firstpass_height
-    res['Hires resize-1'] = width
-    res['Hires resize-2'] = height
+    res["Size-1"] = firstpass_width
+    res["Size-2"] = firstpass_height
+    res["Hires resize-1"] = width
+    res["Hires resize-2"] = height
 
 
 def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     """parses generation parameters string, the one you see in text field under the picture in UI:
-```
-girl with an artist's beret, determined, blue eyes, desert scene, computer monitors, heavy makeup, by Alphonse Mucha and Charlie Bowater, ((eyeshadow)), (coquettish), detailed, intricate
-Negative prompt: ugly, fat, obese, chubby, (((deformed))), [blurry], bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), messy drawing
-Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model hash: 45dee52b
-```
+    ```
+    girl with an artist's beret, determined, blue eyes, desert scene, computer monitors, heavy makeup, by Alphonse Mucha and Charlie Bowater, ((eyeshadow)), (coquettish), detailed, intricate
+    Negative prompt: ugly, fat, obese, chubby, (((deformed))), [blurry], bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), messy drawing
+    Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model hash: 45dee52b
+    ```
 
-    returns a dict with field values
+        returns a dict with field values
     """
     if skip_fields is None:
         skip_fields = shared.opts.infotext_skip_pasting
@@ -251,7 +252,7 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
     *lines, lastline = x.strip().split("\n")
     if len(re_param.findall(lastline)) < 3:
         lines.append(lastline)
-        lastline = ''
+        lastline = ""
 
     for line in lines:
         line = line.strip()
@@ -315,7 +316,7 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
         res["Mask mode"] = "Inpaint masked"
 
     if "Masked content" not in res:
-        res["Masked content"] = 'original'
+        res["Masked content"] = "original"
 
     if "Inpaint area" not in res:
         res["Inpaint area"] = "Whole picture"
@@ -354,7 +355,7 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
         p_attention = prompt_parser.parse_prompt_attention(prompt)
         n_attention = prompt_parser.parse_prompt_attention(negative_prompt)
         prompt_attention = [*p_attention, *n_attention]
-        prompt_with_attention = [p for p in prompt_attention if p[1] == 1.0 or p[0] == 'BREAK']
+        prompt_with_attention = [p for p in prompt_attention if p[1] == 1.0 or p[0] == "BREAK"]
         if len(prompt_attention) != len(prompt_with_attention):
             res["Emphasis"] = "Original"
 
@@ -364,9 +365,7 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
     return res
 
 
-infotext_to_setting_name_mapping = [
-
-]
+infotext_to_setting_name_mapping = []
 """Mapping of infotext labels to setting names. Only left for backwards compatibility - use OptionInfo(..., infotext='...') instead.
 Example content:
 
@@ -522,4 +521,4 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
 import sys
 
 # Backward Compatibility
-sys.modules["modules.generation_parameters_copypaste"] = sys.modules[__name__] 
+sys.modules["modules.generation_parameters_copypaste"] = sys.modules[__name__]
