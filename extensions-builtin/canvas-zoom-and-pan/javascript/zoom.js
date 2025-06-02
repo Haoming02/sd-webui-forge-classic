@@ -47,9 +47,7 @@
         // Wait until opts loaded
         async function waitForOpts() {
             for (; ;) {
-                if (window.opts && Object.keys(window.opts).length) {
-                    return window.opts;
-                }
+                if (window.opts && Object.keys(window.opts).length) return window.opts;
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
@@ -189,9 +187,7 @@
                 );
                 let zoom = 1; // default zoom
 
-                if (scaleMatch && scaleMatch[1]) {
-                    zoom = Number(scaleMatch[1]);
-                }
+                if (scaleMatch && scaleMatch[1]) zoom = Number(scaleMatch[1]);
 
                 imageARPreview.style.transformOrigin = "0 0";
                 imageARPreview.style.transform = `scale(${zoom})`;
@@ -201,9 +197,7 @@
 
             img.style.display = "block";
 
-            setTimeout(() => {
-                img.style.display = "none";
-            }, 400);
+            setTimeout(() => { img.style.display = "none"; }, 500);
         }
 
         const hotkeysConfigOpts = await waitForOpts();
@@ -339,9 +333,7 @@
                 });
 
                 for (const hotkey of hotkeys) {
-                    if (hotkey.disabled) {
-                        continue;
-                    }
+                    if (hotkey.disabled) continue;
 
                     const p = document.createElement("p");
                     p.innerHTML = `<b>${hotkey.key}</b> - ${hotkey.action}`;
@@ -357,9 +349,7 @@
             }
 
             //Show tool tip if setting enable
-            if (hotkeysConfig.canvas_show_tooltip) {
-                createTooltip();
-            }
+            if (hotkeysConfig.canvas_show_tooltip) createTooltip();
 
             // In the course of research, it was found that the tag img is very harmful when zooming and creates white canvases. This hack allows you to almost never think about this problem, it has no effect on webui.
             function fixCanvas() {
@@ -383,9 +373,7 @@
                     panY: 0
                 };
 
-                if (isExtension) {
-                    targetElement.style.overflow = "hidden";
-                }
+                if (isExtension) targetElement.style.overflow = "hidden";
 
                 targetElement.isZoomed = false;
 
@@ -400,9 +388,7 @@
                 fullScreenMode = false;
 
                 const closeBtn = targetElement.querySelector("button[aria-label='Remove Image']");
-                if (closeBtn) {
-                    closeBtn.addEventListener("click", resetZoom);
-                }
+                if (closeBtn) closeBtn.addEventListener("click", resetZoom);
 
                 if (canvas && isExtension) {
                     const parentElement = targetElement.closest('[id^="component-"]');
@@ -438,11 +424,8 @@
                 targetElement.style.zIndex =
                     targetElement.style.zIndex !== zIndex2 ? zIndex2 : zIndex1;
 
-                if (forced === "off") {
-                    targetElement.style.zIndex = zIndex1;
-                } else if (forced === "on") {
-                    targetElement.style.zIndex = zIndex2;
-                }
+                if (forced === "off") targetElement.style.zIndex = zIndex1;
+                else if (forced === "on") targetElement.style.zIndex = zIndex2;
             }
 
             // Adjust the brush size based on the deltaY value from a mouse wheel event
@@ -501,9 +484,7 @@
                 targetElement.style.transform = `translate(${elemData[elemId].panX}px, ${elemData[elemId].panY}px) scale(${newZoomLevel})`;
 
                 toggleOverlap("on");
-                if (isExtension) {
-                    targetElement.style.overflow = "visible";
-                }
+                if (isExtension) targetElement.style.overflow = "visible";
 
                 return newZoomLevel;
             }
@@ -517,11 +498,8 @@
 
                     let zoomPosX, zoomPosY;
                     let delta = 0.2;
-                    if (elemData[elemId].zoomLevel > 7) {
-                        delta = 0.9;
-                    } else if (elemData[elemId].zoomLevel > 2) {
-                        delta = 0.6;
-                    }
+                    if (elemData[elemId].zoomLevel > 7) delta = 0.9;
+                    else if (elemData[elemId].zoomLevel > 2) delta = 0.6;
 
                     zoomPosX = e.clientX;
                     zoomPosY = e.clientY;
@@ -550,12 +528,8 @@
 
                 let parentElement;
 
-                if (isExtension) {
-                    parentElement = targetElement.closest('[id^="component-"]');
-                } else {
-                    parentElement = targetElement.parentElement;
-                }
-
+                if (isExtension) parentElement = targetElement.closest('[id^="component-"]');
+                else parentElement = targetElement.parentElement;
 
                 // Get element and screen dimensions
                 const elementWidth = targetElement.offsetWidth;
@@ -613,13 +587,9 @@
 
                 if (!canvas) return;
 
-                if (canvas.offsetWidth > 862 || isExtension) {
-                    targetElement.style.width = (canvas.offsetWidth + 2) + "px";
-                }
+                if (canvas.offsetWidth > 862 || isExtension) targetElement.style.width = (canvas.offsetWidth + 2) + "px";
 
-                if (isExtension) {
-                    targetElement.style.overflow = "visible";
-                }
+                if (isExtension) targetElement.style.overflow = "visible";
 
                 if (fullScreenMode) {
                     resetZoom();
@@ -688,11 +658,9 @@
 
                 // before activating shortcut, ensure user is not actively typing in an input field
                 if (!hotkeysConfig.canvas_blur_prompt) {
-                    if (event.target.nodeName === 'TEXTAREA' || event.target.nodeName === 'INPUT') {
+                    if (event.target.nodeName === 'TEXTAREA' || event.target.nodeName === 'INPUT')
                         return;
-                    }
                 }
-
 
                 const hotkeyActions = {
                     [hotkeysConfig.canvas_hotkey_reset]: resetZoom,
@@ -711,9 +679,7 @@
                 if (
                     isModifierKey(event, hotkeysConfig.canvas_hotkey_zoom) ||
                     isModifierKey(event, hotkeysConfig.canvas_hotkey_adjust)
-                ) {
-                    event.preventDefault();
-                }
+                ) event.preventDefault();
             }
 
             // Simulation of the function to put a long image into the screen.
@@ -786,9 +752,7 @@
                 elements.img2imgTabs.addEventListener("click", resetZoom);
                 elements.img2imgTabs.addEventListener("click", () => {
                     // targetElement.style.width = "";
-                    if (parseInt(targetElement.style.width) > 865) {
-                        setTimeout(fitToElement, 0);
-                    }
+                    if (parseInt(targetElement.style.width) > 865) setTimeout(fitToElement, 0);
                 });
             }
 
@@ -819,11 +783,9 @@
 
                 // before activating shortcut, ensure user is not actively typing in an input field
                 if (!hotkeysConfig.canvas_blur_prompt) {
-                    if (e.target.nodeName === 'TEXTAREA' || e.target.nodeName === 'INPUT') {
+                    if (e.target.nodeName === 'TEXTAREA' || e.target.nodeName === 'INPUT')
                         return;
-                    }
                 }
-
 
                 if (e.code === hotkeysConfig.canvas_hotkey_move) {
                     if (!e.ctrlKey && !e.metaKey && isKeyDownHandlerAttached) {
@@ -835,9 +797,7 @@
             }
 
             function handleMoveKeyUp(e) {
-                if (e.code === hotkeysConfig.canvas_hotkey_move) {
-                    isMoving = false;
-                }
+                if (e.code === hotkeysConfig.canvas_hotkey_move) isMoving = false;
             }
 
             document.addEventListener("keydown", handleMoveKeyDown);
@@ -856,9 +816,7 @@
             function updatePanPosition(movementX, movementY) {
                 let panSpeed = 2;
 
-                if (elemData[elemId].zoomLevel > 8) {
-                    panSpeed = 3.5;
-                }
+                if (elemData[elemId].zoomLevel > 8) panSpeed = 3.5;
 
                 elemData[elemId].panX += movementX * panSpeed;
                 elemData[elemId].panY += movementY * panSpeed;
@@ -875,19 +833,14 @@
                     updatePanPosition(e.movementX, e.movementY);
                     targetElement.style.pointerEvents = "none";
 
-                    if (isExtension) {
-                        targetElement.style.overflow = "visible";
-                    }
-
+                    if (isExtension) targetElement.style.overflow = "visible";
                 } else {
                     targetElement.style.pointerEvents = "auto";
                 }
             }
 
             // Prevents sticking to the mouse
-            window.onblur = function () {
-                isMoving = false;
-            };
+            window.onblur = function () { isMoving = false; };
 
             // Checks for extension
             function checkForOutBox() {
@@ -906,10 +859,7 @@
                 }
             }
 
-            if (isExtension) {
-                targetElement.addEventListener("mousemove", checkForOutBox);
-            }
-
+            if (isExtension) targetElement.addEventListener("mousemove", checkForOutBox);
 
             window.addEventListener('resize', (e) => {
                 resetZoom();
