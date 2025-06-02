@@ -421,17 +421,6 @@ def create_ui():
 
             steps = scripts.scripts_txt2img.script("Sampler").steps
 
-            txt2img_preview_params = [
-                toprow.prompt,
-                toprow.negative_prompt,
-                steps,
-                scripts.scripts_txt2img.script("Sampler").sampler_name,
-                cfg_scale,
-                scripts.scripts_txt2img.script("Seed").seed,
-                width,
-                height,
-            ]
-
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
             toprow.token_button.click(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])

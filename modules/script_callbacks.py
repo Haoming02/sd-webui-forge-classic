@@ -95,11 +95,6 @@ class AfterCFGCallbackParams:
         """Total number of sampling steps planned"""
 
 
-class UiTrainTabParams:
-    def __init__(self, txt2img_preview_params):
-        self.txt2img_preview_params = txt2img_preview_params
-
-
 class ImageGridLoopParams:
     def __init__(self, imgs, cols, rows):
         self.imgs = imgs
@@ -121,7 +116,6 @@ callback_map = dict(
     callbacks_app_started=[],
     callbacks_model_loaded=[],
     callbacks_ui_tabs=[],
-    callbacks_ui_train_tabs=[],
     callbacks_ui_settings=[],
     callbacks_before_image_saved=[],
     callbacks_image_saved=[],
@@ -184,14 +178,6 @@ def ui_tabs_callback():
             report_exception(c, 'ui_tabs_callback')
 
     return res
-
-
-def ui_train_tabs_callback(params: UiTrainTabParams):
-    for c in callback_map['callbacks_ui_train_tabs']:
-        try:
-            c.callback(params)
-        except Exception:
-            report_exception(c, 'callbacks_ui_train_tabs')
 
 
 def ui_settings_callback():
@@ -387,12 +373,6 @@ def on_ui_tabs(callback):
     """
     add_callback(callback_map['callbacks_ui_tabs'], callback)
 
-
-def on_ui_train_tabs(callback):
-    """register a function to be called when the UI is creating new tabs for the train tab.
-    Create your new tabs with gr.Tab.
-    """
-    add_callback(callback_map['callbacks_ui_train_tabs'], callback)
 
 
 def on_ui_settings(callback):
