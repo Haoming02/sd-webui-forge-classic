@@ -1,3 +1,5 @@
+const ZoomAndPanReset = {};
+
 const elementIDs = {
     img2imgTabs: "#mode_img2img .tab-nav",
     inpaint: "#img2maskimg",
@@ -416,6 +418,8 @@ const tabNameToElementId = {
 
                 targetElement.style.width = "";
             }
+
+            ZoomAndPanReset[elemId] = resetZoom;
 
             // Toggle the zIndex of the target element between two values, allowing it to overlap or be overlapped by other elements
             function toggleOverlap(forced = "") {
@@ -909,6 +913,7 @@ const tabNameToElementId = {
 function trigger_zoom_resize(tabname) {
     const id = elementIDs[tabname];
     if (id == undefined) return;
+    ZoomAndPanReset[id]();
 
     const img = gradioApp().querySelector(id);
 
