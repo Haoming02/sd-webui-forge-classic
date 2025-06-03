@@ -24,6 +24,7 @@ if PERSISTENT_PATCHES:
 
 CUDA_STREAM = args.cuda_stream and torch.cuda.is_available()
 
+
 class AsyncMover:
     def __init__(self):
         self.backing_stream = None
@@ -34,21 +35,23 @@ class AsyncMover:
             torch.cuda.current_stream().wait_stream(self.backing_stream)
             self.is_streaming = False
 
-    def __call__(self, model, device_to: torch.device):
+    def __call__(self, model: torch.nn.Module, device_to: torch.device):
         if device_to is None:
             return
 
-        if CUDA_STREAM:
-            if self.backing_stream is None:
-                self.backing_stream = torch.cuda.Stream()
-            else:
-                self.wait_for_stream()
-
-            with torch.inference_mode(), torch.cuda.stream(self.backing_stream):
-                model.to(device_to, non_blocking=True)
-                self.is_streaming = True
-        else:
+        if not CUDA_STREAM:
             model.to(device_to)
+            return
+
+        if self.backing_stream is None:
+            self.backing_stream = torch.cuda.Stream()
+        else:
+            self.wait_for_stream()
+
+        with torch.inference_mode(), torch.cuda.stream(self.backing_stream):
+            model.to(device_to, non_blocking=True)
+            self.is_streaming = True
+
 
 class PatchStatus:
     def __init__(self):
