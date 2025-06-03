@@ -44,7 +44,7 @@ class UpscalerESRGAN(Upscaler):
             scaler_data = UpscalerData(name, file, self, scale)
             self.scalers.append(scaler_data)
 
-    def do_upscale(self, img: Image.Image, selected_model: str, scale: int):
+    def do_upscale(self, img: Image.Image, selected_model: str):
         prepare_free_memory()
         try:
             model = self.load_model(selected_model)
@@ -55,8 +55,7 @@ class UpscalerESRGAN(Upscaler):
             model=model,
             img=img,
             tile_size=opts.ESRGAN_tile,
-            tile_overlap=opts.ESRGAN_tile_overlap,
-            target_scale=scale
+            tile_overlap=opts.ESRGAN_tile_overlap
         )
 
     @lru_cache(maxsize=3, typed=False)
