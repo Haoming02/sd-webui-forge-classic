@@ -8,7 +8,11 @@ from modules.shared import opts
 from modules.upscaler import Upscaler, UpscalerData
 from modules.upscaler_utils import upscale_with_model
 from modules_forge.forge_util import prepare_free_memory
+from ldm_patched.modules.args_parser import args
 
+PREFER_HALF = args.prefer_fp16_upscalers
+if PREFER_HALF:
+    print("Prefer Half-Precision Upscalers:", PREFER_HALF)
 
 class UpscalerESRGAN(Upscaler):
     def __init__(self, dirname: str):
@@ -40,7 +44,7 @@ class UpscalerESRGAN(Upscaler):
             scaler_data = UpscalerData(name, file, self, scale)
             self.scalers.append(scaler_data)
 
-    def do_upscale(self, img: Image.Image, selected_model: str):
+    def do_upscale(self, img: Image.Image, selected_model: str, scale: int):
         prepare_free_memory()
         try:
             model = self.load_model(selected_model)
@@ -52,6 +56,7 @@ class UpscalerESRGAN(Upscaler):
             img=img,
             tile_size=opts.ESRGAN_tile,
             tile_overlap=opts.ESRGAN_tile_overlap,
+            target_scale=scale
         )
 
     @lru_cache(maxsize=3, typed=False)
@@ -65,6 +70,6 @@ class UpscalerESRGAN(Upscaler):
                 file_name=path.rsplit("/", 1)[-1],
             )
 
-        model = modelloader.load_spandrel_model(filename, device="cpu")
+        model = modelloader.load_spandrel_model(filename, device="cpu", prefer_half=PREFER_HALF)
         model.to(devices.device_esrgan)
         return model
