@@ -83,7 +83,7 @@ parser.add_argument("--pin-shared-memory", action="store_true")
 
 parser.add_argument("--fast-fp16", action="store_true")
 parser.add_argument("--persistent-patches", action="store_true")
-parser.add_argument("--prefer-fp16-upscalers", action="store_true")
+
 
 class SageAttentionAPIs(enum.Enum):
     Automatic = "auto"

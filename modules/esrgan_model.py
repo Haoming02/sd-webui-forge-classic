@@ -8,11 +8,12 @@ from modules.shared import opts
 from modules.upscaler import Upscaler, UpscalerData
 from modules.upscaler_utils import upscale_with_model
 from modules_forge.forge_util import prepare_free_memory
-from ldm_patched.modules.args_parser import args
 
-PREFER_HALF = args.prefer_fp16_upscalers
+
+PREFER_HALF = opts.prefer_fp16_upscalers
 if PREFER_HALF:
-    print("Prefer Half-Precision Upscalers:", PREFER_HALF)
+    print("[Upscalers] Prefer Half-Precision:", PREFER_HALF)
+
 
 class UpscalerESRGAN(Upscaler):
     def __init__(self, dirname: str):
@@ -55,7 +56,7 @@ class UpscalerESRGAN(Upscaler):
             model=model,
             img=img,
             tile_size=opts.ESRGAN_tile,
-            tile_overlap=opts.ESRGAN_tile_overlap
+            tile_overlap=opts.ESRGAN_tile_overlap,
         )
 
     @lru_cache(maxsize=3, typed=False)
