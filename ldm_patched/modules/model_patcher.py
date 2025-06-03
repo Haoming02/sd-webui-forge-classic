@@ -14,6 +14,7 @@ import torch
 import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 from ldm_patched.modules.args_parser import args
+from modules_forge import stream
 
 extra_weight_calculators = {}  # backward compatibility
 
@@ -22,8 +23,6 @@ PERSISTENT_PATCHES = args.persistent_patches
 if PERSISTENT_PATCHES:
     print("[Experimental] Persistent Patches:", PERSISTENT_PATCHES)
 
-CUDA_STREAM = args.cuda_stream and torch.cuda.is_available()
-
 
 class AsyncMover:
     def __init__(self):
@@ -31,24 +30,24 @@ class AsyncMover:
         self.is_streaming = False
 
     def wait_for_stream(self):
-        if CUDA_STREAM and self.is_streaming and self.backing_stream is not None:
-            torch.cuda.current_stream().wait_stream(self.backing_stream)
+        if stream.using_stream and self.is_streaming and self.backing_stream is not None:
+            stream.current_stream.wait_stream(self.backing_stream)
             self.is_streaming = False
 
     def __call__(self, model: torch.nn.Module, device_to: torch.device):
         if device_to is None:
             return
 
-        if not CUDA_STREAM:
+        if not stream.using_stream:
             model.to(device_to)
             return
 
         if self.backing_stream is None:
-            self.backing_stream = torch.cuda.Stream()
+            self.backing_stream = stream.get_new_stream()
         else:
             self.wait_for_stream()
 
-        with torch.inference_mode(), torch.cuda.stream(self.backing_stream):
+        with torch.inference_mode(), stream.stream_context()(self.backing_stream):
             model.to(device_to, non_blocking=True)
             self.is_streaming = True
 
