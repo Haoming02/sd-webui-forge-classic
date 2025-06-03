@@ -14,7 +14,7 @@ class UnetPatcher(ModelPatcher):
 
     def clone(self):
         n = UnetPatcher(
-            self.model,
+            self._model,
             self.load_device,
             self.offload_device,
             self.size,

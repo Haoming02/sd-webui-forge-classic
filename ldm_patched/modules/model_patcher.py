@@ -124,7 +124,7 @@ class ModelPatcher:
 
     def clone(self):
         n = ModelPatcher(
-            self.model,
+            self._model,
             self.load_device,
             self.offload_device,
             self.size,
@@ -145,7 +145,7 @@ class ModelPatcher:
         return n
 
     def is_clone(self, other):
-        return getattr(other, "model", None) is self.model
+        return getattr(other, "_model", None) is self._model
 
     def memory_required(self, input_shape):
         return self.model.memory_required(input_shape=input_shape)
