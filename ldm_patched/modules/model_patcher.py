@@ -38,7 +38,7 @@ class AsyncMover:
         if device_to is None:
             return
 
-        if not stream.using_stream:
+        if not stream.using_stream or not ldm_patched.modules.model_management.device_supports_non_blocking(device_to):
             model.to(device_to)
             return
 
