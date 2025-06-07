@@ -205,6 +205,17 @@ def create_ui():
 
         dummy_component = gr.Label(visible=False)
 
+        _t2i_gallery_index = gr.Number(value=0, visible=False, interactive=False, precision=0)
+        _t2i_gallery_index.change(fn=None, _js="(v) => { t2i_gallery_index = v; }", inputs=[_t2i_gallery_index])
+        _i2i_gallery_index = gr.Number(value=0, visible=False, interactive=False, precision=0)
+        _i2i_gallery_index.change(fn=None, _js="(v) => { i2i_gallery_index = v; }", inputs=[_i2i_gallery_index])
+
+        def _reset() -> int:
+            return 0
+
+        def _update(evt: gr.SelectData) -> int:
+            return evt.index
+
         extra_tabs = gr.Tabs(elem_id="txt2img_extra_tabs", elem_classes=["extra-networks"])
         extra_tabs.__enter__()
 
@@ -361,8 +372,9 @@ def create_ui():
                 show_progress=False,
             )
 
-            toprow.prompt.submit(**txt2img_args)
-            toprow.submit.click(**txt2img_args)
+            toprow.prompt.submit(fn=_reset, outputs=[_t2i_gallery_index]).then(**txt2img_args)
+            toprow.submit.click(fn=_reset, outputs=[_t2i_gallery_index]).then(**txt2img_args)
+            output_panel.gallery.select(fn=_update, outputs=[_t2i_gallery_index], show_progress=False, queue=False)
 
             output_panel.button_upscale.click(
                 fn=wrap_gradio_gpu_call(modules.txt2img.txt2img_upscale, extra_outputs=[None, "", ""]),
@@ -724,8 +736,9 @@ def create_ui():
                 show_progress=False,
             )
 
-            toprow.prompt.submit(**img2img_args)
-            toprow.submit.click(**img2img_args)
+            toprow.prompt.submit(fn=_reset, outputs=[_i2i_gallery_index]).then(**img2img_args)
+            toprow.submit.click(fn=_reset, outputs=[_i2i_gallery_index]).then(**img2img_args)
+            output_panel.gallery.select(fn=_update, outputs=[_i2i_gallery_index], show_progress=False, queue=False)
 
             res_switch_btn.click(fn=None, _js="function(){switchWidthHeight('img2img')}", inputs=None, outputs=None, show_progress=False)
 
@@ -793,6 +806,9 @@ def create_ui():
 
         if shared.opts.paste_safe_guard:
             toprow.hook_paste_guard()
+
+    shared.t2i_gallery_index = _t2i_gallery_index
+    shared.i2i_gallery_index = _i2i_gallery_index
 
     scripts.scripts_current = None
 

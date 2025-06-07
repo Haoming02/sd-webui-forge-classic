@@ -7,22 +7,13 @@ function set_theme(theme) {
     }
 }
 
-function all_gallery_buttons(tabname = null) {
-    const tab = (tabname == null)
-        ? '[style="display: block;"].tabitem'
-        : (tabname === "txt2img"
-            ? "#tab_txt2img"
-            : "#tab_img2img");
-
-    let allGalleryButtons = gradioApp().querySelectorAll(
-        `${tab} div[id$=_gallery].gradio-gallery .thumbnails > .thumbnail-item.thumbnail-small`,
-    );
+function all_gallery_buttons() {
+    let allGalleryButtons = gradioApp().querySelectorAll('[style="display: block;"].tabitem div[id$=_gallery].gradio-gallery .thumbnails > .thumbnail-item.thumbnail-small');
     let visibleGalleryButtons = [];
     allGalleryButtons.forEach((elem) => {
-        if (tabname) visibleGalleryButtons.push(elem);
-        else if (elem.parentElement.offsetParent) visibleGalleryButtons.push(elem);
+        if (elem.parentElement.offsetParent)
+            visibleGalleryButtons.push(elem);
     });
-
     return visibleGalleryButtons;
 }
 
@@ -30,16 +21,19 @@ function selected_gallery_button() {
     return all_gallery_buttons().find(elem => elem.classList.contains('selected')) ?? null;
 }
 
-function selected_gallery_index(tabname = null) {
-    return all_gallery_buttons(tabname).findIndex(elem => elem.classList.contains('selected'));
+function selected_gallery_index() {
+    return all_gallery_buttons().findIndex(elem => elem.classList.contains('selected'));
 }
 
-function extract_image_from_gallery(gallery, tabname = null) {
-    if (gallery.length == 0) return [null];
-    if (gallery.length == 1) return [gallery[0]];
+let t2i_gallery_index = 0;
+let i2i_gallery_index = 0;
 
-    let index = selected_gallery_index(tabname);
-    if (index < 0 || index >= gallery.length) index = 0;
+function extract_image_from_gallery(gallery, tabname = null) {
+    if (gallery.length === 0) return [null];
+    if (gallery.length === 1) return [gallery[0]];
+
+    const index = (tabname === null) ? 0
+        : (tabname === "txt2img" ? t2i_gallery_index : i2i_gallery_index);
 
     return [gallery[index]];
 }

@@ -1,14 +1,17 @@
 from __future__ import annotations
+
 import base64
 import io
 import json
 import os
 import re
+from functools import partial
 
 import gradio as gr
-from modules.paths import data_path
-from modules import shared, ui_tempdir, script_callbacks, processing, prompt_parser
 from PIL import Image
+
+from modules import images, processing, prompt_parser, script_callbacks, shared, ui_tempdir
+from modules.paths import data_path
 
 re_param_code = r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
@@ -169,12 +172,69 @@ def connect_paste_params_buttons():
 
         if binding.source_tabname is not None and fields is not None:
             paste_field_names = ["Prompt", "Negative prompt", "Steps", "Face restoration"] + (["Seed"] if shared.opts.send_seed else []) + binding.paste_field_names
-            binding.paste_button.click(
-                fn=lambda *x: x,
-                inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
-                outputs=[field for field, name in fields if name in paste_field_names],
-                show_progress=False,
-            )
+
+            if binding.source_tabname == "txt2img" and shared.opts.send_image_info_t2i_to_i2i:
+
+                def read_infotext(gallery: list[dict], index: int, _paste_fields: list[tuple]):
+                    res = []
+
+                    if len(gallery) == 0:
+                        for _ in _paste_fields:
+                            res.append(gr.skip())
+                        return res
+
+                    image = image_from_url_text(gallery[index])
+                    info, _ = images.read_info_from_image(image)
+
+                    if not info:
+                        for _ in _paste_fields:
+                            res.append(gr.skip())
+                        return res
+
+                    params = parse_generation_parameters(info)
+                    script_callbacks.infotext_pasted_callback(info, params)
+
+                    for output, key in _paste_fields:
+                        if callable(key):
+                            v = key(params)
+                        else:
+                            v = params.get(key, None)
+
+                        if v is None:
+                            res.append(gr.skip())
+                        elif isinstance(v, type_of_gr_update):
+                            res.append(v)
+                        else:
+                            try:
+                                valtype = type(output.value)
+
+                                if valtype == bool and v == "False":
+                                    val = False
+                                elif valtype == int:
+                                    val = float(v)
+                                else:
+                                    val = valtype(v)
+
+                                res.append(gr.update(value=val))
+                            except Exception:
+                                res.append(gr.skip())
+
+                    return res
+
+                binding.paste_button.click(
+                    fn=partial(read_infotext, _paste_fields=[(field, name) for field, name in fields if name in paste_field_names]),
+                    inputs=[binding.source_image_component, shared.t2i_gallery_index],
+                    outputs=[field for field, name in fields if name in paste_field_names],
+                    show_progress=False,
+                )
+
+            else:
+                binding.paste_button.click(
+                    fn=lambda *args: args,
+                    inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
+                    outputs=[field for field, name in fields if name in paste_field_names],
+                    show_progress=False,
+                )
 
         binding.paste_button.click(
             fn=lambda: None,
