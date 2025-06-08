@@ -11,6 +11,109 @@ from modules import devices, images, shared, torch_utils
 logger = logging.getLogger(__name__)
 
 
+def pil_rgb_to_tensor_bgr(img: Image.Image, param: torch.Tensor) -> torch.Tensor:
+    tensor = torch.from_numpy(np.asarray(img)).to(param.device)
+    tensor = tensor.to(param.dtype).mul_(1.0 / 255.0).permute(2, 0, 1)
+    return tensor[[2, 1, 0], ...].unsqueeze(0).contiguous()
+
+def tensor_bgr_to_pil_rgb(tensor: torch.Tensor) -> Image.Image:
+    tensor = tensor[:, [2, 1, 0], ...]
+    tensor = tensor.squeeze(0).permute(1, 2, 0).mul_(255.0).round_().clamp_(0.0, 255.0)
+    return Image.fromarray(tensor.to(torch.uint8).cpu().numpy())
+
+def upscale_tensor_tiles(model, tensor: torch.Tensor, tile_size: int, overlap: int, desc: str) -> torch.Tensor:
+    _, _, H_in, W_in = tensor.shape
+    stride = tile_size - overlap
+    n_tiles_x, n_tiles_y = (W_in + stride - 1) // stride, (H_in + stride - 1) // stride
+    total_tiles = n_tiles_x * n_tiles_y
+
+    if tile_size <= 0 or total_tiles <= 4:
+        with torch.inference_mode():
+            return model(tensor)
+
+    device = tensor.device
+    dtype = tensor.dtype # Accumulate in native model dtype.
+
+    accum = None
+    model_scale = None
+    H_out = W_out = None
+
+    last_mask = None
+    last_mask_key = None
+
+    # Generate feathered mask for tile overlap.
+    def get_weight_mask(h, w, y, x):
+        top, bottom, left, right = y > 0, y + h < H_out, x > 0, x + w < W_out
+        key = (h, w, top, bottom, left, right)
+
+        if key == last_mask_key:
+            return key, last_mask
+        elif overlap == 0:
+            mask = torch.ones((1, 1, h, w), device=device, dtype=dtype)
+        else:
+            ov_h, ov_w = min(overlap, h), min(overlap, w)
+
+            ramp_x, ramp_y = torch.ones(w, device=device, dtype=dtype), torch.ones(h, device=device, dtype=dtype)
+            fade_x, fade_y = torch.linspace(0, 1, ov_w, device=device, dtype=dtype), torch.linspace(0, 1, ov_h, device=device, dtype=dtype)
+
+            ramp_x[:ov_w].lerp_(fade_x, float(left))
+            ramp_x[-ov_w:].lerp_(fade_x.flip(0), float(right))
+            ramp_y[:ov_h].lerp_(fade_y, float(top))
+            ramp_y[-ov_h:].lerp_(fade_y.flip(0), float(bottom))
+
+            mask = (ramp_y[:, None] * ramp_x[None, :]).expand(1, 1, h, w)
+        return key, mask
+
+    with torch.inference_mode(), tqdm.tqdm(desc=desc, total=total_tiles) as pbar:
+        for tile_idx in range(total_tiles):
+            if shared.state.interrupted:
+                return None
+
+            # Loop in row-major or column-major, depending on aspect ratio to maximise hit-rate on cached mask.
+            x_idx, y_idx = (
+                (tile_idx % n_tiles_x, tile_idx // n_tiles_x) if W_in >= H_in else 
+                (tile_idx // n_tiles_y, tile_idx % n_tiles_y)
+            )
+            x, y = x_idx * stride, y_idx * stride
+
+            tile = tensor[:, :, y:y + tile_size, x:x + tile_size]
+            out = model(tile)
+
+            if model_scale is None:
+                model_scale = out.shape[-2] / tile.shape[-2]
+                H_out, W_out = int(H_in * model_scale), int(W_in * model_scale)
+                accum = torch.zeros((1, 4, H_out, W_out), dtype=dtype, device=device)
+
+            h_out, w_out = out.shape[-2:]
+            y_out, x_out = int(y * model_scale), int(x * model_scale)
+            ys, ye = y_out, y_out + h_out
+            xs, xe = x_out, x_out + w_out
+
+            # With correct traversal order, mask hit-rate is about 40%.
+            last_mask_key, last_mask = get_weight_mask(h_out, w_out, y_out, x_out)
+            accum_slice = accum[:, :, ys:ye, xs:xe]
+            accum_slice[:, :3].addcmul_(out, last_mask)
+            accum_slice[:, 3:].add_(last_mask)
+
+            del tile, out
+            pbar.update(1)
+
+    del last_mask
+    return accum[:, :3].div_(accum[:, 3:].clamp_min_(1e-6))
+
+def upscale_with_model_gpu(
+    model: Callable[[torch.Tensor], torch.Tensor],
+    img: Image.Image,
+    *,
+    tile_size: int,
+    tile_overlap: int = 0,
+    desc="tiled upscale"
+) -> Image.Image:
+    
+    tensor = pil_rgb_to_tensor_bgr(img, torch_utils.get_param(model))
+    out = upscale_tensor_tiles(model, tensor, tile_size, tile_overlap, desc)
+    return img if out is None else tensor_bgr_to_pil_rgb(out)
+
 def pil_image_to_torch_bgr(img: Image.Image) -> torch.Tensor:
     img = np.array(img.convert("RGB"))
     img = img[:, :, ::-1]  # flip RGB to BGR
@@ -47,7 +150,7 @@ def upscale_pil_patch(model, img: Image.Image) -> Image.Image:
             return torch_bgr_to_pil_image(model(tensor))
 
 
-def upscale_with_model(
+def upscale_with_model_cpu(
     model: Callable[[torch.Tensor], torch.Tensor],
     img: Image.Image,
     *,
@@ -91,6 +194,20 @@ def upscale_with_model(
         overlap=grid.overlap * scale_factor,
     )
     return images.combine_grid(newgrid)
+
+
+def upscale_with_model(
+    model: Callable[[torch.Tensor], torch.Tensor],
+    img: Image.Image,
+    *,
+    tile_size: int,
+    tile_overlap: int = 0,
+    desc="tiled upscale"
+) -> Image.Image:
+    if shared.opts.composite_tiles_on_gpu:
+        return upscale_with_model_gpu(model, img, tile_size=tile_size, tile_overlap=tile_overlap, desc=f"{desc} (GPU composite)")
+    else:
+        return upscale_with_model_cpu(model, img, tile_size=tile_size, tile_overlap=tile_overlap, desc=f"{desc} (CPU composite)")
 
 
 def tiled_upscale_2(

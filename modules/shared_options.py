@@ -121,6 +121,7 @@ options_templates.update(
             "upscaler_for_img2img": OptionInfo("None", "Upscaler for img2img", gr.Dropdown, lambda: {"choices": [x.name for x in shared.sd_upscalers]}).info("for resizing the input image if the image resolution is smaller than the generation resolution"),
             "upscaling_max_images_in_cache": OptionInfo(4, "Number of upscaled images to cache", gr.Slider, {"minimum": 0, "maximum": 8, "step": 1}),
             "prefer_fp16_upscalers": OptionInfo(False, "Prefer to load Upscaler in fp16").info("not all upscalers support half precision").needs_restart(),
+            "composite_tiles_on_gpu": OptionInfo(False, "Composite tiles on GPU").info("reduces memory usage and improves performance"),
         },
     )
 )
