@@ -136,6 +136,32 @@ def _zoom() -> bool:
     return "canvas-zoom-and-pan" not in shared.opts.disabled_extensions
 
 
+def _parse_info(output, key, params):
+    if callable(key):
+        v = key(params)
+    else:
+        v = params.get(key, None)
+
+    if v is None:
+        return gr.skip()
+    if isinstance(v, type_of_gr_update):
+        return v
+
+    try:
+        valtype = type(output.value)
+
+        if valtype == bool and v == "False":
+            val = False
+        elif valtype == int:
+            val = float(v)
+        else:
+            val = valtype(v)
+
+        return gr.update(value=val)
+    except Exception:
+        return gr.skip()
+
+
 def connect_paste_params_buttons():
     for binding in registered_param_bindings:
         if binding.tabname not in paste_fields:
@@ -175,11 +201,11 @@ def connect_paste_params_buttons():
 
             if binding.source_tabname == "txt2img" and shared.opts.send_image_info_t2i_to_i2i:
 
-                def read_infotext(gallery: list[dict], index: int, _paste_fields: list[tuple]):
+                def read_infotext(gallery: list[dict], index: int, paste_fields: list[tuple]):
                     res = []
 
                     if len(gallery) == 0:
-                        for _ in _paste_fields:
+                        for _ in paste_fields:
                             res.append(gr.skip())
                         return res
 
@@ -187,42 +213,20 @@ def connect_paste_params_buttons():
                     info, _ = images.read_info_from_image(image)
 
                     if not info:
-                        for _ in _paste_fields:
+                        for _ in paste_fields:
                             res.append(gr.skip())
                         return res
 
                     params = parse_generation_parameters(info)
                     script_callbacks.infotext_pasted_callback(info, params)
 
-                    for output, key in _paste_fields:
-                        if callable(key):
-                            v = key(params)
-                        else:
-                            v = params.get(key, None)
-
-                        if v is None:
-                            res.append(gr.skip())
-                        elif isinstance(v, type_of_gr_update):
-                            res.append(v)
-                        else:
-                            try:
-                                valtype = type(output.value)
-
-                                if valtype == bool and v == "False":
-                                    val = False
-                                elif valtype == int:
-                                    val = float(v)
-                                else:
-                                    val = valtype(v)
-
-                                res.append(gr.update(value=val))
-                            except Exception:
-                                res.append(gr.skip())
+                    for output, key in paste_fields:
+                        res.append(_parse_info(output, key, params))
 
                     return res
 
                 binding.paste_button.click(
-                    fn=partial(read_infotext, _paste_fields=[(field, name) for field, name in fields if name in paste_field_names]),
+                    fn=partial(read_infotext, paste_fields=[(field, name) for field, name in fields if name in paste_field_names]),
                     inputs=[binding.source_image_component, shared.t2i_gallery_index],
                     outputs=[field for field, name in fields if name in paste_field_names],
                     show_progress=False,
@@ -536,29 +540,7 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
         script_callbacks.infotext_pasted_callback(prompt, params)
 
         for output, key in paste_fields:
-            if callable(key):
-                v = key(params)
-            else:
-                v = params.get(key, None)
-
-            if v is None:
-                res.append(gr.skip())
-            elif isinstance(v, type_of_gr_update):
-                res.append(v)
-            else:
-                try:
-                    valtype = type(output.value)
-
-                    if valtype == bool and v == "False":
-                        val = False
-                    elif valtype == int:
-                        val = float(v)
-                    else:
-                        val = valtype(v)
-
-                    res.append(gr.update(value=val))
-                except Exception:
-                    res.append(gr.skip())
+            res.append(_parse_info(output, key, params))
 
         return res
 
