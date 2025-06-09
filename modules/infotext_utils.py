@@ -6,6 +6,7 @@ import json
 import os
 import re
 from functools import partial
+from typing import Any, Callable
 
 import gradio as gr
 from PIL import Image
@@ -21,14 +22,14 @@ type_of_gr_update = type(gr.skip())
 
 class ParamBinding:
     def __init__(self, paste_button, tabname, source_text_component=None, source_image_component=None, source_tabname=None, override_settings_component=None, paste_field_names=None, *, is_paste=False):
-        self.paste_button = paste_button
-        self.tabname = tabname
-        self.source_text_component = source_text_component
-        self.source_image_component = source_image_component
-        self.source_tabname = source_tabname
-        self.override_settings_component = override_settings_component
-        self.paste_field_names = paste_field_names or []
-        self.is_paste = is_paste
+        self.paste_button: gr.Button = paste_button
+        self.tabname: str = tabname
+        self.source_text_component: gr.Textbox = source_text_component
+        self.source_image_component: gr.Gallery = source_image_component
+        self.source_tabname: str = source_tabname
+        self.override_settings_component: list[gr.components.IOComponent] = override_settings_component
+        self.paste_field_names: list[str] = paste_field_names or []
+        self.is_paste: bool = is_paste
 
 
 class PasteField(tuple):
@@ -53,14 +54,14 @@ def reset():
     registered_param_bindings.clear()
 
 
-def quote(text):
+def quote(text: str) -> str:
     if "," not in str(text) and "\n" not in str(text) and ":" not in str(text):
         return text
 
     return json.dumps(text, ensure_ascii=False)
 
 
-def unquote(text):
+def unquote(text: str) -> str:
     if len(text) == 0 or text[0] != '"' or text[-1] != '"':
         return text
 
@@ -70,7 +71,7 @@ def unquote(text):
         return text
 
 
-def image_from_url_text(filedata):
+def image_from_url_text(filedata: str | dict) -> Image.Image:
     if filedata is None:
         return None
 
@@ -78,7 +79,7 @@ def image_from_url_text(filedata):
         filedata = filedata[0]
 
     if type(filedata) == dict and filedata.get("is_file", False):
-        filename = filedata["name"]
+        filename: str = filedata["name"]
         is_in_right_dir = ui_tempdir.check_tmp_file(shared.demo, filename)
         assert is_in_right_dir, "trying to open image file outside of allowed directories"
 
@@ -92,7 +93,7 @@ def image_from_url_text(filedata):
         filedata = filedata[0]
 
     if filedata.startswith("data:image/png;base64,"):
-        filedata = filedata[len("data:image/png;base64,") :]
+        filedata = filedata[22:]
 
     filedata = base64.decodebytes(filedata.encode("utf-8"))
     image = Image.open(io.BytesIO(filedata))
@@ -108,7 +109,7 @@ def add_paste_fields(tabname, init_img, fields, override_settings_component=None
 
     paste_fields[tabname] = {"init_img": init_img, "fields": fields, "override_settings_component": override_settings_component}
 
-    # backwards compatibility for existing extensions
+    # Backward Compatibility
     import modules.ui
 
     if tabname == "txt2img":
@@ -136,7 +137,7 @@ def _zoom() -> bool:
     return "canvas-zoom-and-pan" not in shared.opts.disabled_extensions
 
 
-def _parse_info(output, key, params):
+def _parse_info(output: gr.components.IOComponent, key: str | Callable, params: dict[str, Any]):
     if callable(key):
         v = key(params)
     else:
@@ -250,7 +251,7 @@ def connect_paste_params_buttons():
         )
 
 
-def send_image_and_dimensions(x):
+def send_image_and_dimensions(x: Any) -> tuple[Image.Image, int, int]:
     if isinstance(x, Image.Image):
         img = x
     else:
@@ -266,9 +267,10 @@ def send_image_and_dimensions(x):
     return img, w, h
 
 
-def restore_old_hires_fix_params(res):
-    """for infotexts that specify old First pass size parameter, convert it into
-    width, height, and hr scale"""
+def restore_old_hires_fix_params(res: dict):
+    """
+    for infotexts that specify old First pass size parameter, convert it into width, height, and hr scale
+    """
 
     firstpass_width = res.get("First pass size-1", None)
     firstpass_height = res.get("First pass size-2", None)
@@ -299,7 +301,8 @@ def restore_old_hires_fix_params(res):
 
 
 def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
-    """parses generation parameters string, the one you see in text field under the picture in UI:
+    """
+    parses generation parameters string, the one you see in text field under the picture in UI:
     ```
     girl with an artist's beret, determined, blue eyes, desert scene, computer monitors, heavy makeup, by Alphonse Mucha and Charlie Bowater, ((eyeshadow)), (coquettish), detailed, intricate
     Negative prompt: ugly, fat, obese, chubby, (((deformed))), [blurry], bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), messy drawing
@@ -358,7 +361,6 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
         except Exception:
             print(f'Error parsing "{k}: {v}"')
 
-    # Missing CLIP skip means it was set to 1 (the default)
     if "Clip skip" not in res:
         res["Clip skip"] = "1"
 
@@ -395,7 +397,6 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
 
     restore_old_hires_fix_params(res)
 
-    # Missing RNG means the default was set, which is GPU RNG
     if "RNG" not in res:
         res["RNG"] = "GPU"
 
@@ -434,8 +435,9 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     return res
 
 
-infotext_to_setting_name_mapping = []
-"""Mapping of infotext labels to setting names. Only left for backwards compatibility - use OptionInfo(..., infotext='...') instead.
+infotext_to_setting_name_mapping: list[tuple[str, str]] = []
+"""
+Mapping of infotext labels to setting names. Only left for backwards compatibility - use OptionInfo(..., infotext='...') instead.
 Example content:
 
 infotext_to_setting_name_mapping = [
@@ -447,8 +449,9 @@ infotext_to_setting_name_mapping = [
 """
 
 
-def create_override_settings_dict(text_pairs):
-    """creates processing's override_settings parameters from gradio's multiselect
+def create_override_settings_dict(text_pairs: list[str]) -> dict[str, Any]:
+    """
+    creates processing's override_settings parameters from gradio's multiselect
 
     Example input:
         ['Clip skip: 2', 'Model hash: e6e99610c4', 'ENSD: 31337']
@@ -478,7 +481,8 @@ def create_override_settings_dict(text_pairs):
 
 
 def get_override_settings(params, *, skip_fields=None):
-    """Returns a list of settings overrides from the infotext parameters dictionary.
+    """
+    Returns a list of settings overrides from the infotext parameters dictionary.
 
     This function checks the `params` dictionary for any keys that correspond to settings in `shared.opts` and returns
     a list of tuples containing the parameter name, setting name, and new value cast to correct type.
