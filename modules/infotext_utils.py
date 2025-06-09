@@ -198,7 +198,12 @@ def connect_paste_params_buttons():
             connect_paste(binding.paste_button, fields, binding.source_text_component, override_settings_component, binding.tabname, is_paste=binding.is_paste)
 
         if binding.source_tabname is not None and fields is not None:
-            paste_field_names = ["Prompt", "Negative prompt", "Steps", "Face restoration"] + (["Seed"] if shared.opts.send_seed else []) + binding.paste_field_names
+            paste_field_names = [
+                *["Prompt", "Negative prompt", "Steps", "Face restoration"],
+                *(["Seed"] if shared.opts.send_seed else []),
+                *(["CFG scale"] if shared.opts.send_cfg else []),
+                *binding.paste_field_names,
+            ]
 
             if binding.source_tabname == "txt2img" and shared.opts.send_image_info_t2i_to_i2i:
 
