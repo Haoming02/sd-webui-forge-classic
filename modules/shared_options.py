@@ -413,7 +413,7 @@ options_templates.update(
                 """
             ),
             "div_exp_info": OptionDiv(),
-            "send_image_info_t2i_to_i2i": OptionInfo(False, 'When using the "Send to img2img" button (in txt2img tab), use the parameters in the infotext rather than the UI fields').info("<b>e.g.</b> to send the result of Wildcards instead of its syntax"),
+            "send_image_info_t2i_to_i2i": OptionInfo(False, 'When using the "Send to img2img" button (in txt2img tab), use the parameters in the infotext rather than the UI fields').info("<b>e.g.</b> to send the result of Wildcards instead of its syntax").needs_restart(),
         },
     )
 )
