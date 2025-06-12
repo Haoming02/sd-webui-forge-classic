@@ -31,7 +31,8 @@ class AsyncMover:
 
     def wait_for_stream(self):
         if stream.using_stream and self.is_streaming and self.backing_stream is not None:
-            self.backing_stream.synchronize()
+            if not self.backing_stream.query():
+                stream.current_stream.wait_stream(self.backing_stream)
             self.is_streaming = False
 
     def __call__(self, model: torch.nn.Module, device_to: torch.device):
@@ -46,6 +47,8 @@ class AsyncMover:
             self.backing_stream = stream.get_new_stream()
         else:
             self.wait_for_stream()
+
+        self.backing_stream.wait_stream(stream.current_stream)
 
         with torch.inference_mode(), stream.stream_context()(self.backing_stream):
             model.to(device_to, non_blocking=True)
