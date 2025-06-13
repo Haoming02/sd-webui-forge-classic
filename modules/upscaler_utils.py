@@ -73,11 +73,14 @@ def pil_rgb_to_tensor_bgr(img: Image.Image, param: torch.Tensor) -> torch.Tensor
     tensor = tensor.to(param.dtype).mul_(1.0 / 255.0).permute(2, 0, 1)
     return tensor[[2, 1, 0], ...].unsqueeze(0).contiguous()
 
+
 def tensor_bgr_to_pil_rgb(tensor: torch.Tensor) -> Image.Image:
     tensor = tensor[:, [2, 1, 0], ...]
     tensor = tensor.squeeze(0).permute(1, 2, 0).mul_(255.0).round_().clamp_(0.0, 255.0)
     return Image.fromarray(tensor.to(torch.uint8).cpu().numpy())
 
+
+@torch.inference_mode()
 def upscale_tensor_tiles(model, tensor: torch.Tensor, tile_size: int, overlap: int, desc: str) -> torch.Tensor:
     _, _, H_in, W_in = tensor.shape
     stride = tile_size - overlap
@@ -85,11 +88,10 @@ def upscale_tensor_tiles(model, tensor: torch.Tensor, tile_size: int, overlap: i
     total_tiles = n_tiles_x * n_tiles_y
 
     if tile_size <= 0 or total_tiles <= 4:
-        with torch.inference_mode():
-            return model(tensor)
+        return model(tensor)
 
     device = tensor.device
-    dtype = tensor.dtype # Accumulate in native model dtype.
+    dtype = tensor.dtype  # Accumulate in native model dtype.
 
     accum = None
     model_scale = None
@@ -121,19 +123,16 @@ def upscale_tensor_tiles(model, tensor: torch.Tensor, tile_size: int, overlap: i
             mask = (ramp_y[:, None] * ramp_x[None, :]).expand(1, 1, h, w)
         return key, mask
 
-    with torch.inference_mode(), tqdm.tqdm(desc=desc, total=total_tiles) as pbar:
+    with tqdm.tqdm(desc=desc, total=total_tiles) as pbar:
         for tile_idx in range(total_tiles):
             if shared.state.interrupted:
                 return None
 
             # Loop in row-major or column-major, depending on aspect ratio to maximise hit-rate on cached mask.
-            x_idx, y_idx = (
-                (tile_idx % n_tiles_x, tile_idx // n_tiles_x) if W_in >= H_in else 
-                (tile_idx // n_tiles_y, tile_idx % n_tiles_y)
-            )
+            x_idx, y_idx = (tile_idx % n_tiles_x, tile_idx // n_tiles_x) if W_in >= H_in else (tile_idx // n_tiles_y, tile_idx % n_tiles_y)
             x, y = x_idx * stride, y_idx * stride
 
-            tile = tensor[:, :, y:y + tile_size, x:x + tile_size]
+            tile = tensor[:, :, y : y + tile_size, x : x + tile_size]
             out = model(tile)
 
             if model_scale is None:
@@ -158,15 +157,16 @@ def upscale_tensor_tiles(model, tensor: torch.Tensor, tile_size: int, overlap: i
     del last_mask
     return accum[:, :3].div_(accum[:, 3:].clamp_min_(1e-6))
 
+
 def upscale_with_model_gpu(
     model: Callable[[torch.Tensor], torch.Tensor],
     img: Image.Image,
     *,
     tile_size: int,
     tile_overlap: int = 0,
-    desc="tiled upscale"
+    desc="tiled upscale",
 ) -> Image.Image:
-    
+
     tensor = pil_rgb_to_tensor_bgr(img, torch_utils.get_param(model))
     out = upscale_tensor_tiles(model, tensor, tile_size, tile_overlap, desc)
     return img if out is None else tensor_bgr_to_pil_rgb(out)
@@ -260,7 +260,7 @@ def upscale_with_model(
     *,
     tile_size: int,
     tile_overlap: int = 0,
-    desc="tiled upscale"
+    desc="tiled upscale",
 ) -> Image.Image:
     if shared.opts.composite_tiles_on_gpu:
         return upscale_with_model_gpu(model, img, tile_size=tile_size, tile_overlap=tile_overlap, desc=f"{desc} (GPU composite)")
