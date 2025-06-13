@@ -14,7 +14,7 @@ class UnetPatcher(ModelPatcher):
 
     def clone(self):
         n = UnetPatcher(
-            self._model,
+            self.model,
             self.load_device,
             self.offload_device,
             self.size,
@@ -34,7 +34,6 @@ class UnetPatcher(ModelPatcher):
         n.extra_model_patchers_during_sampling = self.extra_model_patchers_during_sampling.copy()
         n.extra_concat_condition = self.extra_concat_condition
         n.patch_status = self.patch_status
-        n.async_mover = self.async_mover
 
         return n
 

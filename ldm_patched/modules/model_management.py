@@ -38,6 +38,9 @@ vram_state = VRAMState.NORMAL_VRAM
 set_vram_to = VRAMState.NORMAL_VRAM
 cpu_state = CPUState.GPU
 
+load_stream = stream.get_new_stream() if stream.using_stream else None
+free_mem_stream = stream.get_new_stream() if stream.using_stream else None
+
 try:
     OOM_EXCEPTION = torch.cuda.OutOfMemoryError
 except Exception:
@@ -478,17 +481,19 @@ def unload_model_clones(model):
 def free_memory(memory_required, device, keep_loaded=[]):
     offload_everything = ALWAYS_VRAM_OFFLOAD or vram_state is VRAMState.NO_VRAM
     unloaded_model = False
-    for i in range(len(current_loaded_models) - 1, -1, -1):
-        if not offload_everything:
-            if get_free_memory(device) > memory_required:
-                break
-        shift_model = current_loaded_models[i]
-        if shift_model.device == device:
-            if shift_model not in keep_loaded:
-                m = current_loaded_models.pop(i)
-                m.model_unload()
-                del m
-                unloaded_model = True
+
+    with stream.async_stream(free_mem_stream):
+        for i in range(len(current_loaded_models) - 1, -1, -1):
+            if not offload_everything:
+                if get_free_memory(device) > memory_required:
+                    break
+            shift_model = current_loaded_models[i]
+            if shift_model.device == device:
+                if shift_model not in keep_loaded:
+                    m = current_loaded_models.pop(i)
+                    m.model_unload()
+                    del m
+                    unloaded_model = True
 
     if unloaded_model:
         soft_empty_cache()
@@ -534,50 +539,53 @@ def load_models_gpu(models, memory_required=0):
     print(f"Begin to load {len(models_to_load)} model{'s' if len(models_to_load) > 1 else ''}")
 
     total_memory_required = {}
-    for loaded_model in models_to_load:
-        unload_model_clones(loaded_model.model)
-        mem = total_memory_required.get(loaded_model.device, 0) + loaded_model.model_memory_required(loaded_model.device)
-        total_memory_required[loaded_model.device] = mem
 
-    for device in total_memory_required:
-        if device != torch.device("cpu"):
-            free_memory(
-                total_memory_required[device] * 1.25 + extra_mem,
-                device,
-                models_already_loaded,
-            )
+    with stream.async_stream(load_stream):
+        for loaded_model in models_to_load:
+            unload_model_clones(loaded_model.model)
+            mem = total_memory_required.get(loaded_model.device, 0) + loaded_model.model_memory_required(loaded_model.device)
+            total_memory_required[loaded_model.device] = mem
 
-    for loaded_model in models_to_load:
-        model = loaded_model.model
-        torch_dev = model.load_device
-        if is_device_cpu(torch_dev):
-            vram_set_state = VRAMState.DISABLED
-        else:
-            vram_set_state = vram_state
+        for device in total_memory_required:
+            if device != torch.device("cpu"):
+                free_memory(
+                    total_memory_required[device] * 1.25 + extra_mem,
+                    device,
+                    models_already_loaded
+                )
 
-        async_kept_memory = -1
+    with stream.async_stream(load_stream):
+        for loaded_model in models_to_load:
+            model = loaded_model.model
+            torch_dev = model.load_device
+            if is_device_cpu(torch_dev):
+                vram_set_state = VRAMState.DISABLED
+            else:
+                vram_set_state = vram_state
 
-        if vram_set_state in (VRAMState.LOW_VRAM, VRAMState.NORMAL_VRAM):
-            model_memory = loaded_model.model_memory_required(torch_dev)
-            current_free_mem = get_free_memory(torch_dev)
-            minimal_inference_memory = minimum_inference_memory()
-            estimated_remaining_memory = current_free_mem - model_memory - minimal_inference_memory
+            async_kept_memory = -1
 
-            print("[Memory Management] Current Free GPU Memory (MB) = ", current_free_mem / (2**20))
-            print("[Memory Management] Model Memory (MB) = ", model_memory / (2**20))
-            print("[Memory Management] Minimal Inference Memory (MB) = ", minimal_inference_memory / (2**20))
-            print("[Memory Management] Estimated Remaining GPU Memory (MB) = ", estimated_remaining_memory / (2**20))
+            if vram_set_state in (VRAMState.LOW_VRAM, VRAMState.NORMAL_VRAM):
+                model_memory = loaded_model.model_memory_required(torch_dev)
+                current_free_mem = get_free_memory(torch_dev)
+                minimal_inference_memory = minimum_inference_memory()
+                estimated_remaining_memory = current_free_mem - model_memory - minimal_inference_memory
 
-            if estimated_remaining_memory < 0:
-                vram_set_state = VRAMState.LOW_VRAM
-                async_kept_memory = (current_free_mem - minimal_inference_memory) / 1.25
-                async_kept_memory = int(max(0, async_kept_memory))
+                print("[Memory Management] Current Free GPU Memory (MB) = ", current_free_mem / (2**20))
+                print("[Memory Management] Model Memory (MB) = ", model_memory / (2**20))
+                print("[Memory Management] Minimal Inference Memory (MB) = ", minimal_inference_memory / (2**20))
+                print("[Memory Management] Estimated Remaining GPU Memory (MB) = ", estimated_remaining_memory / (2**20))
 
-        if vram_set_state is VRAMState.NO_VRAM:
-            async_kept_memory = 0
+                if estimated_remaining_memory < 0:
+                    vram_set_state = VRAMState.LOW_VRAM
+                    async_kept_memory = (current_free_mem - minimal_inference_memory) / 1.25
+                    async_kept_memory = int(max(0, async_kept_memory))
 
-        loaded_model.model_load(async_kept_memory)
-        current_loaded_models.insert(0, loaded_model)
+            if vram_set_state is VRAMState.NO_VRAM:
+                async_kept_memory = 0
+
+            loaded_model.model_load(async_kept_memory)
+            current_loaded_models.insert(0, loaded_model)
 
     moving_time = time.perf_counter() - execution_start_time
     print(f"Moving model(s) has taken {moving_time:.2f} seconds")

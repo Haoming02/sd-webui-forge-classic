@@ -83,19 +83,15 @@ class CLIP:
         params["device"] = offload_device
         params["dtype"] = model_management.text_encoder_dtype(load_device)
 
-        cond_stage_model = clip(**(params))
+        self.cond_stage_model = clip(**(params))
 
         self.tokenizer = tokenizer(embedding_directory=embedding_directory)
         self.patcher = ldm_patched.modules.model_patcher.ModelPatcher(
-            cond_stage_model,
+            self.cond_stage_model,
             load_device=load_device,
             offload_device=offload_device,
         )
         self.layer_idx = None
-
-    @property
-    def cond_stage_model(self):
-        return self.patcher.model
 
     def clone(self):
         n = CLIP(no_init=True)
@@ -158,7 +154,7 @@ class VAE:
 
         if config is None:
             if "taesd_decoder.1.weight" in sd:
-                first_stage_model = ldm_patched.taesd.taesd.TAESD()
+                self.first_stage_model = ldm_patched.taesd.taesd.TAESD()
             else:
                 # default SD1 VAE parameters
                 ddconfig = {
@@ -178,12 +174,12 @@ class VAE:
                     ddconfig["ch_mult"] = [1, 2, 4]
                     self.downscale_ratio = 4
 
-                first_stage_model = AutoencoderKL(ddconfig=ddconfig, embed_dim=4)
+                self.first_stage_model = AutoencoderKL(ddconfig=ddconfig, embed_dim=4)
         else:
-            first_stage_model = AutoencoderKL(**(config["params"]))
-        first_stage_model = first_stage_model.eval()
+            self.first_stage_model = AutoencoderKL(**(config["params"]))
+        self.first_stage_model = self.first_stage_model.eval()
 
-        m, u = first_stage_model.load_state_dict(sd, strict=False)
+        m, u = self.first_stage_model.load_state_dict(sd, strict=False)
         if len(m) > 0:
             print("Missing VAE keys", m)
 
@@ -201,14 +197,10 @@ class VAE:
         self.output_device = model_management.intermediate_device()
 
         self.patcher = ldm_patched.modules.model_patcher.ModelPatcher(
-            first_stage_model.to(self.vae_dtype),
+            self.first_stage_model.to(self.vae_dtype),
             load_device=self.device,
             offload_device=offload_device,
         )
-
-    @property
-    def first_stage_model(self):
-        return self.patcher.model
 
     def clone(self):
         n = VAE(no_init=True)
@@ -232,8 +224,7 @@ class VAE:
         steps += samples.shape[0] * ldm_patched.modules.utils.get_tiled_scale_steps(samples.shape[3], samples.shape[2], tile_x * 2, tile_y // 2, overlap)
         pbar = ldm_patched.modules.utils.ProgressBar(steps, title="VAE tiled decode")
 
-        first_stage_model = self.first_stage_model
-        decode_fn = lambda a: (first_stage_model.decode(a.to(self.vae_dtype).to(self.device)) + 1.0).float()
+        decode_fn = lambda a: (self.first_stage_model.decode(a.to(self.vae_dtype).to(self.device)) + 1.0).float()
         output = torch.clamp(
             (
                 (
@@ -298,8 +289,7 @@ class VAE:
         )
         pbar = ldm_patched.modules.utils.ProgressBar(steps, title="VAE tiled encode")
 
-        first_stage_model = self.first_stage_model
-        encode_fn = lambda a: first_stage_model.encode((2.0 * a - 1.0).to(self.vae_dtype).to(self.device)).float()
+        encode_fn = lambda a: self.first_stage_model.encode((2.0 * a - 1.0).to(self.vae_dtype).to(self.device)).float()
         samples = ldm_patched.modules.utils.tiled_scale(
             pixel_samples,
             encode_fn,
@@ -347,7 +337,6 @@ class VAE:
             batch_number = int(free_memory / memory_used)
             batch_number = max(1, batch_number)
 
-            first_stage_model = self.first_stage_model # Call **after** load_models_gpu in case model was moved.
             pixel_samples = torch.empty(
                 (
                     samples_in.shape[0],
@@ -360,7 +349,7 @@ class VAE:
             for x in range(0, samples_in.shape[0], batch_number):
                 samples = samples_in[x : x + batch_number].to(self.vae_dtype).to(self.device)
                 pixel_samples[x : x + batch_number] = torch.clamp(
-                    (first_stage_model.decode(samples).to(self.output_device).float() + 1.0) / 2.0,
+                    (self.first_stage_model.decode(samples).to(self.output_device).float() + 1.0) / 2.0,
                     min=0.0,
                     max=1.0,
                 )
@@ -395,7 +384,6 @@ class VAE:
             batch_number = int(free_memory / memory_used)
             batch_number = max(1, batch_number)
 
-            first_stage_model = self.first_stage_model # Call **after** load_models_gpu in case model was moved.
             samples = torch.empty(
                 (
                     pixel_samples.shape[0],
@@ -407,7 +395,7 @@ class VAE:
             )
             for x in range(0, pixel_samples.shape[0], batch_number):
                 pixels_in = (2.0 * pixel_samples[x : x + batch_number] - 1.0).to(self.vae_dtype).to(self.device)
-                samples[x : x + batch_number] = first_stage_model.encode(pixels_in).to(self.output_device).float()
+                samples[x : x + batch_number] = self.first_stage_model.encode(pixels_in).to(self.output_device).float()
 
         except model_management.OOM_EXCEPTION as e:
             print("Warning: Ran out of memory when regular VAE encoding, retrying with tiled VAE encoding.")
