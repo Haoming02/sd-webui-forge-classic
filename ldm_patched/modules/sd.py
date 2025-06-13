@@ -83,20 +83,23 @@ class CLIP:
         params["device"] = offload_device
         params["dtype"] = model_management.text_encoder_dtype(load_device)
 
-        self.cond_stage_model = clip(**(params))
+        cond_stage_model = clip(**(params))
 
         self.tokenizer = tokenizer(embedding_directory=embedding_directory)
         self.patcher = ldm_patched.modules.model_patcher.ModelPatcher(
-            self.cond_stage_model,
+            cond_stage_model,
             load_device=load_device,
             offload_device=offload_device,
         )
         self.layer_idx = None
 
+    @property
+    def cond_stage_model(self):
+        return self.patcher.model
+
     def clone(self):
         n = CLIP(no_init=True)
         n.patcher = self.patcher.clone()
-        n.cond_stage_model = self.cond_stage_model
         n.tokenizer = self.tokenizer
         n.layer_idx = self.layer_idx
         return n
