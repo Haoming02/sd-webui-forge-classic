@@ -381,6 +381,7 @@ options_templates.update(
             "gradio_themes_cache": OptionInfo(True, "Cache selected theme locally"),
             "show_progress_in_title": OptionInfo(True, "Show generation progress in window title"),
             "send_seed": OptionInfo(True, 'Send the Seed information when using the "Send to" buttons'),
+            "send_cfg": OptionInfo(True, 'Send the CFG information when using the "Send to" buttons'),
             "send_size": OptionInfo(True, 'Send the Resolution information when using the "Send to" buttons'),
         },
     )
@@ -412,6 +413,8 @@ options_templates.update(
 </ul>
                 """
             ),
+            "div_exp_info": OptionDiv(),
+            "send_image_info_t2i_to_i2i": OptionInfo(False, 'When using the "Send to img2img" button (in txt2img tab), use the parameters in the infotext rather than the UI fields').info("<b>e.g.</b> to send the result of Wildcards instead of its syntax").needs_restart(),
         },
     )
 )

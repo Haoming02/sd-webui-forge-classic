@@ -32,7 +32,7 @@ def try_install_from_wheel(pkg_name: str, wheel_url: str):
 
     try:
         launch.run_pip(
-            f"install -U {wheel_url}",
+            f"install {wheel_url}",
             f"Legacy Preprocessor Requirement: {pkg_name}",
         )
     except Exception as e:

@@ -1,5 +1,3 @@
-const ZoomAndPanReset = {};
-
 const elementIDs = {
     img2imgTabs: "#mode_img2img .tab-nav",
     inpaint: "#img2maskimg",
@@ -179,7 +177,7 @@ const tabNameToElementId = {
             if (!img || !imageARPreview) return;
 
             imageARPreview.style.transform = "";
-            if (parseFloat(mainTab.style.width) > 865) {
+            if (parseFloat(mainTab.style.width) > 800) {
                 const transformString = mainTab.style.transform;
                 const scaleMatch = transformString.match(
                     /scale\(([-+]?[0-9]*\.?[0-9]+)\)/,
@@ -348,7 +346,7 @@ const tabNameToElementId = {
                 toolTipElement.appendChild(tooltip);
             }
 
-            //Show tool tip if setting enable
+            // Show tool tip if setting enable
             if (hotkeysConfig.canvas_show_tooltip) createTooltip();
 
             // In the course of research, it was found that the tag img is very harmful when zooming and creates white canvases. This hack allows you to almost never think about this problem, it has no effect on webui.
@@ -407,8 +405,8 @@ const tabNameToElementId = {
                 if (
                     canvas &&
                     !isExtension &&
-                    parseFloat(canvas.style.width) > 865 &&
-                    parseFloat(targetElement.style.width) > 865
+                    parseFloat(canvas.style.width) > 800 &&
+                    parseFloat(targetElement.style.width) > 800
                 ) {
                     fitToElement();
                     return;
@@ -416,8 +414,6 @@ const tabNameToElementId = {
 
                 targetElement.style.width = "";
             }
-
-            ZoomAndPanReset[elemId] = resetZoom;
 
             // Toggle the zIndex of the target element between two values, allowing it to overlap or be overlapped by other elements
             function toggleOverlap(forced = "") {
@@ -523,7 +519,7 @@ const tabNameToElementId = {
              */
 
             function fitToElement() {
-                //Reset Zoom
+                // Reset Zoom
                 targetElement.style.transform = `translate(${0}px, ${0}px) scale(${1})`;
 
                 let parentElement;
@@ -587,8 +583,8 @@ const tabNameToElementId = {
 
                 if (!canvas) return;
 
-                if (canvas.offsetWidth > 862 || isExtension)
-                    targetElement.style.width = canvas.offsetWidth + 2 + "px";
+                if (canvas.offsetWidth > 800 || isExtension)
+                    targetElement.style.width = canvas.offsetWidth + 16 + "px";
 
                 if (isExtension) targetElement.style.overflow = "visible";
 
@@ -598,8 +594,8 @@ const tabNameToElementId = {
                     return;
                 }
 
-                //Reset Zoom
-                targetElement.style.transform = `translate(${0}px, ${0}px) scale(${1})`;
+                // Reset Zoom
+                targetElement.style.transform = 'translate(0px, 0px) scale(1.0)';
 
                 // Get scrollbar width to right-align the image
                 const scrollbarWidth =
@@ -716,10 +712,10 @@ const tabNameToElementId = {
                 }
             }
 
-            //observers
+            // Observers
             // Creating an observer with a callback function to handle DOM changes
-            const observer = new MutationObserver((mutationsList, observer) => {
-                for (let mutation of mutationsList) {
+            const observer = new MutationObserver((mutationsList) => {
+                for (const mutation of mutationsList) {
                     // If the style attribute of the canvas has changed, by observation it happens only when the picture changes
                     if (
                         mutation.type === "attributes" &&
@@ -727,7 +723,12 @@ const tabNameToElementId = {
                         mutation.target.tagName.toLowerCase() === "canvas"
                     ) {
                         targetElement.isExpanded = false;
-                        setTimeout(resetZoom, 10);
+                        setTimeout(resetZoom, 25);
+                        setTimeout(autoExpand, 25);
+                        setTimeout(() => {
+                            const btn = targetElement.querySelector("button[aria-label='Undo']");
+                            btn.click();
+                        }, 25);
                     }
                 }
             });
@@ -773,7 +774,7 @@ const tabNameToElementId = {
                 elements.img2imgTabs.addEventListener("click", resetZoom);
                 elements.img2imgTabs.addEventListener("click", () => {
                     // targetElement.style.width = "";
-                    if (parseInt(targetElement.style.width) > 865)
+                    if (parseInt(targetElement.style.width) > 800)
                         setTimeout(fitToElement, 0);
                 });
             }
@@ -951,25 +952,3 @@ const tabNameToElementId = {
         window.applyZoomAndPanIntegration = applyZoomAndPanIntegration; // for any extension
     });
 })();
-
-function trigger_zoom_resize(tabname) {
-    const id = elementIDs[tabname];
-    if (id == undefined) return;
-    ZoomAndPanReset[id]();
-
-    const img = gradioApp().querySelector(id);
-
-    function _reset() {
-        if (img.querySelector("img") == undefined) {
-            setTimeout(_reset, 50);
-            return;
-        }
-
-        img.dispatchEvent(new Event("mousemove"));
-        setTimeout(() => {
-            img.querySelector("button[aria-label='Clear']").click();
-        }, 50);
-    }
-
-    setTimeout(_reset, 500);
-}

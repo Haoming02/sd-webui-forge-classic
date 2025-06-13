@@ -96,5 +96,8 @@ list_checkpoint_tiles = shared_items.list_checkpoint_tiles
 refresh_checkpoints = shared_items.refresh_checkpoints
 list_samplers = shared_items.list_samplers
 
+t2i_gallery_index: gr.Number  # int
+i2i_gallery_index: gr.Number  # int
+
 # ===== backward compatibility ===== #
 batch_cond_uncond = True

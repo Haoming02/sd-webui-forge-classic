@@ -1,14 +1,18 @@
 from __future__ import annotations
+
 import base64
 import io
 import json
 import os
 import re
+from functools import partial
+from typing import Any, Callable
 
 import gradio as gr
-from modules.paths import data_path
-from modules import shared, ui_tempdir, script_callbacks, processing, prompt_parser
 from PIL import Image
+
+from modules import images, processing, prompt_parser, script_callbacks, shared, ui_tempdir
+from modules.paths import data_path
 
 re_param_code = r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
@@ -18,14 +22,14 @@ type_of_gr_update = type(gr.skip())
 
 class ParamBinding:
     def __init__(self, paste_button, tabname, source_text_component=None, source_image_component=None, source_tabname=None, override_settings_component=None, paste_field_names=None, *, is_paste=False):
-        self.paste_button = paste_button
-        self.tabname = tabname
-        self.source_text_component = source_text_component
-        self.source_image_component = source_image_component
-        self.source_tabname = source_tabname
-        self.override_settings_component = override_settings_component
-        self.paste_field_names = paste_field_names or []
-        self.is_paste = is_paste
+        self.paste_button: gr.Button = paste_button
+        self.tabname: str = tabname
+        self.source_text_component: gr.Textbox = source_text_component
+        self.source_image_component: gr.Gallery = source_image_component
+        self.source_tabname: str = source_tabname
+        self.override_settings_component: list[gr.components.IOComponent] = override_settings_component
+        self.paste_field_names: list[str] = paste_field_names or []
+        self.is_paste: bool = is_paste
 
 
 class PasteField(tuple):
@@ -50,14 +54,14 @@ def reset():
     registered_param_bindings.clear()
 
 
-def quote(text):
+def quote(text: str) -> str:
     if "," not in str(text) and "\n" not in str(text) and ":" not in str(text):
         return text
 
     return json.dumps(text, ensure_ascii=False)
 
 
-def unquote(text):
+def unquote(text: str) -> str:
     if len(text) == 0 or text[0] != '"' or text[-1] != '"':
         return text
 
@@ -67,7 +71,7 @@ def unquote(text):
         return text
 
 
-def image_from_url_text(filedata):
+def image_from_url_text(filedata: str | dict) -> Image.Image:
     if filedata is None:
         return None
 
@@ -75,7 +79,7 @@ def image_from_url_text(filedata):
         filedata = filedata[0]
 
     if type(filedata) == dict and filedata.get("is_file", False):
-        filename = filedata["name"]
+        filename: str = filedata["name"]
         is_in_right_dir = ui_tempdir.check_tmp_file(shared.demo, filename)
         assert is_in_right_dir, "trying to open image file outside of allowed directories"
 
@@ -89,7 +93,7 @@ def image_from_url_text(filedata):
         filedata = filedata[0]
 
     if filedata.startswith("data:image/png;base64,"):
-        filedata = filedata[len("data:image/png;base64,") :]
+        filedata = filedata[22:]
 
     filedata = base64.decodebytes(filedata.encode("utf-8"))
     image = Image.open(io.BytesIO(filedata))
@@ -105,7 +109,7 @@ def add_paste_fields(tabname, init_img, fields, override_settings_component=None
 
     paste_fields[tabname] = {"init_img": init_img, "fields": fields, "override_settings_component": override_settings_component}
 
-    # backwards compatibility for existing extensions
+    # Backward Compatibility
     import modules.ui
 
     if tabname == "txt2img":
@@ -129,8 +133,30 @@ def register_paste_params_button(binding: ParamBinding):
     registered_param_bindings.append(binding)
 
 
-def _zoom() -> bool:
-    return "canvas-zoom-and-pan" not in shared.opts.disabled_extensions
+def _parse_info(output: gr.components.IOComponent, key: str | Callable, params: dict[str, Any]):
+    if callable(key):
+        v = key(params)
+    else:
+        v = params.get(key, None)
+
+    if v is None:
+        return gr.skip()
+    if isinstance(v, type_of_gr_update):
+        return v
+
+    try:
+        valtype = type(output.value)
+
+        if valtype == bool and v == "False":
+            val = False
+        elif valtype == int:
+            val = float(v)
+        else:
+            val = valtype(v)
+
+        return gr.update(value=val)
+    except Exception:
+        return gr.skip()
 
 
 def connect_paste_params_buttons():
@@ -153,10 +179,6 @@ def connect_paste_params_buttons():
                 jsfunc = None
 
             binding.paste_button.click(
-                fn=lambda: gr.update(value=None),
-                outputs=[destination_image_component],
-                show_progress=False,
-            ).then(
                 fn=func,
                 _js=jsfunc,
                 inputs=[binding.source_image_component],
@@ -168,25 +190,62 @@ def connect_paste_params_buttons():
             connect_paste(binding.paste_button, fields, binding.source_text_component, override_settings_component, binding.tabname, is_paste=binding.is_paste)
 
         if binding.source_tabname is not None and fields is not None:
-            paste_field_names = ["Prompt", "Negative prompt", "Steps", "Face restoration"] + (["Seed"] if shared.opts.send_seed else []) + binding.paste_field_names
-            binding.paste_button.click(
-                fn=lambda *x: x,
-                inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
-                outputs=[field for field, name in fields if name in paste_field_names],
-                show_progress=False,
-            )
+            paste_field_names = [
+                *["Prompt", "Negative prompt", "Steps", "Face restoration"],
+                *(["Seed"] if shared.opts.send_seed else []),
+                *(["CFG scale"] if shared.opts.send_cfg else []),
+                *binding.paste_field_names,
+            ]
+
+            if binding.source_tabname == "txt2img" and shared.opts.send_image_info_t2i_to_i2i:
+
+                def read_infotext(gallery: list[dict], index: int, paste_fields: list[tuple]):
+                    res = []
+
+                    if len(gallery) == 0:
+                        for _ in paste_fields:
+                            res.append(gr.skip())
+                        return res
+
+                    image = image_from_url_text(gallery[index])
+                    info, _ = images.read_info_from_image(image)
+
+                    if not info:
+                        for _ in paste_fields:
+                            res.append(gr.skip())
+                        return res
+
+                    params = parse_generation_parameters(info)
+                    script_callbacks.infotext_pasted_callback(info, params)
+
+                    for output, key in paste_fields:
+                        res.append(_parse_info(output, key, params))
+
+                    return res
+
+                binding.paste_button.click(
+                    fn=partial(read_infotext, paste_fields=[(field, name) for field, name in fields if name in paste_field_names]),
+                    inputs=[binding.source_image_component, shared.t2i_gallery_index],
+                    outputs=[field for field, name in fields if name in paste_field_names],
+                    show_progress=False,
+                )
+
+            else:
+                binding.paste_button.click(
+                    fn=lambda *args: args,
+                    inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
+                    outputs=[field for field, name in fields if name in paste_field_names],
+                    show_progress=False,
+                )
 
         binding.paste_button.click(
-            fn=lambda: None,
+            fn=None,
             _js=f"switch_to_{binding.tabname}",
             show_progress=False,
-        ).then(
-            fn=None,
-            _js=f'() => {{ trigger_zoom_resize("{binding.tabname}"); }}' if _zoom() else None,
         )
 
 
-def send_image_and_dimensions(x):
+def send_image_and_dimensions(x: Any) -> tuple[Image.Image, int, int]:
     if isinstance(x, Image.Image):
         img = x
     else:
@@ -202,9 +261,10 @@ def send_image_and_dimensions(x):
     return img, w, h
 
 
-def restore_old_hires_fix_params(res):
-    """for infotexts that specify old First pass size parameter, convert it into
-    width, height, and hr scale"""
+def restore_old_hires_fix_params(res: dict):
+    """
+    for infotexts that specify old First pass size parameter, convert it into width, height, and hr scale
+    """
 
     firstpass_width = res.get("First pass size-1", None)
     firstpass_height = res.get("First pass size-2", None)
@@ -235,7 +295,8 @@ def restore_old_hires_fix_params(res):
 
 
 def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
-    """parses generation parameters string, the one you see in text field under the picture in UI:
+    """
+    parses generation parameters string, the one you see in text field under the picture in UI:
     ```
     girl with an artist's beret, determined, blue eyes, desert scene, computer monitors, heavy makeup, by Alphonse Mucha and Charlie Bowater, ((eyeshadow)), (coquettish), detailed, intricate
     Negative prompt: ugly, fat, obese, chubby, (((deformed))), [blurry], bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), messy drawing
@@ -294,7 +355,6 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
         except Exception:
             print(f'Error parsing "{k}: {v}"')
 
-    # Missing CLIP skip means it was set to 1 (the default)
     if "Clip skip" not in res:
         res["Clip skip"] = "1"
 
@@ -331,7 +391,6 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
 
     restore_old_hires_fix_params(res)
 
-    # Missing RNG means the default was set, which is GPU RNG
     if "RNG" not in res:
         res["RNG"] = "GPU"
 
@@ -370,8 +429,9 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     return res
 
 
-infotext_to_setting_name_mapping = []
-"""Mapping of infotext labels to setting names. Only left for backwards compatibility - use OptionInfo(..., infotext='...') instead.
+infotext_to_setting_name_mapping: list[tuple[str, str]] = []
+"""
+Mapping of infotext labels to setting names. Only left for backwards compatibility - use OptionInfo(..., infotext='...') instead.
 Example content:
 
 infotext_to_setting_name_mapping = [
@@ -383,8 +443,9 @@ infotext_to_setting_name_mapping = [
 """
 
 
-def create_override_settings_dict(text_pairs):
-    """creates processing's override_settings parameters from gradio's multiselect
+def create_override_settings_dict(text_pairs: list[str]) -> dict[str, Any]:
+    """
+    creates processing's override_settings parameters from gradio's multiselect
 
     Example input:
         ['Clip skip: 2', 'Model hash: e6e99610c4', 'ENSD: 31337']
@@ -414,7 +475,8 @@ def create_override_settings_dict(text_pairs):
 
 
 def get_override_settings(params, *, skip_fields=None):
-    """Returns a list of settings overrides from the infotext parameters dictionary.
+    """
+    Returns a list of settings overrides from the infotext parameters dictionary.
 
     This function checks the `params` dictionary for any keys that correspond to settings in `shared.opts` and returns
     a list of tuples containing the parameter name, setting name, and new value cast to correct type.
@@ -476,29 +538,7 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
         script_callbacks.infotext_pasted_callback(prompt, params)
 
         for output, key in paste_fields:
-            if callable(key):
-                v = key(params)
-            else:
-                v = params.get(key, None)
-
-            if v is None:
-                res.append(gr.skip())
-            elif isinstance(v, type_of_gr_update):
-                res.append(v)
-            else:
-                try:
-                    valtype = type(output.value)
-
-                    if valtype == bool and v == "False":
-                        val = False
-                    elif valtype == int:
-                        val = float(v)
-                    else:
-                        val = valtype(v)
-
-                    res.append(gr.update(value=val))
-                except Exception:
-                    res.append(gr.skip())
+            res.append(_parse_info(output, key, params))
 
         return res
 

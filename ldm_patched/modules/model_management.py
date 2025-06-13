@@ -397,6 +397,7 @@ class LoadedModel:
             )
             real_async_memory = 0
             mem_counter = 0
+            self.real_model = self.model.model # Force sync if streaming is enabled.
             for m in self.real_model.modules():
                 if hasattr(m, "ldm_patched_cast_weights"):
                     m.prev_ldm_patched_cast_weights = m.ldm_patched_cast_weights
@@ -427,7 +428,7 @@ class LoadedModel:
 
         if is_intel_xpu() and not args.disable_ipex_hijack:
             self.real_model = torch.xpu.optimize(
-                self.real_model.eval(),
+                self.model.model.eval(), # Force sync if streaming is enabled.
                 inplace=True,
                 auto_kernel_selection=True,
                 graph_mode=True,

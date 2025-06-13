@@ -3,9 +3,6 @@
 
 var ignore_ids_for_localization = {
     setting_sd_model_checkpoint: 'OPTION',
-    modelmerger_primary_model_name: 'OPTION',
-    modelmerger_secondary_model_name: 'OPTION',
-    modelmerger_tertiary_model_name: 'OPTION',
     txt2img_styles: 'OPTION',
     img2img_styles: 'OPTION',
     setting_random_artist_categories: 'OPTION',

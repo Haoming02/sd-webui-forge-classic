@@ -14,6 +14,7 @@ import torch
 import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 from ldm_patched.modules.args_parser import args
+from modules_forge import stream
 
 extra_weight_calculators = {}  # backward compatibility
 
@@ -21,6 +22,34 @@ extra_weight_calculators = {}  # backward compatibility
 PERSISTENT_PATCHES = args.persistent_patches
 if PERSISTENT_PATCHES:
     print("[Experimental] Persistent Patches:", PERSISTENT_PATCHES)
+
+
+class AsyncMover:
+    def __init__(self):
+        self.backing_stream = None
+        self.is_streaming = False
+
+    def wait_for_stream(self):
+        if stream.using_stream and self.is_streaming and self.backing_stream is not None:
+            stream.current_stream.wait_stream(self.backing_stream)
+            self.is_streaming = False
+
+    def __call__(self, model: torch.nn.Module, device_to: torch.device):
+        if device_to is None:
+            return
+
+        if not stream.using_stream or not ldm_patched.modules.model_management.device_supports_non_blocking(device_to):
+            model.to(device_to)
+            return
+
+        if self.backing_stream is None:
+            self.backing_stream = stream.get_new_stream()
+        else:
+            self.wait_for_stream()
+
+        with torch.inference_mode(), stream.stream_context()(self.backing_stream):
+            model.to(device_to, non_blocking=True)
+            self.is_streaming = True
 
 
 class PatchStatus:
@@ -63,31 +92,39 @@ class PatchStatus:
 class ModelPatcher:
     def __init__(self, model, load_device, offload_device, size=0, current_device=None, weight_inplace_update=False):
         self.size = size
-        self.model = model
+        self._model = model
         self.patches = {}
         self.backup = {}
         self.object_patches = {}
         self.object_patches_backup = {}
         self.model_options = {"transformer_options": {}}
-        self.model_size()
         self.load_device = load_device
         self.offload_device = offload_device
         self.current_device = self.offload_device if current_device is None else current_device
         self.weight_inplace_update = weight_inplace_update
 
         self.patch_status = PatchStatus()
+        self.async_mover = AsyncMover()
+
+        self.model_size()
+
+    @property
+    def model(self):
+        self.async_mover.wait_for_stream()
+        return self._model
 
     def model_size(self):
         if self.size > 0:
             return self.size
-        model_sd = self.model.state_dict()
-        self.size = ldm_patched.modules.model_management.module_size(self.model)
+        model = self.model
+        model_sd = model.state_dict()
+        self.size = ldm_patched.modules.model_management.module_size(model)
         self.model_keys = set(model_sd.keys())
         return self.size
 
     def clone(self):
         n = ModelPatcher(
-            self.model,
+            self._model,
             self.load_device,
             self.offload_device,
             self.size,
@@ -103,11 +140,12 @@ class ModelPatcher:
         n.model_options = copy.deepcopy(self.model_options)
         n.model_keys = self.model_keys
         n.patch_status = self.patch_status
+        n.async_mover = self.async_mover
 
         return n
 
     def is_clone(self, other):
-        return getattr(other, "model", None) is self.model
+        return getattr(other, "_model", None) is self._model
 
     def memory_required(self, input_shape):
         return self.model.memory_required(input_shape=input_shape)
@@ -243,14 +281,16 @@ class ModelPatcher:
         return sd
 
     def patch_model(self, device_to=None, patch_weights=True):
+        model = self.model
+
         for k in self.object_patches:
-            old = ldm_patched.modules.utils.get_attr(self.model, k)
+            old = ldm_patched.modules.utils.get_attr(model, k)
             if k not in self.object_patches_backup:
                 self.object_patches_backup[k] = old
-            ldm_patched.modules.utils.set_attr_raw(self.model, k, self.object_patches[k])
+            ldm_patched.modules.utils.set_attr_raw(model, k, self.object_patches[k])
 
         if not patch_weights:
-            return self.model
+            return model
 
         if self.patches and self.patch_status.require_patch():
             model_sd = self.model_state_dict()
@@ -272,18 +312,18 @@ class ModelPatcher:
                     temp_weight = weight.to(torch.float32, copy=True)
                 out_weight = self.calculate_weight(self.patches[key], temp_weight, key).to(weight.dtype)
                 if inplace_update:
-                    ldm_patched.modules.utils.copy_to_param(self.model, key, out_weight)
+                    ldm_patched.modules.utils.copy_to_param(model, key, out_weight)
                 else:
-                    ldm_patched.modules.utils.set_attr(self.model, key, out_weight)
+                    ldm_patched.modules.utils.set_attr(model, key, out_weight)
                 del temp_weight
 
             self.patch_status.patch()
 
         if device_to is not None:
-            self.model.to(device_to)
+            self.async_mover(model, device_to)
             self.current_device = device_to
 
-        return self.model
+        return model
 
     def calculate_weight(self, patches, weight, key):
         for p in patches:
@@ -456,26 +496,28 @@ class ModelPatcher:
         return weight
 
     def unpatch_model(self, device_to=None):
+        model = self.model
+
         if self.backup and self.patch_status.require_unpatch():
             keys = list(self.backup.keys())
 
             if self.weight_inplace_update:
                 for k in keys:
-                    ldm_patched.modules.utils.copy_to_param(self.model, k, self.backup[k])
+                    ldm_patched.modules.utils.copy_to_param(model, k, self.backup[k])
             else:
                 for k in keys:
-                    ldm_patched.modules.utils.set_attr(self.model, k, self.backup[k])
+                    ldm_patched.modules.utils.set_attr(model, k, self.backup[k])
 
             self.backup.clear()
             self.patch_status.unpatch()
 
         if device_to is not None:
-            self.model.to(device_to)
+            self.async_mover(model, device_to)
             self.current_device = device_to
 
         keys = list(self.object_patches_backup.keys())
         for k in keys:
-            ldm_patched.modules.utils.set_attr_raw(self.model, k, self.object_patches_backup[k])
+            ldm_patched.modules.utils.set_attr_raw(model, k, self.object_patches_backup[k])
 
         self.object_patches_backup.clear()
 
@@ -483,4 +525,5 @@ class ModelPatcher:
         del self.patches
         del self.object_patches
         del self.model_options
-        self.model = None
+        self.async_mover = None
+        self._model = None
