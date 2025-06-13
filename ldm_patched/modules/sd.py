@@ -96,6 +96,7 @@ class CLIP:
     def clone(self):
         n = CLIP(no_init=True)
         n.patcher = self.patcher.clone()
+        n.cond_stage_model = self.cond_stage_model
         n.tokenizer = self.tokenizer
         n.layer_idx = self.layer_idx
         return n
@@ -194,10 +195,11 @@ class VAE:
             dtype = model_management.vae_dtype()
         print("VAE dtype:", dtype)
         self.vae_dtype = dtype
+        self.first_stage_model.to(self.vae_dtype)
         self.output_device = model_management.intermediate_device()
 
         self.patcher = ldm_patched.modules.model_patcher.ModelPatcher(
-            self.first_stage_model.to(self.vae_dtype),
+            self.first_stage_model,
             load_device=self.device,
             offload_device=offload_device,
         )
@@ -209,6 +211,7 @@ class VAE:
         n.memory_used_decode = self.memory_used_decode
         n.downscale_ratio = self.downscale_ratio
         n.latent_channels = self.latent_channels
+        n.first_stage_model = self.first_stage_model
         n.device = self.device
         n.vae_dtype = self.vae_dtype
         n.output_device = self.output_device
