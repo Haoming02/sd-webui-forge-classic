@@ -63,7 +63,7 @@ def on_default_stream() -> bool:
     return get_current_stream(False) == current_stream
 
 @contextmanager
-def async_stream(target_stream: torch.cuda.Stream | torch.xpu.Stream, synchronize: bool = False):
+def async_stream(target_stream: torch.cuda.Stream | torch.xpu.Stream, synchronize: bool = True):
     if target_stream is None or not using_stream or not on_default_stream():
         yield # Don't use a stream is we can't, or if we're already on a stream besides the default.
     else:
