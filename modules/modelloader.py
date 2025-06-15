@@ -129,6 +129,9 @@ def load_spandrel_model(
         if model_descriptor.supports_half:
             model_descriptor.model.half()
             half = True
+        elif model_descriptor.supports_bfloat16:
+            model_descriptor.model.bfloat16()
+            half = True
         else:
             logger.warning(f"Model {path} does not support half precision...")
 

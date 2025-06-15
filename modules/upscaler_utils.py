@@ -67,6 +67,20 @@ def try_patch_spandrel():
 
 try_patch_spandrel()
 
+def call_model(model: Callable[[torch.Tensor], torch.Tensor], x: torch.Tensor) -> torch.Tensor:
+    # Spandrel does not correctly handle non-FP32 for ATD and DAT models.
+    if x.dtype != torch.float32 and model.architecture.name in ['ATD', 'DAT']:
+        try:
+            # Force the upscaler to use the dtype it should for new tensors.
+            torch.set_default_dtype(x.dtype)
+            # Using torch.device incurs a small amount of overhead, but makes sure we don't
+            # get errors when unsupported dtype tensors would be made on the CPU.
+            with torch.device(x.device):
+                return model(x)
+        finally:
+            torch.set_default_dtype(torch.float32)
+    else:
+        return model(x)
 
 def pil_image_to_torch_bgr(img: Image.Image) -> torch.Tensor:
     img = np.array(img.convert("RGB"))
@@ -101,7 +115,7 @@ def upscale_pil_patch(model, img: Image.Image) -> Image.Image:
         tensor = pil_image_to_torch_bgr(img).unsqueeze(0)  # add batch dimension
         tensor = tensor.to(device=param.device, dtype=param.dtype)
         with devices.without_autocast():
-            return torch_bgr_to_pil_image(model(tensor))
+            return torch_bgr_to_pil_image(call_model(model, tensor))
 
 
 def upscale_with_model(
@@ -172,7 +186,7 @@ def tiled_upscale_2(
 
     if tile_size <= 0:
         logger.debug("Upscaling %s without tiling", img.shape)
-        return model(img)
+        return call_model(model, img)
 
     stride = tile_size - tile_overlap
     h_idx_list = list(range(0, h - tile_size, stride)) + [h - tile_size]
@@ -207,7 +221,7 @@ def tiled_upscale_2(
                     w_idx : w_idx + tile_size,
                 ].to(device=device)
 
-                out_patch = model(in_patch)
+                out_patch = call_model(model, in_patch)
 
                 result[
                     ...,
