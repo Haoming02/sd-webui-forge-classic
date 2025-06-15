@@ -26,18 +26,25 @@ class AlterSampler(sd_samplers_kdiffusion.KDiffusionSampler):
             logging.warning("Low CFG is recommended when using CFG++ samplers")
         return super().sample_img2img(p, *args, **kwargs)
 
-
-def build_constructor(sampler_name):
+def build_constructor(sampler_key):
     def constructor(model):
-        return AlterSampler(model, sampler_name)
-
+        return AlterSampler(model, sampler_key)
     return constructor
 
+def create_cfg_pp_sampler(sampler_name, sampler_key):
+    config = {}
+    base_name = sampler_name.removesuffix(" CFG++")
+    for name, _, _, params in sd_samplers_kdiffusion.samplers_k_diffusion:
+        if name == base_name:
+            config = params.copy()
+            break
+
+    return sd_samplers_common.SamplerData(sampler_name, build_constructor(sampler_key=sampler_key), [sampler_key], config)
 
 samplers_data_alter = [
-    sd_samplers_common.SamplerData("DPM++ 2M CFG++", build_constructor(sampler_name="dpmpp_2m_cfg_pp"), ["dpmpp_2m_cfg_pp"], {}),
-    sd_samplers_common.SamplerData("DPM++ SDE CFG++", build_constructor(sampler_name="dpmpp_sde_cfg_pp"), ["dpmpp_sde_cfg_pp"], {}),
-    sd_samplers_common.SamplerData("DPM++ 3M SDE CFG++", build_constructor(sampler_name="dpmpp_3m_sde_cfg_pp"), ["dpmpp_3m_sde_cfg_pp"], {}),
-    sd_samplers_common.SamplerData("Euler a CFG++", build_constructor(sampler_name="euler_ancestral_cfg_pp"), ["euler_ancestral_cfg_pp"], {}),
-    sd_samplers_common.SamplerData("Euler CFG++", build_constructor(sampler_name="euler_cfg_pp"), ["euler_cfg_pp"], {}),
+    create_cfg_pp_sampler("DPM++ 2M CFG++", "dpmpp_2m_cfg_pp"),
+    create_cfg_pp_sampler("DPM++ SDE CFG++", "dpmpp_sde_cfg_pp"),
+    create_cfg_pp_sampler("DPM++ 3M SDE CFG++", "dpmpp_3m_sde_cfg_pp"),
+    create_cfg_pp_sampler("Euler a CFG++", "euler_ancestral_cfg_pp"),
+    create_cfg_pp_sampler("Euler CFG++", "euler_cfg_pp"),
 ]
