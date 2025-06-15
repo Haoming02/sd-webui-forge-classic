@@ -1,3 +1,4 @@
+import math
 import torch
 from modules import prompt_parser, sd_samplers_common
 from modules.script_callbacks import (
@@ -157,7 +158,8 @@ class CFGDenoiser(torch.nn.Module):
         if 0.0 <= sigma[0] <= s_min_uncond:
             cond_scale = 1.0
 
-        skip_uncond: bool = abs(cond_scale - 1.0) < 10**-6
+        model_options = kwargs.get("model_options", None)
+        skip_uncond: bool = math.isclose(cond_scale, 1.0) and not (model_options or {}).get('disable_cfg1_optimization', False)
         self.padded_cond_uncond = not skip_uncond
 
         denoised = forge_sampler.forge_sample(
@@ -166,7 +168,7 @@ class CFGDenoiser(torch.nn.Module):
             cond_scale=cond_scale,
             cond_composition=cond_composition,
             skip_uncond=skip_uncond,
-            options=kwargs.get("model_options", None),
+            options=model_options,
         )
 
         # if getattr(self.p.sd_model, "cond_stage_key", None) == "edit" and getattr(self, "image_cfg_scale", 1.0) != 1.0:
