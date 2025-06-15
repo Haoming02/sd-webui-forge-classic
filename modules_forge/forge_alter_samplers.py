@@ -44,6 +44,7 @@ def create_cfg_pp_sampler(sampler_name, sampler_key):
 samplers_data_alter = [
     create_cfg_pp_sampler("DPM++ 2M CFG++", "dpmpp_2m_cfg_pp"),
     create_cfg_pp_sampler("DPM++ SDE CFG++", "dpmpp_sde_cfg_pp"),
+    create_cfg_pp_sampler("DPM++ 2M SDE CFG++", "dpmpp_2m_sde_cfg_pp"),
     create_cfg_pp_sampler("DPM++ 3M SDE CFG++", "dpmpp_3m_sde_cfg_pp"),
     create_cfg_pp_sampler("Euler a CFG++", "euler_ancestral_cfg_pp"),
     create_cfg_pp_sampler("Euler CFG++", "euler_cfg_pp"),
