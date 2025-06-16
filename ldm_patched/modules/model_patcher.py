@@ -9,13 +9,17 @@ https://github.com/comfyanonymous/ComfyUI
 import copy
 import inspect
 import logging
+from functools import wraps
+from typing import Callable
 
 import torch
+import torch.nn
 
 import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 from ldm_patched.modules.args_parser import args
 from ldm_patched.modules.lora import pad_tensor_to_shape, weight_decompose
+from modules_forge import stream
 
 logger = logging.getLogger(__name__)
 extra_weight_calculators = {}  # backward compatibility
@@ -63,10 +67,44 @@ class PatchStatus:
         return sd_model.current_lora_hash != str([])
 
 
+def patch_async_to(model: torch.nn.Module, _stream: torch.cuda.Stream):
+    from ldm_patched.modules.model_management import device_supports_non_blocking
+
+    model.cuda_stream = _stream
+    original_to: Callable = model.to
+
+    @wraps(original_to)
+    @torch.inference_mode()
+    def streamed_to(*args, **kwargs):
+        device, *_ = torch._C._nn._parse_to(*args, **kwargs)
+
+        if device is None and "device" in kwargs:
+            device = torch.device(kwargs["device"])
+
+        if device is None or not device_supports_non_blocking(device):
+            return original_to(*args, **kwargs)
+
+        with stream.stream_context()(model.cuda_stream):
+            kwargs["non_blocking"] = True
+            original_to(*args, **kwargs)
+
+        return model
+
+    model.to = streamed_to
+    return model
+
+
 class ModelPatcher:
+    patching_stream: torch.cuda.Stream = None
+
     def __init__(self, model, load_device, offload_device, size=0, current_device=None, weight_inplace_update=False):
         self.size = size
-        self.model = model
+
+        if stream.using_stream and not hasattr(model, "cuda_stream"):
+            self.model = patch_async_to(model, self.get_stream())
+        else:
+            self.model = model
+
         self.patches = {}
         self.backup = {}
         self.object_patches = {}
@@ -79,6 +117,17 @@ class ModelPatcher:
         self.weight_inplace_update = weight_inplace_update
 
         self.patch_status = PatchStatus()
+
+    @classmethod
+    def get_stream(cls):
+        if getattr(cls, "patching_stream", None) is None:
+            cls.patching_stream = stream.get_new_stream()
+        return cls.patching_stream
+
+    @classmethod
+    def sync_stream(cls):
+        if getattr(cls, "patching_stream", None) is not None:
+            cls.patching_stream.synchronize()
 
     def model_size(self):
         if self.size > 0:

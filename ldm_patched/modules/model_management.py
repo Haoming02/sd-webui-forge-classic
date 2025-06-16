@@ -578,6 +578,8 @@ def load_models_gpu(models, memory_required=0):
         loaded_model.model_load(async_kept_memory)
         current_loaded_models.insert(0, loaded_model)
 
+    ModelPatcher.sync_stream()
+
     moving_time = time.perf_counter() - execution_start_time
     print(f"Moving model(s) has taken {moving_time:.2f} seconds")
 
@@ -759,6 +761,8 @@ def supports_dtype(device, dtype):  # TODO
 
 def device_supports_non_blocking(device):
     if is_device_mps(device):
+        return False
+    if is_device_cpu(device):
         return False
     if is_intel_xpu():
         return False
