@@ -1,10 +1,5 @@
 import torch
-from k_diffusion.sampling import (
-    BrownianTreeNoiseSampler,
-    default_noise_sampler,
-    get_ancestral_step,
-    to_d,
-)
+from k_diffusion.sampling import BrownianTreeNoiseSampler, default_noise_sampler, get_ancestral_step, to_d
 from tqdm.auto import trange
 
 
@@ -192,12 +187,14 @@ def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
         old_uncond_denoised = uncond_denoised
     return x
 
+
 @torch.no_grad()
 def sample_dpmpp_2m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None, eta=1.0, s_noise=1.0, noise_sampler=None, solver_type="midpoint"):
-    """DPM-Solver++(2M) SDE"""
+    if len(sigmas) <= 1:
+        return x
 
     if solver_type not in {"heun", "midpoint"}:
-        raise ValueError("solver_type must be 'heun' or 'midpoint'")
+        raise ValueError('solver_type must be "heun" or "midpoint"')
 
     seed = extra_args.get("seed", None)
     sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
@@ -244,6 +241,7 @@ def sample_dpmpp_2m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None,
         old_denoised = denoised
         h_last = h
     return x
+
 
 @torch.no_grad()
 def sample_dpmpp_3m_sde_cfg_pp(model, x, sigmas, extra_args=None, callback=None, disable=None, eta=1.0, s_noise=1.0, noise_sampler=None):
