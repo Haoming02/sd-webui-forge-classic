@@ -78,9 +78,6 @@ def patch_async_to(model: torch.nn.Module, _stream: torch.cuda.Stream):
     def streamed_to(*args, **kwargs):
         device, *_ = torch._C._nn._parse_to(*args, **kwargs)
 
-        if device is None and "device" in kwargs:
-            device = torch.device(kwargs["device"])
-
         if device is None or not device_supports_non_blocking(device):
             return original_to(*args, **kwargs)
 
