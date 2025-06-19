@@ -11,6 +11,7 @@ import contextlib
 import torch
 from ldm_patched.modules.model_management import cast_to_device
 from modules_forge import stream
+from typing import Callable, Tuple
 
 stash = {}
 
@@ -126,6 +127,13 @@ class disable_weight_init:
             else:
                 return super().forward(*args, **kwargs)
 
+    class Conv2dTiled(Conv2d):
+        def forward(self, input: torch.Tensor, enable_tiling: bool = True, **kwargs) -> torch.Tensor:
+            from modules.shared import opts
+            if enable_tiling and opts.sd_vae_tiled_ops:
+                return tiled_conv2d_3x1x1(input, super().forward, self.out_channels, **kwargs)
+            return super().forward(input)
+
     class Conv3d(torch.nn.Conv3d):
         ldm_patched_cast_weights = False
 
@@ -201,6 +209,9 @@ class manual_cast(disable_weight_init):
     class Conv2d(disable_weight_init.Conv2d):
         ldm_patched_cast_weights = True
 
+    class Conv2dTiled(disable_weight_init.Conv2dTiled):
+        ldm_patched_cast_weights = True
+
     class Conv3d(disable_weight_init.Conv3d):
         ldm_patched_cast_weights = True
 
@@ -263,6 +274,77 @@ def fp8_linear(self, input):
     else:
         return o.view((-1, input_shape[1], self.weight.shape[0]))
 
+def tiled_conv2d_3x1x1(x: torch.Tensor, conv: Callable[[torch.Tensor], torch.Tensor], out_channels: int = None, tile_size: int = 128, **kwargs) -> torch.Tensor:
+    B, C, H, W = x.shape
+
+    if H <= tile_size and W <= tile_size:
+        return conv(x, **kwargs)
+
+    out = torch.empty((B, C if out_channels is None else out_channels, H, W), device=x.device, dtype=x.dtype, memory_format=torch.contiguous_format)
+    non_blocking = x.device.type != 'cpu'
+
+    for i in range(0, H, tile_size):
+        for j in range(0, W, tile_size):
+            i0 = max(i - 1, 0)
+            j0 = max(j - 1, 0)
+            i1 = min(i + tile_size + 1, H)
+            j1 = min(j + tile_size + 1, W)
+
+            tile = x[:, :, i0:i1, j0:j1]
+            tile_conv = conv(tile, **kwargs)
+
+            pi = (i - i0)
+            pj = (j - j0)
+            ph = min(tile_size, H - i)
+            pw = min(tile_size, W - j)
+
+            out[:, :, i:i + ph, j:j + pw].copy_(tile_conv[:, :, pi:pi + ph, pj:pj + pw], non_blocking=non_blocking)
+            del tile_conv
+    return out
+
+def tiled_upsample(x: torch.Tensor, conv: Callable[[torch.Tensor], torch.Tensor] = None, size: Tuple[int, int] = None, tile_size: int = 128) -> torch.Tensor:
+    B, C, H, W = x.shape
+    out_H, out_W = (H * 2, W * 2) if size is None else size
+    with_conv = conv is not None
+
+    if out_H <= tile_size and out_W <= tile_size:
+        x_up = torch.nn.functional.interpolate(x, size=(out_H, out_W), mode='nearest')
+        return x_up if with_conv else conv(x_up, enable_tiling=False)
+
+    scale_h = out_H / H
+    scale_w = out_W / W
+
+    out = torch.empty((B, C, out_H, out_W), device=x.device, dtype=x.dtype, memory_format=torch.contiguous_format)
+    non_blocking = x.device.type != 'cpu'
+
+    for i in range(0, H, tile_size):
+        for j in range(0, W, tile_size):
+            i0 = max(i - 1, 0)
+            j0 = max(j - 1, 0)
+            i1 = min(i + tile_size + 1, H)
+            j1 = min(j + tile_size + 1, W)
+            tile = x[:, :, i0:i1, j0:j1]
+
+            tile_up = torch.nn.functional.interpolate(tile, scale_factor=(scale_h, scale_w), mode='nearest')
+
+            if with_conv:
+                tile_up = conv(tile_up, enable_tiling=False)
+
+            pi = int((i - i0) * scale_h)
+            pj = int((j - j0) * scale_w)
+            ph = int(min(tile_size, H - i) * scale_h)
+            pw = int(min(tile_size, W - j) * scale_w)
+
+            oi = int(i * scale_h)
+            oj = int(j * scale_w)
+
+            # Clip output patch to not exceed requested output size
+            ph = min(ph, out_H - oi)
+            pw = min(pw, out_W - oj)
+
+            out[:, :, oi:oi + ph, oj:oj + pw].copy_(tile_up[:, :, pi:pi + ph, pj:pj + pw], non_blocking=non_blocking)
+            del tile_up
+    return out
 
 class fp8_ops(manual_cast):
     class Linear(manual_cast.Linear):
