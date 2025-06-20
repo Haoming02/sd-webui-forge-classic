@@ -300,11 +300,14 @@ else:
 
 class tiled_ops(disable_weight_init):
     class Conv2d(disable_weight_init.Conv2d):
-        tile_size = 128
+        tile_size: int
 
         def __init__(self, *arg, **kwargs):
+            from modules.shared import opts
+
             super().__init__(*arg, **kwargs)
-            self._3x1x1: bool = kwargs["kernel_size"] == 3 and kwargs["stride"] == 1 and kwargs["padding"] == 1
+            self._3x1x1: bool = kwargs.get("kernel_size", 1) == 3 and kwargs.get("stride", 1) == 1 and kwargs.get("padding", 0) == 1
+            self.tile_size = opts.sd_vae_tiled_size
 
         @torch.inference_mode()
         def forward(self, x: torch.Tensor):
@@ -340,13 +343,17 @@ class tiled_ops(disable_weight_init):
             return out
 
     class Upsample(torch.nn.Module):
-        tile_size: int = 128
+        tile_size: int
 
         def __init__(self, in_channels, with_conv):
+            from modules.shared import opts
+
             super().__init__()
             self.with_conv = with_conv
             if self.with_conv:
                 self.conv = tiled_ops.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
+
+            self.tile_size = opts.sd_vae_tiled_size
 
         @torch.inference_mode()
         def forward(self, x: torch.Tensor):

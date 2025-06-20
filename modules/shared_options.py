@@ -207,9 +207,11 @@ to create the resulting image after the sampling is finished. For img2img, VAE i
             "sd_vae": OptionInfo("Automatic", "SD VAE", gr.Dropdown, lambda: {"choices": shared_items.sd_vae_items()}, refresh=shared_items.refresh_vae_list, infotext="VAE").info("None = always use VAE from checkpoint; Automatic = use VAE with the same filename as checkpoint"),
             "sd_vae_overrides_per_model_preferences": OptionInfo(True, '"SD VAE" option overrides per-model preference'),
             "prefer_vae_precision_float16": OptionInfo(False, "Prefer VAE in float16 precision").info("VAE at fp16 tends to cause NaNs; <b>enable with caution!</b>"),
-            "sd_vae_tiled_ops": OptionInfo(False, "Use tiled operations for VAE").info("replace interpolate and Conv2D ops with tiled variants; reduce memory usage").needs_restart(),
             "sd_vae_encode_method": OptionInfo("Full", "VAE for Encoding", gr.Radio, {"choices": ("Full", "TAESD")}, infotext="VAE Encoder").info("method to encode image to latent (img2img / Hires. fix / inpaint)"),
             "sd_vae_decode_method": OptionInfo("Full", "VAE for Decoding", gr.Radio, {"choices": ("Full", "TAESD")}, infotext="VAE Decoder").info("method to decode latent to image"),
+            "tile_exp_div": OptionDiv(),
+            "sd_vae_tiled_ops": OptionInfo(False, "Enable tiling optimizations for VAE").info("replace <b>interpolate</b> and <b>Conv2D</b> ops with tiled variants; reduce memory usage; <i>slightly</i> reduce speed").needs_restart(),
+            "sd_vae_tiled_size": OptionInfo(128, "Tile Size", gr.Slider, {"minimum": 64, "maximum": 256, "step": 64}).info("for the above setting").needs_restart(),
         },
     )
 )
