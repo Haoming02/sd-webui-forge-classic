@@ -524,7 +524,7 @@ class Decoder(nn.Module):
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = ops.Conv2d(
+        self.conv_out = conv_out_op(
             block_in, out_ch, kernel_size=3, stride=1, padding=1
         )
 

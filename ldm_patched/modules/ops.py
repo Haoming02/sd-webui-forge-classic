@@ -304,7 +304,7 @@ class tiled_ops(disable_weight_init):
 
         def __init__(self, *arg, **kwargs):
             super().__init__(*arg, **kwargs)
-            self._3x1x1 = self.kernel_size == 3 and self.stride == 1 and self.padding == 1
+            self._3x1x1: bool = kwargs["kernel_size"] == 3 and kwargs["stride"] == 1 and kwargs["padding"] == 1
 
         @torch.inference_mode()
         def forward(self, x: torch.Tensor):
@@ -346,7 +346,7 @@ class tiled_ops(disable_weight_init):
             super().__init__()
             self.with_conv = with_conv
             if self.with_conv:
-                self.conv = disable_weight_init.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
+                self.conv = tiled_ops.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
 
         @torch.inference_mode()
         def forward(self, x: torch.Tensor):
