@@ -14,7 +14,10 @@ import torch.nn as nn
 from ldm_patched.modules import model_management
 from modules.shared import opts
 
-ops = ldm_patched.modules.ops.disable_weight_init
+if opts.sd_vae_tiled_ops:
+    ops = ldm_patched.modules.ops.tiled_ops
+else:
+    ops = ldm_patched.modules.ops.disable_weight_init
 
 if model_management.xformers_enabled_vae():
     import xformers
@@ -58,16 +61,12 @@ class Upsample(nn.Module):
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
-            self.conv = ops.Conv2dTiled(
+            self.conv = ops.Conv2d(
                 in_channels, in_channels, kernel_size=3, stride=1, padding=1
             )
 
     def forward(self, x):
         try:
-            # Tiled upsample calls conv2d per tile.
-            if opts.sd_vae_tiled_ops:
-                return ops.tiled_upsample(x, self.conv if self.with_conv else None)
-
             x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
         except:  # operation not implemented for bf16
             b, c, h, w = x.shape
@@ -126,19 +125,19 @@ class ResnetBlock(nn.Module):
 
         self.swish = torch.nn.SiLU(inplace=True)
         self.norm1 = Normalize(in_channels)
-        self.conv1 = ops.Conv2dTiled(
+        self.conv1 = ops.Conv2d(
             in_channels, out_channels, kernel_size=3, stride=1, padding=1
         )
         if temb_channels > 0:
             self.temb_proj = ops.Linear(temb_channels, out_channels)
         self.norm2 = Normalize(out_channels)
         self.dropout = torch.nn.Dropout(dropout, inplace=True)
-        self.conv2 = ops.Conv2dTiled(
+        self.conv2 = ops.Conv2d(
             out_channels, out_channels, kernel_size=3, stride=1, padding=1
         )
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                self.conv_shortcut = ops.Conv2dTiled(
+                self.conv_shortcut = ops.Conv2d(
                     in_channels, out_channels, kernel_size=3, stride=1, padding=1
                 )
             else:
@@ -344,7 +343,7 @@ class Encoder(nn.Module):
         self.in_channels = in_channels
 
         # downsampling
-        self.conv_in = ops.Conv2dTiled(
+        self.conv_in = ops.Conv2d(
             in_channels, self.ch, kernel_size=3, stride=1, padding=1
         )
 
@@ -516,13 +515,16 @@ class Decoder(nn.Module):
             up.block = block
             up.attn = attn
             if i_level != 0:
-                up.upsample = Upsample(block_in, resamp_with_conv)
+                if opts.sd_vae_tiled_ops:
+                    up.upsample = ops.Upsample(block_in, resamp_with_conv)
+                else:
+                    up.upsample = Upsample(block_in, resamp_with_conv)
                 curr_res = curr_res * 2
             self.up.insert(0, up)  # prepend to get consistent order
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = ops.Conv2dTiled(
+        self.conv_out = ops.Conv2d(
             block_in, out_ch, kernel_size=3, stride=1, padding=1
         )
 
