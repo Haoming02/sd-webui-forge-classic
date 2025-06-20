@@ -306,7 +306,7 @@ class tiled_ops(disable_weight_init):
             from modules.shared import opts
 
             super().__init__(*arg, **kwargs)
-            self._3x1x1: bool = kwargs.get("kernel_size", 1) == 3 and kwargs.get("stride", 1) == 1 and kwargs.get("padding", 0) == 1
+            self._3x1x1: bool = self.kernel_size == (3, 3) and self.stride == (1, 1) and self.padding == (1, 1)
             self.tile_size = opts.sd_vae_tiled_size
 
         @torch.inference_mode()
