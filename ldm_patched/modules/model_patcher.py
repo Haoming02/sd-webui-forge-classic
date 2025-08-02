@@ -37,7 +37,10 @@ class PatchStatus:
 
         return self.current == 0
 
-    def require_unpatch(self) -> bool:
+    def require_unpatch(self, is_prepatch=False) -> bool:
+        if is_prepatch:
+            return self.require_prepatch_unpatch()
+
         if not PERSISTENT_PATCHES:
             return True
 
@@ -45,6 +48,15 @@ class PatchStatus:
             return True
 
         return self.current != self.updated
+
+    def require_prepatch_unpatch(self) -> bool:
+        if not PERSISTENT_PATCHES:
+            return False
+
+        if not PatchStatus.has_lora():
+            return False
+
+        return True
 
     def patch(self):
         if self.updated > 0:
@@ -463,8 +475,8 @@ class ModelPatcher:
 
         return weight
 
-    def unpatch_model(self, device_to=None):
-        if self.backup and self.patch_status.require_unpatch():
+    def unpatch_model(self, device_to=None, is_prepatch=False):
+        if self.backup and (self.patch_status.require_unpatch(is_prepatch)):
             keys = list(self.backup.keys())
 
             if self.weight_inplace_update:

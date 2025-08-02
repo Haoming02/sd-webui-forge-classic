@@ -1,7 +1,7 @@
 import os.path
 import re
 
-from ldm_patched.modules.sd import load_lora_for_models
+from ldm_patched.modules.sd import load_lora_for_models, unpatch_models_prior_to_patch
 from ldm_patched.modules.utils import load_torch_file
 from modules import errors, scripts, sd_models, shared
 
@@ -57,6 +57,10 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
 
     if current_sd.current_lora_hash == compiled_lora_targets_hash:
         return
+
+    if current_sd.current_lora_hash != str([]):
+        # patch for persistent patches only: need to unpatch prior to patching if lora hash has changed.
+        unpatch_models_prior_to_patch(current_sd.forge_objects.unet, current_sd.forge_objects.clip)
 
     current_sd.current_lora_hash = compiled_lora_targets_hash
     current_sd.forge_objects.unet = current_sd.forge_objects_original.unet

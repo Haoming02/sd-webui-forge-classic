@@ -69,6 +69,10 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip, filen
 
     return model, clip
 
+def unpatch_models_prior_to_patch(model, clip):
+    model.unpatch_model(model.offload_device, is_prepatch=True)
+    clip.patcher.unpatch_model(clip.patcher.offload_device, is_prepatch=True)
+
 
 class CLIP:
     def __init__(self, target=None, embedding_directory=None, no_init=False):
