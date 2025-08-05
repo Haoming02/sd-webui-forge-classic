@@ -29,15 +29,12 @@ def load_model_weights(model, sd):
     return model
 
 
-def load_lora_for_models(model, clip, lora, strength_model, strength_clip, filename="default"):
+def load_lora_for_models(model, clip, lora, strength_model, strength_clip, known_unet_keys = set(), known_clip_keys = set(), full_unet_keys = {}, full_clip_keys = {}, filename="default", do_referential_load=False):
     model_flag = type(model.model).__name__ if model is not None else "default"
 
-    unet_keys = ldm_patched.modules.lora.model_lora_keys_unet(model.model) if model is not None else {}
-    clip_keys = ldm_patched.modules.lora.model_lora_keys_clip(clip.cond_stage_model) if clip is not None else {}
-
     lora_unmatch = lora
-    lora_unet, lora_unmatch = ldm_patched.modules.lora.load_lora(lora_unmatch, unet_keys)
-    lora_clip, lora_unmatch = ldm_patched.modules.lora.load_lora(lora_unmatch, clip_keys)
+    lora_clip, lora_unmatch, found_clip_keys = ldm_patched.modules.lora.load_lora(lora_unmatch, known_clip_keys, full_clip_keys, do_referential_load)
+    lora_unet, lora_unmatch, found_unet_keys = ldm_patched.modules.lora.load_lora(lora_unmatch, known_unet_keys, full_unet_keys, do_referential_load)
 
     if len(lora_unmatch) > 12:
         print(f"[LORA] LoRA version mismatch for {model_flag}: {filename}")
@@ -56,6 +53,8 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip, filen
             print(f"[LORA] Mismatch {filename} for {model_flag}-UNet with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
         else:
             print(f"[LORA] Loaded {filename} for {model_flag}-UNet with {len(loaded_keys)} keys at weight {strength_model} (skipped {len(skipped_keys)} keys)")
+            if do_referential_load:
+                known_unet_keys.update(found_unet_keys)
             model = new_model
 
     if new_clip is not None and len(lora_clip) > 0:
@@ -65,6 +64,8 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip, filen
             print(f"[LORA] Mismatch {filename} for {model_flag}-CLIP with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
         else:
             print(f"[LORA] Loaded {filename} for {model_flag}-CLIP with {len(loaded_keys)} keys at weight {strength_clip} (skipped {len(skipped_keys)} keys)")
+            if do_referential_load:
+                known_clip_keys.update(found_clip_keys)
             clip = new_clip
 
     return model, clip

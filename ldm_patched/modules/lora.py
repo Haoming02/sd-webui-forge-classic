@@ -8,6 +8,9 @@ import torch
 import ldm_patched.modules.model_management
 import ldm_patched.modules.utils
 
+LEN_WEIGHT = len(".weight")
+LEN_DIFFUSION_MODEL = len("diffusion_model.")
+
 LORA_CLIP_MAP = {
     "mlp.fc1": "mlp_fc1",
     "mlp.fc2": "mlp_fc2",
@@ -18,208 +21,235 @@ LORA_CLIP_MAP = {
 }
 
 
-def load_lora(lora, to_load):
+def load_lora(lora, known_keys, to_load, do_referential_load):
     patch_dict = {}
     loaded_keys = set()
-    for x in to_load:
-        alpha_name = "{}.alpha".format(x)
-        alpha = None
-        if alpha_name in lora.keys():
-            alpha = lora[alpha_name].item()
-            loaded_keys.add(alpha_name)
+    new_keys = set()
+    remaining_dict = lora
 
-        dora_scale_name = "{}.dora_scale".format(x)
-        dora_scale = None
-        if dora_scale_name in lora.keys():
-            dora_scale = lora[dora_scale_name]
-            loaded_keys.add(dora_scale_name)
+    if do_referential_load:
+        new_lora_keys = set()
+        for key in known_keys:
+            load_lora_key(key, to_load[key], remaining_dict, patch_dict, new_lora_keys)
+            if (len(new_lora_keys) > 0):
+                loaded_keys.update(new_lora_keys)
+                for nk in new_lora_keys:
+                    del remaining_dict[nk]
+                new_lora_keys = set()
 
-        reshape_name = "{}.reshape_weight".format(x)
-        reshape = None
-        if reshape_name in lora.keys():
-            try:
-                reshape = lora[reshape_name].tolist()
-                loaded_keys.add(reshape_name)
-            except Exception:
-                pass
+    if (len(remaining_dict) > 0):
+        new_lora_keys = set()
+        for key in to_load:
+            if key not in known_keys:
+                load_lora_key(key, to_load[key], remaining_dict, patch_dict, new_lora_keys)
+                if (len(new_lora_keys) > 0):
+                    if do_referential_load:
+                        new_keys.add(key)
+                    loaded_keys.update(new_lora_keys)
+                    for nk in new_lora_keys:
+                        del remaining_dict[nk]
+                    new_lora_keys = set()
 
-        regular_lora = "{}.lora_up.weight".format(x)
-        diffusers_lora = "{}_lora.up.weight".format(x)
-        diffusers2_lora = "{}.lora_B.weight".format(x)
-        diffusers3_lora = "{}.lora.up.weight".format(x)
-        mochi_lora = "{}.lora_B".format(x)
-        transformers_lora = "{}.lora_linear_layer.up.weight".format(x)
-        A_name = None
+    return patch_dict, remaining_dict, new_keys
 
-        if regular_lora in lora.keys():
-            A_name = regular_lora
-            B_name = "{}.lora_down.weight".format(x)
-            mid_name = "{}.lora_mid.weight".format(x)
-        elif diffusers_lora in lora.keys():
-            A_name = diffusers_lora
-            B_name = "{}_lora.down.weight".format(x)
-            mid_name = None
-        elif diffusers2_lora in lora.keys():
-            A_name = diffusers2_lora
-            B_name = "{}.lora_A.weight".format(x)
-            mid_name = None
-        elif diffusers3_lora in lora.keys():
-            A_name = diffusers3_lora
-            B_name = "{}.lora.down.weight".format(x)
-            mid_name = None
-        elif mochi_lora in lora.keys():
-            A_name = mochi_lora
-            B_name = "{}.lora_A".format(x)
-            mid_name = None
-        elif transformers_lora in lora.keys():
-            A_name = transformers_lora
-            B_name = "{}.lora_linear_layer.down.weight".format(x)
-            mid_name = None
 
-        if A_name is not None:
-            mid = None
-            if mid_name is not None and mid_name in lora.keys():
-                mid = lora[mid_name]
-                loaded_keys.add(mid_name)
-            patch_dict[to_load[x]] = ("lora", (lora[A_name], lora[B_name], alpha, mid, dora_scale, reshape))
-            loaded_keys.add(A_name)
-            loaded_keys.add(B_name)
+def load_lora_key(key, to_load_value_for_key, lora, patch_dict, loaded_keys):
+    alpha_name = "{}.alpha".format(key)
+    alpha = None
+    if alpha_name in lora.keys():
+        alpha = lora[alpha_name].item()
+        loaded_keys.add(alpha_name)
 
-        ######## loha
-        hada_w1_a_name = "{}.hada_w1_a".format(x)
-        hada_w1_b_name = "{}.hada_w1_b".format(x)
-        hada_w2_a_name = "{}.hada_w2_a".format(x)
-        hada_w2_b_name = "{}.hada_w2_b".format(x)
-        hada_t1_name = "{}.hada_t1".format(x)
-        hada_t2_name = "{}.hada_t2".format(x)
-        if hada_w1_a_name in lora.keys():
-            hada_t1 = None
-            hada_t2 = None
-            if hada_t1_name in lora.keys():
-                hada_t1 = lora[hada_t1_name]
-                hada_t2 = lora[hada_t2_name]
-                loaded_keys.add(hada_t1_name)
-                loaded_keys.add(hada_t2_name)
+    dora_scale_name = "{}.dora_scale".format(key)
+    dora_scale = None
+    if dora_scale_name in lora.keys():
+        dora_scale = lora[dora_scale_name]
+        loaded_keys.add(dora_scale_name)
 
-            patch_dict[to_load[x]] = (
-                "loha",
-                (
-                    lora[hada_w1_a_name],
-                    lora[hada_w1_b_name],
-                    alpha,
-                    lora[hada_w2_a_name],
-                    lora[hada_w2_b_name],
-                    hada_t1,
-                    hada_t2,
-                    dora_scale,
-                ),
-            )
-            loaded_keys.add(hada_w1_a_name)
-            loaded_keys.add(hada_w1_b_name)
-            loaded_keys.add(hada_w2_a_name)
-            loaded_keys.add(hada_w2_b_name)
+    reshape_name = "{}.reshape_weight".format(key)
+    reshape = None
+    if reshape_name in lora.keys():
+        try:
+            reshape = lora[reshape_name].tolist()
+            loaded_keys.add(reshape_name)
+        except Exception:
+            pass
 
-        ######## lokr
-        lokr_w1_name = "{}.lokr_w1".format(x)
-        lokr_w2_name = "{}.lokr_w2".format(x)
-        lokr_w1_a_name = "{}.lokr_w1_a".format(x)
-        lokr_w1_b_name = "{}.lokr_w1_b".format(x)
-        lokr_t2_name = "{}.lokr_t2".format(x)
-        lokr_w2_a_name = "{}.lokr_w2_a".format(x)
-        lokr_w2_b_name = "{}.lokr_w2_b".format(x)
+    regular_lora = "{}.lora_up.weight".format(key)
+    diffusers_lora = "{}_lora.up.weight".format(key)
+    diffusers2_lora = "{}.lora_B.weight".format(key)
+    diffusers3_lora = "{}.lora.up.weight".format(key)
+    mochi_lora = "{}.lora_B".format(key)
+    transformers_lora = "{}.lora_linear_layer.up.weight".format(key)
+    A_name = None
 
-        lokr_w1 = None
-        if lokr_w1_name in lora.keys():
-            lokr_w1 = lora[lokr_w1_name]
-            loaded_keys.add(lokr_w1_name)
+    if regular_lora in lora.keys():
+        A_name = regular_lora
+        B_name = "{}.lora_down.weight".format(key)
+        mid_name = "{}.lora_mid.weight".format(key)
+    elif diffusers_lora in lora.keys():
+        A_name = diffusers_lora
+        B_name = "{}_lora.down.weight".format(key)
+        mid_name = None
+    elif diffusers2_lora in lora.keys():
+        A_name = diffusers2_lora
+        B_name = "{}.lora_A.weight".format(key)
+        mid_name = None
+    elif diffusers3_lora in lora.keys():
+        A_name = diffusers3_lora
+        B_name = "{}.lora.down.weight".format(key)
+        mid_name = None
+    elif mochi_lora in lora.keys():
+        A_name = mochi_lora
+        B_name = "{}.lora_A".format(key)
+        mid_name = None
+    elif transformers_lora in lora.keys():
+        A_name = transformers_lora
+        B_name = "{}.lora_linear_layer.down.weight".format(key)
+        mid_name = None
 
-        lokr_w2 = None
-        if lokr_w2_name in lora.keys():
-            lokr_w2 = lora[lokr_w2_name]
-            loaded_keys.add(lokr_w2_name)
+    if A_name is not None:
+        mid = None
+        if mid_name is not None and mid_name in lora.keys():
+            mid = lora[mid_name]
+            loaded_keys.add(mid_name)
+        patch_dict[to_load_value_for_key] = ("lora", (lora[A_name], lora[B_name], alpha, mid, dora_scale, reshape))
+        loaded_keys.add(A_name)
+        loaded_keys.add(B_name)
 
-        lokr_w1_a = None
-        if lokr_w1_a_name in lora.keys():
-            lokr_w1_a = lora[lokr_w1_a_name]
-            loaded_keys.add(lokr_w1_a_name)
+    ######## loha
+    hada_w1_a_name = "{}.hada_w1_a".format(key)
+    hada_w1_b_name = "{}.hada_w1_b".format(key)
+    hada_w2_a_name = "{}.hada_w2_a".format(key)
+    hada_w2_b_name = "{}.hada_w2_b".format(key)
+    hada_t1_name = "{}.hada_t1".format(key)
+    hada_t2_name = "{}.hada_t2".format(key)
+    if hada_w1_a_name in lora.keys():
+        hada_t1 = None
+        hada_t2 = None
+        if hada_t1_name in lora.keys():
+            hada_t1 = lora[hada_t1_name]
+            hada_t2 = lora[hada_t2_name]
+            loaded_keys.add(hada_t1_name)
+            loaded_keys.add(hada_t2_name)
 
-        lokr_w1_b = None
-        if lokr_w1_b_name in lora.keys():
-            lokr_w1_b = lora[lokr_w1_b_name]
-            loaded_keys.add(lokr_w1_b_name)
+        patch_dict[to_load_value_for_key] = (
+            "loha",
+            (
+                lora[hada_w1_a_name],
+                lora[hada_w1_b_name],
+                alpha,
+                lora[hada_w2_a_name],
+                lora[hada_w2_b_name],
+                hada_t1,
+                hada_t2,
+                dora_scale,
+            ),
+        )
+        loaded_keys.add(hada_w1_a_name)
+        loaded_keys.add(hada_w1_b_name)
+        loaded_keys.add(hada_w2_a_name)
+        loaded_keys.add(hada_w2_b_name)
 
-        lokr_w2_a = None
-        if lokr_w2_a_name in lora.keys():
-            lokr_w2_a = lora[lokr_w2_a_name]
-            loaded_keys.add(lokr_w2_a_name)
+    ######## lokr
+    lokr_w1_name = "{}.lokr_w1".format(key)
+    lokr_w2_name = "{}.lokr_w2".format(key)
+    lokr_w1_a_name = "{}.lokr_w1_a".format(key)
+    lokr_w1_b_name = "{}.lokr_w1_b".format(key)
+    lokr_t2_name = "{}.lokr_t2".format(key)
+    lokr_w2_a_name = "{}.lokr_w2_a".format(key)
+    lokr_w2_b_name = "{}.lokr_w2_b".format(key)
 
-        lokr_w2_b = None
-        if lokr_w2_b_name in lora.keys():
-            lokr_w2_b = lora[lokr_w2_b_name]
-            loaded_keys.add(lokr_w2_b_name)
+    lokr_w1 = None
+    if lokr_w1_name in lora.keys():
+        lokr_w1 = lora[lokr_w1_name]
+        loaded_keys.add(lokr_w1_name)
 
-        lokr_t2 = None
-        if lokr_t2_name in lora.keys():
-            lokr_t2 = lora[lokr_t2_name]
-            loaded_keys.add(lokr_t2_name)
+    lokr_w2 = None
+    if lokr_w2_name in lora.keys():
+        lokr_w2 = lora[lokr_w2_name]
+        loaded_keys.add(lokr_w2_name)
 
-        if (lokr_w1 is not None) or (lokr_w2 is not None) or (lokr_w1_a is not None) or (lokr_w2_a is not None):
-            patch_dict[to_load[x]] = (
-                "lokr",
-                (lokr_w1, lokr_w2, alpha, lokr_w1_a, lokr_w1_b, lokr_w2_a, lokr_w2_b, lokr_t2, dora_scale),
-            )
+    lokr_w1_a = None
+    if lokr_w1_a_name in lora.keys():
+        lokr_w1_a = lora[lokr_w1_a_name]
+        loaded_keys.add(lokr_w1_a_name)
 
-        # glora
-        a1_name = "{}.a1.weight".format(x)
-        a2_name = "{}.a2.weight".format(x)
-        b1_name = "{}.b1.weight".format(x)
-        b2_name = "{}.b2.weight".format(x)
-        if a1_name in lora:
-            patch_dict[to_load[x]] = ("glora", (lora[a1_name], lora[a2_name], lora[b1_name], lora[b2_name], alpha, dora_scale))
-            loaded_keys.add(a1_name)
-            loaded_keys.add(a2_name)
-            loaded_keys.add(b1_name)
-            loaded_keys.add(b2_name)
+    lokr_w1_b = None
+    if lokr_w1_b_name in lora.keys():
+        lokr_w1_b = lora[lokr_w1_b_name]
+        loaded_keys.add(lokr_w1_b_name)
 
-        w_norm_name = "{}.w_norm".format(x)
-        b_norm_name = "{}.b_norm".format(x)
-        w_norm = lora.get(w_norm_name, None)
-        b_norm = lora.get(b_norm_name, None)
+    lokr_w2_a = None
+    if lokr_w2_a_name in lora.keys():
+        lokr_w2_a = lora[lokr_w2_a_name]
+        loaded_keys.add(lokr_w2_a_name)
 
-        if w_norm is not None:
-            loaded_keys.add(w_norm_name)
-            patch_dict[to_load[x]] = ("diff", (w_norm,))
-            if b_norm is not None:
-                loaded_keys.add(b_norm_name)
-                patch_dict["{}.bias".format(to_load[x][: -len(".weight")])] = ("diff", (b_norm,))
+    lokr_w2_b = None
+    if lokr_w2_b_name in lora.keys():
+        lokr_w2_b = lora[lokr_w2_b_name]
+        loaded_keys.add(lokr_w2_b_name)
 
-        diff_name = "{}.diff".format(x)
-        diff_weight = lora.get(diff_name, None)
-        if diff_weight is not None:
-            patch_dict[to_load[x]] = ("diff", (diff_weight,))
-            loaded_keys.add(diff_name)
+    lokr_t2 = None
+    if lokr_t2_name in lora.keys():
+        lokr_t2 = lora[lokr_t2_name]
+        loaded_keys.add(lokr_t2_name)
 
-        diff_bias_name = "{}.diff_b".format(x)
-        diff_bias = lora.get(diff_bias_name, None)
-        if diff_bias is not None:
-            patch_dict["{}.bias".format(to_load[x][: -len(".weight")])] = ("diff", (diff_bias,))
-            loaded_keys.add(diff_bias_name)
+    if (lokr_w1 is not None) or (lokr_w2 is not None) or (lokr_w1_a is not None) or (lokr_w2_a is not None):
+        patch_dict[to_load_value_for_key] = (
+            "lokr",
+            (lokr_w1, lokr_w2, alpha, lokr_w1_a, lokr_w1_b, lokr_w2_a, lokr_w2_b, lokr_t2, dora_scale),
+        )
 
-        set_weight_name = "{}.set_weight".format(x)
-        set_weight = lora.get(set_weight_name, None)
-        if set_weight is not None:
-            patch_dict[to_load[x]] = ("set", (set_weight,))
-            loaded_keys.add(set_weight_name)
+    # glora
+    a1_name = "{}.a1.weight".format(key)
+    a2_name = "{}.a2.weight".format(key)
+    b1_name = "{}.b1.weight".format(key)
+    b2_name = "{}.b2.weight".format(key)
+    if a1_name in lora:
+        patch_dict[to_load_value_for_key] = ("glora", (lora[a1_name], lora[a2_name], lora[b1_name], lora[b2_name], alpha, dora_scale))
+        loaded_keys.add(a1_name)
+        loaded_keys.add(a2_name)
+        loaded_keys.add(b1_name)
+        loaded_keys.add(b2_name)
 
-    remaining_dict = {x: y for x, y in lora.items() if x not in loaded_keys}
-    return patch_dict, remaining_dict
+    w_norm_name = "{}.w_norm".format(key)
+    b_norm_name = "{}.b_norm".format(key)
+    w_norm = lora.get(w_norm_name, None)
+    b_norm = lora.get(b_norm_name, None)
+
+    if w_norm is not None:
+        loaded_keys.add(w_norm_name)
+        patch_dict[to_load_value_for_key] = ("diff", (w_norm,))
+        if b_norm is not None:
+            loaded_keys.add(b_norm_name)
+            patch_dict["{}.bias".format(to_load_value_for_key[: -LEN_WEIGHT])] = ("diff", (b_norm,))
+
+    diff_name = "{}.diff".format(key)
+    diff_weight = lora.get(diff_name, None)
+    if diff_weight is not None:
+        patch_dict[to_load_value_for_key] = ("diff", (diff_weight,))
+        loaded_keys.add(diff_name)
+
+    diff_bias_name = "{}.diff_b".format(key)
+    diff_bias = lora.get(diff_bias_name, None)
+    if diff_bias is not None:
+        patch_dict["{}.bias".format(to_load_value_for_key[: -LEN_WEIGHT])] = ("diff", (diff_bias,))
+        loaded_keys.add(diff_bias_name)
+
+    set_weight_name = "{}.set_weight".format(key)
+    set_weight = lora.get(set_weight_name, None)
+    if set_weight is not None:
+        patch_dict[to_load_value_for_key] = ("set", (set_weight,))
+        loaded_keys.add(set_weight_name)
+
 
 
 def model_lora_keys_clip(model, key_map={}):
     sdk = model.state_dict().keys()
     for k in sdk:
         if k.endswith(".weight"):
-            key_map["text_encoders.{}".format(k[: -len(".weight")])] = k  # generic lora format without any weird key names
+            key_map["text_encoders.{}".format(k[: -LEN_WEIGHT])] = k  # generic lora format without any weird key names
 
     text_model_lora_key = "lora_te_text_model_encoder_layers_{}_{}"
     clip_l_present = False
@@ -271,9 +301,9 @@ def model_lora_keys_unet(model, key_map={}):
     for k in sdk:
         if k.startswith("diffusion_model."):
             if k.endswith(".weight"):
-                key_lora = k[len("diffusion_model.") : -len(".weight")].replace(".", "_")
+                key_lora = k[LEN_DIFFUSION_MODEL : -LEN_WEIGHT].replace(".", "_")
                 key_map["lora_unet_{}".format(key_lora)] = k
-                key_map["{}".format(k[: -len(".weight")])] = k  # generic lora format without any weird key names
+                key_map["{}".format(k[: -LEN_WEIGHT])] = k  # generic lora format without any weird key names
             else:
                 key_map["{}".format(k)] = k  # generic lora format for not .weight without any weird key names
 
@@ -281,13 +311,13 @@ def model_lora_keys_unet(model, key_map={}):
     for k in diffusers_keys:
         if k.endswith(".weight"):
             unet_key = "diffusion_model.{}".format(diffusers_keys[k])
-            key_lora = k[: -len(".weight")].replace(".", "_")
+            key_lora = k[: -LEN_WEIGHT].replace(".", "_")
             key_map["lora_unet_{}".format(key_lora)] = unet_key
             key_map["lycoris_{}".format(key_lora)] = unet_key  # simpletuner lycoris format
 
             diffusers_lora_prefix = ["", "unet."]
             for p in diffusers_lora_prefix:
-                diffusers_lora_key = "{}{}".format(p, k[: -len(".weight")].replace(".to_", ".processor.to_"))
+                diffusers_lora_key = "{}{}".format(p, k[: -LEN_WEIGHT].replace(".to_", ".processor.to_"))
                 if diffusers_lora_key.endswith(".to_out.0"):
                     diffusers_lora_key = diffusers_lora_key[:-2]
                 key_map[diffusers_lora_key] = unet_key

@@ -1,6 +1,7 @@
 import os.path
 import re
 
+from ldm_patched.modules.lora import model_lora_keys_clip, model_lora_keys_unet
 from ldm_patched.modules.sd import load_lora_for_models
 from ldm_patched.modules.utils import load_torch_file
 from modules import errors, scripts, sd_models, shared
@@ -58,9 +59,26 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
     if current_sd.current_lora_hash == compiled_lora_targets_hash:
         return
 
+    # Potential performance enhancement: referential lora load
+    #   - Maintain a list of keys that loras have modified during load process.
+    #       - When loading each subsequent lora, check those keys first, and only iterate the full set of keys in model if
+    #         the lora is touching keys that are not present in the accumulated list of "known" keys.
+    #   - seems to only be a performance boost if there are >1 loras in use
+    #
+    #   - To potentially optimize this further, one could consider keeping the loaded unet/clip keys and accumulated known
+    #     keys in memory until the SD 1.5/SDXL model itself is swapped out by the user.  I didn't go that far (yet), though.
+    do_referential_load = len(compiled_lora_targets) > 1
+
     current_sd.current_lora_hash = compiled_lora_targets_hash
+
     current_sd.forge_objects.unet = current_sd.forge_objects_original.unet
     current_sd.forge_objects.clip = current_sd.forge_objects_original.clip
+
+    unet_keys = model_lora_keys_unet(current_sd.forge_objects.unet.model) if current_sd.forge_objects.unet is not None else {}
+    clip_keys = model_lora_keys_clip(current_sd.forge_objects.clip.cond_stage_model) if current_sd.forge_objects.clip is not None else {}
+
+    accum_unet = set()
+    accum_clip = set()
 
     for filename, strength_model, strength_clip in compiled_lora_targets:
         lora_sd = load_lora_state_dict(filename)
@@ -70,10 +88,16 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
             lora_sd,
             strength_model,
             strength_clip,
+            accum_unet,
+            accum_clip,
+            unet_keys,
+            clip_keys,
             filename,
+            do_referential_load,
         )
 
     current_sd.forge_objects_after_applying_lora = current_sd.forge_objects.shallow_copy()
+
 
 
 def list_available_networks():
