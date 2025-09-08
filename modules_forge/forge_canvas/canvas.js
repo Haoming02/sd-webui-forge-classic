@@ -88,6 +88,10 @@ class ForgeCanvas {
         this.background_gradio_bind = new GradioTextAreaBind(this.uuid, "logical_image_background");
         this.foreground_gradio_bind = new GradioTextAreaBind(this.uuid, "logical_image_foreground");
         this.init();
+
+        this._held_W = false;
+        this._held_A = false;
+        this._held_S = false;
     }
 
     init() {
@@ -303,11 +307,34 @@ class ForgeCanvas {
         container.addEventListener("wheel", (e) => {
             if (!self.img) return;
             e.preventDefault();
+            const delta = e.deltaY * -0.001;
+            let scale = true;
+
+            if (this._held_W) {
+                // Width
+                scribbleWidth.value = parseInt(scribbleWidth.value) - Math.sign(e.deltaY);
+                updateInput(scribbleWidth);
+                scale = false;
+            }
+            if (this._held_A) {
+                // Alpha (Opacity)
+                scribbleAlpha.value = parseInt(scribbleAlpha.value) - Math.sign(e.deltaY) * 5;
+                updateInput(scribbleAlpha);
+                scale = false;
+            }
+            if (this._held_S) {
+                // Softness
+                scribbleSoftness.value = parseInt(scribbleSoftness.value) - Math.sign(e.deltaY) * 5;
+                updateInput(scribbleSoftness);
+                scale = false;
+            }
+
+            if (!scale) return;
+
             const rect = container.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
             const oldScale = self.imgScale;
-            const delta = e.deltaY * -0.001;
             self.imgScale += delta;
             self.imgScale = Math.max(0.1, self.imgScale);
             const newScale = self.imgScale / oldScale;
@@ -409,6 +436,16 @@ class ForgeCanvas {
                 e.preventDefault();
                 this.redo();
             }
+
+            if (e.key === "w") this._held_W = true;
+            if (e.key === "a") this._held_A = true;
+            if (e.key === "s") this._held_S = true;
+        });
+
+        document.addEventListener("keyup", () => {
+            this._held_W = false;
+            this._held_A = false;
+            this._held_S = false;
         });
 
         maxButton.addEventListener("click", () => {
