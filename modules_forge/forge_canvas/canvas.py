@@ -15,7 +15,6 @@ GNU Affero General Public License for more details.
 
 import gradio.component_meta
 
-
 create_or_modify_pyi_org = gradio.component_meta.create_or_modify_pyi
 
 
@@ -31,19 +30,20 @@ def create_or_modify_pyi_org_patched(component_class, class_name, events):
 gradio.component_meta.create_or_modify_pyi = create_or_modify_pyi_org_patched
 
 
+import base64
 import os
 import uuid
-import base64
+from functools import wraps
+from io import BytesIO
+
 import gradio as gr
 import numpy as np
-
-from PIL import Image
-from io import BytesIO
 from gradio.context import Context
-from functools import wraps
+from PIL import Image
 
 from modules.shared import opts
 
+DEBUG_MODE = False
 canvas_js_root_path = os.path.dirname(__file__)
 
 
@@ -57,12 +57,8 @@ def web_css(file_name):
     return f'<link rel="stylesheet" href="file={full_path}?{os.path.getmtime(full_path)}">\n'
 
 
-DEBUG_MODE = False
-
 canvas_html = open(os.path.join(canvas_js_root_path, "canvas.html"), encoding="utf-8").read()
-canvas_head = ""
-canvas_head += web_css("canvas.css")
-canvas_head += web_js("canvas.min.js")
+canvas_head = "".join((web_css("canvas.css"), web_js("canvas.js")))
 
 
 def image_to_base64(image_array, numpy=True):
