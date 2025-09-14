@@ -161,6 +161,22 @@ function submit_txt2img_upscale() {
     return res;
 }
 
+function select_gallery_image_after_upscale(generation_info_json) {
+    try {
+        const geninfo = JSON.parse(generation_info_json);
+        if (geninfo.selected_gallery_index !== undefined) {
+            setTimeout(() => {
+                const galleryButtons = all_gallery_buttons();
+                if (galleryButtons && galleryButtons.length > geninfo.selected_gallery_index) {
+                    galleryButtons[geninfo.selected_gallery_index].click();
+                }
+            }, 100); // Small delay to ensure gallery is updated
+        }
+    } catch (e) {
+        console.log("Could not auto-select upscaled image:", e);
+    }
+}
+
 function submit_img2img() {
     showSubmitButtons('img2img', false);
 

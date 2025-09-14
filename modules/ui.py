@@ -378,6 +378,12 @@ def create_ui():
                 inputs=txt2img_inputs[0:1] + [output_panel.gallery, dummy_component, output_panel.generation_info] + txt2img_inputs[1:],
                 outputs=txt2img_outputs,
                 show_progress=False,
+                ).then(
+                fn=None,
+                _js="function(gallery, generation_info, infotext, html_log) { select_gallery_image_after_upscale(generation_info); return [gallery, generation_info, infotext, html_log]; }",
+                inputs=txt2img_outputs,
+                outputs=txt2img_outputs,
+                show_progress=False,
             )
 
             res_switch_btn.click(fn=None, _js="function(){switchWidthHeight('txt2img')}", inputs=None, outputs=None, show_progress=False)
