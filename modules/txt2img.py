@@ -119,15 +119,11 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery: list[di
     shared.total_tqdm.clear()
 
     new_gallery = []
-    new_gallery_index = gallery_index  # Track the index to auto-select
     for i, image in enumerate(_gallery):
         if i == gallery_index:
             if shared.opts.hires_button_gallery_insert:
                 new_gallery.append(image)
-                new_gallery_index = gallery_index + 1  # Select the first upscaled image
             new_gallery.extend(processed.images)
-            if not shared.opts.hires_button_gallery_insert:
-                new_gallery_index = gallery_index  # Select the replaced upscaled image
         else:
             new_gallery.append(image)
 
@@ -135,9 +131,6 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery: list[di
         geninfo["infotexts"].insert(gallery_index + 1, processed.info)
     else:
         geninfo["infotexts"][gallery_index] = processed.info
-
-    # Add the gallery index to select to the generation info for JavaScript to access
-    geninfo["selected_gallery_index"] = new_gallery_index
 
     return new_gallery, json.dumps(geninfo), plaintext_to_html(processed.info), plaintext_to_html(processed.comments, classname="comments")
 
