@@ -7,17 +7,19 @@ By using one single thread to process all major calls, model moving is significa
 import threading
 import time
 import traceback
+from typing import Callable
+
 from modules.shared import cmd_opts
 
 lock = threading.Lock()
 last_id = 0
-waiting_list = []
-finished_list = []
+waiting_list: list["Task"] = []
+finished_list: list["Task"] = []
 fps = 1.0 / max(1, cmd_opts.fps)
 
 
 class Task:
-    def __init__(self, task_id, func, args, kwargs):
+    def __init__(self, task_id: int, func: Callable, args: list, kwargs: dict):
         self.task_id = task_id
         self.func = func
         self.args = args
@@ -26,6 +28,16 @@ class Task:
 
     def work(self):
         self.result = self.func(*self.args, **self.kwargs)
+
+
+class DiscardTask(Task):
+    def work(self):
+        try:
+            self.func(*self.args, **self.kwargs)
+        finally:
+            del self.func
+            del self.args
+            del self.kwargs
 
 
 def loop():
@@ -40,11 +52,13 @@ def loop():
             except Exception as e:
                 traceback.print_exc()
                 print(e)
+            if isinstance(task, DiscardTask):
+                continue
             with lock:
                 finished_list.append(task)
 
 
-def async_run(func, *args, **kwargs):
+def _async_run(func, *args, **kwargs):
     global lock, last_id, waiting_list, finished_list
     with lock:
         last_id += 1
@@ -53,9 +67,17 @@ def async_run(func, *args, **kwargs):
     return new_task.task_id
 
 
+def async_run(func, *args, **kwargs):
+    global lock, last_id, waiting_list, finished_list
+    with lock:
+        last_id += 1
+        new_task = DiscardTask(task_id=last_id, func=func, args=args, kwargs=kwargs)
+        waiting_list.append(new_task)
+
+
 def run_and_wait_result(func, *args, **kwargs):
     global lock, last_id, waiting_list, finished_list
-    current_id = async_run(func, *args, **kwargs)
+    current_id = _async_run(func, *args, **kwargs)
     while True:
         time.sleep(fps)
         finished_task = None

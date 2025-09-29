@@ -51,7 +51,7 @@ def load_checkpoint_guess_config(sd, output_vae=True, output_clip=True, output_c
     clipvision = None
     vae = None
     model = None
-    model_patcher = None
+    unet = None
     clip_target = None
 
     parameters = ldm_patched.modules.utils.calculate_parameters(sd, "model.diffusion_model.")
@@ -78,10 +78,22 @@ def load_checkpoint_guess_config(sd, output_vae=True, output_clip=True, output_c
         model = model_config.get_model(sd, "model.diffusion_model.", device=initial_load_device)
         model.load_model_weights(sd, "model.diffusion_model.")
 
+        unet = UnetPatcher(
+            model,
+            load_device=load_device,
+            offload_device=model_management.unet_offload_device(),
+            current_device=initial_load_device,
+            weight_inplace_update=shared.opts.extra_networks_patch_inplace,
+        )
+        if initial_load_device != torch.device("cpu"):
+            print("loaded straight to GPU")
+            model_management.load_model_gpu(unet)
+
     if output_vae:
         vae_sd = ldm_patched.modules.utils.state_dict_prefix_replace(sd, {"first_stage_model.": ""}, filter_keys=True)
         vae_sd = model_config.process_vae_state_dict(vae_sd)
         vae = VAE(sd=vae_sd)
+        del vae_sd
 
     if output_clip:
         w = WeightsLoader()
@@ -96,19 +108,8 @@ def load_checkpoint_guess_config(sd, output_vae=True, output_clip=True, output_c
     if len(left_over) > 0:
         print("left over keys:", left_over)
 
-    if output_model:
-        model_patcher = UnetPatcher(
-            model,
-            load_device=load_device,
-            offload_device=model_management.unet_offload_device(),
-            current_device=initial_load_device,
-            weight_inplace_update=shared.opts.extra_networks_patch_inplace,
-        )
-        if initial_load_device != torch.device("cpu"):
-            print("loaded straight to GPU")
-            model_management.load_model_gpu(model_patcher)
-
-    return ForgeObjects(model_patcher, clip, vae, clipvision)
+    del sd
+    return ForgeObjects(unet, clip, vae, clipvision)
 
 
 @torch.no_grad()

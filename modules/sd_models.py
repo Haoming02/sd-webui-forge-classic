@@ -379,6 +379,7 @@ def send_model_to_trash(m):
     pass
 
 
+@torch.inference_mode()
 def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     from modules import sd_hijack
 
@@ -391,6 +392,8 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
             return model_data.sd_model
 
         model_management.unload_all_models()
+        sd_vae.delete_base_vae()
+        sd_vae.clear_loaded_vae()
 
         try:
             del model_data.sd_model.model.diffusion_model
@@ -414,7 +417,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
                 pass
 
         del model_data.sd_model
-        model_data.sd_model = None
+        model_management.soft_empty_cache()
         gc.collect()
 
     timer.record("unload existing model")
@@ -438,8 +441,6 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     shared.opts.data["sd_checkpoint_hash"] = checkpoint_info.sha256
 
-    sd_vae.delete_base_vae()
-    sd_vae.clear_loaded_vae()
     vae_file, vae_source = sd_vae.resolve_vae(checkpoint_info.filename).tuple()
     sd_vae.load_vae(sd_model, vae_file, vae_source)
     timer.record("load VAE")
@@ -455,8 +456,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     script_callbacks.model_loaded_callback(sd_model)
     timer.record("scripts callbacks")
 
-    with torch.inference_mode():
-        sd_model.cond_stage_model_empty_prompt = get_empty_cond(sd_model)
+    sd_model.cond_stage_model_empty_prompt = get_empty_cond(sd_model)
 
     timer.record("calculate empty prompt")
 
