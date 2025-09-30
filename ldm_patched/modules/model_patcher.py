@@ -491,8 +491,10 @@ class ModelPatcher:
 
         self.object_patches_backup.clear()
 
-    def __del__(self):
-        del self.patches
-        del self.object_patches
-        del self.model_options
+    def cleanup(self):
+        self.patches.clear()
+        self.backup.clear()
+        self.object_patches.clear()
+        self.object_patches_backup.clear()
+        self.model_options.clear()
         self.model = None

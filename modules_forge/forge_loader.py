@@ -35,12 +35,6 @@ class ForgeObjects:
         self.vae: VAE = vae
         self.clipvision: ModelPatcher = clipvision
 
-    def __del__(self):
-        del self.unet
-        del self.clip
-        del self.vae
-        del self.clipvision
-
     def shallow_copy(self):
         return ForgeObjects(self.unet, self.clip, self.vae, self.clipvision)
 
@@ -108,7 +102,6 @@ def load_checkpoint_guess_config(sd, output_vae=True, output_clip=True, output_c
     if len(left_over) > 0:
         print("left over keys:", left_over)
 
-    del sd
     return ForgeObjects(unet, clip, vae, clipvision)
 
 
