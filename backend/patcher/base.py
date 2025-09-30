@@ -268,11 +268,3 @@ class ModelPatcher:
             utils.set_attr_raw(self.model, k, self.object_patches_backup[k])
 
         self.object_patches_backup = {}
-        return
-
-    def cleanup(self):
-        self.lora_patches.clear()
-        self.object_patches.clear()
-        self.object_patches_backup.clear()
-        self.model_options.clear()
-        self.model = None
