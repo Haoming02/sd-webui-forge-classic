@@ -53,6 +53,11 @@ class ControlNetCachedParameters:
         self.control_cond_for_hr_fix = None
         self.control_mask = None
         self.control_mask_for_hr_fix = None
+        # For batch mode: store full tensor and batch config
+        self.control_cond_full = None
+        self.control_cond_for_hr_fix_full = None
+        self.batch_size = None
+        self.num_images = None
 
 
 class ControlNetForForgeOfficial(scripts.Script):
@@ -344,16 +349,56 @@ class ControlNetForForgeOfficial(scripts.Script):
             if input_mask is not None:
                 control_masks.append(input_mask)
 
+            # Note: Removed early break to allow all batch images to be processed
+            # Previous code would stop after first image if preprocessor output wasn't standard image format
             if len(input_list) > 1 and not preprocessor_output_is_image:
-                logger.info('Batch wise input only support controlnet, control-lora, and t2i adapters!')
-                break
+                logger.warning('Non-image preprocessor output detected in batch mode. Processing all images anyway.')
+                # Continue processing remaining images instead of breaking
 
         if has_high_res_fix:
             hr_option = HiResFixOption.from_value(unit.hr_option)
         else:
             hr_option = HiResFixOption.BOTH
 
-        alignment_indices = [i % len(preprocessor_outputs) for i in range(p.batch_size)]
+        # Fixed: Proper batch handling - when multiple images are provided, use 1:1 mapping
+        # instead of repeating/cycling through images
+        if len(input_list) > 1:
+            # Batch mode: each preprocessed image should map to one generation
+            # Memory optimization: Split into sub-batches using n_iter for better memory management
+            import math
+
+            num_images = len(preprocessor_outputs)
+            original_batch_size = p.batch_size
+            original_n_iter = p.n_iter
+
+            # Optimal batch size for memory (adjust based on VRAM - 2 for 8GB, 4 for 12GB+)
+            optimal_batch_size = 2
+
+            # Calculate how to split the images
+            if num_images <= optimal_batch_size:
+                # Small batch: process all at once
+                p.batch_size = num_images
+                p.n_iter = 1
+                alignment_indices = list(range(num_images))
+                params.batch_size = None  # Not using iteration-based batching
+                params.num_images = None
+            else:
+                # Large batch: split into iterations for memory efficiency
+                p.batch_size = optimal_batch_size
+                p.n_iter = math.ceil(num_images / optimal_batch_size)
+                # Store batch config for later slicing per iteration
+                params.batch_size = optimal_batch_size
+                params.num_images = num_images
+                # For now, create alignment for all images (will be sliced per iteration later)
+                alignment_indices = list(range(num_images))
+
+            if original_batch_size != p.batch_size or original_n_iter != p.n_iter:
+                logger.info(f'Batch mode: Processing {num_images} images as {p.n_iter} iteration(s) of {p.batch_size} (memory optimized)')
+        else:
+            # Single image mode: repeat the same control for batch_size generations
+            alignment_indices = [i % len(preprocessor_outputs) for i in range(p.batch_size)]
+            params.batch_size = None
+            params.num_images = None
         def attach_extra_result_image(img: np.ndarray, is_high_res: bool = False):
             if (
                 (is_high_res and hr_option.high_res_enabled) or
@@ -370,14 +415,40 @@ class ControlNetForForgeOfficial(scripts.Script):
                 attach_extra_result_image(external_code.visualize_inpaint_mask(control_cond))
                 params.control_cond.append(numpy_to_pytorch(control_cond).movedim(-1, 1))
 
-            params.control_cond = torch.cat(params.control_cond, dim=0)[alignment_indices].contiguous()
+            # Fixed: Add safety check for indexing
+            params.control_cond = torch.cat(params.control_cond, dim=0)
+
+            # Store full tensor for iteration-based batching
+            if params.num_images is not None:
+                params.control_cond_full = params.control_cond.contiguous()
+                # Don't slice yet - will be done per iteration in process_before_every_sampling
+            else:
+                # No iteration batching - use alignment as before
+                if len(alignment_indices) <= len(params.control_cond):
+                    params.control_cond = params.control_cond[alignment_indices].contiguous()
+                else:
+                    logger.warning(f"Batch size mismatch: {len(alignment_indices)} requested but only {len(params.control_cond)} control conditions available")
+                    params.control_cond = params.control_cond.contiguous()
 
             if has_high_res_fix:
                 for preprocessor_output in preprocessor_outputs:
                     control_cond_for_hr_fix = crop_and_resize_image(preprocessor_output, resize_mode, hr_y, hr_x)
                     attach_extra_result_image(external_code.visualize_inpaint_mask(control_cond_for_hr_fix), is_high_res=True)
                     params.control_cond_for_hr_fix.append(numpy_to_pytorch(control_cond_for_hr_fix).movedim(-1, 1))
-                params.control_cond_for_hr_fix = torch.cat(params.control_cond_for_hr_fix, dim=0)[alignment_indices].contiguous()
+                # Fixed: Add safety check for high-res indexing
+                params.control_cond_for_hr_fix = torch.cat(params.control_cond_for_hr_fix, dim=0)
+
+                # Store full tensor for iteration-based batching
+                if params.num_images is not None:
+                    params.control_cond_for_hr_fix_full = params.control_cond_for_hr_fix.contiguous()
+                    # Don't slice yet - will be done per iteration in process_before_every_sampling
+                else:
+                    # No iteration batching - use alignment as before
+                    if len(alignment_indices) <= len(params.control_cond_for_hr_fix):
+                        params.control_cond_for_hr_fix = params.control_cond_for_hr_fix[alignment_indices].contiguous()
+                    else:
+                        logger.warning(f"High-res batch size mismatch: {len(alignment_indices)} requested but only {len(params.control_cond_for_hr_fix)} available")
+                        params.control_cond_for_hr_fix = params.control_cond_for_hr_fix.contiguous()
             else:
                 params.control_cond_for_hr_fix = params.control_cond
         else:
@@ -451,6 +522,19 @@ class ControlNetForForgeOfficial(scripts.Script):
         if has_high_res_fix and (not is_hr_pass) and (not hr_option.low_res_enabled):
             logger.info(f"ControlNet Skipped Low-res pass.")
             return
+
+        # Fixed: Slice the appropriate portion of control tensor for this iteration
+        if params.num_images is not None and params.control_cond_full is not None:
+            iteration = getattr(p, 'iteration', 0)
+            start_idx = iteration * params.batch_size
+            end_idx = min(start_idx + params.batch_size, params.num_images)
+
+            # Slice the tensors for this iteration
+            params.control_cond = params.control_cond_full[start_idx:end_idx].contiguous()
+            if params.control_cond_for_hr_fix_full is not None:
+                params.control_cond_for_hr_fix = params.control_cond_for_hr_fix_full[start_idx:end_idx].contiguous()
+
+            logger.info(f"Batch iteration {iteration + 1}: Using images {start_idx} to {end_idx - 1}")
 
         if is_hr_pass:
             cond = params.control_cond_for_hr_fix
@@ -562,12 +646,20 @@ class ControlNetForForgeOfficial(scripts.Script):
     @torch.no_grad()
     def process_before_every_sampling(self, p, *args, **kwargs):
         for i, unit in enumerate(self.get_enabled_units(args)):
+            # Fixed: Handle case where params weren't cached due to earlier errors
+            if i not in self.current_params:
+                logger.warning(f"ControlNet unit {i} has no cached params (likely due to model load failure). Skipping.")
+                continue
             self.process_unit_before_every_sampling(p, unit, self.current_params[i], *args, **kwargs)
         return
 
     @torch.no_grad()
     def postprocess_batch_list(self, p, pp, *args, **kwargs):
         for i, unit in enumerate(self.get_enabled_units(args)):
+            # Fixed: Handle case where params weren't cached due to earlier errors
+            if i not in self.current_params:
+                logger.warning(f"ControlNet unit {i} has no cached params in postprocess. Skipping.")
+                continue
             self.process_unit_after_every_sampling(p, unit, self.current_params[i], pp, *args, **kwargs)
         return
 
