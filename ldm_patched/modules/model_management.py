@@ -440,7 +440,6 @@ class LoadedModel:
         else:
             self.model.unpatch_model(device_to=self.model.offload_device)
             self.model.model_patches_to(self.model.offload_device)
-            self.model.cleanup()
 
     def __eq__(self, other: "LoadedModel"):
         return self.model is other.model
