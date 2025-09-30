@@ -28,8 +28,3 @@ class CLIP:
 
     def add_patches(self, *arg, **kwargs):
         return self.patcher.add_patches(*arg, **kwargs)
-
-    def __del__(self):
-        del self.cond_stage_model
-        del self.tokenizer
-        del self.patcher

@@ -292,7 +292,3 @@ class VAE:
 
     def process_output(self, image):
         return torch.clamp((image + 1.0) / 2.0, min=0.0, max=1.0)
-
-    def __del__(self):
-        del self.first_stage_model
-        del self.patcher

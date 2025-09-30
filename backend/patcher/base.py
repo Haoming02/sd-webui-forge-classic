@@ -60,10 +60,7 @@ class ModelPatcher:
         self.load_device = load_device
         self.offload_device = offload_device
 
-        if not hasattr(model, "lora_loader"):
-            model.lora_loader = LoraLoader(model)
-
-        self.lora_loader: LoraLoader = model.lora_loader
+        self.lora_loader: LoraLoader = LoraLoader(self.model)
 
         if current_device is None:
             self.current_device = self.offload_device
@@ -273,10 +270,9 @@ class ModelPatcher:
         self.object_patches_backup = {}
         return
 
-    def __del__(self):
-        del self.model
-        del self.lora_patches
-        del self.object_patches
-        del self.object_patches_backup
-        del self.lora_loader
+    def cleanup(self):
+        self.lora_patches.clear()
+        self.object_patches.clear()
+        self.object_patches_backup.clear()
+        self.model_options.clear()
         self.model = None

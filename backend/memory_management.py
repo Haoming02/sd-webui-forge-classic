@@ -578,6 +578,7 @@ class LoadedModel:
         else:
             self.model.forge_unpatch_model(self.model.offload_device)
             self.model.model_patches_to(self.model.offload_device)
+            self.model.cleanup()
 
         self.model_finalizer.detach()
         self.model_finalizer = None
@@ -585,9 +586,6 @@ class LoadedModel:
 
     def __eq__(self, other: "LoadedModel"):
         return self.model is other.model
-
-    def __del__(self):
-        del self.model
 
 
 WINDOWS = any(platform.win32_ver())

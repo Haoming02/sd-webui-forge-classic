@@ -10,12 +10,6 @@ class ForgeObjects:
         self.vae = vae
         self.clipvision = clipvision
 
-    def __del__(self):
-        del self.unet
-        del self.clip
-        del self.vae
-        del self.clipvision
-
     def shallow_copy(self):
         return ForgeObjects(self.unet, self.clip, self.vae, self.clipvision)
 
