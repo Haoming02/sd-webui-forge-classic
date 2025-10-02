@@ -268,7 +268,7 @@ def create_ui():
                             scripts.scripts_txt2img.setup_ui_for_section(category)
                         
                         with gr.Row(elem_id="txt2img_sigma_shift_row"):
-                            sigma_shift = gr.Slider(minimum=0.5, maximum=8.0, step=0.1, label="Sigma Shift", value=1.0, elem_id="txt2img_sigma_shift", info="Flow Match noise schedule (1.0=default, 3.0=Lightning)", visible=False)
+                            sigma_shift = gr.Slider(minimum=0.5, maximum=8.0, step=0.1, label="Sigma Shift", value=1.0, elem_id="txt2img_sigma_shift", info="Flow Match noise schedule", visible=False)
 
                     elif category == "accordions":
                         with gr.Row(elem_id="txt2img_accordions", elem_classes="accordions"):
@@ -670,7 +670,7 @@ def create_ui():
                             scripts.scripts_img2img.setup_ui_for_section(category)
                         
                         with gr.Row(elem_id="img2img_sigma_shift_row"):
-                            img2img_sigma_shift = gr.Slider(minimum=0.5, maximum=8.0, step=0.1, label="Sigma Shift", value=1.0, elem_id="img2img_sigma_shift", info="Flow Match noise schedule (1.0=default, 3.0=Lightning)", visible=False)
+                            img2img_sigma_shift = gr.Slider(minimum=0.5, maximum=8.0, step=0.1, label="Sigma Shift", value=1.0, elem_id="img2img_sigma_shift", info="Flow Match noise schedule", visible=False)
 
                     elif category == "accordions":
                         with gr.Row(elem_id="img2img_accordions", elem_classes="accordions"):
