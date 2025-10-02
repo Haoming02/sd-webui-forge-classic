@@ -136,6 +136,7 @@ class StableDiffusionProcessing:
     steps: int = 50
     cfg_scale: float = 7.0
     distilled_cfg_scale: float = 3.5
+    sigma_shift: float = 1.0
     width: int = 512
     height: int = 512
     restore_faces: bool = None
@@ -736,6 +737,10 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
     firstpass_use_distilled_cfg_scale = getattr(p,'firstpass_use_distilled_cfg_scale', p.sd_model.use_distilled_cfg_scale)
     if firstpass_use_distilled_cfg_scale:
         generation_params['Distilled CFG Scale'] = p.distilled_cfg_scale
+    
+    # Add sigma shift to generation params if not default
+    if p.sigma_shift != 1.0:
+        generation_params['Sigma Shift'] = p.sigma_shift
 
     noise_source_type = get_noise_source_type()
 
@@ -842,6 +847,40 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
     return res
 
 
+def apply_sigma_shift_to_scheduler(model, sigma_shift: float):
+    """Apply sigma shift to Flow Match models (Qwen, Flux, Chroma)"""
+    if sigma_shift == 1.0:
+        return  # Skip if default value
+    
+    # Use predictor path (standard for Qwen/Flow models in this codebase)
+    if hasattr(model, 'forge_objects') and hasattr(model.forge_objects, 'unet'):
+        unet = model.forge_objects.unet
+        if hasattr(unet, 'model') and hasattr(unet.model, 'predictor'):
+            predictor = unet.model.predictor
+            if hasattr(predictor, 'set_parameters'):
+                print(f"Applying sigma shift via predictor: {sigma_shift}")
+                predictor.set_parameters(shift=sigma_shift)
+                return
+    
+    # Fallback: try scheduler path (for other possible architectures)
+    if hasattr(model, 'forge_objects') and hasattr(model.forge_objects, 'unet'):
+        unet = model.forge_objects.unet
+        if hasattr(unet, 'model') and hasattr(unet.model, 'diffusion_model'):
+            diffusion_model = unet.model.diffusion_model
+            if hasattr(diffusion_model, 'scheduler'):
+                scheduler = diffusion_model.scheduler
+                if hasattr(scheduler, 'config') and hasattr(scheduler.config, 'shift'):
+                    print(f"Applying sigma shift via scheduler: {sigma_shift}")
+                    scheduler.config.shift = sigma_shift
+                    if hasattr(scheduler, 'timesteps') and scheduler.timesteps is not None:
+                        num_steps = getattr(scheduler, 'num_inference_steps', None)
+                        if num_steps is not None:
+                            scheduler.set_timesteps(num_steps)
+                    return
+    
+    print(f"Warning: Could not apply sigma shift - no compatible predictor or scheduler found")
+
+
 def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     """this is the main loop that both txt2img and img2img use; it calls func_init once inside all the scopes and func_sample once per batch"""
 
@@ -917,6 +956,9 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                 sd_vae_approx.model()
 
             sd_unet.apply_unet()
+            
+            # Apply sigma shift for Flow Match schedulers
+            apply_sigma_shift_to_scheduler(shared.sd_model, p.sigma_shift)
 
         if state.job_count == -1:
             state.job_count = p.n_iter

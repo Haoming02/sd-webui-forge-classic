@@ -266,6 +266,9 @@ def create_ui():
                             cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.1, label="CFG Scale", value=7.0, elem_id="txt2img_cfg_scale", scale=4)
                             cfg_scale.change(lambda x: gr.update(interactive=(x != 1)), inputs=[cfg_scale], outputs=[toprow.negative_prompt], queue=False, show_progress=False)
                             scripts.scripts_txt2img.setup_ui_for_section(category)
+                        
+                        with gr.Row(elem_id="txt2img_sigma_shift_row"):
+                            sigma_shift = gr.Slider(minimum=0.5, maximum=8.0, step=0.1, label="Sigma Shift", value=1.0, elem_id="txt2img_sigma_shift", info="Flow Match noise schedule (1.0=default, 3.0=Lightning)", visible=False)
 
                     elif category == "accordions":
                         with gr.Row(elem_id="txt2img_accordions", elem_classes="accordions"):
@@ -371,6 +374,7 @@ def create_ui():
                 batch_size,
                 cfg_scale,
                 distilled_cfg_scale,
+                sigma_shift,
                 height,
                 width,
                 enable_hr,
@@ -450,6 +454,7 @@ def create_ui():
                 PasteField(toprow.negative_prompt, "Negative prompt", api="negative_prompt"),
                 PasteField(cfg_scale, "CFG scale", api="cfg_scale"),
                 PasteField(distilled_cfg_scale, "Distilled CFG Scale", api="distilled_cfg_scale"),
+                PasteField(sigma_shift, "Sigma Shift", api="sigma_shift"),
                 PasteField(width, "Size-1", api="width"),
                 PasteField(height, "Size-2", api="height"),
                 PasteField(batch_size, "Batch size", api="batch_size"),
@@ -663,6 +668,9 @@ def create_ui():
                             image_cfg_scale = gr.Slider(minimum=0, maximum=3.0, step=0.05, label="Image CFG Scale", value=1.5, elem_id="img2img_image_cfg_scale", visible=False)
                             cfg_scale.change(lambda x: gr.update(interactive=(x != 1)), inputs=[cfg_scale], outputs=[toprow.negative_prompt], queue=False, show_progress=False)
                             scripts.scripts_img2img.setup_ui_for_section(category)
+                        
+                        with gr.Row(elem_id="img2img_sigma_shift_row"):
+                            img2img_sigma_shift = gr.Slider(minimum=0.5, maximum=8.0, step=0.1, label="Sigma Shift", value=1.0, elem_id="img2img_sigma_shift", info="Flow Match noise schedule (1.0=default, 3.0=Lightning)", visible=False)
 
                     elif category == "accordions":
                         with gr.Row(elem_id="img2img_accordions", elem_classes="accordions"):
@@ -740,6 +748,7 @@ def create_ui():
                 batch_size,
                 cfg_scale,
                 distilled_cfg_scale,
+                img2img_sigma_shift,
                 image_cfg_scale,
                 denoising_strength,
                 selected_scale_tab,
@@ -808,7 +817,7 @@ def create_ui():
             toprow.token_button.click(fn=update_token_counter, inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.negative_token_button.click(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
 
-            img2img_paste_fields = [(toprow.prompt, "Prompt"), (toprow.negative_prompt, "Negative prompt"), (cfg_scale, "CFG scale"), (distilled_cfg_scale, "Distilled CFG Scale"), (image_cfg_scale, "Image CFG scale"), (width, "Size-1"), (height, "Size-2"), (batch_size, "Batch size"), (toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.update()), (denoising_strength, "Denoising strength"), (mask_blur, "Mask blur"), (inpainting_mask_invert, "Mask mode"), (inpainting_fill, "Masked content"), (inpaint_full_res, "Inpaint area"), (inpaint_full_res_padding, "Masked area padding"), *scripts.scripts_img2img.infotext_fields]
+            img2img_paste_fields = [(toprow.prompt, "Prompt"), (toprow.negative_prompt, "Negative prompt"), (cfg_scale, "CFG scale"), (distilled_cfg_scale, "Distilled CFG Scale"), (img2img_sigma_shift, "Sigma Shift"), (image_cfg_scale, "Image CFG scale"), (width, "Size-1"), (height, "Size-2"), (batch_size, "Batch size"), (toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.update()), (denoising_strength, "Denoising strength"), (mask_blur, "Mask blur"), (inpainting_mask_invert, "Mask mode"), (inpainting_fill, "Masked content"), (inpaint_full_res, "Inpaint area"), (inpaint_full_res_padding, "Masked area padding"), *scripts.scripts_img2img.infotext_fields]
             parameters_copypaste.add_paste_fields("img2img", init_img.background, img2img_paste_fields, override_settings)
             parameters_copypaste.add_paste_fields("inpaint", init_img_with_mask.background, img2img_paste_fields, override_settings)
             parameters_copypaste.register_paste_params_button(

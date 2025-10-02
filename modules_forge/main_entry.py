@@ -261,6 +261,10 @@ def forge_main_entry():
 
     ui_txt2img_batch_size = get_a1111_ui_component("txt2img", "Batch size")
     ui_img2img_batch_size = get_a1111_ui_component("img2img", "Batch size")
+    
+    # Get sigma shift components
+    ui_txt2img_sigma_shift = get_a1111_ui_component("txt2img", "Sigma Shift")
+    ui_img2img_sigma_shift = get_a1111_ui_component("img2img", "Sigma Shift")
 
     output_targets = [
         ui_checkpoint,
@@ -286,6 +290,8 @@ def forge_main_entry():
         ui_txt2img_hr_distilled_cfg,
         ui_txt2img_batch_size,
         ui_img2img_batch_size,
+        ui_txt2img_sigma_shift,
+        ui_img2img_sigma_shift,
     ]
 
     ui_forge_preset.change(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False).then(js="clickLoraRefresh", fn=None, queue=False, show_progress=False)
@@ -309,6 +315,10 @@ def on_preset_change(preset: str):
     distilled = preset in ("flux", "wan")
     d_label = "Distilled CFG Scale" if preset == "flux" else "Shift"
     batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch size", "value": 1}
+    
+    # Show sigma shift for Flow Match models (Qwen, Flux, Chroma)
+    show_sigma_shift = preset in ("qwen", "flux", "chroma")
+    sigma_shift_default = 1.0  # Default for all models
 
     additional_modules = [os.path.basename(x) for x in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]
 
@@ -336,4 +346,6 @@ def on_preset_change(preset: str):
         gr.update(visible=distilled, label=d_label, value=getattr(shared.opts, f"{preset}_t2i_hr_d_cfg", 3.0)),  # ui_txt2img_hr_distilled_cfg
         gr.update(**batch_args),  # ui_txt2img_batch_size
         gr.update(**batch_args),  # ui_img2img_batch_size
+        gr.update(visible=show_sigma_shift, value=sigma_shift_default),  # ui_txt2img_sigma_shift
+        gr.update(visible=show_sigma_shift, value=sigma_shift_default),  # ui_img2img_sigma_shift
     ]
