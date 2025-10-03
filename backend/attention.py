@@ -28,6 +28,14 @@ if memory_management.sage_enabled():
 
     IS_SAGE_2 = importlib.metadata.version("sageattention").startswith("2")
 
+    if IS_SAGE_2 and args.sage2_fp16_triton:
+        from functools import partial
+        import sageattention
+
+        _function = getattr(sageattention, f"sageattn_qk_int8_pv_fp16_triton")
+        sageattn = partial(_function, quantization_backend="triton")
+
+
 if memory_management.flash_enabled():
     from flash_attn import flash_attn_func
 
@@ -364,7 +372,7 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
 
 
 if memory_management.sage_enabled():
-    print(f"Using SageAttention {'2' if IS_SAGE_2 else ''}")
+    print(f"Using SageAttention{' 2' if IS_SAGE_2 else ''}{' with fp16_triton function' if args.sage2_fp16_triton else ''}")
     attention_function = attention_sage
 elif memory_management.flash_enabled():
     print("Using FlashAttention")

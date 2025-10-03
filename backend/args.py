@@ -65,6 +65,8 @@ parser.add_argument("--fast-fp16", action="store_true")
 parser.add_argument("--mmap-torch-files", action="store_true")
 parser.add_argument("--disable-mmap", action="store_true")
 
+parser.add_argument("--sage2-fp16-triton", action="store_true")
+
 args, _ = parser.parse_known_args()
 
 dynamic_args = dict(embedding_dir="./embeddings", emphasis_name="original")
