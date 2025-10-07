@@ -27,6 +27,7 @@ parser.add_argument("--ckpt-dir", type=normalized_filepath, default=None, help="
 parser.add_argument("--vae-dir", type=normalized_filepath, default=None, help="Path to directory with VAE files")
 parser.add_argument("--gfpgan-dir", type=normalized_filepath, help="GFPGAN directory", default=("./src/gfpgan" if os.path.exists("./src/gfpgan") else "./GFPGAN"))
 parser.add_argument("--gfpgan-model", type=normalized_filepath, help="GFPGAN model file name", default=None)
+parser.add_argument("--nf4", action="store_true", help="load unet and vae in 4-bit precision")
 parser.add_argument("--no-half", action="store_true", help="do not switch the model to 16-bit floats")
 parser.add_argument("--embeddings-dir", type=normalized_filepath, default=os.path.join(models_path, "embeddings"), help="textual inversion directory")
 parser.add_argument("--localizations-dir", type=normalized_filepath, default=os.path.join(script_path, "localizations"), help="localizations directory")

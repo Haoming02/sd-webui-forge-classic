@@ -9,9 +9,16 @@ import ldm_patched.modules.utils
 import ldm_patched.taesd.taesd
 from ldm_patched.ldm.models.autoencoder import AutoencoderKL
 from ldm_patched.modules import model_management
-from modules.shared import opts
+from modules.shared import cmd_opts, opts
 
 from . import diffusers_convert
+
+try:
+    from accelerate.utils import BnbQuantizationConfig, load_and_quantize_model
+except ImportError:
+    use_nf4 = False
+else:
+    use_nf4 = cmd_opts.nf4
 
 
 def load_model_weights(model, sd):
@@ -194,16 +201,32 @@ class VAE:
         offload_device = model_management.vae_offload_device()
         if dtype is None:
             dtype = model_management.vae_dtype()
+        if use_nf4:
+            dtype = torch.float16
         print("VAE dtype:", dtype)
         self.vae_dtype = dtype
         self.first_stage_model.to(self.vae_dtype)
         self.output_device = model_management.intermediate_device()
+
+        if use_nf4:
+            self.first_stage_model = load_and_quantize_model(
+                self.first_stage_model,
+                bnb_quantization_config=BnbQuantizationConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype="fp16",
+                    torch_dtype="fp16",
+                ),
+            ).eval()
 
         self.patcher = ldm_patched.modules.model_patcher.ModelPatcher(
             self.first_stage_model,
             load_device=self.device,
             offload_device=offload_device,
         )
+
+        if use_nf4:
+            model_management.load_model_gpu(self.patcher)
 
     def clone(self):
         n = VAE(no_init=True)

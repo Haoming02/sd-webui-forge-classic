@@ -335,6 +335,14 @@ def prepare_environment():
         run_pip(f'install -r "{requirements_file}"', "requirements")
         startup_timer.record("install requirements")
 
+    if args.nf4:
+        if not is_installed("accelerate"):
+            acc_package = os.environ.get("ACC_PACKAGE", "accelerate==1.10.1")
+            run_pip(f"install {acc_package}", "accelerate")
+        if not is_installed("bitsandbytes"):
+            bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.48.1")
+            run_pip(f"install {bnb_package}", "bitsandbytes")
+
     if not is_installed("insightface"):
         try:
             run_pip(f"install --no-deps {insightface_package}", "insightface")

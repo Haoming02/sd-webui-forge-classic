@@ -1,4 +1,5 @@
 import contextlib
+import logging
 
 import torch
 from omegaconf import OmegaConf
@@ -15,6 +16,14 @@ from modules.sd_models_config import find_checkpoint_config
 from modules.sd_models_types import WebuiSdModel
 from modules_forge import forge_clip
 from modules_forge.unet_patcher import UnetPatcher
+
+try:
+    from accelerate.utils import BnbQuantizationConfig, load_and_quantize_model
+except ImportError:
+    use_nf4 = False
+else:
+    use_nf4 = shared.cmd_opts.nf4
+    logging.getLogger("accelerate.utils.bnb").setLevel(logging.ERROR)
 
 
 class FakeObject:
@@ -67,10 +76,26 @@ def load_checkpoint_guess_config(sd, output_vae=True, output_clip=True, output_c
             clipvision = ldm_patched.modules.clip_vision.load_clipvision_from_sd(sd, model_config.clip_vision_prefix, True)
 
     if output_model:
-        initial_load_device = model_management.unet_initial_load_device(parameters, unet_dtype)
-        print("UNet dtype:", unet_dtype)
+        if use_nf4:
+            initial_load_device = load_device
+            print("UNet dtype:", "nf4 (LoRA is not Supported)")
+        else:
+            initial_load_device = model_management.unet_initial_load_device(parameters, unet_dtype)
+            print("UNet dtype:", unet_dtype)
+
         model = model_config.get_model(sd, "model.diffusion_model.", device=initial_load_device)
         model.load_model_weights(sd, "model.diffusion_model.")
+
+        if use_nf4:
+            model = load_and_quantize_model(
+                model,
+                bnb_quantization_config=BnbQuantizationConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype="fp16",
+                    torch_dtype="fp16",
+                ),
+            ).eval()
 
         unet = UnetPatcher(
             model,
