@@ -1,10 +1,13 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
+
 import collections
 import glob
 import os
 from copy import deepcopy
 from dataclasses import dataclass
-
-import torch
 
 from modules import extra_networks, hashes, paths, script_callbacks, sd_hijack, sd_models, sd_samplers_common, shared  # noqa
 
@@ -13,7 +16,7 @@ vae_ignore_keys = {"model_ema.decay", "model_ema.num_updates"}
 vae_dict = {}
 
 
-base_vae: collections.OrderedDict[str, torch.Tensor] = None
+base_vae: collections.OrderedDict[str, "torch.Tensor"] = None
 loaded_vae_file: os.PathLike = None
 checkpoint_info: "sd_models.CheckpointInfo" = None
 
@@ -234,7 +237,7 @@ def load_vae(model, vae_file=None, vae_source="from unknown source"):
     model.loaded_vae_file = loaded_vae_file
 
 
-@torch.inference_mode()
+# don't call this from outside
 def _load_vae_dict(model, vae_dict_1):
     model.first_stage_model.load_state_dict(vae_dict_1)
 
