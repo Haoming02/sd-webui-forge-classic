@@ -47,6 +47,7 @@ __pycache__
 /ui-config.json
 /user.css
 /venv
+/venv_broken
 /webui-user.bat
 /webui-user.sh
 /webui.settings.bat

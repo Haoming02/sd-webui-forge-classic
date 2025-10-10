@@ -654,7 +654,7 @@ def create_ui():
                                     batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="img2img_batch_size")
 
                     elif category == "denoising":
-                        denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.75, elem_id="img2img_denoising_strength")
+                        denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.60, elem_id="img2img_denoising_strength")
 
                     elif category == "cfg":
                         with gr.Row():

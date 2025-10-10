@@ -1200,7 +1200,7 @@ def old_hires_fix_first_pass_dimensions(width, height):
 @dataclass(repr=False)
 class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
     enable_hr: bool = False
-    denoising_strength: float = 0.75
+    denoising_strength: float = 0.60
     firstphase_width: int = 0
     firstphase_height: int = 0
     hr_scale: float = 2.0
@@ -1654,7 +1654,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     init_images: list = None
     resize_mode: int = 0
-    denoising_strength: float = 0.75
+    denoising_strength: float = 0.60
     image_cfg_scale: float = None
     mask: Any = None
     mask_blur_x: int = 4

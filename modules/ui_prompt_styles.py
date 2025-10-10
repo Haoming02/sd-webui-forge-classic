@@ -14,16 +14,25 @@ def select_style(name):
 
     prompt = style.prompt if style else gr.update()
     negative_prompt = style.negative_prompt if style else gr.update()
+    original_name = name if existing else ""
 
-    return prompt, negative_prompt, gr.update(visible=existing), gr.update(visible=not empty)
+    return prompt, negative_prompt, gr.update(visible=existing), gr.update(visible=not empty), original_name
 
 
-def save_style(name, prompt, negative_prompt):
+def save_style(name, prompt, negative_prompt, original_name):
     if not name:
         return gr.update(visible=False)
 
-    existing_style = shared.prompt_styles.styles.get(name)
-    path = existing_style.path if existing_style is not None else None
+    # Check if this is a rename operation
+    if original_name and original_name != name and original_name in shared.prompt_styles.styles:
+        # Remove the old style entry
+        old_style = shared.prompt_styles.styles.pop(original_name)
+        # Use the path from the old style
+        path = old_style.path
+    else:
+        # Not a rename, check if updating existing style
+        existing_style = shared.prompt_styles.styles.get(name)
+        path = existing_style.path if existing_style is not None else None
 
     style = styles.PromptStyle(name, prompt, negative_prompt, path)
     shared.prompt_styles.styles[style.name] = style
@@ -81,16 +90,19 @@ class UiPromptStyles:
                 self.delete = gr.Button('Delete', variant='primary', elem_id=f'{tabname}_edit_style_delete', visible=False)
                 self.close = gr.Button('Close', variant='secondary', elem_id=f'{tabname}_edit_style_close')
 
+            # Hidden textbox to track the original style name for rename detection
+            self.original_name = gr.Textbox(value="", visible=False)
+
         self.selection.change(
             fn=select_style,
             inputs=[self.selection],
-            outputs=[self.prompt, self.neg_prompt, self.delete, self.save],
+            outputs=[self.prompt, self.neg_prompt, self.delete, self.save, self.original_name],
             show_progress=False,
         )
 
         self.save.click(
             fn=save_style,
-            inputs=[self.selection, self.prompt, self.neg_prompt],
+            inputs=[self.selection, self.prompt, self.neg_prompt, self.original_name],
             outputs=[self.delete],
             show_progress=False,
         ).then(refresh_styles, outputs=[self.dropdown, self.selection], show_progress=False)
