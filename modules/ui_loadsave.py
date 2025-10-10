@@ -55,7 +55,7 @@ class UiLoadsave:
             if saved_value is None:
                 value_in_gradio = getattr(obj, field)
                 if isinstance(obj, gr.Textbox) and field == 'value' and value_in_gradio is None:
-                    value_in_gradio = ''  # Gradio 4 fix: https://github.com/lllyasviel/stable-diffusion-webui-forge/issues/880
+                    value_in_gradio = ''  # Gradio 4 fix: https://github.com/SillySilk/sd-webui-forge-classic/issues/880
                 self.ui_settings[key] = value_in_gradio
             elif condition and not condition(saved_value):
                 pass

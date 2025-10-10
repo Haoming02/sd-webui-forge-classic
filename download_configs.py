@@ -1,4 +1,4 @@
-# reference: https://github.com/lllyasviel/stable-diffusion-webui-forge/blob/main/download_supported_configs.py
+# reference: https://github.com/SillySilk/sd-webui-forge-classic/blob/neo/download_supported_configs.py
 
 import os
 import shutil

@@ -1,7 +1,7 @@
 <h1 align="center">Stable Diffusion WebUI Forge - Neo</h1>
 
 <p align="center"><sup>
-[ <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/classic#stable-diffusion-webui-forge---classic">Classic</a> | Neo ]
+[ <a href="https://github.com/SillySilk/sd-webui-forge-classic/tree/classic#stable-diffusion-webui-forge---classic">Classic</a> | Neo ]
 </sup></p>
 
 <p align="center"><img src="html\ui.webp" width=512 alt="UI"></p>
@@ -219,7 +219,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 0. Install **[git](https://git-scm.com/downloads)**
 1. Clone the Repo
     ```bash
-    git clone https://github.com/Haoming02/sd-webui-forge-classic sd-webui-forge-neo --branch neo
+    git clone https://github.com/SillySilk/sd-webui-forge-classic sd-webui-forge-neo --branch neo
     ```
 
 2. Setup Python
