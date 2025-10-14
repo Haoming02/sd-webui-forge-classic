@@ -432,8 +432,11 @@ class ControlNetUiGroup(object):
             )
 
         with gr.Row(elem_classes=["controlnet_preprocessor_model", "controlnet_row"]):
+            all_preprocessors = global_state.get_all_preprocessor_names()
+            all_models = global_state.get_all_controlnet_names()
+
             self.module = gr.Dropdown(
-                global_state.get_all_preprocessor_names(),
+                all_preprocessors,
                 label=f"Preprocessor",
                 value=self.default_unit.module,
                 elem_id=f"{elem_id_tabname}_{tabname}_controlnet_preprocessor_dropdown",
@@ -446,7 +449,7 @@ class ControlNetUiGroup(object):
                 tooltip=ControlNetUiGroup.tooltips[ControlNetUiGroup.trigger_symbol],
             )
             self.model = gr.Dropdown(
-                global_state.get_all_controlnet_names(),
+                all_models,
                 label=f"Model",
                 value=self.default_unit.model,
                 elem_id=f"{elem_id_tabname}_{tabname}_controlnet_model_dropdown",
@@ -687,19 +690,23 @@ class ControlNetUiGroup(object):
             build_sliders, inputs=inputs, outputs=outputs, show_progress=False
         )
 
-        def filter_selected(k: str):
-            logger.debug(f"Prevent update {self.prevent_next_n_module_update}")
-            logger.debug(f"Switch to control type {k}")
-
+        def filter_selected(k: str, current_module: str, current_model: str):
             filtered_preprocessor_list = global_state.get_filtered_preprocessor_names(k)
             filtered_controlnet_names = global_state.get_filtered_controlnet_names(k)
-            default_preprocessor = filtered_preprocessor_list[0]
-            default_controlnet_name = filtered_controlnet_names[0]
 
-            if k != 'All':
-                if len(filtered_preprocessor_list) > 1:
+            # Preserve current values if they're valid (not "None") and in the filtered lists
+            if current_module != "None" and current_module in filtered_preprocessor_list:
+                default_preprocessor = current_module
+            else:
+                default_preprocessor = filtered_preprocessor_list[0]
+                if k != 'All' and len(filtered_preprocessor_list) > 1:
                     default_preprocessor = filtered_preprocessor_list[1]
-                if len(filtered_controlnet_names) > 1:
+
+            if current_model != "None" and current_model in filtered_controlnet_names:
+                default_controlnet_name = current_model
+            else:
+                default_controlnet_name = filtered_controlnet_names[0]
+                if k != 'All' and len(filtered_controlnet_names) > 1:
                     default_controlnet_name = filtered_controlnet_names[1]
 
             if self.prevent_next_n_module_update > 0:
@@ -720,7 +727,7 @@ class ControlNetUiGroup(object):
 
         self.type_filter.change(
             fn=filter_selected,
-            inputs=[self.type_filter],
+            inputs=[self.type_filter, self.module, self.model],
             outputs=[self.module, self.model],
             show_progress=False,
         )

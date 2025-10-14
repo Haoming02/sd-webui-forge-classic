@@ -76,7 +76,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         max_models = shared.opts.data.get("control_net_unit_count", 3)
         gen_type = "img2img" if is_img2img else "txt2img"
         elem_id_tabname = gen_type + "_controlnet"
-        default_unit = ControlNetUnit(enabled=False, module="None", model="None")
+        default_unit = ControlNetUnit()  # enabled, module and model will use dataclass defaults
         with gr.Group(elem_id=elem_id_tabname):
             with gr.Accordion(f"ControlNet Integrated", open=False, elem_id="controlnet",
                               elem_classes=["controlnet"]):
@@ -603,10 +603,20 @@ class ControlNetForForgeOfficial(scripts.Script):
         Checks and corrects negative parameters in ControlNetUnit 'unit'.
         Parameters 'processor_res', 'threshold_a', 'threshold_b' are reset to
         their default values if negative.
+        Also applies defaults for module and model if they are "None".
 
         Args:
             unit (ControlNetUnit): The ControlNetUnit instance to check.
         """
+        # Apply defaults for module and model if they are "None"
+        if unit.module == "None":
+            unit.module = "lineart_standard (from white bg & black line)"
+            logger.info(f"Applied default preprocessor: {unit.module}")
+
+        if unit.model == "None":
+            unit.model = "mistoline_v10 [0f320932]"
+            logger.info(f"Applied default model: {unit.model}")
+
         preprocessor = global_state.get_preprocessor(unit.module)
 
         if unit.processor_res < 0:

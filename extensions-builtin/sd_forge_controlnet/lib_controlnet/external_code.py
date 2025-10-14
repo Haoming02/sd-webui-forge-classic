@@ -166,8 +166,8 @@ class ControlNetUnit:
     mask_image_fg: Optional[GradioImageMaskPair] = None
     hr_option: Union[HiResFixOption, int, str] = HiResFixOption.BOTH
     enabled: bool = True
-    module: str = "None"
-    model: str = "None"
+    module: str = "lineart_standard (from white bg & black line)"
+    model: str = "mistoline_v10 [0f320932]"
     weight: float = 1.0
     image: Optional[GradioImageMaskPair] = None
     image_fg: Optional[GradioImageMaskPair] = None
