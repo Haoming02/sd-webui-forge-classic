@@ -1,7 +1,9 @@
+import math
+
 import torch
 from huggingface_guess import model_list
 
-from backend import memory_management
+from backend import args, memory_management
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.modules.k_prediction import PredictionDiscreteFlow
 from backend.patcher.clip import CLIP
@@ -37,12 +39,25 @@ class QwenImage(ForgeDiffusionEngine):
 
         self.is_wan = True
 
+        self.images_vl = []
+        self.ref_latents = []
+        self.image_prompt = []
+
     def set_clip_skip(self, clip_skip):
         pass
 
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
+        if not prompt.is_negative_prompt and self.image_prompt:
+            assert len(self.images_vl) == len(self.ref_latents) == len(self.image_prompt)
+            cond = self.text_processing_engine_qwen(["\n".join([*self.image_prompt, *prompt])], images=self.images_vl.copy())
+            args.dynamic_args["ref_latents"] = self.ref_latents.copy()
+            self.images_vl.clear()
+            self.ref_latents.clear()
+            self.image_prompt.clear()
+            return cond
+
         return self.text_processing_engine_qwen(prompt)
 
     @torch.inference_mode()
@@ -51,8 +66,34 @@ class QwenImage(ForgeDiffusionEngine):
         return token_count, max(999, token_count)
 
     @torch.inference_mode()
+    def image_to_edit(self, image):
+        samples = image.movedim(-1, 1)  # b, c, h, w
+
+        total = int(384 * 384)
+        scale_by = math.sqrt(total / (samples.shape[3] * samples.shape[2]))
+        width = round(samples.shape[3] * scale_by)
+        height = round(samples.shape[2] * scale_by)
+
+        s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
+        self.images_vl.append(s.movedim(1, -1))
+
+        total = int(1024 * 1024)
+        scale_by = math.sqrt(total / (samples.shape[3] * samples.shape[2]))
+        width = round(samples.shape[3] * scale_by / 8.0) * 8
+        height = round(samples.shape[2] * scale_by / 8.0) * 8
+
+        s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
+        self.ref_latents.append(self.forge_objects.vae.encode(s.movedim(1, -1)[:, :, :, :3]))
+
+        self.image_prompt.append(f"Picture {len(self.images_vl)}: <|vision_start|><|image_pad|><|vision_end|>")
+
+    @torch.inference_mode()
     def encode_first_stage(self, x):
-        sample = self.forge_objects.vae.encode(x.movedim(2, -1) * 0.5 + 0.5)
+        if x.size(0) > 1:
+            x = x[0].unsqueeze(0)  # enforce batch_size of 1
+        start_image = x.movedim(1, -1) * 0.5 + 0.5
+        self.image_to_edit(start_image)
+        sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
         return sample.to(x)
 
