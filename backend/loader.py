@@ -566,6 +566,7 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
 
     repo_name = estimated_config.huggingface_repo
     backend.args.dynamic_args["kontext"] = "kontext" in str(sd).lower()
+    backend.args.dynamic_args["edit"] = "qwen" in str(sd).lower() and "edit" in str(sd).lower()
     backend.args.dynamic_args["nunchaku"] = getattr(estimated_config, "nunchaku", False)
 
     if getattr(estimated_config, "nunchaku", False):

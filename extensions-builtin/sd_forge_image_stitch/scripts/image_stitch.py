@@ -15,12 +15,12 @@ from modules.sd_samplers_common import approximation_indexes, images_tensor_to_s
 from modules.shared import device, opts
 
 t2i_info = """
-For <b>Flux-Kontext</b> Only<br>
-Use in <b>txt2img</b> to achieve the effect of EmptySD3LatentImage with custom resolution
+For <b>Flux-Kontext</b> and <b>Qwen-Image-Edit</b><br>
+Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution
 """
 
 i2i_info = """
-For <b>Flux-Kontext</b> Only<br>
+For <b>Flux-Kontext</b> and <b>Qwen-Image-Edit</b><br>
 Use in <b>img2img</b> to achieve the effect of 2 input images<br>
 <b>NOTE:</b> This doesn't actually stitch the images, so use "1st/2nd" instead of "left/right" in prompts
 """
@@ -58,8 +58,7 @@ class ImageStitch(scripts.Script):
     def process(self, p: "StableDiffusionProcessing", reference: "Image.Image"):
         if reference is None:
             return
-        if not dynamic_args.get("kontext", False):
-            # print("\nImageStitch only works with Flux-Kontext!\n")
+        if not any(dynamic_args[key] for key in ("kontext", "edit")):
             return
 
         image = images.flatten(reference, opts.img2img_background_color)
@@ -67,8 +66,11 @@ class ImageStitch(scripts.Script):
         image = np.moveaxis(image, 2, 0)
         image = torch.from_numpy(image).to(device=device, dtype=torch.float32)
 
-        dynamic_args["ref_latents"] = images_tensor_to_samples(
+        ref = images_tensor_to_samples(
             image.unsqueeze(0),
             approximation_indexes.get(opts.sd_vae_encode_method),
             p.sd_model,
         )
+
+        if dynamic_args["kontext"]:
+            dynamic_args["ref_latents"] = ref
