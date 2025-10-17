@@ -110,7 +110,7 @@ class QwenTextProcessingEngine:
                         multipliers += [1.0] * remaining_count
 
                     z = self.process_tokens([tokens], [multipliers])[0]
-                    z = self.postprocess_tokens(z, tokens)
+                    z = self.strip_template(z, tokens)
                     line_z_values.append(z)
                 cache[line] = line_z_values
 
@@ -118,8 +118,7 @@ class QwenTextProcessingEngine:
 
         return torch.stack(zs)
 
-    def postprocess_tokens(self, out, tokens):
-        """strip the llama_template"""
+    def strip_template(self, out, tokens):
         template_end = 0
         count_im_start = 0
 
@@ -171,12 +170,7 @@ class QwenTextProcessingEngine:
             embeds_info = []
 
             for o in other_embeds:
-                emb = o[1]
-
-                extra = None
-                emb_type = emb.get("type", None)
-                emb, extra = self.text_encoder.preprocess_embed(emb, device=device)
-
+                emb, extra = self.text_encoder.preprocess_embed(o[1], device=device)
                 if emb is None:
                     index += -1
                     continue
@@ -189,6 +183,7 @@ class QwenTextProcessingEngine:
                 tokens_embed = torch.cat([tokens_embed[:, :ind], emb, tokens_embed[:, ind:]], dim=1)
                 attention_mask = attention_mask[:ind] + [1] * emb_shape + attention_mask[ind:]
                 index += emb_shape - 1
+                emb_type = o[1].get("type", None)
                 embeds_info.append({"type": emb_type, "index": ind, "size": emb_shape, "extra": extra})
 
             embeds_out.append(tokens_embed)
@@ -199,7 +194,5 @@ class QwenTextProcessingEngine:
 
     def process_tokens(self, batch_tokens, batch_multipliers):
         embeds, mask, count, info = self.process_embeds(batch_tokens)
-
-        z, _ = self.text_encoder(x=None, attention_mask=mask, embeds=embeds, num_tokens=count, embeds_info=info)
-
+        z, _ = self.text_encoder(x=None, embeds=embeds, attention_mask=mask, num_tokens=count, embeds_info=info)
         return z

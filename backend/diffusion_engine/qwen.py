@@ -72,7 +72,7 @@ class QwenImage(ForgeDiffusionEngine):
         return token_count, max(999, token_count)
 
     @torch.inference_mode()
-    def image_to_edit(self, image):
+    def encode_vision(self, image):
         samples = image.movedim(-1, 1)  # b, c, h, w
 
         total = int(384 * 384)
@@ -98,7 +98,7 @@ class QwenImage(ForgeDiffusionEngine):
         if x.size(0) > 1:
             x = x[0].unsqueeze(0)  # enforce batch_size of 1
         start_image = x.movedim(1, -1) * 0.5 + 0.5
-        self.image_to_edit(start_image)
+        self.encode_vision(start_image)
         sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
         return sample.to(x)
