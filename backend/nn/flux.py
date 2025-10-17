@@ -424,7 +424,7 @@ class IntegratedFluxTransformer2DModel(nn.Module):
                 else:
                     h_offset = h
 
-                kontext, kontext_ids = process_img(ref, index=1, h_offset=h_offset, w_offset=w_offset)
+                kontext, kontext_ids = process_img(ref.to(x), index=1, h_offset=h_offset, w_offset=w_offset)
                 img = torch.cat([img, kontext], dim=1)
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
                 h = max(h, ref.shape[-2] + h_offset)
