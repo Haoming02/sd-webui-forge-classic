@@ -15,6 +15,7 @@ if xformers_enabled():
 else:
     from backend.attention import attention_pytorch as attention_function
 
+from backend.args import dynamic_args
 from backend.nn.flux import EmbedND
 from backend.utils import pad_to_patch_size
 
@@ -399,6 +400,9 @@ class QwenImageTransformer2DModel(nn.Module):
 
         hidden_states, img_ids, orig_shape = self.process_img(x)
         num_embeds = hidden_states.shape[1]
+
+        if dynamic_args.get("ref_latents", None) is not None:
+            ref_latents = dynamic_args["ref_latents"]
 
         if ref_latents is not None:
             h = 0
