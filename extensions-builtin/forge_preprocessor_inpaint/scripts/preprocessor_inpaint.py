@@ -172,7 +172,7 @@ class PreprocessorInpaintLama(PreprocessorInpaintOnly):
         return cond, mask
 
 
-class PreprocessorInpaintNoobAIXL(PreprocessorInpaint):
+class PreprocessorInpaintNoobAIXL(PreprocessorInpaintOnly):
     def __init__(self):
         super().__init__()
         self.name = "inpaint_noobai"
@@ -216,7 +216,8 @@ class PreprocessorInpaintNoobAIXL(PreprocessorInpaint):
 
         mask = mask.round()
         mixed_cond = cond * (1.0 - mask)
-
+        _, _ = super().process_before_every_sampling(process, cond, mask, *args, **kwargs)
+        
         return mixed_cond, None
 
 
