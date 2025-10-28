@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Uncomment and set these variables as needed:
+# export PYTHON=
+# export GIT=
+# export VENV_DIR=
+
+export COMMANDLINE_ARGS=""
+
+# Example arguments:
+# --xformers --sage --uv
+# --pin-shared-memory --cuda-malloc --cuda-stream
+# --skip-python-version-check --skip-torch-cuda-test --skip-version-check --skip-prepare-environment --skip-install
+
+# Launch webui
+bash "$(dirname "${BASH_SOURCE[0]}")/webui.sh" "$@"
