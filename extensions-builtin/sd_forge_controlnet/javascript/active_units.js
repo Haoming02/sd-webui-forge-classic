@@ -7,7 +7,7 @@
  */
 (function () {
     const cnetAllAccordions = new Set();
-    onUiUpdate(() => {
+    onUiLoaded(() => {
         const ImgChangeType = {
             NO_CHANGE: 0,
             REMOVE: 1,
@@ -16,7 +16,7 @@
         };
 
         function imgChangeObserved(mutationsList) {
-            // Iterate over all mutations that just occured
+            // Iterate over all mutations that just occurred
             for (let mutation of mutationsList) {
                 // Check if the mutation is an addition or removal of a node
                 if (mutation.type === 'childList') {
@@ -201,7 +201,7 @@
             getMaskImageSrc() {
                 function isEmptyCanvas(canvas) {
                     if (!canvas) return true;
-                    if (canvas.width == 0 || canvas.height ==0) return true;
+                    if (canvas.width == 0 || canvas.height == 0) return true;
                     const ctx = canvas.getContext('2d');
                     // Get the image data
                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -352,7 +352,7 @@
              */
             attachAccordionStateObserver() {
                 new MutationObserver((mutationsList) => {
-                    for(const mutation of mutationsList) {
+                    for (const mutation of mutationsList) {
                         if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                             const newState = mutation.target.classList.contains('open');
                             if (this.tabOpen != newState) {
@@ -389,7 +389,7 @@
                 for (const mutation of mutations) {
                     if (mutation.target.classList.contains('open') &&
                         tabs.every(tab => !tab.enabledCheckbox.checked &&
-                                          !tab.tab.querySelector('.label-wrap').classList.contains('open'))
+                            !tab.tab.querySelector('.label-wrap').classList.contains('open'))
                     ) {
                         tabs[0].tab.querySelector('.label-wrap').click();
                     }

@@ -1,6 +1,6 @@
 (function () {
     const cnetModalRegisteredElements = new Set();
-    onUiUpdate(() => {
+    onUiLoaded(() => {
         // Get all the buttons that open a modal
         const btns = gradioApp().querySelectorAll(".cnet-modal-open");
 

@@ -63,5 +63,5 @@
         });
     }
 
-    onUiUpdate(loadOpenposeEditor);
+    onUiLoaded(loadOpenposeEditor);
 })();
