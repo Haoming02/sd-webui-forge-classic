@@ -821,8 +821,6 @@ class ControlNetUiGroup(object):
                 gr.update(visible=False),  # Now this is automatically managed
                 # download_pose_link
                 gr.update() if is_on else gr.update(value=None),
-                # modal edit button
-                gr.update() if is_on else gr.update(visible=False),
             )
 
         self.preprocessor_preview.change(
@@ -833,7 +831,6 @@ class ControlNetUiGroup(object):
                 self.generated_image_group,
                 self.use_preview_as_input,
                 self.openpose_editor.download_link,
-                self.openpose_editor.modal,
             ],
             show_progress=False,
         )
