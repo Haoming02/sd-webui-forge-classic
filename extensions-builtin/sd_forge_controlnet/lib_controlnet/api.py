@@ -1,21 +1,22 @@
 from typing import List
 
+import gradio as gr
 import numpy as np
-from fastapi import FastAPI, Body
+from fastapi import Body, FastAPI
 from fastapi.exceptions import HTTPException
 from PIL import Image
-import gradio as gr
 
 from modules.api import api
+
 from .global_state import (
-    get_all_preprocessor_names,
     get_all_controlnet_names,
-    get_preprocessor,
+    get_all_preprocessor_names,
     get_all_preprocessor_tags,
+    get_preprocessor,
     select_control_type,
 )
-from .utils import judge_image_type
 from .logging import logger
+from .utils import judge_image_type
 
 
 def encode_to_base64(image):
@@ -28,7 +29,7 @@ def encode_to_base64(image):
     elif isinstance(image, np.ndarray):
         return encode_np_to_base64(image)
     else:
-        logger.warn("Unable to encode image.")
+        logger.warning("Unable to encode image.")
         return ""
 
 
@@ -49,11 +50,7 @@ def controlnet_api(_: gr.Blocks, app: FastAPI):
         module_list = get_all_preprocessor_names()
         logger.debug(module_list)
 
-        return {
-            "module_list": module_list,
-            # TODO: Add back module detail.
-            # "module_detail": external_code.get_modules_detail(alias_names),
-        }
+        return {"module_list": module_list}
 
     @app.get("/controlnet/control_types")
     async def control_types():
@@ -64,28 +61,21 @@ def controlnet_api(_: gr.Blocks, app: FastAPI):
             default_model,
         ):
             control_dict = {
-                    "module_list": filtered_preprocessor_list,
-                    "model_list": filtered_model_list,
-                    "default_option": default_option,
-                    "default_model": default_model,
-                }
+                "module_list": filtered_preprocessor_list,
+                "model_list": filtered_model_list,
+                "default_option": default_option,
+                "default_model": default_model,
+            }
 
             return control_dict
 
-        return {
-            "control_types": {
-                control_type: format_control_type(*select_control_type(control_type))
-                for control_type in get_all_preprocessor_tags()
-            }
-        }
+        return {"control_types": {control_type: format_control_type(*select_control_type(control_type)) for control_type in get_all_preprocessor_tags()}}
 
     @app.post("/controlnet/detect")
     async def detect(
         controlnet_module: str = Body("none", title="Controlnet Module"),
         controlnet_input_images: List[str] = Body([], title="Controlnet Input Images"),
-        controlnet_processor_res: int = Body(
-            512, title="Controlnet Processor Resolution"
-        ),
+        controlnet_processor_res: int = Body(512, title="Controlnet Processor Resolution"),
         controlnet_threshold_a: float = Body(64, title="Controlnet Threshold a"),
         controlnet_threshold_b: float = Body(64, title="Controlnet Threshold b"),
     ):
@@ -96,15 +86,13 @@ def controlnet_api(_: gr.Blocks, app: FastAPI):
         if len(controlnet_input_images) == 0:
             raise HTTPException(status_code=422, detail="No image selected")
 
-        logger.debug(
-            f"Detecting {str(len(controlnet_input_images))} images with the {controlnet_module} module."
-        )
+        logger.debug(f"Detecting {str(len(controlnet_input_images))} images with the {controlnet_module} module.")
 
         results = []
         poses = []
 
         for input_image in controlnet_input_images:
-            img = np.array(api.decode_base64_to_image(input_image)).astype('uint8')
+            img = np.array(api.decode_base64_to_image(input_image)).astype("uint8")
 
             class JsonAcceptor:
                 def __init__(self) -> None:
@@ -135,4 +123,3 @@ def controlnet_api(_: gr.Blocks, app: FastAPI):
             res["poses"] = poses
 
         return res
-
