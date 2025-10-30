@@ -1,39 +1,35 @@
+import functools
 import os
-from typing import Dict, Optional, Tuple, List, Union
+import tempfile  # Gradio 3.32 bug fix
+from typing import Optional
 
 import cv2
+import gradio as gr
+import numpy as np
 import torch
+from lib_controlnet import external_code, global_state
+from lib_controlnet.api import controlnet_api
+from lib_controlnet.controlnet_ui.controlnet_ui_group import ControlNetUiGroup
+from lib_controlnet.enums import HiResFixOption
+from lib_controlnet.external_code import ControlNetUnit
+from lib_controlnet.infotext import Infotext
+from lib_controlnet.logging import logger
+from lib_controlnet.utils import align_dim_latent, crop_and_resize_image, judge_image_type, prepare_mask, set_numpy_seed
+from PIL import Image
 
 import modules.scripts as scripts
-from modules import shared, script_callbacks, masking, images
+from modules import images, masking, script_callbacks, shared
+from modules.processing import (
+    StableDiffusionProcessing,
+    StableDiffusionProcessingImg2Img,
+    StableDiffusionProcessingTxt2Img,
+)
 from modules.ui_components import InputAccordion
-from modules.api.api import decode_base64_to_image
-import gradio as gr
-
-from lib_controlnet import global_state, external_code
-from lib_controlnet.external_code import ControlNetUnit
-from lib_controlnet.utils import align_dim_latent, set_numpy_seed, crop_and_resize_image, \
-    prepare_mask, judge_image_type
-from lib_controlnet.controlnet_ui.controlnet_ui_group import ControlNetUiGroup
-from lib_controlnet.logging import logger
-from modules.processing import StableDiffusionProcessingImg2Img, StableDiffusionProcessingTxt2Img, \
-    StableDiffusionProcessing
-from lib_controlnet.infotext import Infotext
-from modules_forge.utils import HWC3, numpy_to_pytorch
-from lib_controlnet.enums import HiResFixOption
-from lib_controlnet.api import controlnet_api
-
-import numpy as np
-import functools
-
-from PIL import Image
 from modules_forge.shared import try_load_supported_control_model
 from modules_forge.supported_controlnet import ControlModelPatcher
+from modules_forge.utils import HWC3, numpy_to_pytorch
 
-# Gradio 3.32 bug fix
-import tempfile
-
-gradio_tempfile_path = os.path.join(tempfile.gettempdir(), 'gradio')
+gradio_tempfile_path = os.path.join(tempfile.gettempdir(), "gradio")
 os.makedirs(gradio_tempfile_path, exist_ok=True)
 
 global_state.update_controlnet_filenames()
@@ -72,8 +68,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         elem_id_tabname = gen_type + "_controlnet"
         default_unit = ControlNetUnit(enabled=False, module="None", model="None")
         with gr.Group(elem_id=elem_id_tabname):
-            with gr.Accordion(f"ControlNet Integrated", open=False, elem_id="controlnet",
-                              elem_classes=["controlnet"]):
+            with gr.Accordion(f"ControlNet Integrated", open=False, elem_id="controlnet", elem_classes=["controlnet"]):
                 with gr.Row(elem_id=elem_id_tabname + "_accordions", elem_classes="accordions"):
                     for i in range(max_models):
                         with InputAccordion(
@@ -94,32 +89,16 @@ class ControlNetForForgeOfficial(scripts.Script):
 
     def get_enabled_units(self, units):
         # Parse dict from API calls.
-        units = [
-            ControlNetUnit.from_dict(unit) if isinstance(unit, dict) else unit
-            for unit in units
-        ]
+        units = [ControlNetUnit.from_dict(unit) if isinstance(unit, dict) else unit for unit in units]
         assert all(isinstance(unit, ControlNetUnit) for unit in units)
         enabled_units = [x for x in units if x.enabled]
         return enabled_units
 
     @staticmethod
-    def try_crop_image_with_a1111_mask(
-            p: StableDiffusionProcessing,
-            unit: ControlNetUnit,
-            input_image: np.ndarray,
-            resize_mode: external_code.ResizeMode,
-            preprocessor
-    ) -> np.ndarray:
+    def try_crop_image_with_a1111_mask(p: StableDiffusionProcessing, unit: ControlNetUnit, input_image: np.ndarray, resize_mode: external_code.ResizeMode, preprocessor) -> np.ndarray:
         a1111_mask_image: Optional[Image.Image] = getattr(p, "image_mask", None)
-        is_only_masked_inpaint = (
-                issubclass(type(p), StableDiffusionProcessingImg2Img) and
-                p.inpaint_full_res and
-                a1111_mask_image is not None
-        )
-        if (
-                preprocessor.corp_image_with_a1111_mask_when_in_img2img_inpaint_tab
-                and is_only_masked_inpaint
-        ):
+        is_only_masked_inpaint = issubclass(type(p), StableDiffusionProcessingImg2Img) and p.inpaint_full_res and a1111_mask_image is not None
+        if preprocessor.corp_image_with_a1111_mask_when_in_img2img_inpaint_tab and is_only_masked_inpaint:
             logger.info("Crop input image based on A1111 mask.")
             input_image = [input_image[:, :, i] for i in range(input_image.shape[2])]
             input_image = [Image.fromarray(x) for x in input_image]
@@ -129,16 +108,10 @@ class ControlNetForForgeOfficial(scripts.Script):
             crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
             crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
 
-            input_image = [
-                images.resize_image(resize_mode.int_value(), i, mask.width, mask.height)
-                for i in input_image
-            ]
+            input_image = [images.resize_image(resize_mode.int_value(), i, mask.width, mask.height) for i in input_image]
 
             input_image = [x.crop(crop_region) for x in input_image]
-            input_image = [
-                images.resize_image(external_code.ResizeMode.OUTER_FIT.int_value(), x, p.width, p.height)
-                for x in input_image
-            ]
+            input_image = [images.resize_image(external_code.ResizeMode.OUTER_FIT.int_value(), x, p.width, p.height) for x in input_image]
 
             input_image = [np.asarray(x)[:, :, 0] for x in input_image]
             input_image = np.stack(input_image, axis=2)
@@ -223,15 +196,12 @@ class ControlNetForForgeOfficial(scripts.Script):
         return image_list, resize_mode
 
     @staticmethod
-    def get_target_dimensions(p: StableDiffusionProcessing) -> Tuple[int, int, int, int]:
+    def get_target_dimensions(p: StableDiffusionProcessing) -> tuple[int, int, int, int]:
         """Returns (h, w, hr_h, hr_w)."""
         h = align_dim_latent(p.height)
         w = align_dim_latent(p.width)
 
-        high_res_fix = (
-                isinstance(p, StableDiffusionProcessingTxt2Img)
-                and getattr(p, 'enable_hr', False)
-        )
+        high_res_fix = isinstance(p, StableDiffusionProcessingTxt2Img) and getattr(p, "enable_hr", False)
         if high_res_fix:
             if p.hr_resize_x == 0 and p.hr_resize_y == 0:
                 hr_y = int(p.height * p.hr_scale)
@@ -247,21 +217,14 @@ class ControlNetForForgeOfficial(scripts.Script):
         return h, w, hr_y, hr_x
 
     @torch.no_grad()
-    def process_unit_after_click_generate(self,
-                                          p: StableDiffusionProcessing,
-                                          unit: ControlNetUnit,
-                                          params: ControlNetCachedParameters,
-                                          *args, **kwargs):
+    def process_unit_after_click_generate(self, p: StableDiffusionProcessing, unit: ControlNetUnit, params: ControlNetCachedParameters, *args, **kwargs):
 
         h, w, hr_y, hr_x = self.get_target_dimensions(p)
 
-        has_high_res_fix = (
-                isinstance(p, StableDiffusionProcessingTxt2Img)
-                and getattr(p, 'enable_hr', False)
-        )
+        has_high_res_fix = isinstance(p, StableDiffusionProcessingTxt2Img) and getattr(p, "enable_hr", False)
 
         if unit.use_preview_as_input:
-            unit.module = 'None'
+            unit.module = "None"
 
         preprocessor = global_state.get_preprocessor(unit.module)
 
@@ -273,6 +236,7 @@ class ControlNetForForgeOfficial(scripts.Script):
 
         def optional_tqdm(iterable, use_tqdm):
             from tqdm import tqdm
+
             return tqdm(iterable) if use_tqdm else iterable
 
         for input_image, input_mask in optional_tqdm(input_list, len(input_list) > 1):
@@ -287,7 +251,7 @@ class ControlNetForForgeOfficial(scripts.Script):
             seed = set_numpy_seed(p)
             logger.debug(f"Use numpy seed {seed}.")
             logger.info(f"Using preprocessor: {unit.module}")
-            logger.info(f'preprocessor resolution = {unit.processor_res}')
+            logger.info(f"preprocessor resolution = {unit.processor_res}")
 
             preprocessor_output = preprocessor(
                 input_image=input_image,
@@ -305,7 +269,7 @@ class ControlNetForForgeOfficial(scripts.Script):
                 control_masks.append(input_mask)
 
             if len(input_list) > 1 and not preprocessor_output_is_image:
-                logger.info('Batch wise input only support controlnet, control-lora, and t2i adapters!')
+                logger.info("Batch wise input only support controlnet, control-lora, and t2i adapters!")
                 break
 
         if has_high_res_fix:
@@ -314,11 +278,9 @@ class ControlNetForForgeOfficial(scripts.Script):
             hr_option = HiResFixOption.BOTH
 
         alignment_indices = [i % len(preprocessor_outputs) for i in range(p.batch_size)]
+
         def attach_extra_result_image(img: np.ndarray, is_high_res: bool = False):
-            if (
-                (is_high_res and hr_option.high_res_enabled) or
-                (not is_high_res and hr_option.low_res_enabled)
-            ) and unit.save_detected_map:
+            if ((is_high_res and hr_option.high_res_enabled) or (not is_high_res and hr_option.low_res_enabled)) and unit.save_detected_map:
                 p.extra_result_images.append(img)
 
         if preprocessor_output_is_image:
@@ -369,10 +331,10 @@ class ControlNetForForgeOfficial(scripts.Script):
                 params.control_mask_for_hr_fix = params.control_mask
 
         if preprocessor.do_not_need_model:
-            model_filename = 'Not Needed'
+            model_filename = "Not Needed"
             params.model = ControlModelPatcher()
         else:
-            assert unit.model != 'None', 'You have not selected any control model!'
+            assert unit.model != "None", "You have not selected any control model!"
             model_filename = global_state.get_controlnet_filename(unit.model)
             params.model = cached_controlnet_loader(model_filename)
             assert params.model is not None, logger.error(f"Recognizing Control Model failed: {model_filename}")
@@ -386,18 +348,11 @@ class ControlNetForForgeOfficial(scripts.Script):
         return
 
     @torch.no_grad()
-    def process_unit_before_every_sampling(self,
-                                           p: StableDiffusionProcessing,
-                                           unit: ControlNetUnit,
-                                           params: ControlNetCachedParameters,
-                                           *args, **kwargs):
+    def process_unit_before_every_sampling(self, p: StableDiffusionProcessing, unit: ControlNetUnit, params: ControlNetCachedParameters, *args, **kwargs):
 
-        is_hr_pass = getattr(p, 'is_hr_pass', False)
+        is_hr_pass = getattr(p, "is_hr_pass", False)
 
-        has_high_res_fix = (
-                isinstance(p, StableDiffusionProcessingTxt2Img)
-                and getattr(p, 'enable_hr', False)
-        )
+        has_high_res_fix = isinstance(p, StableDiffusionProcessingTxt2Img) and getattr(p, "enable_hr", False)
 
         if has_high_res_fix:
             hr_option = HiResFixOption.from_value(unit.hr_option)
@@ -419,12 +374,14 @@ class ControlNetForForgeOfficial(scripts.Script):
             cond = params.control_cond
             mask = params.control_mask
 
-        kwargs.update(dict(
-            unit=unit,
-            params=params,
-            cond_original=cond.clone() if isinstance(cond, torch.Tensor) else cond,
-            mask_original=mask.clone() if isinstance(mask, torch.Tensor) else mask,
-        ))
+        kwargs.update(
+            dict(
+                unit=unit,
+                params=params,
+                cond_original=cond.clone() if isinstance(cond, torch.Tensor) else cond,
+                mask_original=mask.clone() if isinstance(mask, torch.Tensor) else mask,
+            )
+        )
 
         params.model.strength = float(unit.weight)
         params.model.start_percent = float(unit.guidance_start)
@@ -434,23 +391,9 @@ class ControlNetForForgeOfficial(scripts.Script):
         params.model.advanced_frame_weighting = None
         params.model.advanced_sigma_weighting = None
 
-        soft_weighting = {
-            'input': [0.09941396206337118, 0.12050177219802567, 0.14606275417942507, 0.17704576264172736,
-                      0.214600924414215,
-                      0.26012233262329093, 0.3152997971191405, 0.3821815722656249, 0.4632503906249999, 0.561515625,
-                      0.6806249999999999, 0.825],
-            'middle': [0.561515625] if p.sd_model.is_sdxl else [1.0],
-            'output': [0.09941396206337118, 0.12050177219802567, 0.14606275417942507, 0.17704576264172736,
-                       0.214600924414215,
-                       0.26012233262329093, 0.3152997971191405, 0.3821815722656249, 0.4632503906249999, 0.561515625,
-                       0.6806249999999999, 0.825]
-        }
+        soft_weighting = {"input": [0.09941396206337118, 0.12050177219802567, 0.14606275417942507, 0.17704576264172736, 0.214600924414215, 0.26012233262329093, 0.3152997971191405, 0.3821815722656249, 0.4632503906249999, 0.561515625, 0.6806249999999999, 0.825], "middle": [0.561515625] if p.sd_model.is_sdxl else [1.0], "output": [0.09941396206337118, 0.12050177219802567, 0.14606275417942507, 0.17704576264172736, 0.214600924414215, 0.26012233262329093, 0.3152997971191405, 0.3821815722656249, 0.4632503906249999, 0.561515625, 0.6806249999999999, 0.825]}
 
-        zero_weighting = {
-            'input': [0.0] * 12,
-            'middle': [0.0],
-            'output': [0.0] * 12
-        }
+        zero_weighting = {"input": [0.0] * 12, "middle": [0.0], "output": [0.0] * 12}
 
         if unit.control_mode == external_code.ControlMode.CONTROL.value:
             params.model.positive_advanced_weighting = soft_weighting.copy()
@@ -486,22 +429,18 @@ class ControlNetForForgeOfficial(scripts.Script):
         preprocessor = global_state.get_preprocessor(unit.module)
 
         if unit.processor_res < 0:
-            unit.processor_res = int(preprocessor.slider_resolution.gradio_update_kwargs.get('value', 512))
+            unit.processor_res = int(preprocessor.slider_resolution.gradio_update_kwargs.get("value", 512))
 
         if unit.threshold_a < 0:
-            unit.threshold_a = int(preprocessor.slider_1.gradio_update_kwargs.get('value', 1.0))
+            unit.threshold_a = int(preprocessor.slider_1.gradio_update_kwargs.get("value", 1.0))
 
         if unit.threshold_b < 0:
-            unit.threshold_b = int(preprocessor.slider_2.gradio_update_kwargs.get('value', 1.0))
+            unit.threshold_b = int(preprocessor.slider_2.gradio_update_kwargs.get("value", 1.0))
 
         return
 
     @torch.no_grad()
-    def process_unit_after_every_sampling(self,
-                                          p: StableDiffusionProcessing,
-                                          unit: ControlNetUnit,
-                                          params: ControlNetCachedParameters,
-                                          *args, **kwargs):
+    def process_unit_after_every_sampling(self, p: StableDiffusionProcessing, unit: ControlNetUnit, params: ControlNetCachedParameters, *args, **kwargs):
 
         params.preprocessor.process_after_every_sampling(p, params, *args, **kwargs)
         params.model.process_after_every_sampling(p, params, *args, **kwargs)
@@ -537,37 +476,20 @@ class ControlNetForForgeOfficial(scripts.Script):
 
 
 def on_ui_settings():
-    section = ('control_net', "ControlNet")
-    shared.opts.add_option("control_net_detectedmap_dir", shared.OptionInfo(
-        "detected_maps", "Directory for detected maps auto saving", section=section))
-    shared.opts.add_option("control_net_models_path", shared.OptionInfo(
-        "", "Extra path to scan for ControlNet models (e.g. training output directory)", section=section))
-    shared.opts.add_option("control_net_modules_path", shared.OptionInfo(
-        "",
-        "Path to directory containing annotator model directories (requires restart, overrides corresponding command line flag)",
-        section=section))
-    shared.opts.add_option("control_net_unit_count", shared.OptionInfo(
-        3, "Multi-ControlNet: ControlNet unit number (requires restart)", gr.Slider,
-        {"minimum": 1, "maximum": 10, "step": 1}, section=section))
-    shared.opts.add_option("control_net_model_cache_size", shared.OptionInfo(
-        5, "Model cache size (requires restart)", gr.Slider, {"minimum": 1, "maximum": 10, "step": 1}, section=section))
-    shared.opts.add_option("control_net_no_detectmap", shared.OptionInfo(
-        False, "Do not append detectmap to output", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("control_net_detectmap_autosaving", shared.OptionInfo(
-        False, "Allow detectmap auto saving", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("control_net_allow_script_control", shared.OptionInfo(
-        False, "Allow other script to control this extension", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("control_net_sync_field_args", shared.OptionInfo(
-        True, "Paste ControlNet parameters in infotext", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_show_batch_images_in_ui", shared.OptionInfo(
-        False, "Show batch images in gradio gallery output", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_increment_seed_during_batch", shared.OptionInfo(
-        False, "Increment seed after each controlnet batch iteration", gr.Checkbox, {"interactive": True},
-        section=section))
-    shared.opts.add_option("controlnet_disable_openpose_edit", shared.OptionInfo(
-        False, "Disable openpose edit", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_input_thumbnail", shared.OptionInfo(
-        True, "Input image thumbnail on unit header", gr.Checkbox, {"interactive": True}, section=section))
+    section = ("control_net", "ControlNet")
+    shared.opts.add_option("control_net_detectedmap_dir", shared.OptionInfo("detected_maps", "Directory for detected maps auto saving", section=section))
+    shared.opts.add_option("control_net_models_path", shared.OptionInfo("", "Extra path to scan for ControlNet models (e.g. training output directory)", section=section))
+    shared.opts.add_option("control_net_modules_path", shared.OptionInfo("", "Path to directory containing annotator model directories (requires restart, overrides corresponding command line flag)", section=section))
+    shared.opts.add_option("control_net_unit_count", shared.OptionInfo(3, "Multi-ControlNet: ControlNet unit number (requires restart)", gr.Slider, {"minimum": 1, "maximum": 10, "step": 1}, section=section))
+    shared.opts.add_option("control_net_model_cache_size", shared.OptionInfo(5, "Model cache size (requires restart)", gr.Slider, {"minimum": 1, "maximum": 10, "step": 1}, section=section))
+    shared.opts.add_option("control_net_no_detectmap", shared.OptionInfo(False, "Do not append detectmap to output", gr.Checkbox, {"interactive": True}, section=section))
+    shared.opts.add_option("control_net_detectmap_autosaving", shared.OptionInfo(False, "Allow detectmap auto saving", gr.Checkbox, {"interactive": True}, section=section))
+    shared.opts.add_option("control_net_allow_script_control", shared.OptionInfo(False, "Allow other script to control this extension", gr.Checkbox, {"interactive": True}, section=section))
+    shared.opts.add_option("control_net_sync_field_args", shared.OptionInfo(True, "Paste ControlNet parameters in infotext", gr.Checkbox, {"interactive": True}, section=section))
+    shared.opts.add_option("controlnet_show_batch_images_in_ui", shared.OptionInfo(False, "Show batch images in gradio gallery output", gr.Checkbox, {"interactive": True}, section=section))
+    shared.opts.add_option("controlnet_increment_seed_during_batch", shared.OptionInfo(False, "Increment seed after each controlnet batch iteration", gr.Checkbox, {"interactive": True}, section=section))
+    shared.opts.add_option("controlnet_disable_openpose_edit", shared.OptionInfo(False, "Disable openpose edit", gr.Checkbox, {"interactive": True}, section=section))
+    shared.opts.add_option("controlnet_input_thumbnail", shared.OptionInfo(True, "Input image thumbnail on unit header", gr.Checkbox, {"interactive": True}, section=section))
 
 
 script_callbacks.on_ui_settings(on_ui_settings)
