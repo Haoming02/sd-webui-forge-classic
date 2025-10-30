@@ -1,26 +1,20 @@
 import json
-import gradio as gr
-import functools
-from copy import copy
-from typing import List, Optional, Union, Callable, Dict, Tuple, Literal
 from dataclasses import dataclass
-import numpy as np
 
-from lib_controlnet.utils import svg_preprocess, read_image, judge_image_type
-from lib_controlnet import (
-    global_state,
-    external_code,
-)
-from lib_controlnet.logging import logger
+import gradio as gr
+import numpy as np
+from gradio_rangeslider import RangeSlider
+from lib_controlnet import external_code, global_state
 from lib_controlnet.controlnet_ui.openpose_editor import OpenposeEditor
 from lib_controlnet.enums import HiResFixOption
-from modules import shared, script_callbacks
-from modules.ui_components import FormRow
-from modules_forge.utils import HWC3
 from lib_controlnet.external_code import UiControlNetUnit
-from modules.ui_components import ToolButton
-from gradio_rangeslider import RangeSlider
+from lib_controlnet.logging import logger
+from lib_controlnet.utils import judge_image_type
+
+from modules import shared
+from modules.ui_components import FormRow, ToolButton
 from modules_forge.forge_canvas.canvas import ForgeCanvas
+from modules_forge.utils import HWC3
 
 
 @dataclass
@@ -75,11 +69,7 @@ class A1111Context:
             "img2img_inpaint_sketch_tab": "img2img_inpaint_sketch_tab",
             "img2img_inpaint_upload_tab": "img2img_inpaint_upload_tab",
         }
-        return all(
-            c
-            for name, c in vars(self).items()
-            if name not in optional_components.values()
-        )
+        return all(c for name, c in vars(self).items() if name not in optional_components.values())
 
     def set_component(self, component):
         id_mapping = {
@@ -106,19 +96,17 @@ class A1111Context:
         if elem_id in id_mapping and getattr(self, id_mapping[elem_id]) is None:
             setattr(self, id_mapping[elem_id], component)
             logger.debug(f"Setting {elem_id}.")
-            logger.debug(
-                f"A1111 initialized {sum(c is not None for c in vars(self).values())}/{len(vars(self).keys())}."
-            )
+            logger.debug(f"A1111 initialized {sum(c is not None for c in vars(self).values())}/{len(vars(self).keys())}.")
 
 
 class ControlNetUiGroup(object):
     refresh_symbol = "\U0001f504"  # 🔄
-    switch_values_symbol = "\U000021C5"  # ⇅
-    camera_symbol = "\U0001F4F7"  # 📷
-    reverse_symbol = "\U000021C4"  # ⇄
+    switch_values_symbol = "\U000021c5"  # ⇅
+    camera_symbol = "\U0001f4f7"  # 📷
+    reverse_symbol = "\U000021c4"  # ⇄
     tossup_symbol = "\u2934"
-    trigger_symbol = "\U0001F4A5"  # 💥
-    open_symbol = "\U0001F4DD"  # 📝
+    trigger_symbol = "\U0001f4a5"  # 💥
+    open_symbol = "\U0001f4dd"  # 📝
 
     tooltips = {
         "🔄": "Refresh",
@@ -137,7 +125,7 @@ class ControlNetUiGroup(object):
     )
     a1111_context = A1111Context()
     # All ControlNetUiGroup instances created.
-    all_ui_groups: List["ControlNetUiGroup"] = []
+    all_ui_groups: list["ControlNetUiGroup"] = []
 
     @property
     def width_slider(self):
@@ -248,30 +236,13 @@ class ControlNetUiGroup(object):
                 with gr.Tab(label="Single Image") as self.upload_tab:
                     with gr.Row(elem_classes=["cnet-image-row"], equal_height=True):
                         with gr.Group(elem_classes=["cnet-input-image-group"]):
-                            self.image = ForgeCanvas(
-                                elem_id=f"{elem_id_tabname}_{tabname}_input_image",
-                                elem_classes=["cnet-image"],
-                                contrast_scribbles=True,
-                                height=300,
-                                numpy=True
-                            )
+                            self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], contrast_scribbles=True, height=300, numpy=True)
                             self.openpose_editor.render_upload()
 
-                        with gr.Group(
-                                visible=False, elem_classes=["cnet-generated-image-group"]
-                        ) as self.generated_image_group:
-                            self.generated_image = ForgeCanvas(
-                                elem_id=f"{elem_id_tabname}_{tabname}_generated_image",
-                                elem_classes=["cnet-image"],
-                                height=300,
-                                no_scribbles=True,
-                                no_upload=True,
-                                numpy=True
-                            )
+                        with gr.Group(visible=False, elem_classes=["cnet-generated-image-group"]) as self.generated_image_group:
+                            self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], height=300, no_scribbles=True, no_upload=True, numpy=True)
 
-                            with gr.Group(
-                                    elem_classes=["cnet-generated-image-control-group"]
-                            ):
+                            with gr.Group(elem_classes=["cnet-generated-image-control-group"]):
                                 self.openpose_editor.render_edit()
                                 preview_check_elem_id = f"{elem_id_tabname}_{tabname}_controlnet_preprocessor_preview_checkbox"
                                 preview_close_button_js = f"document.querySelector('#{preview_check_elem_id} input[type=\\'checkbox\\']').click();"
@@ -281,20 +252,8 @@ class ControlNetUiGroup(object):
                                     elem_classes=["cnet-close-preview"],
                                 )
 
-                        with gr.Group(
-                                visible=False, elem_classes=["cnet-mask-image-group"]
-                        ) as self.mask_image_group:
-                            self.mask_image = ForgeCanvas(
-                                elem_id=f"{elem_id_tabname}_{tabname}_mask_image",
-                                elem_classes=["cnet-mask-image"],
-                                height=300,
-                                scribble_color='#FFFFFF',
-                                scribble_width=1,
-                                scribble_alpha_fixed=True,
-                                scribble_color_fixed=True,
-                                scribble_softness_fixed=True,
-                                numpy=True
-                            )
+                        with gr.Group(visible=False, elem_classes=["cnet-mask-image-group"]) as self.mask_image_group:
+                            self.mask_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_mask_image", elem_classes=["cnet-mask-image"], height=300, scribble_color="#FFFFFF", scribble_width=1, scribble_alpha_fixed=True, scribble_color_fixed=True, scribble_softness_fixed=True, numpy=True)
 
                 with gr.Tab(label="Batch Folder") as self.batch_tab:
                     with gr.Row():
@@ -313,18 +272,12 @@ class ControlNetUiGroup(object):
                 with gr.Tab(label="Batch Upload") as self.merge_tab:
                     with gr.Row():
                         with gr.Column():
-                            self.batch_input_gallery = gr.Gallery(
-                                columns=[4], rows=[2], object_fit="contain", height="auto", label="Images"
-                            )
+                            self.batch_input_gallery = gr.Gallery(columns=[4], rows=[2], object_fit="contain", height="auto", label="Images")
                         with gr.Group(visible=False, elem_classes=["cnet-mask-gallery-group"]) as self.batch_mask_gallery_group:
                             with gr.Column():
-                                self.batch_mask_gallery = gr.Gallery(
-                                    columns=[4], rows=[2], object_fit="contain", height="auto", label="Masks"
-                                )
+                                self.batch_mask_gallery = gr.Gallery(columns=[4], rows=[2], object_fit="contain", height="auto", label="Masks")
 
-            with gr.Accordion(
-                label="Open New Canvas", visible=False
-            ) as self.create_canvas:
+            with gr.Accordion(label="Open New Canvas", visible=False) as self.create_canvas:
                 self.canvas_width = gr.Slider(
                     label="New Canvas Width",
                     minimum=256,
@@ -460,7 +413,7 @@ class ControlNetUiGroup(object):
                 elem_classes="controlnet_control_weight_slider",
             )
             self.timestep_range = RangeSlider(
-                label='Timestep Range',
+                label="Timestep Range",
                 minimum=0,
                 maximum=1.0,
                 value=(self.default_unit.guidance_start, self.default_unit.guidance_end),
@@ -470,11 +423,7 @@ class ControlNetUiGroup(object):
             self.guidance_start = gr.State(self.default_unit.guidance_start)
             self.guidance_end = gr.State(self.default_unit.guidance_end)
 
-        self.timestep_range.change(
-            lambda x: (x[0], x[1]),
-            inputs=[self.timestep_range],
-            outputs=[self.guidance_start, self.guidance_end]
-        )
+        self.timestep_range.change(lambda x: (x[0], x[1]), inputs=[self.timestep_range], outputs=[self.guidance_start, self.guidance_end])
 
         # advanced options
         with gr.Column(visible=False) as self.advanced:
@@ -576,15 +525,9 @@ class ControlNetUiGroup(object):
                 event_subscribers.append(comp.clear)
 
             for event_subscriber in event_subscribers:
-                event_subscriber(
-                    fn=UiControlNetUnit, inputs=list(unit_args), outputs=unit
-                )
+                event_subscriber(fn=UiControlNetUnit, inputs=list(unit_args), outputs=unit)
 
-        (
-            ControlNetUiGroup.a1111_context.img2img_submit_button
-            if self.is_img2img
-            else ControlNetUiGroup.a1111_context.txt2img_submit_button
-        ).click(
+        (ControlNetUiGroup.a1111_context.img2img_submit_button if self.is_img2img else ControlNetUiGroup.a1111_context.txt2img_submit_button).click(
             fn=UiControlNetUnit,
             inputs=list(unit_args),
             outputs=unit,
@@ -633,9 +576,7 @@ class ControlNetUiGroup(object):
     def register_build_sliders(self):
         def build_sliders(module: str, pp: bool):
 
-            logger.debug(
-                f"Prevent update slider value: {self.prevent_next_n_slider_value_update}"
-            )
+            logger.debug(f"Prevent update slider value: {self.prevent_next_n_slider_value_update}")
             logger.debug(f"Build slider for module: {module} - {pp}")
 
             preprocessor = global_state.get_preprocessor(module)
@@ -643,7 +584,7 @@ class ControlNetUiGroup(object):
             slider_resolution_kwargs = preprocessor.slider_resolution.gradio_update_kwargs.copy()
 
             if pp:
-                slider_resolution_kwargs['visible'] = False
+                slider_resolution_kwargs["visible"] = False
 
             grs = [
                 gr.update(**slider_resolution_kwargs),
@@ -670,12 +611,8 @@ class ControlNetUiGroup(object):
             self.refresh_models,
             self.control_mode,
         ]
-        self.module.change(
-            build_sliders, inputs=inputs, outputs=outputs, show_progress=False
-        )
-        self.pixel_perfect.change(
-            build_sliders, inputs=inputs, outputs=outputs, show_progress=False
-        )
+        self.module.change(build_sliders, inputs=inputs, outputs=outputs, show_progress=False)
+        self.pixel_perfect.change(build_sliders, inputs=inputs, outputs=outputs, show_progress=False)
 
         def filter_selected(k: str):
             logger.debug(f"Prevent update {self.prevent_next_n_module_update}")
@@ -686,7 +623,7 @@ class ControlNetUiGroup(object):
             default_preprocessor = filtered_preprocessor_list[0]
             default_controlnet_name = filtered_controlnet_names[0]
 
-            if k != 'All':
+            if k != "All":
                 if len(filtered_preprocessor_list) > 1:
                     default_preprocessor = filtered_preprocessor_list[1]
                 if len(filtered_controlnet_names) > 1:
@@ -700,12 +637,8 @@ class ControlNetUiGroup(object):
                 ]
             else:
                 return [
-                    gr.Dropdown.update(
-                        value=default_preprocessor, choices=filtered_preprocessor_list
-                    ),
-                    gr.Dropdown.update(
-                        value=default_controlnet_name, choices=filtered_controlnet_names
-                    ),
+                    gr.Dropdown.update(value=default_preprocessor, choices=filtered_preprocessor_list),
+                    gr.Dropdown.update(value=default_controlnet_name, choices=filtered_controlnet_names),
                 ]
 
         self.type_filter.change(
@@ -768,9 +701,7 @@ class ControlNetUiGroup(object):
                 slider_1=pthr_a,
                 slider_2=pthr_b,
                 input_mask=mask,
-                json_pose_callback=json_acceptor.accept
-                if is_openpose(module)
-                else None,
+                json_pose_callback=json_acceptor.accept if is_openpose(module) else None,
             )
 
             is_image = judge_image_type(result)
@@ -850,9 +781,7 @@ class ControlNetUiGroup(object):
         )
 
         def fn_canvas(h, w):
-            return np.zeros(shape=(h, w, 3), dtype=np.uint8), gr.update(
-                visible=False
-            )
+            return np.zeros(shape=(h, w, 3), dtype=np.uint8), gr.update(visible=False)
 
         self.canvas_create_button.click(
             fn=fn_canvas,
@@ -896,22 +825,20 @@ class ControlNetUiGroup(object):
 
     def register_shift_upload_mask(self):
         """Controls whether the upload mask input should be visible."""
+
         def on_checkbox_click(checked: bool, canvas_height: int, canvas_width: int):
             if not checked:
                 # Clear mask_image if unchecked.
-                return gr.update(visible=False), gr.update(value=None), gr.update(value=None, visible=False), \
-                        gr.update(visible=False), gr.update(value=None)
+                return gr.update(visible=False), gr.update(value=None), gr.update(value=None, visible=False), gr.update(visible=False), gr.update(value=None)
             else:
                 # Init an empty canvas the same size as the generation target.
                 empty_canvas = np.zeros(shape=(canvas_height, canvas_width, 3), dtype=np.uint8)
-                return gr.update(visible=True), gr.update(value=empty_canvas), gr.update(visible=True), \
-                        gr.update(visible=True), gr.update()
+                return gr.update(visible=True), gr.update(value=empty_canvas), gr.update(visible=True), gr.update(visible=True), gr.update()
 
         self.mask_upload.change(
             fn=on_checkbox_click,
             inputs=[self.mask_upload, self.height_slider, self.width_slider],
-            outputs=[self.mask_image_group, self.mask_image.background, self.batch_mask_dir,
-                     self.batch_mask_gallery_group, self.batch_mask_gallery],
+            outputs=[self.mask_image_group, self.mask_image.background, self.batch_mask_dir, self.batch_mask_gallery_group, self.batch_mask_gallery],
             show_progress=False,
         )
 
@@ -987,12 +914,7 @@ class ControlNetUiGroup(object):
             if hasattr(comp, "clear"):
                 event_subscribers.append(comp.clear)
             for event_subscriber in event_subscribers:
-                event_subscriber(
-                    fn=clear_preview,
-                    inputs=self.use_preview_as_input,
-                    outputs=[self.use_preview_as_input, self.generated_image.background],
-                    show_progress=False
-                )
+                event_subscriber(fn=clear_preview, inputs=self.use_preview_as_input, outputs=[self.use_preview_as_input, self.generated_image.background], show_progress=False)
 
     def register_core_callbacks(self):
         """Register core callbacks that only involves gradio components defined
@@ -1040,10 +962,7 @@ class ControlNetUiGroup(object):
             # All A1111 components ControlNet units care about are all registered.
             ControlNetUiGroup.a1111_context.ui_initialized
             and all_unit_count == len(ControlNetUiGroup.all_ui_groups)
-            and all(
-                g.ui_initialized and (not g.callbacks_registered)
-                for g in ControlNetUiGroup.all_ui_groups
-            )
+            and all(g.ui_initialized and (not g.callbacks_registered) for g in ControlNetUiGroup.all_ui_groups)
         ):
             for ui_group in ControlNetUiGroup.all_ui_groups:
                 ui_group.register_callbacks()
