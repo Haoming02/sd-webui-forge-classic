@@ -63,7 +63,11 @@ class OpenposeEditor:
     ):
         def render_pose(pose_url: str) -> tuple[dict]:
             json_string = parse_data_url(pose_url).decode("utf-8")
-            poses, animals, height, width = decode_json_as_poses(json.loads(json_string))
+            pose = json.loads(json_string)
+            if isinstance(pose, list):
+                pose = pose[0]
+            assert isinstance(pose, dict)
+            poses, animals, height, width = decode_json_as_poses(pose)
             logger.info("Preview as input is enabled.")
             return (
                 # Generated image
