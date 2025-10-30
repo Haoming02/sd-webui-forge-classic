@@ -1,5 +1,5 @@
-import logging
 import copy
+import logging
 import sys
 
 from modules import shared
@@ -27,12 +27,10 @@ class ColoredFormatter(logging.Formatter):
 logger = logging.getLogger("ControlNet")
 logger.propagate = False
 
-# Add handler if we don't have one.
+# Add handler if we don't have one yet
 if not logger.handlers:
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
+    handler.setFormatter(ColoredFormatter("[%(name)s] - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
 
 # Configure logger
