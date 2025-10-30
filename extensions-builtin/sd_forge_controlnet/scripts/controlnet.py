@@ -15,7 +15,6 @@ from lib_controlnet.external_code import ControlNetUnit
 from lib_controlnet.utils import align_dim_latent, set_numpy_seed, crop_and_resize_image, \
     prepare_mask, judge_image_type
 from lib_controlnet.controlnet_ui.controlnet_ui_group import ControlNetUiGroup
-from lib_controlnet.controlnet_ui.photopea import Photopea
 from lib_controlnet.logging import logger
 from modules.processing import StableDiffusionProcessingImg2Img, StableDiffusionProcessingTxt2Img, \
     StableDiffusionProcessing
@@ -75,11 +74,6 @@ class ControlNetForForgeOfficial(scripts.Script):
         with gr.Group(elem_id=elem_id_tabname):
             with gr.Accordion(f"ControlNet Integrated", open=False, elem_id="controlnet",
                               elem_classes=["controlnet"]):
-                photopea = (
-                    Photopea()
-                    if not shared.opts.data.get("controlnet_disable_photopea_edit", False)
-                    else None
-                )
                 with gr.Row(elem_id=elem_id_tabname + "_accordions", elem_classes="accordions"):
                     for i in range(max_models):
                         with InputAccordion(
@@ -87,7 +81,7 @@ class ControlNetForForgeOfficial(scripts.Script):
                             label=f"ControlNet Unit {i}",
                             elem_classes=["cnet-unit-enabled-accordion"],  # Class on accordion
                         ):
-                            group = ControlNetUiGroup(is_img2img, default_unit, photopea)
+                            group = ControlNetUiGroup(is_img2img, default_unit)
                             ui_groups.append(group)
                             controls.append(group.render(f"ControlNet-{i}", elem_id_tabname))
 
@@ -572,10 +566,6 @@ def on_ui_settings():
         section=section))
     shared.opts.add_option("controlnet_disable_openpose_edit", shared.OptionInfo(
         False, "Disable openpose edit", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_disable_photopea_edit", shared.OptionInfo(
-        False, "Disable photopea edit", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_photopea_warning", shared.OptionInfo(
-        True, "Photopea popup warning", gr.Checkbox, {"interactive": True}, section=section))
     shared.opts.add_option("controlnet_input_thumbnail", shared.OptionInfo(
         True, "Input image thumbnail on unit header", gr.Checkbox, {"interactive": True}, section=section))
 

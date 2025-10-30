@@ -22,6 +22,7 @@
         /* Changes to 1 column when window width is ≤ 600px */
     }
 }
+
 /* Input image thumbnail */
 .cnet-thumbnail {
     height: 3rem !important;
@@ -136,8 +137,7 @@
 .cnet-download-pose a,
 .cnet-close-preview,
 .cnet-edit-pose,
-.cnet-upload-pose,
-.cnet-photopea-child-trigger {
+.cnet-upload-pose {
     font-size: x-small !important;
     font-weight: bold !important;
     padding: 2px !important;
@@ -155,8 +155,7 @@
 .cnet-download-pose:hover a,
 .cnet-close-preview:hover a,
 .cnet-edit-pose:hover,
-.cnet-upload-pose:hover,
-.cnet-photopea-child-trigger:hover {
+.cnet-upload-pose:hover {
     color: var(--block-label-text-color) !important;
 }
 
@@ -209,35 +208,17 @@
     height: 100%;
 }
 
-/* Photopea integration styles */
-.photopea-button-group {
-    position: absolute;
-    top: -30px; /* 20px modal padding + 10px margin */
-}
-
-.photopea-button {
-    font-size: 3rem;
-    font-weight: bold;
-    padding: 2px !important;
-    margin: 2px !important;
-    box-shadow: var(--shadow-drop);
-    border: 1px solid var(--button-secondary-border-color);
-    border-radius: var(--radius-sm);
-    background: var(--background-fill-primary);
-    color: var(--block-label-text-color);
-}
-
 .controlnet_control_type_filter_group label {
     background: unset !important;
     border: unset !important;
     margin-left: -10px !important;
 }
 
-.controlnet_control_type_filter_group > span {
+.controlnet_control_type_filter_group>span {
     display: none !important;
 }
 
-.controlnet_control_type_filter_group > .wrap {
+.controlnet_control_type_filter_group>.wrap {
     margin-top: -20px !important;
 }
 
