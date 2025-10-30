@@ -14,7 +14,7 @@ from lib_controlnet import (
 from lib_controlnet.logging import logger
 from lib_controlnet.controlnet_ui.openpose_editor import OpenposeEditor
 from lib_controlnet.controlnet_ui.photopea import Photopea
-from lib_controlnet.enums import InputMode, HiResFixOption
+from lib_controlnet.enums import HiResFixOption
 from modules import shared, script_callbacks
 from modules.ui_components import FormRow
 from modules_forge.utils import HWC3
@@ -219,7 +219,6 @@ class ControlNetUiGroup(object):
         self.upload_independent_img_in_img2img = None
         self.image_upload_panel = None
         self.save_detected_map = None
-        self.input_mode = gr.State(InputMode.SIMPLE)
         self.hr_option = None
         self.batch_image_dir_state = None
         self.output_dir_state = None
@@ -544,7 +543,6 @@ class ControlNetUiGroup(object):
         self.batch_image_dir_state = gr.State("")
         self.output_dir_state = gr.State("")
         unit_args = (
-            self.input_mode,
             self.use_preview_as_input,
             self.batch_image_dir,
             self.batch_mask_dir,
@@ -1041,39 +1039,6 @@ class ControlNetUiGroup(object):
             self.register_shift_hr_options()
 
     @staticmethod
-    def register_input_mode_sync(ui_groups: List["ControlNetUiGroup"]):
-        """
-        - ui_group.input_mode should be updated when user switch tabs.
-        - Loopback checkbox should only be visible if at least one ControlNet unit
-        is set to batch mode.
-
-        Argument:
-            ui_groups: All ControlNetUiGroup instances defined in current Script context.
-
-        Returns:
-            None
-        """
-        if not ui_groups:
-            return
-
-        for ui_group in ui_groups:
-            batch_fn = lambda: InputMode.BATCH
-            simple_fn = lambda: InputMode.SIMPLE
-            merge_fn = lambda: InputMode.MERGE
-            for input_tab, fn in (
-                (ui_group.upload_tab, simple_fn),
-                (ui_group.batch_tab, batch_fn),
-                (ui_group.merge_tab, merge_fn),
-            ):
-                # Sync input_mode.
-                input_tab.select(
-                    fn=fn,
-                    inputs=[],
-                    outputs=[ui_group.input_mode],
-                    show_progress=False,
-                )
-
-    @staticmethod
     def reset():
         ControlNetUiGroup.a1111_context = A1111Context()
         ControlNetUiGroup.all_ui_groups = []
@@ -1094,12 +1059,6 @@ class ControlNetUiGroup(object):
             for ui_group in ControlNetUiGroup.all_ui_groups:
                 ui_group.register_callbacks()
 
-            ControlNetUiGroup.register_input_mode_sync(
-                [g for g in ControlNetUiGroup.all_ui_groups if g.is_img2img]
-            )
-            ControlNetUiGroup.register_input_mode_sync(
-                [g for g in ControlNetUiGroup.all_ui_groups if not g.is_img2img]
-            )
             logger.info("ControlNet UI callback registered.")
 
     @staticmethod

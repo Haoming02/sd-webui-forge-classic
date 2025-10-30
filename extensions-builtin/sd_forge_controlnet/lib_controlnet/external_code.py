@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional, TypedDict
 
 import numpy as np
-from lib_controlnet.enums import HiResFixOption, InputMode
+from lib_controlnet.enums import HiResFixOption
 from lib_controlnet.logging import logger
 
 from modules.api import api
@@ -152,7 +152,6 @@ class GradioImageMaskPair(TypedDict):
 
 @dataclass
 class ControlNetUnit:
-    input_mode: InputMode = InputMode.SIMPLE
     use_preview_as_input: bool = False
     batch_image_dir: str = ""
     batch_mask_dir: str = ""
