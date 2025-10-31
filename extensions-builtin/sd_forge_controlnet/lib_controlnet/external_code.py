@@ -153,10 +153,6 @@ class GradioImageMaskPair(TypedDict):
 @dataclass
 class ControlNetUnit:
     use_preview_as_input: bool = False
-    batch_image_dir: str = ""
-    batch_mask_dir: str = ""
-    batch_input_gallery: Optional[list[str]] = None
-    batch_mask_gallery: Optional[list[str]] = None
     generated_image: Optional[np.ndarray] = None
     mask_image: Optional[GradioImageMaskPair] = None
     mask_image_fg: Optional[GradioImageMaskPair] = None

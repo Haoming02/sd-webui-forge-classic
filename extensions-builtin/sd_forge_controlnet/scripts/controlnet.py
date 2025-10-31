@@ -69,10 +69,9 @@ class ControlNetForForgeOfficial(scripts.Script):
         default_unit = ControlNetUnit(enabled=False, module="None", model="None")
         with gr.Group(elem_id=elem_id_tabname):
             with gr.Accordion(f"ControlNet Integrated", open=False, elem_id="controlnet", elem_classes=["controlnet"]):
-                with gr.Row(elem_id=elem_id_tabname + "_accordions", elem_classes="accordions"):
+                with gr.Tabs(elem_id=elem_id_tabname + "_accordions", elem_classes="accordions"):
                     for i in range(max_models):
-                        with InputAccordion(
-                            value=False,
+                        with gr.Tab(
                             label=f"ControlNet Unit {i}",
                             elem_classes=["cnet-unit-enabled-accordion"],  # Class on accordion
                         ):

@@ -163,17 +163,11 @@ class ControlNetUiGroup(object):
         # this counter to trigger a sync update of UiControlNetUnit.
         self.dummy_gradio_update_trigger = None
         self.enabled = None
-        self.upload_tab = None
         self.image = None
         self.generated_image_group = None
         self.generated_image = None
         self.mask_image_group = None
         self.mask_image = None
-        self.batch_tab = None
-        self.batch_image_dir = None
-        self.merge_tab = None
-        self.batch_input_gallery = None
-        self.batch_mask_gallery = None
         self.create_canvas = None
         self.canvas_width = None
         self.canvas_height = None
@@ -232,50 +226,26 @@ class ControlNetUiGroup(object):
         with gr.Group(visible=not self.is_img2img) as self.image_upload_panel:
             self.save_detected_map = gr.Checkbox(value=True, visible=False)
 
-            with gr.Tabs(visible=True):
-                with gr.Tab(label="Single Image") as self.upload_tab:
-                    with gr.Row(elem_classes=["cnet-image-row"], equal_height=True):
-                        with gr.Group(elem_classes=["cnet-input-image-group"]):
-                            self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], contrast_scribbles=True, height=300, numpy=True)
-                            self.openpose_editor.render_upload()
+            with gr.Row(elem_classes=["cnet-image-row"], equal_height=True):
+                with gr.Group(elem_classes=["cnet-input-image-group"]):
+                    self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], contrast_scribbles=True, numpy=True)
+                    self.openpose_editor.render_upload()
 
-                        with gr.Group(visible=False, elem_classes=["cnet-generated-image-group"]) as self.generated_image_group:
-                            self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], height=300, no_scribbles=True, no_upload=True, numpy=True)
+                with gr.Group(visible=False, elem_classes=["cnet-generated-image-group"]) as self.generated_image_group:
+                    self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], no_scribbles=True, no_upload=True, numpy=True)
 
-                            with gr.Group(elem_classes=["cnet-generated-image-control-group"]):
-                                self.openpose_editor.render_edit()
-                                preview_check_elem_id = f"{elem_id_tabname}_{tabname}_controlnet_preprocessor_preview_checkbox"
-                                preview_close_button_js = f"document.querySelector('#{preview_check_elem_id} input[type=\\'checkbox\\']').click();"
-                                gr.HTML(
-                                    value=f"""<a title="Close Preview" onclick="{preview_close_button_js}">Close</a>""",
-                                    visible=True,
-                                    elem_classes=["cnet-close-preview"],
-                                )
-
-                        with gr.Group(visible=False, elem_classes=["cnet-mask-image-group"]) as self.mask_image_group:
-                            self.mask_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_mask_image", elem_classes=["cnet-mask-image"], height=300, scribble_color="#FFFFFF", scribble_width=1, scribble_alpha_fixed=True, scribble_color_fixed=True, scribble_softness_fixed=True, numpy=True)
-
-                with gr.Tab(label="Batch Folder") as self.batch_tab:
-                    with gr.Row():
-                        self.batch_image_dir = gr.Textbox(
-                            label="Input Directory",
-                            placeholder="Input directory path to the control images.",
-                            elem_id=f"{elem_id_tabname}_{tabname}_batch_image_dir",
-                        )
-                        self.batch_mask_dir = gr.Textbox(
-                            label="Mask Directory",
-                            placeholder="Mask directory path to the control images.",
-                            elem_id=f"{elem_id_tabname}_{tabname}_batch_mask_dir",
-                            visible=False,
+                    with gr.Group(elem_classes=["cnet-generated-image-control-group"]):
+                        self.openpose_editor.render_edit()
+                        preview_check_elem_id = f"{elem_id_tabname}_{tabname}_controlnet_preprocessor_preview_checkbox"
+                        preview_close_button_js = f"document.querySelector('#{preview_check_elem_id} input[type=\\'checkbox\\']').click();"
+                        gr.HTML(
+                            value=f"""<a title="Close Preview" onclick="{preview_close_button_js}">Close</a>""",
+                            visible=True,
+                            elem_classes=["cnet-close-preview"],
                         )
 
-                with gr.Tab(label="Batch Upload") as self.merge_tab:
-                    with gr.Row():
-                        with gr.Column():
-                            self.batch_input_gallery = gr.Gallery(columns=[4], rows=[2], object_fit="contain", height="auto", label="Images")
-                        with gr.Group(visible=False, elem_classes=["cnet-mask-gallery-group"]) as self.batch_mask_gallery_group:
-                            with gr.Column():
-                                self.batch_mask_gallery = gr.Gallery(columns=[4], rows=[2], object_fit="contain", height="auto", label="Masks")
+                with gr.Group(visible=False, elem_classes=["cnet-mask-image-group"]) as self.mask_image_group:
+                    self.mask_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_mask_image", elem_classes=["cnet-mask-image"], scribble_color="#FFFFFF", scribble_width=1, scribble_alpha_fixed=True, scribble_color_fixed=True, scribble_softness_fixed=True, numpy=True)
 
             with gr.Accordion(label="Open New Canvas", visible=False) as self.create_canvas:
                 self.canvas_width = gr.Slider(
@@ -485,10 +455,6 @@ class ControlNetUiGroup(object):
         self.output_dir_state = gr.State("")
         unit_args = (
             self.use_preview_as_input,
-            self.batch_image_dir,
-            self.batch_mask_dir,
-            self.batch_input_gallery,
-            self.batch_mask_gallery,
             self.generated_image.background,
             self.mask_image.background,
             self.mask_image.foreground,
@@ -794,7 +760,6 @@ class ControlNetUiGroup(object):
         def fn_same_checked(x):
             return [
                 gr.update(value=None),
-                gr.update(value=None),
                 gr.update(value=False, visible=x),
             ] + [gr.update(visible=x)] * 3
 
@@ -803,7 +768,6 @@ class ControlNetUiGroup(object):
             inputs=self.upload_independent_img_in_img2img,
             outputs=[
                 self.image.background,
-                self.batch_image_dir,
                 self.preprocessor_preview,
                 self.image_upload_panel,
                 self.trigger_preprocessor,
@@ -829,16 +793,16 @@ class ControlNetUiGroup(object):
         def on_checkbox_click(checked: bool, canvas_height: int, canvas_width: int):
             if not checked:
                 # Clear mask_image if unchecked.
-                return gr.update(visible=False), gr.update(value=None), gr.update(value=None, visible=False), gr.update(visible=False), gr.update(value=None)
+                return gr.update(visible=False), gr.update(value=None)
             else:
                 # Init an empty canvas the same size as the generation target.
                 empty_canvas = np.zeros(shape=(canvas_height, canvas_width, 3), dtype=np.uint8)
-                return gr.update(visible=True), gr.update(value=empty_canvas), gr.update(visible=True), gr.update(visible=True), gr.update()
+                return gr.update(visible=True), gr.update(value=empty_canvas)
 
         self.mask_upload.change(
             fn=on_checkbox_click,
             inputs=[self.mask_upload, self.height_slider, self.width_slider],
-            outputs=[self.mask_image_group, self.mask_image.background, self.batch_mask_dir, self.batch_mask_gallery_group, self.batch_mask_gallery],
+            outputs=[self.mask_image_group, self.mask_image.background],
             show_progress=False,
         )
 
@@ -865,7 +829,6 @@ class ControlNetUiGroup(object):
                 return fallback_fallback_dir
 
         batch_dirs = [
-            self.batch_image_dir,
             ControlNetUiGroup.global_batch_input_dir,
             ControlNetUiGroup.a1111_context.img2img_batch_input_dir,
         ]
