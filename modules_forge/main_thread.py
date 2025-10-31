@@ -6,13 +6,18 @@
 import time
 import traceback
 import threading
+import queue
 
 
 lock = threading.Lock()
 last_id = 0
-waiting_list = []
-finished_list = []
+# waiting tasks queue (thread-safe)
+wait_queue = queue.Queue()
+# active tasks by id
+tasks: dict[int, "Task"] = {}
 last_exception = None
+stop_event = threading.Event()
+_main_thread = None
 
 
 class Task:
@@ -23,6 +28,7 @@ class Task:
         self.kwargs = kwargs
         self.result = None
         self.exception = None
+        self.done = threading.Event()
 
     def work(self):
         global last_exception
@@ -35,43 +41,109 @@ class Task:
             print(e)
             self.exception = e
             last_exception = e
+        finally:
+            # mark the task as finished so waiters can proceed
+            try:
+                self.done.set()
+            except Exception:
+                pass
 
 
 def loop():
-    global lock, last_id, waiting_list, finished_list
-    while True:
-        time.sleep(0.01)
-        if len(waiting_list) > 0:
-            with lock:
-                task = waiting_list.pop(0)
+    """Main worker loop.
 
-            task.work()
+    This loop checks ``stop_event`` and will exit promptly when it is set.
+    Use :pyfunc:`start` to run this loop in a daemon thread and :pyfunc:`stop`
+    to request a clean shutdown.
+    """
+    global lock, last_id, wait_queue, tasks, stop_event
+    try:
+        while not stop_event.is_set():
+            try:
+                # block until a task is available or timeout so we can check stop_event
+                task = wait_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
 
-            with lock:
-                finished_list.append(task)
+            try:
+                task.work()
+            finally:
+                # keep the task in tasks mapping until waiter collects result
+                pass
+    except Exception:
+        traceback.print_exc()
+        # ensure the exception is visible to callers
+        # last_exception is set by Task.work on per-task exceptions
+    finally:
+        # no-op cleanup hook; consumers may call stop() to join the thread
+        return
+
+
+def start():
+    """Start the main loop in a background daemon thread.
+
+    If a thread is already running this is a no-op and the running thread is
+    returned.
+    """
+    global _main_thread, stop_event
+    stop_event.clear()
+    if _main_thread is None or not _main_thread.is_alive():
+        _main_thread = threading.Thread(target=loop, name="forge-main-thread", daemon=True)
+        _main_thread.start()
+    return _main_thread
+
+
+def stop(timeout=None):
+    """Request the main loop to stop and optionally join the thread.
+
+    Returns True if the thread is no longer alive after the join, False if
+    the thread is still alive (e.g., if a timeout was given and expired).
+    """
+    global _main_thread, stop_event
+    stop_event.set()
+    if _main_thread is not None:
+        _main_thread.join(timeout)
+        return not _main_thread.is_alive()
+    return True
 
 
 def async_run(func, *args, **kwargs):
-    global lock, last_id, waiting_list, finished_list
+    global lock, last_id, wait_queue, tasks
     with lock:
         last_id += 1
         new_task = Task(task_id=last_id, func=func, args=args, kwargs=kwargs)
-        waiting_list.append(new_task)
+        tasks[new_task.task_id] = new_task
+        wait_queue.put(new_task)
     return new_task.task_id
 
 
 def run_and_wait_result(func, *args, **kwargs):
-    global lock, last_id, waiting_list, finished_list
+    global lock, last_id, tasks
     current_id = async_run(func, *args, **kwargs)
+
+    # wait for the task to be registered
     while True:
-        time.sleep(0.01)
-        finished_task = None
-        for t in finished_list.copy():  # thread safe shallow copy without needing a lock
-            if t.task_id == current_id:
-                finished_task = t
-                break
-        if finished_task is not None:
-            with lock:
-                finished_list.remove(finished_task)
-            return finished_task.result
+        with lock:
+            task = tasks.get(current_id)
+        if task is not None:
+            break
+        if stop_event.is_set():
+            raise RuntimeError("main_thread stopped before task started")
+        stop_event.wait(0.01)
+
+    # wait for the task to finish, but remain responsive to stop_event
+    while True:
+        if task.done.wait(0.1):
+            break
+        if stop_event.is_set():
+            raise RuntimeError("main_thread stopped before task completed")
+
+    # collect result and cleanup
+    try:
+        if task.exception is not None:
+            raise task.exception
+        return task.result
+    finally:
+        with lock:
+            tasks.pop(current_id, None)
 

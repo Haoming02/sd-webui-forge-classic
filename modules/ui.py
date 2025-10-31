@@ -13,7 +13,7 @@ from PIL import Image, PngImagePlugin  # noqa: F401
 import modules.infotext_utils as parameters_copypaste
 import modules.processing_scripts.comments as comments
 import modules.shared as shared
-from modules import extra_networks, gradio_extensions, launch_utils, paths_internal, processing, progress, prompt_parser, script_callbacks, scripts, sd_hijack, sd_models, sd_samplers, sd_schedulers, shared_items, sysinfo, timer, ui_checkpoint_merger, ui_common, ui_extensions, ui_extra_networks, ui_loadsave, ui_postprocessing, ui_settings, ui_toprow  # noqa: F401
+from modules import extra_networks, gradio_extensions, launch_utils, paths_internal, processing, progress, prompt_parser, script_callbacks, scripts, sd_hijack, sd_models, sd_samplers, sd_schedulers, shared_items, sysinfo, timer, ui_checkpoint_merger, ui_common, ui_extra_networks, ui_loadsave, ui_postprocessing, ui_settings, ui_toprow  # noqa: F401
 from modules.call_queue import wrap_gradio_call, wrap_gradio_call_no_job, wrap_gradio_gpu_call, wrap_queued_call  # noqa: F401
 from modules.infotext_utils import PasteField, image_from_url_text
 from modules.paths import script_path
@@ -876,10 +876,36 @@ def create_ui():
         (modelmerger_ui.blocks, "Checkpoint Merger", "modelmerger"),
     ]
 
-    interfaces += script_callbacks.ui_tabs_callback()
+    try:
+        interfaces += script_callbacks.ui_tabs_callback()
+    except Exception as e:
+        import traceback
+
+        print(f"Error while collecting script UI tabs: {e}")
+        traceback.print_exc()
     interfaces += [(settings.interface, "Settings", "settings")]
 
-    extensions_interface = ui_extensions.create_ui()
+    # Defer loading the full extensions UI to reduce startup cost.
+    # We'll create the placeholder inside the Blocks context below and attach a loader.
+
+    # Loader for the real extensions table (defined before block so it can be used by components)
+    def _load_extensions_table():
+        # Import inside the handler to avoid heavy imports at server startup
+        import modules.ui_extensions as ui_extensions
+
+        try:
+            return ui_extensions.extension_table()
+        except Exception as e:
+            return f"<pre>Error loading extensions: {e}</pre>"
+
+    # Attach the loader to the placeholder so it runs when the client loads the tab.
+    # Call .load() while still inside the Blocks context (Gradio requires this).
+    with gr.Blocks(analytics_enabled=False) as extensions_interface:
+        with gr.Column(variant="panel"):
+            extensions_table = gr.HTML("Loading extensions...", elem_id="extensions_installed_html")
+
+        # populate the placeholder after the page loads (Blocks-level load)
+        extensions_interface.load(fn=_load_extensions_table, inputs=[], outputs=[extensions_table], show_progress=False)
     interfaces += [(extensions_interface, "Extensions", "extensions")]
 
     shared.tab_names = []

@@ -13,6 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
+import threading
 
 from modules import cmd_args, errors, logging_config
 from modules.paths_internal import extensions_builtin_dir, extensions_dir, script_path
@@ -310,10 +311,26 @@ def prepare_environment():
         run(f'"{python}" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
         startup_timer.record("install torch")
 
+    # Run the Torch CUDA availability check asynchronously so it doesn't block UI startup.
+    # We intentionally do not raise here; failures will be logged so the UI can come up.
     if not args.skip_torch_cuda_test:
-        if not check_run_python("import torch; assert torch.cuda.is_available()"):
-            raise RuntimeError("PyTorch is not able to access CUDA")
-        startup_timer.record("torch GPU test")
+        def _async_torch_gpu_test():
+            try:
+                ok = check_run_python("import torch; assert torch.cuda.is_available()")
+                if not ok:
+                    print("Warning: PyTorch CUDA test failed (async). PyTorch may not be able to access CUDA.")
+                else:
+                    print("PyTorch CUDA test completed (async): CUDA available.")
+            except Exception as e:
+                print(f"PyTorch CUDA test error (async): {e}")
+            finally:
+                try:
+                    startup_timer.record("torch GPU test")
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_async_torch_gpu_test, name="torch-gpu-test", daemon=True)
+        t.start()
 
     if not is_installed("packaging"):
         run_pip(f"install {packaging_package}", "packaging")

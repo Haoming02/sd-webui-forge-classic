@@ -7,30 +7,54 @@ class GradioTextAreaBind {
         this.syncLock = false;
         this.previousValue = '';
 
-        // In case the target isn't found, bail out early to avoid errors
-        if (!this.target) {
-            console.warn(`GradioTextAreaBind: Target textarea not found for #${elementId}.${className}`);
-            return;
-        }
-
-        this.observer = new MutationObserver(() => {
-            if (this.target.value !== this.previousValue) {
-                this.previousValue = this.target.value;
-                if (!this.syncLock && this._callback) {
-                    this.syncLock = true;
-                    this._callback(this.target.value);
-                    this.syncLock = false;
+        // If the target isn't found yet, don't bail out — try to attach later.
+        // This happens when the Gradio DOM for this canvas/tab isn't rendered yet.
+        // We'll poll briefly for the textarea and attach a MutationObserver once found.
+        const attachObserverToTarget = (targetEl) => {
+            this.target = targetEl;
+            if (!this.target) return;
+            this.observer = new MutationObserver(() => {
+                if (this.target.value !== this.previousValue) {
+                    this.previousValue = this.target.value;
+                    if (!this.syncLock && this._callback) {
+                        this.syncLock = true;
+                        this._callback(this.target.value);
+                        this.syncLock = false;
+                    }
                 }
-            }
-        });
+            });
 
-        // Observe changes
-        this.observer.observe(this.target, {
-            characterData: true,
-            subtree: true,
-            childList: true,
-            attributes: true
-        });
+            // Observe changes
+            this.observer.observe(this.target, {
+                characterData: true,
+                subtree: true,
+                childList: true,
+                attributes: true
+            });
+        };
+
+        if (this.target) {
+            attachObserverToTarget(this.target);
+        } else {
+            // Try a few times to find the textarea in case Gradio mounts it later
+            console.warn(`GradioTextAreaBind: Target textarea not found for #${elementId}.${className} - will retry`);
+            const selector = `#${elementId}.${className} textarea`;
+            let attempts = 0;
+            const maxAttempts = 25; // ~5 seconds if interval is 200ms
+            const interval = 200;
+            const tryFind = () => {
+                const el = document.querySelector(selector);
+                if (el) {
+                    attachObserverToTarget(el);
+                } else if (attempts < maxAttempts) {
+                    attempts++;
+                    setTimeout(tryFind, interval);
+                } else {
+                    console.warn(`GradioTextAreaBind: Failed to find textarea for ${selector} after ${attempts} attempts`);
+                }
+            };
+            tryFind();
+        }
     }
 
     setValue(newValue) {
@@ -92,6 +116,23 @@ class UndoManager {
                 }
             }
         }
+
+        // Also free ImageBitmap resources for older states
+        try {
+            for (let i = 0; i < this.states.length - keepDetailed; i++) {
+                const s = this.states[i];
+                if (s && s.drawingBitmap) {
+                    try {
+                        if (typeof s.drawingBitmap.close === 'function') s.drawingBitmap.close();
+                    } catch (e) {
+                        // ignore
+                    }
+                    s.drawingBitmap = null;
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
     }
 
     canUndo() {
@@ -126,6 +167,15 @@ class UndoManager {
                 }
                 if (state.backgroundImage) {
                     state.backgroundImage = null;
+                }
+                // Close ImageBitmap if present to free GPU memory
+                if (state.drawingBitmap) {
+                    try {
+                        if (typeof state.drawingBitmap.close === 'function') state.drawingBitmap.close();
+                    } catch (e) {
+                        // ignore
+                    }
+                    state.drawingBitmap = null;
                 }
             }
         });
@@ -416,13 +466,27 @@ class ForgeCanvas {
             container.style.height = `${height}px`;
         }
 
-        // Initialize drawing canvas
+        // Initialize drawing canvas with devicePixelRatio awareness
         if (drawingCanvas && this.elems.imageContainer) {
-            drawingCanvas.width = this.elems.imageContainer.clientWidth;
-            drawingCanvas.height = this.elems.imageContainer.clientHeight;
+            const cssWidth = this.elems.imageContainer.clientWidth;
+            const cssHeight = this.elems.imageContainer.clientHeight;
+            const DPR = window.devicePixelRatio || 1;
+
+            // Set internal pixel buffer to CSS size * DPR for crisp drawing
+            drawingCanvas.width = Math.round(cssWidth * DPR);
+            drawingCanvas.height = Math.round(cssHeight * DPR);
+            drawingCanvas.style.width = `${cssWidth}px`;
+            drawingCanvas.style.height = `${cssHeight}px`;
+
             this.drawingCanvas = drawingCanvas;
-            // Grab and store a single 2D context
+            // Grab and store a single 2D context and scale to use CSS pixels
             this.drawingCtx = drawingCanvas.getContext('2d');
+            try {
+                this.drawingCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+            } catch (e) {
+                // some older browsers may not support setTransform with these args
+                this.drawingCtx.scale(DPR, DPR);
+            }
         }
 
         // Hide scribble-related elements if noScribbles is true
@@ -1460,8 +1524,23 @@ class ForgeCanvas {
 
             const {drawingCanvas} = this.elems;
             if (drawingCanvas && (drawingCanvas.width !== img.width || drawingCanvas.height !== img.height)) {
-                drawingCanvas.width = img.width;
-                drawingCanvas.height = img.height;
+                // Use DPR-aware sizing: store pixel buffer as cssSize * DPR and keep CSS width for layout
+                const cssWidth = img.width;
+                const cssHeight = img.height;
+                const DPR = window.devicePixelRatio || 1;
+
+                drawingCanvas.width = Math.round(cssWidth * DPR);
+                drawingCanvas.height = Math.round(cssHeight * DPR);
+                drawingCanvas.style.width = `${cssWidth}px`;
+                drawingCanvas.style.height = `${cssHeight}px`;
+
+                // re-acquire context and scale
+                this.drawingCtx = drawingCanvas.getContext('2d');
+                try {
+                    this.drawingCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+                } catch (e) {
+                    this.drawingCtx.scale(DPR, DPR);
+                }
             }
 
             this.adjustInitialPositionAndScale();
@@ -1481,10 +1560,14 @@ class ForgeCanvas {
         this.originalHeight = null;
         const {drawingCanvas} = this.elems;
         if (drawingCanvas) {
-            drawingCanvas.width = 1;
-            drawingCanvas.height = 1;
+            const DPR = window.devicePixelRatio || 1;
+            drawingCanvas.width = Math.round(1 * DPR);
+            drawingCanvas.height = Math.round(1 * DPR);
+            drawingCanvas.style.width = `1px`;
+            drawingCanvas.style.height = `1px`;
             if (this.drawingCtx) {
-                this.drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                // clear using CSS pixels (context is scaled by DPR)
+                this.drawingCtx.clearRect(0, 0, 1, 1);
             }
         }
         this.adjustInitialPositionAndScale();
@@ -1499,8 +1582,10 @@ class ForgeCanvas {
         img.onload = () => {
             const {drawingCanvas} = this.elems;
             if (!drawingCanvas) return;
-            this.drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
-            this.drawingCtx.drawImage(img, 0, 0);
+            const DPR = window.devicePixelRatio || 1;
+            // drawingCtx is scaled by DPR so operate in CSS pixels
+            this.drawingCtx.clearRect(0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
+            this.drawingCtx.drawImage(img, 0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
             this.saveState();
         };
 
@@ -1509,7 +1594,8 @@ class ForgeCanvas {
         } else {
             const {drawingCanvas} = this.elems;
             if (!drawingCanvas) return;
-            this.drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            const DPR = window.devicePixelRatio || 1;
+            this.drawingCtx.clearRect(0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
             this.saveState();
         }
     }
@@ -1619,8 +1705,7 @@ class ForgeCanvas {
             // Only save the drawing layer - background is handled separately
             const state = {
                 timestamp: Date.now(),
-                // Save only drawing data, not the full canvas with background
-                drawingDataURL: drawingCanvas.toDataURL('image/png', 0.8), // Compress
+                // We'll attach a drawingBitmap asynchronously where supported to save memory/CPU
                 width: drawingCanvas.width,
                 height: drawingCanvas.height,
                 // Store background info separately (only if it changed)
@@ -1630,7 +1715,49 @@ class ForgeCanvas {
                 backgroundY: this.imgY
             };
 
+            // Push an initial lightweight state; attach a bitmap async when available
             this.undoManager.pushState(state);
+
+            // Try to capture an ImageBitmap for efficient undo storage (async, non-blocking)
+            if (typeof createImageBitmap === 'function') {
+                try {
+                    // createImageBitmap can accept an HTMLCanvasElement directly
+                    createImageBitmap(drawingCanvas).then(bitmap => {
+                        // attach bitmap to the same state object (by reference)
+                        state.drawingBitmap = bitmap;
+                    }).catch(err => {
+                        // fallback: create a dataURL for older browsers or failures
+                        try {
+                            state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
+                        } catch (e) {
+                            // give up
+                        }
+                    });
+                } catch (e) {
+                    try {
+                        state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
+                    } catch (err) {
+                        // ignore
+                    }
+                }
+                // If bitmap doesn't arrive within a short window, capture a dataURL as a fallback
+                setTimeout(() => {
+                    try {
+                        if (!state.drawingBitmap && !state.drawingDataURL) {
+                            state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                }, 250);
+            } else {
+                // Fallback to dataURL for environments without createImageBitmap
+                try {
+                    state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
+                } catch (e) {
+                    // ignore
+                }
+            }
             this.lastSavedState = Date.now();
             this.updateUndoRedoButtons();
 
@@ -1714,20 +1841,73 @@ class ForgeCanvas {
         const {drawingCanvas, image} = this.elems;
         if (!drawingCanvas || !state) return;
 
-        // Handle both old format (dataURL) and new format (drawingDataURL + background)
-        const drawingDataURL = state.drawingDataURL || state.dataURL;
-        if (!drawingDataURL) return;
+        // Prefer ImageBitmap if available in state
+        const DPR = window.devicePixelRatio || 1;
 
-        const img = new Image();
-        img.onload = () => {
-            // Resize canvas if needed
-            if (drawingCanvas.width !== state.width || drawingCanvas.height !== state.height) {
-                drawingCanvas.width = state.width;
-                drawingCanvas.height = state.height;
+        const applyBitmap = (bitmap) => {
+            // Resize internal buffer & CSS size to match stored state if provided
+            if (state.width && state.height) {
+                // state.width/height are pixel buffer sizes; convert to CSS px for styling
+                const cssWidth = Math.round((state.width || drawingCanvas.width) / DPR);
+                const cssHeight = Math.round((state.height || drawingCanvas.height) / DPR);
+                drawingCanvas.width = Math.round(cssWidth * DPR);
+                drawingCanvas.height = Math.round(cssHeight * DPR);
+                drawingCanvas.style.width = `${cssWidth}px`;
+                drawingCanvas.style.height = `${cssHeight}px`;
+                this.drawingCtx = drawingCanvas.getContext('2d');
+                try { this.drawingCtx.setTransform(DPR, 0, 0, DPR, 0, 0); } catch (e) { this.drawingCtx.scale(DPR, DPR); }
+            }
+            // Clear and draw bitmap (bitmap draws in device pixels so we draw using CSS size)
+            try {
+                this.drawingCtx.clearRect(0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
+                this.drawingCtx.drawImage(bitmap, 0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
+            } catch (e) {
+                // fallback: convert bitmap to data URL
+                try {
+                    const canvasForBitmap = document.createElement('canvas');
+                    canvasForBitmap.width = drawingCanvas.width / DPR;
+                    canvasForBitmap.height = drawingCanvas.height / DPR;
+                    const ctx = canvasForBitmap.getContext('2d');
+                    ctx.drawImage(bitmap, 0, 0, canvasForBitmap.width, canvasForBitmap.height);
+                    this.drawingCtx.drawImage(canvasForBitmap, 0, 0);
+                } catch (err) {
+                    console.warn('Failed to draw bitmap during applyState:', err);
+                }
             }
 
+            // Restore background if available in state
+            if (state.backgroundImage && image) {
+                this.img = state.backgroundImage;
+                this.imgScale = state.backgroundScale || this.imgScale;
+                this.imgX = state.backgroundX || this.imgX;
+                this.imgY = state.backgroundY || this.imgY;
+                this.drawImage();
+            }
+        };
+
+        if (state.drawingBitmap) {
+            // drawingBitmap may be an ImageBitmap
+            applyBitmap(state.drawingBitmap);
+            return;
+        }
+
+        // Fallback to dataURL if bitmap not available
+        const drawingDataURL = state.drawingDataURL || state.dataURL;
+        if (!drawingDataURL) return;
+        const img = new Image();
+        img.onload = () => {
+            // Determine css sizes from state or image
+            const cssWidth = state.width ? Math.round(state.width / DPR) : img.width;
+            const cssHeight = state.height ? Math.round(state.height / DPR) : img.height;
+            drawingCanvas.width = Math.round(cssWidth * DPR);
+            drawingCanvas.height = Math.round(cssHeight * DPR);
+            drawingCanvas.style.width = `${cssWidth}px`;
+            drawingCanvas.style.height = `${cssHeight}px`;
+            this.drawingCtx = drawingCanvas.getContext('2d');
+            try { this.drawingCtx.setTransform(DPR, 0, 0, DPR, 0, 0); } catch (e) { this.drawingCtx.scale(DPR, DPR); }
+
             // Clear and restore drawing layer
-            this.drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            this.drawingCtx.clearRect(0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
             this.drawingCtx.drawImage(img, 0, 0);
 
             // Restore background if available in state
@@ -1773,6 +1953,53 @@ class ForgeCanvas {
         }
         const {drawingCanvas} = this.elems;
         if (!drawingCanvas) return;
+        // Helper to convert canvas to base64 via blob asynchronously (safer and non-blocking)
+        const emitCanvasAsBase64 = (cb) => {
+            try {
+                drawingCanvas.toBlob((blob) => {
+                    if (!blob) {
+                        // Fallback to toDataURL if toBlob fails
+                        try {
+                            const base64 = drawingCanvas.toDataURL('image/png');
+                            this.foregroundGradioBind.setValue(base64);
+                        } catch (err) {
+                            console.warn('Failed to generate canvas dataURL:', err);
+                        }
+                        if (typeof cb === 'function') cb();
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        try {
+                            const dataUrl = reader.result;
+                            this.foregroundGradioBind.setValue(dataUrl);
+                        } catch (err) {
+                            console.warn('Failed to read canvas blob as data URL:', err);
+                        }
+                        if (typeof cb === 'function') cb();
+                    };
+                    reader.onerror = () => {
+                        try {
+                            const base64 = drawingCanvas.toDataURL('image/png');
+                            this.foregroundGradioBind.setValue(base64);
+                        } catch (err) {
+                            console.warn('Failed to generate canvas dataURL after reader error:', err);
+                        }
+                        if (typeof cb === 'function') cb();
+                    };
+                    reader.readAsDataURL(blob);
+                }, 'image/png');
+            } catch (err) {
+                // Final fallback
+                try {
+                    const base64 = drawingCanvas.toDataURL('image/png');
+                    this.foregroundGradioBind.setValue(base64);
+                } catch (e) {
+                    console.warn('Failed to generate canvas data URL (final fallback):', e);
+                }
+                if (typeof cb === 'function') cb();
+            }
+        };
 
         // Optionally skip the debounce if forceImmediate
         if (!forceImmediate) {
@@ -1780,12 +2007,10 @@ class ForgeCanvas {
                 clearTimeout(this.uploadDebounceTimer);
             }
             this.uploadDebounceTimer = setTimeout(() => {
-                const base64Data = drawingCanvas.toDataURL('image/png');
-                this.foregroundGradioBind.setValue(base64Data);
+                emitCanvasAsBase64();
             }, this.uploadDebounceDelay);
         } else {
-            const base64Data = drawingCanvas.toDataURL('image/png');
-            this.foregroundGradioBind.setValue(base64Data);
+            emitCanvasAsBase64();
         }
     }
 
