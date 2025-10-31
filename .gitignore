@@ -55,3 +55,18 @@ huggingface_space_mirror/
 notification.mp3
 random_test.py
 trace.json
+
+# profiler outputs
+*.prof
+
+# tools profile outputs
+tools/*.prof
+
+# large tokenizer files from huggingface local copies
+backend/huggingface/**/tokenizer/tokenizer.json
+
+# common large model artifacts (not tracked normally)
+*.ckpt
+*.safetensors
+*.pt
+*.pth
