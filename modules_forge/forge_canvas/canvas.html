@@ -1,55 +1,75 @@
 <div class="forge-container" id="container_forge_mixin">
     <input type="file" id="imageInput_forge_mixin" class="forge-file-upload">
     <div id="imageContainer_forge_mixin" class="forge-image-container">
-        <div id="uploadHint_forge_mixin">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4"
-                stroke-linecap="round" stroke-linejoin="round" class="forge-upload-hint">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="grey" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" class="forge-upload-hint">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
+        <div id="uploadHint_forge_mixin" class="forge-upload-empty">
+            <div class="forge-upload-card">
+                <div class="forge-upload-graphic">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor"
+                         stroke-width="2.5"
+                         stroke-linecap="round"
+                         stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+                <p class="forge-upload-title">Drop an image</p>
+                <p class="forge-upload-subtitle">or click Upload</p>
+                <button id="uploadHintButton_forge_mixin"
+                        type="button"
+                        class="forge-upload-action forge-no-select">
+                    Browse files
+                </button>
+                <p class="forge-upload-meta">Tip: paste with Ctrl+V</p>
+            </div>
         </div>
-        <img id="image_forge_mixin" draggable="false" class="forge-image">
-        <canvas id="drawingCanvas_forge_mixin" class="forge-drawing-canvas" style="position:absolute;top:0;left:0;"
-            width="1" height="1"></canvas>
+        <img id="image_forge_mixin" class="forge-image forge-no-select">
+        <canvas id="drawingCanvas_forge_mixin" class="forge-drawing-canvas"
+                style="position:absolute;top:0;left:0;" width="1" height="1"></canvas>
         <div class="forge-toolbar" id="toolbar_forge_mixin">
             <div class="forge-toolbar-box-a">
-                <button id="maxButton_forge_mixin" class="forge-btn" title="Maximize [F]">⛶</button>
-                <button id="minButton_forge_mixin" class="forge-btn" title="Minimize [F]">➖</button>
-                <button id="uploadButton_forge_mixin" class="forge-btn" title="Upload">📂</button>
-                <button id="removeButton_forge_mixin" class="forge-btn" title="Remove">🗑️</button>
-                <button id="centerButton_forge_mixin" class="forge-btn" title="Center Position [R]">✠</button>
-                <button id="resetButton_forge_mixin" class="forge-btn" title="Reset [Ctrl + X]">🔄</button>
-                <button id="undoButton_forge_mixin" class="forge-btn" title="Undo [Ctrl + Z]">↩️</button>
-                <button id="redoButton_forge_mixin" class="forge-btn" title="Redo [Ctrl + Y]">↪️</button>
+                <button id="maxButton_forge_mixin" class="forge-btn forge-no-select" title="Maximize">⛶</button>
+                <button id="minButton_forge_mixin" class="forge-btn forge-no-select" title="Minimize" style="display: none;">➖</button>
+                <button id="uploadButton_forge_mixin" class="forge-btn forge-no-select" title="Upload">📂</button>
+                <button id="removeButton_forge_mixin" class="forge-btn forge-no-select" title="Remove">🗑️</button>
+                <button id="centerButton_forge_mixin" class="forge-btn forge-no-select" title="Center Position">✠</button>
+                <button id="resetButton_forge_mixin" class="forge-btn forge-no-select" title="Reset">🔄</button>
+                <div class="forge-brush-dropdown-container">
+                    <button id="brushButton_forge_mixin" class="forge-btn forge-no-select forge-brush-btn" title="Brush Tool">🖌️</button>
+                    <div id="brushDropdown_forge_mixin" class="forge-brush-dropdown">
+                        <button class="forge-dropdown-item forge-brush-item active" data-tool="brush" title="Brush (B)">
+                            <span class="forge-brush-icon">🖌️</span>
+                            <span class="forge-brush-label">Brush</span>
+                            <span class="forge-brush-shortcut">B</span>
+                        </button>
+                        <button class="forge-dropdown-item forge-brush-item" data-tool="eraser" title="Eraser (E)">
+                            <span class="forge-brush-icon">🧽</span>
+                            <span class="forge-brush-label">Eraser</span>
+                            <span class="forge-brush-shortcut">E</span>
+                        </button>
+                    </div>
+                </div>
+                <button id="undoButton_forge_mixin" class="forge-btn forge-no-select" title="Undo">↩️</button>
+                <button id="redoButton_forge_mixin" class="forge-btn forge-no-select" title="Redo">↪️</button>
             </div>
             <div class="forge-toolbar-box-b">
-                <div class="forge-color-picker-block" title="Color Picker [E]" id="scribbleColorBlock_forge_mixin">
+                <div id="toolbarMessage_forge_mixin" class="forge-toolbar-message"></div>
+                <div class="forge-color-picker-block" id="scribbleColorBlock_forge_mixin">
                     <input type="color" id="scribbleColor_forge_mixin" class="forge-toolbar-color" value="#000000">
                 </div>
-                <div class="forge-range-row" title="adjust with [W] + [Scroll Wheel]"
-                    id="scribbleWidthBlock_forge_mixin">
-                    <div id="widthLabel_forge_mixin" class="forge-toolbar-label">Brush Width</div>
-                    <input type="range" id="scribbleWidth_forge_mixin" class="forge-toolbar-range" min="1" max="100"
-                        value="25">
+                <div class="forge-range-row" id="scribbleWidthBlock_forge_mixin">
+                    <div id="widthLabel_forge_mixin" class="forge-toolbar-label">brush width</div>
+                    <input type="range" id="scribbleWidth_forge_mixin" class="forge-toolbar-range" min="1" max="20" value="4">
                 </div>
-                <div class="forge-range-row" title="adjust with [A] + [Scroll Wheel]&#10;function as eraser if 0"
-                    id="scribbleAlphaBlock_forge_mixin">
-                    <div id="alphaLabel_forge_mixin" class="forge-toolbar-label">Brush Opacity</div>
-                    <input type="range" id="scribbleAlpha_forge_mixin" class="forge-toolbar-range" min="0" max="100"
-                        value="100">
+                <div class="forge-range-row" id="scribbleAlphaBlock_forge_mixin">
+                    <div id="alphaLabel_forge_mixin" class="forge-toolbar-label">brush opacity</div>
+                    <input type="range" id="scribbleAlpha_forge_mixin" class="forge-toolbar-range" min="0" max="100" value="100">
                 </div>
-                <div class="forge-range-row" title="adjust with [S] + [Scroll Wheel]"
-                    id="scribbleSoftnessBlock_forge_mixin">
-                    <div id="softnessLabel_forge_mixin" class="forge-toolbar-label">Brush Softness</div>
-                    <input type="range" id="scribbleSoftness_forge_mixin" class="forge-toolbar-range" min="0" max="100"
-                        value="0">
+                <div class="forge-range-row" id="scribbleSoftnessBlock_forge_mixin">
+                    <div id="softnessLabel_forge_mixin" class="forge-toolbar-label">brush softness</div>
+                    <input type="range" id="scribbleSoftness_forge_mixin" class="forge-toolbar-range" min="0" max="100" value="0">
                 </div>
             </div>
         </div>
