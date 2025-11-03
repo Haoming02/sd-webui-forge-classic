@@ -228,11 +228,11 @@ class ControlNetUiGroup(object):
 
             with gr.Row(elem_classes=["cnet-image-row"], equal_height=True):
                 with gr.Group(elem_classes=["cnet-input-image-group"]):
-                    self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], contrast_scribbles=True, numpy=True)
+                    self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], height=384, contrast_scribbles=True, numpy=True)
                     self.openpose_editor.render_upload()
 
                 with gr.Group(visible=False, elem_classes=["cnet-generated-image-group"]) as self.generated_image_group:
-                    self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], no_scribbles=True, no_upload=True, numpy=True)
+                    self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], height=384, no_scribbles=True, no_upload=True, numpy=True)
 
                     with gr.Group(elem_classes=["cnet-generated-image-control-group"]):
                         self.openpose_editor.render_edit()
@@ -245,7 +245,7 @@ class ControlNetUiGroup(object):
                         )
 
                 with gr.Group(visible=False, elem_classes=["cnet-mask-image-group"]) as self.mask_image_group:
-                    self.mask_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_mask_image", elem_classes=["cnet-mask-image"], scribble_color="#FFFFFF", scribble_width=1, scribble_alpha_fixed=True, scribble_color_fixed=True, scribble_softness_fixed=True, numpy=True)
+                    self.mask_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_mask_image", elem_classes=["cnet-mask-image"], height=384, scribble_color="#FFFFFF", scribble_width=1, scribble_alpha_fixed=True, scribble_color_fixed=True, scribble_softness_fixed=True, numpy=True)
 
             with gr.Accordion(label="Open New Canvas", visible=False) as self.create_canvas:
                 self.canvas_width = gr.Slider(
@@ -616,7 +616,7 @@ class ControlNetUiGroup(object):
 
     def register_run_annotator(self):
         def run_annotator(image, mask, module, pres, pthr_a, pthr_b, t2i_w, t2i_h, pp, rm):
-            if image is None:
+            if image is None or mask is None:
                 return (
                     gr.update(visible=True),
                     None,
