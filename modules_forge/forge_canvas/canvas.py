@@ -24,8 +24,13 @@ gradio.component_meta.create_or_modify_pyi = create_or_modify_pyi_org_patched
 import os
 import uuid
 import base64
+import time
 import gradio as gr
 import numpy as np
+import io
+from collections import OrderedDict
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import UploadFile
 
 from PIL import Image
 from io import BytesIO
@@ -74,6 +79,42 @@ def base64_to_image(base64_str, numpy=True):
     return image_array
 
 
+# Temporary in-memory store for uploaded canvas images
+# Key: id (hex string) -> (bytes, content_type, timestamp)
+canvas_image_store: "OrderedDict[str, tuple[bytes, str, float]]" = OrderedDict()
+CANVAS_STORE_LIMIT = 256
+
+
+def setup_canvas_api(app):
+    """Register API endpoints for canvas image upload and retrieval."""
+    app.add_api_route("/internal/forge-canvas/upload", upload_canvas_image, methods=["POST"])
+    app.add_api_route("/internal/forge-canvas/{id}", get_canvas_image, methods=["GET"])
+
+
+async def upload_canvas_image(file: UploadFile):
+    try:
+        data = await file.read()
+        img_id = uuid.uuid4().hex
+        canvas_image_store[img_id] = (data, file.content_type or "image/png", time.time())
+
+        # trim store
+        while len(canvas_image_store) > CANVAS_STORE_LIMIT:
+            canvas_image_store.popitem(last=False)
+
+        return JSONResponse({"id": img_id, "url": f"./internal/forge-canvas/{img_id}"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+def get_canvas_image(id: str):
+    entry = canvas_image_store.get(id)
+    if not entry:
+        from fastapi.responses import Response
+        return Response(status_code=404)
+    data, content_type, _ = entry
+    return StreamingResponse(io.BytesIO(data), media_type=content_type)
+
+
 class LogicalImage(gr.Textbox):
     @wraps(gr.Textbox.__init__)
     def __init__(self, *args, numpy=True, **kwargs):
@@ -92,11 +133,23 @@ class LogicalImage(gr.Textbox):
     def preprocess(self, payload):
         if not isinstance(payload, str):
             return None
-
-        if not payload.startswith("data:image/png;base64,"):
+        if payload.startswith("data:image/png;base64,"):
+            image = base64_to_image(payload, numpy=self.numpy)
+        elif payload.startswith("forge-canvas://"):
+            # payload is a reference to a previously uploaded canvas image
+            img_id = payload.split('://', 1)[1]
+            entry = canvas_image_store.get(img_id)
+            if not entry:
+                return None
+            data, content_type, _ = entry
+            try:
+                image = Image.open(BytesIO(data))
+                image = image.convert('RGBA')
+                image = np.array(image) if self.numpy else image
+            except Exception:
+                return None
+        else:
             return None
-
-        image = base64_to_image(payload, numpy=self.numpy)
         if hasattr(image, 'info'):
             image.info = self.infotext
         

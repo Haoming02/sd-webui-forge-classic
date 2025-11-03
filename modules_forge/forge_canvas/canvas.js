@@ -117,7 +117,7 @@ class UndoManager {
             }
         }
 
-        // Also free ImageBitmap resources for older states
+        // Also free ImageBitmap resources and blob URLs for older states
         try {
             for (let i = 0; i < this.states.length - keepDetailed; i++) {
                 const s = this.states[i];
@@ -128,6 +128,11 @@ class UndoManager {
                         // ignore
                     }
                     s.drawingBitmap = null;
+                }
+                // Revoke any stored object URLs
+                if (s && s.drawingObjectUrl) {
+                    try { URL.revokeObjectURL(s.drawingObjectUrl); } catch (e) {}
+                    s.drawingObjectUrl = null;
                 }
             }
         } catch (e) {
@@ -176,6 +181,11 @@ class UndoManager {
                         // ignore
                     }
                     state.drawingBitmap = null;
+                }
+                // Revoke any stored object URLs
+                if (state.drawingObjectUrl) {
+                    try { URL.revokeObjectURL(state.drawingObjectUrl); } catch (e) {}
+                    state.drawingObjectUrl = null;
                 }
             }
         });
@@ -315,6 +325,11 @@ class ForgeCanvas {
         this.lastMousePos = { x: 0, y: 0 };
         this.toolbarOffset = { x: 0, y: 0 };
         this.originalState = {};
+        this.devicePixelRatio = window.devicePixelRatio || 1;
+        this.lastIndicatorUpdateTime = 0;
+        this.lastPointerMoveTime = 0;
+        this.toolbarHideDistance = 100; // Distance (px) to hide toolbar when drawing
+        this.toolbarHideTimeout = null;
 
         // ============================================================
         // TOAST NOTIFICATION PROPERTIES
@@ -337,15 +352,37 @@ class ForgeCanvas {
         // ============================================================
         this.history = [];
         this.historyIndex = -1;
-        // Ensure maxUndoSteps is always set
+        // Ensure maxUndoSteps is always set; support 'i' or <=0 for unlimited undo
         if (typeof this.maxUndoSteps === 'undefined') {
             this.maxUndoSteps = 20;
         }
+        // Normalize string or numeric settings: allow 'i' (infinite) or numbers <= 0 to mean unlimited
+        const normalizeMaxUndo = (v) => {
+            if (typeof v === 'string') {
+                const s = v.trim().toLowerCase();
+                if (s === 'i' || s === 'infinite' || s === 'unlimited') return Infinity;
+                const n = parseInt(v, 10);
+                if (!isNaN(n)) return n > 0 ? n : Infinity;
+                return 20;
+            }
+            if (typeof v === 'number') {
+                if (!isFinite(v)) return Infinity;
+                return v > 0 ? v : Infinity;
+            }
+            return 20;
+        };
+
+        this.maxUndoSteps = normalizeMaxUndo(this.maxUndoSteps);
         this.undoManager = new UndoManager(this.maxUndoSteps);
         this.lastSavedState = 0; // Timestamp of last save
         this.lastNonDrawingSave = 0; // Timestamp of last non-drawing save
         this.backgroundGradioBind = new GradioTextAreaBind(this.uuid, 'logical_image_background');
         this.foregroundGradioBind = new GradioTextAreaBind(this.uuid, 'logical_image_foreground');
+
+    // Token for a server-stored background image (forge-canvas://id)
+    this.imgToken = null;
+    // Current object URL created from a fetched background blob (for revocation)
+    this._backgroundObjectUrl = null;
 
         // Consecutive undo/redo tracking
         this.consecutiveUndos = 0;
@@ -365,6 +402,15 @@ class ForgeCanvas {
             this.scribbleAlpha = opts.data.canvas_default_brush_alpha || 100;
             this.scribbleSoftness = opts.data.canvas_default_brush_softness || 0;
             this.maxUndoSteps = opts.data.canvas_max_undo_steps || 20;
+            // allow 'i' or <=0 to request unlimited undo
+            if (this.maxUndoSteps === 'i' || this.maxUndoSteps === 'I' || String(this.maxUndoSteps).toLowerCase() === 'infinite' || String(this.maxUndoSteps).toLowerCase() === 'unlimited') {
+                this.maxUndoSteps = Infinity;
+            } else {
+                const parsed = parseInt(this.maxUndoSteps, 10);
+                if (!isNaN(parsed)) {
+                    this.maxUndoSteps = parsed > 0 ? parsed : Infinity;
+                }
+            }
             this.autoSaveInterval = opts.data.canvas_auto_save_interval || 30;
             this.enableKeyboardShortcuts = opts.data.canvas_enable_keyboard_shortcuts !== false;
             this.zoomSensitivity = opts.data.canvas_zoom_sensitivity || 1.0;
@@ -479,8 +525,9 @@ class ForgeCanvas {
             drawingCanvas.style.height = `${cssHeight}px`;
 
             this.drawingCanvas = drawingCanvas;
-            // Grab and store a single 2D context and scale to use CSS pixels
-            this.drawingCtx = drawingCanvas.getContext('2d');
+            // Cache context and store DPR scaling to avoid repeated context reacquisition
+            this.drawingCtx = drawingCanvas.getContext('2d', { willReadFrequently: false });
+            this.devicePixelRatio = DPR;
             try {
                 this.drawingCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
             } catch (e) {
@@ -802,6 +849,11 @@ class ForgeCanvas {
                         this.saveState(); // Save state when drawing ends
                         this.eraseChanged = false;
                     }
+                    // Restore toolbar visibility when drawing ends
+                    if (this.elems.toolbar) {
+                        this.elems.toolbar.style.opacity = '1';
+                        this.elems.toolbar.style.pointerEvents = 'auto';
+                    }
                 }
             });
 
@@ -833,9 +885,9 @@ class ForgeCanvas {
         // Image dragging inside container
         if (imageContainer) {
             imageContainer.addEventListener('pointerdown', e => this.onPointerDownImageContainer(e));
-            imageContainer.addEventListener('pointermove', e => this.onPointerMoveImageContainer(e));
-            imageContainer.addEventListener('pointerup', e => this.onPointerUpImageContainer(e));
-            imageContainer.addEventListener('pointerleave', e => this.onPointerLeaveImageContainer(e));
+            imageContainer.addEventListener('pointermove', e => this.onPointerMoveImageContainer(e), { passive: true });
+            imageContainer.addEventListener('pointerup', e => this.onPointerUpImageContainer(e), { passive: true });
+            imageContainer.addEventListener('pointerleave', e => this.onPointerLeaveImageContainer(e), { passive: true });
             imageContainer.addEventListener('wheel', e => this.onWheelImageContainer(e), { passive: false });
             imageContainer.addEventListener('contextmenu', e => {
                 e.preventDefault();
@@ -885,13 +937,13 @@ class ForgeCanvas {
                 e.preventDefault();
                 e.stopPropagation();
             }
-        });
+        }, { passive: false });
         document.addEventListener('pointerup', () => {
             this.resizing = false;
-        });
+        }, { passive: true });
         document.addEventListener('pointerleave', () => {
             this.resizing = false;
-        });
+        }, { passive: true });
     }
 
     bindDragDropEvents() {
@@ -1278,6 +1330,44 @@ class ForgeCanvas {
     // ============================================================
     // 4) POINTER & MOUSE EVENT HANDLERS (Image Container)
     // ============================================================
+    
+    /**
+     * Check if pointer is near the toolbar and hide it if drawing
+     * @param {number} mouseX - Client X position relative to container
+     * @param {number} mouseY - Client Y position relative to container
+     */
+    checkAndUpdateToolbarVisibility(mouseX, mouseY) {
+        if (!this.drawing || !this.elems.toolbar) return;
+
+        const toolbarRect = this.elems.toolbar.getBoundingClientRect();
+        const containerRect = this.elems.imageContainer?.getBoundingClientRect();
+        if (!containerRect) return;
+
+        // Calculate distance from mouse to toolbar
+        const toolbarLeft = toolbarRect.left - containerRect.left;
+        const toolbarTop = toolbarRect.top - containerRect.top;
+        const toolbarRight = toolbarLeft + toolbarRect.width;
+        const toolbarBottom = toolbarTop + toolbarRect.height;
+
+        // Find closest point on toolbar to mouse
+        const closestX = Math.max(toolbarLeft, Math.min(mouseX, toolbarRight));
+        const closestY = Math.max(toolbarTop, Math.min(mouseY, toolbarBottom));
+
+        // Calculate distance
+        const distX = mouseX - closestX;
+        const distY = mouseY - closestY;
+        const distance = Math.sqrt(distX * distX + distY * distY);
+
+        // Hide toolbar if within threshold distance while drawing
+        if (distance < this.toolbarHideDistance) {
+            this.elems.toolbar.style.opacity = '0';
+            this.elems.toolbar.style.pointerEvents = 'none';
+        } else {
+            this.elems.toolbar.style.opacity = '1';
+            this.elems.toolbar.style.pointerEvents = 'auto';
+        }
+    }
+
     onPointerDownImageContainer(e) {
         const { imageContainer, image } = this.elems;
         if (!imageContainer || !this.img) {
@@ -1363,13 +1453,20 @@ class ForgeCanvas {
             this.imgY = mouseY - this.offsetY * this.panSensitivity;
             this.drawImage();
             this.draggedJustNow = true;
+        } else if (this.drawing && (this.currentTool === 'brush' || this.currentTool === 'eraser')) {
+            // Check toolbar proximity while drawing
+            this.checkAndUpdateToolbarVisibility(newMousePos.x, newMousePos.y);
         } else if (this.elems.scribbleIndicator && this.img && !this.noScribbles && !this.drawing && !this.isZooming && !this.isHandTool && (this.currentTool === 'brush' || this.currentTool === 'eraser')) {
-            const { scribbleIndicator } = this.elems;
-            const { x, y } = newMousePos;
+            // Throttle scribble indicator updates to avoid excessive reflows
+            if (!this.lastIndicatorUpdateTime || performance.now() - this.lastIndicatorUpdateTime > 16) {
+                const { scribbleIndicator } = this.elems;
+                const { x, y } = newMousePos;
 
-            scribbleIndicator.style.display = 'block';
-            scribbleIndicator.style.left = `${x - scribbleIndicator.offsetWidth / 2}px`;
-            scribbleIndicator.style.top = `${y - scribbleIndicator.offsetHeight / 2}px`;
+                scribbleIndicator.style.display = 'block';
+                scribbleIndicator.style.left = `${x - scribbleIndicator.offsetWidth / 2}px`;
+                scribbleIndicator.style.top = `${y - scribbleIndicator.offsetHeight / 2}px`;
+                this.lastIndicatorUpdateTime = performance.now();
+            }
         }
 
         // Update last mouse position
@@ -1449,12 +1546,14 @@ class ForgeCanvas {
 
         this.imgScale += zoomFactor;
         this.imgScale = Math.max(0.1, this.imgScale);
-        const scaleRatio = this.imgScale / previousScale;
-
-        this.imgX = mouseX - (mouseX - this.imgX) * scaleRatio;
-        this.imgY = mouseY - (mouseY - this.imgY) * scaleRatio;
-
-        this.drawImage();
+        
+        // Only update transform if scale actually changed
+        if (this.imgScale !== previousScale) {
+            const scaleRatio = this.imgScale / previousScale;
+            this.imgX = mouseX - (mouseX - this.imgX) * scaleRatio;
+            this.imgY = mouseY - (mouseY - this.imgY) * scaleRatio;
+            this.drawImage();
+        }
     }
 
     resizeContainer(e) {
@@ -1511,14 +1610,66 @@ class ForgeCanvas {
         }
     }
 
-    uploadBase64(base64Data) {
+    async uploadBase64(base64Data) {
         if (this.gradioConfig && !this.gradioConfig.version?.startsWith('4')) return;
         if (!this.gradioConfig) return;
+
+        // Handle both inline data URLs and server-side tokens (forge-canvas://<id>)
+        // If token, fetch binary and create an object URL for rendering, and store token in this.imgToken
+        const isToken = typeof base64Data === 'string' && base64Data.startsWith('forge-canvas://');
+
+        if (isToken) {
+            const id = String(base64Data).replace(/^forge-canvas:\/\//, '');
+            if (!id) return;
+            try {
+                const resp = await fetch(`./internal/forge-canvas/${encodeURIComponent(id)}`);
+                if (!resp.ok) throw new Error('failed to fetch background token');
+                const blob = await resp.blob();
+                // Revoke prior object URL if any
+                try { if (this._backgroundObjectUrl) { URL.revokeObjectURL(this._backgroundObjectUrl); this._backgroundObjectUrl = null; } } catch (e) {}
+                const objectUrl = URL.createObjectURL(blob);
+                this._backgroundObjectUrl = objectUrl;
+                this.imgToken = base64Data; // preserve token for saving states
+                const img = this.tempImage || new Image();
+                this.tempImage = img;
+                img.onload = () => {
+                    this.img = objectUrl;
+                    this.originalWidth = img.width;
+                    this.originalHeight = img.height;
+
+                    const {drawingCanvas} = this.elems;
+                    if (drawingCanvas && (drawingCanvas.width !== img.width || drawingCanvas.height !== img.height)) {
+                        const cssWidth = img.width;
+                        const cssHeight = img.height;
+                        const DPR = window.devicePixelRatio || 1;
+
+                        drawingCanvas.width = Math.round(cssWidth * DPR);
+                        drawingCanvas.height = Math.round(cssHeight * DPR);
+                        drawingCanvas.style.width = `${cssWidth}px`;
+                        drawingCanvas.style.height = `${cssHeight}px`;
+
+                        this.drawingCtx = drawingCanvas.getContext('2d');
+                        try { this.drawingCtx.setTransform(DPR, 0, 0, DPR, 0, 0); } catch (e) { this.drawingCtx.scale(DPR, DPR); }
+                    }
+
+                    this.adjustInitialPositionAndScale();
+                    this.drawImage();
+                    this.onImageUpload();
+                    this.saveState();
+                    this.setUploadHintVisibility(false);
+                };
+                img.src = objectUrl;
+                return;
+            } catch (e) {
+                console.warn('Failed to load background token, falling back:', e);
+            }
+        }
 
         const img = this.tempImage || new Image();
         this.tempImage = img;
         img.onload = () => {
             this.img = base64Data;
+            this.imgToken = null;
             this.originalWidth = img.width;
             this.originalHeight = img.height;
 
@@ -1578,6 +1729,38 @@ class ForgeCanvas {
     }
 
     uploadBase64DrawingCanvas(base64Data) {
+        // Support both data URLs and server-side tokens
+        const isToken = typeof base64Data === 'string' && base64Data.startsWith('forge-canvas://');
+
+        if (isToken) {
+            const id = String(base64Data).replace(/^forge-canvas:\/\//, '');
+            if (!id) return;
+            (async () => {
+                try {
+                    const resp = await fetch(`./internal/forge-canvas/${encodeURIComponent(id)}`);
+                    if (!resp.ok) throw new Error('failed to fetch foreground token');
+                    const blob = await resp.blob();
+                    const img = this.tempImage || new Image();
+                    this.tempImage = img;
+                    // createObjectURL and draw
+                    const objectUrl = URL.createObjectURL(blob);
+                    img.onload = () => {
+                        const {drawingCanvas} = this.elems;
+                        if (!drawingCanvas) return;
+                        const DPR = window.devicePixelRatio || 1;
+                        this.drawingCtx.clearRect(0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
+                        this.drawingCtx.drawImage(img, 0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
+                        this.saveState();
+                        try { URL.revokeObjectURL(objectUrl); } catch (e) {}
+                    };
+                    img.src = objectUrl;
+                } catch (e) {
+                    console.warn('Failed to load foreground token:', e);
+                }
+            })();
+            return;
+        }
+
         const img = this.tempImage || new Image();
         img.onload = () => {
             const {drawingCanvas} = this.elems;
@@ -1709,7 +1892,9 @@ class ForgeCanvas {
                 width: drawingCanvas.width,
                 height: drawingCanvas.height,
                 // Store background info separately (only if it changed)
-                backgroundImage: this.img,
+                // Prefer storing a small token when available to avoid capturing object URLs
+                backgroundToken: this.imgToken || null,
+                backgroundImage: this.imgToken ? null : this.img,
                 backgroundScale: this.imgScale,
                 backgroundX: this.imgX,
                 backgroundY: this.imgY
@@ -1718,6 +1903,22 @@ class ForgeCanvas {
             // Push an initial lightweight state; attach a bitmap async when available
             this.undoManager.pushState(state);
 
+            // Helper: try to upload a blob to server and return a small token (forge-canvas://<id>)
+            const uploadBlobForState = async (blob) => {
+                try {
+                    if (!blob) return null;
+                    const fd = new FormData();
+                    fd.append('file', blob, 'canvas.png');
+                    const resp = await fetch('./internal/forge-canvas/upload', { method: 'POST', body: fd });
+                    if (!resp.ok) throw new Error('upload failed');
+                    const js = await resp.json();
+                    if (js && js.id) return `forge-canvas://${js.id}`;
+                } catch (e) {
+                    console.warn('Canvas upload for undo state failed:', e);
+                }
+                return null;
+            };
+
             // Try to capture an ImageBitmap for efficient undo storage (async, non-blocking)
             if (typeof createImageBitmap === 'function') {
                 try {
@@ -1725,35 +1926,73 @@ class ForgeCanvas {
                     createImageBitmap(drawingCanvas).then(bitmap => {
                         // attach bitmap to the same state object (by reference)
                         state.drawingBitmap = bitmap;
-                    }).catch(err => {
-                        // fallback: create a dataURL for older browsers or failures
+                    }).catch(async err => {
+                        // Attempt to upload the drawing as a binary to avoid storing big data URIs
                         try {
-                            state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
+                            const blob = await this.getNormalizedBlob();
+                            if (!blob) {
+                                // nothing we can do - leave state without drawing data
+                                return;
+                            }
+                            try {
+                                const token = await uploadBlobForState(blob);
+                                if (token) {
+                                    state.drawingToken = token;
+                                }
+                            } catch (e) {
+                                // upload failed - leave state without drawing data
+                            }
                         } catch (e) {
-                            // give up
+                            // ignore
                         }
                     });
                 } catch (e) {
-                    try {
-                        state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
-                    } catch (err) {
+                    // Try uploading a normalized blob first (non-blocking via Promise)
+                    this.getNormalizedBlob().then(async (blob) => {
+                        if (!blob) return;
+                        try {
+                            const token = await uploadBlobForState(blob);
+                            if (token) state.drawingToken = token;
+                        } catch (err) {
+                            // ignore
+                        }
+                    }).catch(err => {
                         // ignore
-                    }
+                    });
                 }
-                // If bitmap doesn't arrive within a short window, capture a dataURL as a fallback
+                // If bitmap doesn't arrive within a short window, try uploading the blob as a fallback
                 setTimeout(() => {
                     try {
-                        if (!state.drawingBitmap && !state.drawingDataURL) {
-                            state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
+                        if (!state.drawingBitmap && !state.drawingToken) {
+                            // Try uploading the blob; do not create data URLs
+                            drawingCanvas.toBlob(async (blob) => {
+                                if (!blob) return;
+                                try {
+                                    const token = await uploadBlobForState(blob);
+                                    if (token) state.drawingToken = token;
+                                } catch (e) {
+                                    // ignore
+                                }
+                            }, 'image/png');
                         }
                     } catch (e) {
                         // ignore
                     }
                 }, 250);
             } else {
-                // Fallback to dataURL for environments without createImageBitmap
+                // Environments without createImageBitmap: attempt to upload normalized blob
                 try {
-                    state.drawingDataURL = drawingCanvas.toDataURL('image/png', 0.8);
+                    this.getNormalizedBlob().then(async (blob) => {
+                        if (!blob) return;
+                        try {
+                            const token = await uploadBlobForState(blob);
+                            if (token) state.drawingToken = token;
+                        } catch (e) {
+                            // ignore
+                        }
+                    }).catch(e => {
+                        // ignore
+                    });
                 } catch (e) {
                     // ignore
                 }
@@ -1844,6 +2083,54 @@ class ForgeCanvas {
         // Prefer ImageBitmap if available in state
         const DPR = window.devicePixelRatio || 1;
 
+        // If a background token is present, fetch and set up the background image first
+        if (state.backgroundToken) {
+            const bgToken = state.backgroundToken;
+            const bgId = String(bgToken).replace(/^forge-canvas:\/\//, '');
+            if (bgId) {
+                (async () => {
+                    try {
+                        const resp = await fetch(`./internal/forge-canvas/${encodeURIComponent(bgId)}`);
+                        if (!resp.ok) throw new Error('failed to fetch background token');
+                        const blob = await resp.blob();
+                        try { if (this._backgroundObjectUrl) { URL.revokeObjectURL(this._backgroundObjectUrl); this._backgroundObjectUrl = null; } } catch (e) {}
+                        const objectUrl = URL.createObjectURL(blob);
+                        this._backgroundObjectUrl = objectUrl;
+                        this.imgToken = bgToken;
+                        const img = new Image();
+                        img.onload = () => {
+                            this.img = objectUrl;
+                            this.originalWidth = img.width;
+                            this.originalHeight = img.height;
+
+                            // Ensure drawing canvas buffer matches image size (DPR-aware)
+                            const {drawingCanvas} = this.elems;
+                            if (drawingCanvas) {
+                                const cssWidth = img.width;
+                                const cssHeight = img.height;
+                                const DPRloc = window.devicePixelRatio || 1;
+                                drawingCanvas.width = Math.round(cssWidth * DPRloc);
+                                drawingCanvas.height = Math.round(cssHeight * DPRloc);
+                                drawingCanvas.style.width = `${cssWidth}px`;
+                                drawingCanvas.style.height = `${cssHeight}px`;
+                                this.drawingCtx = drawingCanvas.getContext('2d');
+                                try { this.drawingCtx.setTransform(DPRloc, 0, 0, DPRloc, 0, 0); } catch (e) { this.drawingCtx.scale(DPRloc, DPRloc); }
+                            }
+
+                            // Restore positional metadata
+                            this.imgScale = state.backgroundScale || this.imgScale;
+                            this.imgX = state.backgroundX || this.imgX;
+                            this.imgY = state.backgroundY || this.imgY;
+                            this.drawImage();
+                        };
+                        img.src = objectUrl;
+                    } catch (e) {
+                        console.warn('Failed to load background token during applyState:', e);
+                    }
+                })();
+            }
+        }
+
         const applyBitmap = (bitmap) => {
             // Resize internal buffer & CSS size to match stored state if provided
             if (state.width && state.height) {
@@ -1889,6 +2176,64 @@ class ForgeCanvas {
             // drawingBitmap may be an ImageBitmap
             applyBitmap(state.drawingBitmap);
             return;
+        }
+
+        // If a remote token exists (uploaded to server), fetch it and render
+        if (state.drawingToken) {
+            const token = state.drawingToken;
+            const id = String(token).replace(/^forge-canvas:\/\//, '');
+            if (id) {
+                (async () => {
+                    try {
+                        const resp = await fetch(`./internal/forge-canvas/${encodeURIComponent(id)}`);
+                        if (!resp.ok) throw new Error('failed to fetch drawing token');
+                        const blob = await resp.blob();
+                        if (typeof createImageBitmap === 'function') {
+                            try {
+                                const bitmap = await createImageBitmap(blob);
+                                applyBitmap(bitmap);
+                                return;
+                            } catch (e) {
+                                // fall through to object URL path
+                            }
+                        }
+                        const objectUrl = URL.createObjectURL(blob);
+                        const img = new Image();
+                        img.onload = () => {
+                            try {
+                                const cssWidth = state.width ? Math.round(state.width / DPR) : img.width;
+                                const cssHeight = state.height ? Math.round(state.height / DPR) : img.height;
+                                drawingCanvas.width = Math.round(cssWidth * DPR);
+                                drawingCanvas.height = Math.round(cssHeight * DPR);
+                                drawingCanvas.style.width = `${cssWidth}px`;
+                                drawingCanvas.style.height = `${cssHeight}px`;
+                                this.drawingCtx = drawingCanvas.getContext('2d');
+                                try { this.drawingCtx.setTransform(DPR, 0, 0, DPR, 0, 0); } catch (e) { this.drawingCtx.scale(DPR, DPR); }
+
+                                this.drawingCtx.clearRect(0, 0, drawingCanvas.width / DPR, drawingCanvas.height / DPR);
+                                this.drawingCtx.drawImage(img, 0, 0);
+
+                                if (state.backgroundImage && image) {
+                                    this.img = state.backgroundImage;
+                                    this.imgScale = state.backgroundScale || this.imgScale;
+                                    this.imgX = state.backgroundX || this.imgX;
+                                    this.imgY = state.backgroundY || this.imgY;
+                                    this.drawImage();
+                                }
+                            } catch (err) {
+                                console.warn('Failed to draw token image during applyState:', err);
+                            } finally {
+                                URL.revokeObjectURL(objectUrl);
+                            }
+                        };
+                        img.src = objectUrl;
+                        return;
+                    } catch (e) {
+                        console.warn('Failed to load drawing token during applyState:', e);
+                        // fall through to dataURL path below
+                    }
+                })();
+            }
         }
 
         // Fallback to dataURL if bitmap not available
@@ -1942,8 +2287,38 @@ class ForgeCanvas {
         tempCanvas.height = this.originalHeight;
         ctx.drawImage(image, 0, 0, this.originalWidth, this.originalHeight);
 
-        const base64Data = tempCanvas.toDataURL('image/png');
-        this.backgroundGradioBind.setValue(base64Data);
+        // Try to upload as binary to avoid large base64 strings in JS memory.
+        const uploadBlob = async (blob) => {
+            try {
+                const fd = new FormData();
+                fd.append('file', blob, 'canvas.png');
+                const resp = await fetch('./internal/forge-canvas/upload', { method: 'POST', body: fd });
+                if (!resp.ok) throw new Error('upload failed');
+                const js = await resp.json();
+                if (js && js.id) return js.id;
+                throw new Error('invalid upload response');
+            } catch (e) {
+                console.warn('Canvas upload failed, falling back to data URI:', e);
+                return null;
+            }
+        };
+
+        tempCanvas.toBlob(async (blob) => {
+            if (!blob) {
+                console.warn('Failed to generate image blob for background upload');
+                this.backgroundGradioBind.setValue('');
+                return;
+            }
+
+            const id = await uploadBlob(blob);
+            if (id) {
+                this.backgroundGradioBind.setValue(`forge-canvas://${id}`);
+            } else {
+                // upload failed — do not emit base64, clear bind
+                console.warn('Background upload failed');
+                this.backgroundGradioBind.setValue('');
+            }
+        }, 'image/png');
     }
 
     onDrawingCanvasUpload(forceImmediate = false) {
@@ -1953,50 +2328,63 @@ class ForgeCanvas {
         }
         const {drawingCanvas} = this.elems;
         if (!drawingCanvas) return;
-        // Helper to convert canvas to base64 via blob asynchronously (safer and non-blocking)
-        const emitCanvasAsBase64 = (cb) => {
+        // Upload drawing canvas as binary to reduce base64 memory pressure.
+        const uploadBlob = async (blob) => {
             try {
-                drawingCanvas.toBlob((blob) => {
+                const fd = new FormData();
+                fd.append('file', blob, 'canvas.png');
+                const resp = await fetch('./internal/forge-canvas/upload', { method: 'POST', body: fd });
+                if (!resp.ok) throw new Error('upload failed');
+                const js = await resp.json();
+                if (js && js.id) return js.id;
+                throw new Error('invalid upload response');
+            } catch (e) {
+                console.warn('Canvas upload failed, falling back to data URI:', e);
+                return null;
+            }
+        };
+
+        const emitCanvasAsBlob = (cb) => {
+            try {
+                // Create a normalized canvas sized to the background's natural pixel size
+                // so that mask pixels align with the background image when server crops "Only masked".
+                const DPR = window.devicePixelRatio || 1;
+                const normCanvas = document.createElement('canvas');
+                const targetW = this.originalWidth || Math.round(drawingCanvas.width / DPR);
+                const targetH = this.originalHeight || Math.round(drawingCanvas.height / DPR);
+                normCanvas.width = targetW;
+                normCanvas.height = targetH;
+                const nctx = normCanvas.getContext('2d');
+
+                // Draw the drawingCanvas content into normalized canvas, scaling as needed
+                try {
+                    nctx.drawImage(drawingCanvas, 0, 0, drawingCanvas.width, drawingCanvas.height, 0, 0, normCanvas.width, normCanvas.height);
+                } catch (e) {
+                    // fallback to drawing without explicit source/dest sizes
+                    try { nctx.drawImage(drawingCanvas, 0, 0); } catch (e2) {}
+                }
+
+                normCanvas.toBlob(async (blob) => {
                     if (!blob) {
-                        // Fallback to toDataURL if toBlob fails
-                        try {
-                            const base64 = drawingCanvas.toDataURL('image/png');
-                            this.foregroundGradioBind.setValue(base64);
-                        } catch (err) {
-                            console.warn('Failed to generate canvas dataURL:', err);
-                        }
+                        console.warn('Failed to generate normalized canvas blob');
                         if (typeof cb === 'function') cb();
                         return;
                     }
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        try {
-                            const dataUrl = reader.result;
-                            this.foregroundGradioBind.setValue(dataUrl);
-                        } catch (err) {
-                            console.warn('Failed to read canvas blob as data URL:', err);
-                        }
-                        if (typeof cb === 'function') cb();
-                    };
-                    reader.onerror = () => {
-                        try {
-                            const base64 = drawingCanvas.toDataURL('image/png');
-                            this.foregroundGradioBind.setValue(base64);
-                        } catch (err) {
-                            console.warn('Failed to generate canvas dataURL after reader error:', err);
-                        }
-                        if (typeof cb === 'function') cb();
-                    };
-                    reader.readAsDataURL(blob);
+
+                    const id = await uploadBlob(blob);
+                    if (id) {
+                        this.foregroundGradioBind.setValue(`forge-canvas://${id}`);
+                    } else {
+                        console.warn('Foreground upload failed');
+                        this.foregroundGradioBind.setValue('');
+                    }
+
+                    if (typeof cb === 'function') cb();
                 }, 'image/png');
             } catch (err) {
-                // Final fallback
-                try {
-                    const base64 = drawingCanvas.toDataURL('image/png');
-                    this.foregroundGradioBind.setValue(base64);
-                } catch (e) {
-                    console.warn('Failed to generate canvas data URL (final fallback):', e);
-                }
+                // Final fallback: we couldn't produce a blob — clear the bind and warn
+                console.warn('Failed to generate normalized canvas blob:', err);
+                this.foregroundGradioBind.setValue('');
                 if (typeof cb === 'function') cb();
             }
         };
@@ -2007,11 +2395,43 @@ class ForgeCanvas {
                 clearTimeout(this.uploadDebounceTimer);
             }
             this.uploadDebounceTimer = setTimeout(() => {
-                emitCanvasAsBase64();
+                emitCanvasAsBlob();
             }, this.uploadDebounceDelay);
         } else {
-            emitCanvasAsBase64();
+            emitCanvasAsBlob();
         }
+    }
+
+    /**
+     * Generate a normalized PNG blob matching the background natural pixel size
+     * Returns a Promise resolving to a Blob or null on failure
+     */
+    getNormalizedBlob() {
+        const { drawingCanvas } = this.elems;
+        return new Promise((resolve) => {
+            if (!drawingCanvas) return resolve(null);
+            const DPR = window.devicePixelRatio || 1;
+            const targetW = this.originalWidth || Math.round(drawingCanvas.width / DPR);
+            const targetH = this.originalHeight || Math.round(drawingCanvas.height / DPR);
+            const normCanvas = document.createElement('canvas');
+            normCanvas.width = targetW;
+            normCanvas.height = targetH;
+            const nctx = normCanvas.getContext('2d');
+
+            try {
+                nctx.drawImage(drawingCanvas, 0, 0, drawingCanvas.width, drawingCanvas.height, 0, 0, normCanvas.width, normCanvas.height);
+            } catch (e) {
+                try { nctx.drawImage(drawingCanvas, 0, 0); } catch (e2) {}
+            }
+
+            try {
+                normCanvas.toBlob((blob) => {
+                    resolve(blob || null);
+                }, 'image/png');
+            } catch (e) {
+                resolve(null);
+            }
+        });
     }
 
     // ============================================================

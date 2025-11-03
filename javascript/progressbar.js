@@ -130,7 +130,18 @@ function requestProgress(
 
         setTitle("");
         parentProgressbar.removeChild(divProgress);
-        if (gallery && livePreview) gallery.removeChild(livePreview);
+        if (gallery && livePreview) {
+            // revoke any blob URLs created for previews to avoid memory leaks
+            try {
+                for (let i = 0; i < livePreview.childElementCount; ++i) {
+                    let el = livePreview.children[i];
+                    if (el && el.dataset && el.dataset.blobUrl) {
+                        try { URL.revokeObjectURL(el.dataset.blobUrl); } catch (e) {}
+                    }
+                }
+            } catch (e) {}
+            gallery.removeChild(livePreview);
+        }
         atEnd();
 
         divProgress = null;
@@ -210,20 +221,58 @@ function requestProgress(
                 }
 
                 if (res.live_preview && gallery) {
-                    let img = new Image();
-                    img.onload = function () {
-                        if (!livePreview) {
-                            livePreview = document.createElement("div");
-                            livePreview.className = "livePreview";
-                            gallery.insertBefore(livePreview, gallery.firstElementChild);
-                        }
+                    // If backend returned a data URI (legacy), use it directly.
+                    if (typeof res.live_preview === 'string' && res.live_preview.startsWith('data:')) {
+                        let img = new Image();
+                        img.onload = function () {
+                            if (!livePreview) {
+                                livePreview = document.createElement("div");
+                                livePreview.className = "livePreview";
+                                gallery.insertBefore(livePreview, gallery.firstElementChild);
+                            }
 
-                        livePreview.appendChild(img);
-                        if (livePreview.childElementCount > 2) {
-                            livePreview.removeChild(livePreview.firstElementChild);
-                        }
-                    };
-                    img.src = res.live_preview;
+                            livePreview.appendChild(img);
+                            if (livePreview.childElementCount > 2) {
+                                // remove oldest without blob revocation (data URI)
+                                livePreview.removeChild(livePreview.firstElementChild);
+                            }
+                        };
+                        img.src = res.live_preview;
+                    } else {
+                        // New flow: res.live_preview is a URL to fetch binary data from.
+                        fetch(res.live_preview)
+                            .then(function (r) {
+                                if (!r.ok) throw new Error('Failed to fetch preview');
+                                return r.blob();
+                            })
+                            .then(function (blob) {
+                                let img = new Image();
+                                let objectUrl = URL.createObjectURL(blob);
+                                img.dataset.blobUrl = objectUrl;
+                                img.onload = function () {
+                                    if (!livePreview) {
+                                        livePreview = document.createElement("div");
+                                        livePreview.className = "livePreview";
+                                        gallery.insertBefore(livePreview, gallery.firstElementChild);
+                                    }
+
+                                    livePreview.appendChild(img);
+                                    if (livePreview.childElementCount > 2) {
+                                        let first = livePreview.firstElementChild;
+                                        // revoke blob URL if present
+                                        if (first && first.dataset && first.dataset.blobUrl) {
+                                            try { URL.revokeObjectURL(first.dataset.blobUrl); } catch (e) {}
+                                        }
+                                        livePreview.removeChild(first);
+                                    }
+                                };
+                                img.src = objectUrl;
+                            })
+                            .catch(function (e) {
+                                // on error, just ignore this preview
+                                console.error('Live preview fetch error', e);
+                            });
+                    }
                 }
 
                 setTimeout(() => {

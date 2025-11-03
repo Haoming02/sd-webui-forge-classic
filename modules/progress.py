@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 import modules.shared as shared
 from modules.shared import opts
+from fastapi.responses import StreamingResponse, Response
 
 current_task = None
 pending_tasks = OrderedDict()
@@ -79,7 +80,9 @@ class ProgressResponse(BaseModel):
 
 def setup_progress_api(app):
     app.add_api_route("/internal/pending-tasks", get_pending_tasks, methods=["GET"])
-    return app.add_api_route("/internal/progress", progressapi, methods=["POST"], response_model=ProgressResponse)
+    app.add_api_route("/internal/progress", progressapi, methods=["POST"], response_model=ProgressResponse)
+    # endpoint that returns the live preview image as binary data (useful to fetch as blob on frontend)
+    return app.add_api_route("/internal/live-preview/{id_live}", live_preview_image, methods=["GET"])
 
 
 def get_pending_tasks():
@@ -125,25 +128,51 @@ def progressapi(req: ProgressRequest):
         if shared.state.id_live_preview != req.id_live_preview:
             image = shared.state.current_image
             if image is not None:
-                buffered = io.BytesIO()
-
-                if opts.live_previews_image_format == "png":
-                    # using optimize for large images takes an enormous amount of time
-                    if max(*image.size) <= 256:
-                        save_kwargs = {"optimize": True}
-                    else:
-                        save_kwargs = {"optimize": False, "compress_level": 1}
-
-                else:
-                    image = image.convert("RGB")
-                    save_kwargs = {}
-
-                image.save(buffered, format=opts.live_previews_image_format, **save_kwargs)
-                base64_image = base64.b64encode(buffered.getvalue()).decode("ascii")
-                live_preview = f"data:image/{opts.live_previews_image_format};base64,{base64_image}"
+                # Instead of embedding the image as a data URI (which consumes more memory on the
+                # frontend), expose a small URL that returns the raw image bytes. The frontend will
+                # fetch that URL and create a blob URL for display.
                 id_live_preview = shared.state.id_live_preview
+                # include format in the returned URL implicitly handled by the image endpoint
+                live_preview = f"./internal/live-preview/{id_live_preview}"
 
     return ProgressResponse(active=active, queued=queued, completed=completed, progress=progress, eta=eta, live_preview=live_preview, id_live_preview=id_live_preview, textinfo=shared.state.textinfo)
+
+
+def live_preview_image(id_live: int):
+    """Return the current live preview image as raw bytes.
+
+    The frontend requests this via fetch and converts the response to a Blob, then to a blob URL
+    with URL.createObjectURL to avoid keeping large base64 strings in memory.
+    """
+    # Ensure current_image is up-to-date
+    shared.state.set_current_image()
+    image = shared.state.current_image
+    if image is None:
+        return Response(status_code=404)
+
+    buffered = io.BytesIO()
+
+    # Same saving heuristics as before
+    if opts.live_previews_image_format == "png":
+        if max(*image.size) <= 256:
+            save_kwargs = {"optimize": True}
+        else:
+            save_kwargs = {"optimize": False, "compress_level": 1}
+    else:
+        image = image.convert("RGB")
+        save_kwargs = {}
+
+    image.save(buffered, format=opts.live_previews_image_format, **save_kwargs)
+    buffered.seek(0)
+
+    media_type = f"image/{opts.live_previews_image_format}"
+    # webp uses image/webp
+    if opts.live_previews_image_format == "jpg":
+        media_type = "image/jpeg"
+    if opts.live_previews_image_format == "jpeg":
+        media_type = "image/jpeg"
+
+    return StreamingResponse(buffered, media_type=media_type)
 
 
 def restore_progress(id_task):

@@ -1,6 +1,10 @@
 // A full size 'lightbox' preview modal shown when left clicking on gallery previews
 function closeModal() {
-    gradioApp().getElementById("lightboxModal").style.display = "none";
+    const lb = gradioApp().getElementById("lightboxModal");
+    if (lb) lb.style.display = "none";
+    // If ForgeCanvas was used, restore the fallback <img> visibility for next open
+    const modalImage = gradioApp().getElementById("modalImage");
+    if (modalImage) modalImage.style.display = '';
 }
 
 function showModal(event) {
@@ -13,9 +17,26 @@ function showModal(event) {
         ? "&#x1F5C7;"
         : "&#x1F5C6;";
     const lb = gradioApp().getElementById("lightboxModal");
-    modalImage.src = source.src;
-    if (modalImage.style.display === "none") {
-        lb.style.setProperty("background-image", "url(" + source.src + ")");
+    // Try to use ForgeCanvas inside the modal if available (minimal integration).
+    const fc = ensureModalForgeCanvas();
+    if (fc) {
+        try {
+            // ForgeCanvas.uploadBase64 accepts data URLs and regular URLs for images
+            fc.uploadBase64(source.src);
+            // hide the plain <img> element; the ForgeCanvas instance will render the image
+            modalImage.style.display = 'none';
+        } catch (e) {
+            // fallback to native behavior
+            modalImage.src = source.src;
+            if (modalImage.style.display === "none") {
+                lb.style.setProperty("background-image", "url(" + source.src + ")");
+            }
+        }
+    } else {
+        modalImage.src = source.src;
+        if (modalImage.style.display === "none") {
+            lb.style.setProperty("background-image", "url(" + source.src + ")");
+        }
     }
     lb.style.display = "flex";
     lb.focus();
@@ -203,6 +224,45 @@ function modalTileImageToggle(event) {
     }
 
     event.stopPropagation();
+}
+
+// Ensure a minimal ForgeCanvas instance is available inside the modal.
+// This is a lightweight integration: it creates the DOM nodes ForgeCanvas
+// expects with a fixed uuid 'modal' and instantiates a singleton ForgeCanvas
+// when the library is available. If not available, code falls back to the
+// legacy <img>-based modal behavior.
+function ensureModalForgeCanvas() {
+    try {
+        if (window.__modalForgeCanvas) return window.__modalForgeCanvas;
+        if (typeof ForgeCanvas !== 'function') return null;
+
+        // Create DOM nodes expected by ForgeCanvas with uuid 'modal'
+        const uid = 'modal';
+        // Avoid recreating if already present
+        if (!gradioApp().getElementById(`container_${uid}`)) {
+            const container = document.createElement('div');
+            container.id = `container_${uid}`;
+            container.className = 'forge-modal-container';
+            container.style.position = 'relative';
+            container.style.width = '100%';
+            container.style.height = '100%';
+            container.innerHTML = `\n                <div id="imageContainer_${uid}" class="imageContainer" style="position:relative; width:100%; height:100%;">\n                    <img id="image_${uid}" style="position:absolute; left:0; top:0; display:block; max-width:none; max-height:none;" />\n                    <canvas id="drawingCanvas_${uid}" style="position:absolute; left:0; top:0;"></canvas>\n                </div>\n            `;
+            const modal = gradioApp().getElementById('lightboxModal');
+            if (modal) modal.appendChild(container);
+        }
+
+        // Instantiate ForgeCanvas: noUpload=true, noScribbles=true (we only want zoom/pan)
+        try {
+            const fc = new ForgeCanvas(uid, true, true, false, 512);
+            window.__modalForgeCanvas = fc;
+            return fc;
+        } catch (e) {
+            console.warn('Failed to init ForgeCanvas for modal:', e);
+            return null;
+        }
+    } catch (e) {
+        return null;
+    }
 }
 
 onAfterUiUpdate(function () {

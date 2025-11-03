@@ -99,7 +99,7 @@ def webui_worker():
             elif shared.opts.auto_launch_browser == "Local":
                 auto_launch_browser = not cmd_opts.webui_is_non_local
 
-        from modules_forge.forge_canvas.canvas import canvas_js_root_path
+        from modules_forge.forge_canvas.canvas import canvas_js_root_path, setup_canvas_api
 
         app, local_url, share_url = shared.demo.launch(
             share=cmd_opts.share,
@@ -132,6 +132,8 @@ def webui_worker():
         initialize_util.setup_middleware(app)
 
         progress.setup_progress_api(app)
+        # register canvas upload/retrieval endpoints
+        setup_canvas_api(app)
         ui.setup_ui_api(app)
 
         if launch_api:
