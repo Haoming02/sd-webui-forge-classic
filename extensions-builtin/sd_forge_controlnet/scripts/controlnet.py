@@ -12,7 +12,13 @@ from lib_controlnet.enums import HiResFixOption
 from lib_controlnet.external_code import ControlNetUnit
 from lib_controlnet.infotext import Infotext
 from lib_controlnet.logging import logger
-from lib_controlnet.utils import align_dim_latent, crop_and_resize_image, judge_image_type, prepare_mask, set_numpy_seed
+from lib_controlnet.utils import (
+    align_dim_latent,
+    crop_and_resize_image,
+    judge_image_type,
+    prepare_mask,
+    set_numpy_seed,
+)
 from PIL import Image
 
 import modules.scripts as scripts
@@ -273,7 +279,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         alignment_indices = [i % len(preprocessor_outputs) for i in range(p.batch_size)]
 
         def attach_extra_result_image(img: np.ndarray, is_high_res: bool = False):
-            if ((is_high_res and hr_option.high_res_enabled) or (not is_high_res and hr_option.low_res_enabled)) and unit.save_detected_map:
+            if not shared.opts.data.get("control_net_no_detectmap", False) and ((is_high_res and hr_option.high_res_enabled) or (not is_high_res and hr_option.low_res_enabled)) and unit.save_detected_map:
                 p.extra_result_images.append(img)
 
         if preprocessor_output_is_image:
@@ -470,23 +476,63 @@ class ControlNetForForgeOfficial(scripts.Script):
 
 def on_ui_settings():
     section = ("control_net", "ControlNet")
-    shared.opts.add_option("control_net_detectedmap_dir", shared.OptionInfo("detected_maps", "Directory for detected maps auto saving", section=section))
-    shared.opts.add_option("control_net_models_path", shared.OptionInfo("", "Extra path to scan for ControlNet models (e.g. training output directory)", section=section))
-    shared.opts.add_option("control_net_modules_path", shared.OptionInfo("", "Path to directory containing annotator model directories (requires restart, overrides corresponding command line flag)", section=section))
-    shared.opts.add_option("control_net_unit_count", shared.OptionInfo(3, "Multi-ControlNet: ControlNet unit number (requires restart)", gr.Slider, {"minimum": 1, "maximum": 10, "step": 1}, section=section))
-    shared.opts.add_option("control_net_model_cache_size", shared.OptionInfo(5, "Model cache size (requires restart)", gr.Slider, {"minimum": 1, "maximum": 10, "step": 1}, section=section))
-    shared.opts.add_option("control_net_no_detectmap", shared.OptionInfo(False, "Do not append detectmap to output", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("control_net_detectmap_autosaving", shared.OptionInfo(False, "Allow detectmap auto saving", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("control_net_allow_script_control", shared.OptionInfo(False, "Allow other script to control this extension", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("control_net_sync_field_args", shared.OptionInfo(True, "Paste ControlNet parameters in infotext", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_show_batch_images_in_ui", shared.OptionInfo(False, "Show batch images in gradio gallery output", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_increment_seed_during_batch", shared.OptionInfo(False, "Increment seed after each controlnet batch iteration", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_disable_openpose_edit", shared.OptionInfo(False, "Disable openpose edit", gr.Checkbox, {"interactive": True}, section=section))
-    shared.opts.add_option("controlnet_input_thumbnail", shared.OptionInfo(True, "Input image thumbnail on unit header", gr.Checkbox, {"interactive": True}, section=section))
+    category_id = "sd"
+
+    shared.opts.add_option(
+        "control_net_models_path",
+        shared.OptionInfo(
+            "",
+            "Extra Path to look for ControlNet Models",
+            section=section,
+            category_id=category_id,
+        ).info("e.g. training output directory"),
+    )
+    shared.opts.add_option(
+        "control_net_unit_count",
+        shared.OptionInfo(
+            3,
+            "Number of ControlNet Units",
+            gr.Slider,
+            {"minimum": 1, "maximum": 5, "step": 1},
+            section=section,
+            category_id=category_id,
+        ).needs_reload_ui(),
+    )
+    shared.opts.add_option(
+        "control_net_model_cache_size",
+        shared.OptionInfo(
+            3,
+            "Number of Models to Cache in Memory",
+            gr.Slider,
+            {"minimum": 0, "maximum": 10, "step": 1},
+            section=section,
+            category_id=category_id,
+        ).needs_reload_ui(),
+    )
+    shared.opts.add_option(
+        "control_net_sync_field_args",
+        shared.OptionInfo(
+            True,
+            "Read ControlNet parameters from Infotext",
+            section=section,
+            category_id=category_id,
+        ).needs_reload_ui(),
+    )
+    shared.opts.add_option(
+        "control_net_no_detectmap",
+        shared.OptionInfo(
+            False,
+            "Do not append detectmap to output",
+            section=section,
+            category_id=category_id,
+        ),
+    )
 
 
 script_callbacks.on_ui_settings(on_ui_settings)
 script_callbacks.on_infotext_pasted(Infotext.on_infotext_pasted)
 script_callbacks.on_after_component(ControlNetUiGroup.on_after_component)
 script_callbacks.on_before_reload(ControlNetUiGroup.reset)
-script_callbacks.on_app_started(controlnet_api)
+
+if shared.cmd_opts.api:
+    script_callbacks.on_app_started(controlnet_api)

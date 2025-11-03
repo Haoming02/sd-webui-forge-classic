@@ -15,7 +15,7 @@ parser.add_argument(
 parser.add_argument(
     "--controlnet-preprocessor-models-dir",
     type=normalized_filepath,
-    help="Path to directory with annotator model directories",
+    help="Path to directory with Annotator models",
     default=os.path.join(models_path, "ControlNetPreprocessor"),
 )
 
@@ -35,24 +35,19 @@ supported_control_models = []
 
 
 def add_supported_preprocessor(preprocessor):
-    global supported_preprocessors
-    p = preprocessor
-    supported_preprocessors[p.name] = p
-    return
+    supported_preprocessors[preprocessor.name] = preprocessor
 
 
 def add_supported_control_model(control_model):
-    global supported_control_models
     supported_control_models.append(control_model)
-    return
 
 
 def try_load_supported_control_model(ckpt_path):
-    global supported_control_models
     state_dict = utils.load_torch_file(ckpt_path, safe_load=True)
     for supported_type in supported_control_models:
         state_dict_copy = {k: v for k, v in state_dict.items()}
         model = supported_type.try_build_from_state_dict(state_dict_copy, ckpt_path)
         if model is not None:
             return model
+
     return None
