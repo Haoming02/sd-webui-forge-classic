@@ -9,7 +9,7 @@
             target.dispatchEvent(e);
         }
 
-        const tabs = gradioApp().querySelectorAll('#controlnet .input-accordion');
+        const tabs = gradioApp().querySelectorAll('#controlnet .tabitem');
         tabs.forEach(tab => {
             if (cnetOpenposeEditorRegisteredElements.has(tab)) return;
             cnetOpenposeEditorRegisteredElements.add(tab);

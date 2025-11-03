@@ -379,7 +379,7 @@
 
         gradioApp().querySelectorAll('#controlnet').forEach(accordion => {
             if (cnetAllAccordions.has(accordion)) return;
-            const tabs = [...accordion.querySelectorAll('.input-accordion')]
+            const tabs = [...accordion.querySelectorAll('.tabitem')]
                 .map(tab => new ControlNetUnitTab(tab, accordion));
 
             // On open of main extension accordion, if no unit is enabled,

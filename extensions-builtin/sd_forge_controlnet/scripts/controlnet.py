@@ -64,26 +64,25 @@ class ControlNetForForgeOfficial(scripts.Script):
         ui_groups = []
         controls = []
         max_models = shared.opts.data.get("control_net_unit_count", 3)
-        gen_type = "img2img" if is_img2img else "txt2img"
-        elem_id_tabname = gen_type + "_controlnet"
+        elem_id_tabname = f"{'img2img' if is_img2img else 'txt2img'}_controlnet"
         default_unit = ControlNetUnit(enabled=False, module="None", model="None")
+
         with gr.Group(elem_id=elem_id_tabname):
-            with gr.Accordion(f"ControlNet Integrated", open=False, elem_id="controlnet", elem_classes=["controlnet"]):
-                with gr.Tabs(elem_id=elem_id_tabname + "_accordions", elem_classes="accordions"):
+            with gr.Accordion(open=False, label="ControlNet Integrated", elem_id="controlnet", elem_classes=["controlnet"]):
+                with gr.Tabs(elem_id=elem_id_tabname + "_tabs", elem_classes="controlnet_tabs"):
                     for i in range(max_models):
-                        with gr.Tab(
-                            label=f"ControlNet Unit {i}",
-                            elem_classes=["cnet-unit-enabled-accordion"],  # Class on accordion
-                        ):
+                        with gr.Tab(label=f"ControlNet Unit {i + 1}", id=i):
                             group = ControlNetUiGroup(is_img2img, default_unit)
                             ui_groups.append(group)
                             controls.append(group.render(f"ControlNet-{i}", elem_id_tabname))
 
         for i, ui_group in enumerate(ui_groups):
             infotext.register_unit(i, ui_group)
+
         if shared.opts.data.get("control_net_sync_field_args", True):
             self.infotext_fields = infotext.infotext_fields
             self.paste_field_names = infotext.paste_field_names
+
         return tuple(controls)
 
     def get_enabled_units(self, units):
