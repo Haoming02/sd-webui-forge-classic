@@ -2,7 +2,7 @@
     const GRADIO_MIN_WIDTH = 320;
     const PAD = 16;
     const DEBOUNCE_TIME = 100;
-    const DOUBLE_TAP_DELAY = 200; //ms
+    const DOUBLE_TAP_DELAY = 200; // ms
 
     const R = {
         tracking: false,
@@ -22,7 +22,7 @@
     }
 
     function displayResizeHandle(parent) {
-        if (!parent.needHideOnMoblie) {
+        if (!parent.needHideOnMobile) {
             return true;
         }
         if (window.innerWidth < GRADIO_MIN_WIDTH * 2 + PAD * 4) {
@@ -39,7 +39,7 @@
     function afterResize(parent) {
         if (
             displayResizeHandle(parent) &&
-            parent.style.gridTemplateColumns !=
+            parent.style.gridTemplateColumns !==
             parent.style.originalGridTemplateColumns
         ) {
             const oldParentWidth = R.parentWidth;
@@ -79,13 +79,13 @@
             leftColTemplate = `${parent.children[0].style.flexGrow}fr`;
             parent.minLeftColWidth = GRADIO_MIN_WIDTH;
             parent.minRightColWidth = GRADIO_MIN_WIDTH;
-            parent.needHideOnMoblie = true;
+            parent.needHideOnMobile = true;
         } else {
             leftColTemplate = parent.children[0].style.flexBasis;
             parent.minLeftColWidth =
                 parent.children[0].style.flexBasis.slice(0, -2) / 2;
             parent.minRightColWidth = 0;
-            parent.needHideOnMoblie = false;
+            parent.needHideOnMobile = false;
         }
 
         if (!leftColTemplate) {
@@ -101,6 +101,7 @@
         parent.insertBefore(resizeHandle, rightCol);
         parent.resizeHandle = resizeHandle;
 
+        // Event listeners for starting resize
         ["mousedown", "touchstart"].forEach((eventType) => {
             resizeHandle.addEventListener(eventType, (evt) => {
                 if (eventType.startsWith("mouse")) {
@@ -143,6 +144,7 @@
         afterResize(parent);
     }
 
+    // Event listeners for moving during resize
     ["mousemove", "touchmove"].forEach((eventType) => {
         window.addEventListener(eventType, (evt) => {
             if (eventType.startsWith("mouse")) {
@@ -175,6 +177,7 @@
         });
     });
 
+    // Event listeners for ending resize
     ["mouseup", "touchend"].forEach((eventType) => {
         window.addEventListener(eventType, (evt) => {
             if (eventType.startsWith("mouse")) {
@@ -194,6 +197,7 @@
         });
     });
 
+    // Window resize handler with debounce
     window.addEventListener("resize", () => {
         clearTimeout(resizeTimer);
 
