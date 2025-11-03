@@ -1,6 +1,4 @@
 import functools
-import os
-import tempfile  # Gradio 3.32 bug fix
 from typing import Optional
 
 import cv2
@@ -24,13 +22,9 @@ from modules.processing import (
     StableDiffusionProcessingImg2Img,
     StableDiffusionProcessingTxt2Img,
 )
-from modules.ui_components import InputAccordion
 from modules_forge.shared import try_load_supported_control_model
 from modules_forge.supported_controlnet import ControlModelPatcher
 from modules_forge.utils import HWC3, numpy_to_pytorch
-
-gradio_tempfile_path = os.path.join(tempfile.gettempdir(), "gradio")
-os.makedirs(gradio_tempfile_path, exist_ok=True)
 
 global_state.update_controlnet_filenames()
 
