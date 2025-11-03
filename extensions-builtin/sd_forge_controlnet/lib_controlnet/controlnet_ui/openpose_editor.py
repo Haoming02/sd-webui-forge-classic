@@ -84,7 +84,6 @@ class OpenposeEditor:
                         if poses
                         else draw_animalposes(animals, height, width)
                     ),
-                    visible=True,
                 ),
                 # Use preview as input
                 gr.update(value=True),
