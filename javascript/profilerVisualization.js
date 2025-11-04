@@ -89,7 +89,7 @@ function createVisualizationTable(data, cutoff = 0, sort = "") {
             }
             cells.push(cutoff === 0 ? x.value : x.value.toFixed(3));
             let cols = createRow(table, "td", cells);
-            for (i = 0; i < level; i++) {
+            for (let i = 0; i < level; i++) {
                 cols[i].className = "muted";
             }
 
@@ -129,7 +129,7 @@ function createVisualizationTable(data, cutoff = 0, sort = "") {
             cells.push(othersTime.toFixed(3));
             cells[level] = "others";
             let cols = createRow(table, "td", cells);
-            for (i = 0; i < level; i++) {
+            for (let i = 0; i < level; i++) {
                 cols[i].className = "muted";
             }
 

@@ -418,3 +418,211 @@
     100% { transform: scale(1); }
 }
 
+/* Layer Panel Styles */
+.forge-layers-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 220px;
+    max-height: 100%;
+    background: rgba(47, 47, 47, 0.95);
+    border-left: 1px solid #555;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 9;
+    backdrop-filter: blur(8px);
+}
+
+.forge-layers-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid #555;
+    flex-shrink: 0;
+}
+
+.forge-layers-title {
+    margin: 0;
+    padding: 0;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.forge-layers-toggle {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 4px;
+    transition: opacity 0.2s ease;
+}
+
+.forge-layers-toggle:hover {
+    opacity: 0.8;
+}
+
+.forge-layers-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 100px;
+}
+
+.forge-layer-item {
+    padding: 6px 8px;
+    border-bottom: 1px solid #3a3a3a;
+    background: rgba(60, 60, 60, 0.5);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+}
+
+.forge-layer-item:hover {
+    background: rgba(70, 70, 70, 0.8);
+}
+
+.forge-layer-item.active {
+    background: rgba(74, 144, 226, 0.3);
+    border-left: 3px solid #4a90e2;
+    padding-left: 5px;
+}
+
+.forge-layer-visibility {
+    width: 16px;
+    height: 16px;
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.forge-layer-visibility:hover {
+    opacity: 0.7;
+}
+
+.forge-layer-name {
+    flex: 1;
+    color: white;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.forge-layer-opacity {
+    width: 30px;
+    height: 14px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #3a3a3a;
+    border-radius: 2px;
+    outline: none;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.forge-layer-opacity::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+}
+
+.forge-layer-opacity::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    cursor: pointer;
+    border: none;
+}
+
+.forge-layer-lock {
+    width: 16px;
+    height: 16px;
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.forge-layer-lock:hover {
+    opacity: 0.7;
+}
+
+.forge-layers-controls {
+    display: flex;
+    gap: 4px;
+    padding: 6px 8px;
+    border-top: 1px solid #555;
+    flex-shrink: 0;
+    background: rgba(47, 47, 47, 0.8);
+}
+
+.forge-layer-control-btn {
+    flex: 1;
+    padding: 4px 6px;
+    border: none;
+    background-color: #4a4a4a;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background-color 0.2s ease;
+}
+
+.forge-layer-control-btn:hover {
+    background-color: #5e5e5e;
+}
+
+.forge-layer-control-btn:active {
+    background-color: #3e3e3e;
+}
+
+.forge-layer-control-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Scrollbar styling for layers list */
+.forge-layers-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.forge-layers-list::-webkit-scrollbar-track {
+    background: rgba(50, 50, 50, 0.5);
+}
+
+.forge-layers-list::-webkit-scrollbar-thumb {
+    background: rgba(100, 100, 100, 0.7);
+    border-radius: 3px;
+}
+
+.forge-layers-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(120, 120, 120, 0.9);
+}
+

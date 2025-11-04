@@ -4,6 +4,7 @@
 # Commercial Use is not allowed. (Contact us for commercial use.)
 
 import gradio.component_meta
+from .layers import LayerManager, Layer, BlendMode
 
 
 create_or_modify_pyi_org = gradio.component_meta.create_or_modify_pyi
@@ -201,6 +202,10 @@ class ForgeCanvas:
         self.block = gr.HTML(canvas_html_uuid, visible=visible, elem_id=elem_id, elem_classes=elem_classes)
         self.foreground = LogicalImage(visible=DEBUG_MODE, label='foreground', numpy=numpy, elem_id=self.uuid, elem_classes=['logical_image_foreground'])
         self.background = LogicalImage(visible=DEBUG_MODE, label='background', numpy=numpy, value=initial_image, elem_id=self.uuid, elem_classes=['logical_image_background'])
+        
+        # Initialize layer manager
+        self.layer_manager = LayerManager(width=512, height=512)
+        
         Context.root_block.load(None, js=f'async ()=>{{new ForgeCanvas("{self.uuid}", {no_upload}, {no_scribbles}, {contrast_scribbles}, {height}, '
                                          f"'{scribble_color}', {scribble_color_fixed}, {scribble_width}, {scribble_width_fixed}, "
                                          f'{scribble_alpha}, {scribble_alpha_fixed}, {scribble_softness}, {scribble_softness_fixed});}}')

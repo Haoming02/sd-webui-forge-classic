@@ -230,6 +230,352 @@ class UndoManager {
     }
 }
 
+// Layer System Classes
+// ============================================================
+
+/**
+ * Represents a single canvas layer
+ */
+class Layer {
+    constructor(id, name, width, height) {
+        this.id = id;
+        this.name = name;
+        this.visible = true;
+        this.opacity = 1.0;
+        this.blendMode = 'normal';
+        this.width = width;
+        this.height = height;
+        this.locked = false;
+        this.canvas = null; // Hidden canvas for this layer
+        this.ctx = null;
+    }
+
+    /**
+     * Create the canvas for this layer
+     */
+    createCanvas(width, height) {
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = width;
+        this.canvas.height = height;
+        this.ctx = this.canvas.getContext('2d');
+        return this.canvas;
+    }
+
+    /**
+     * Get layer data as base64
+     */
+    toBase64() {
+        if (!this.canvas) return null;
+        return this.canvas.toDataURL('image/png');
+    }
+
+    /**
+     * Load layer data from base64
+     */
+    fromBase64(dataUrl) {
+        if (!this.canvas || !this.ctx) return;
+        const img = new Image();
+        img.onload = () => {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.drawImage(img, 0, 0);
+        };
+        img.src = dataUrl;
+    }
+
+    /**
+     * Clear the layer
+     */
+    clear() {
+        if (!this.canvas || !this.ctx) return;
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    /**
+     * Get a copy of this layer's canvas
+     */
+    clone() {
+        const cloned = new Layer(
+            'layer_' + Math.random().toString(36).substr(2, 9),
+            this.name + ' (copy)',
+            this.width,
+            this.height
+        );
+        cloned.createCanvas(this.width, this.height);
+        cloned.opacity = this.opacity;
+        cloned.blendMode = this.blendMode;
+        cloned.visible = this.visible;
+        cloned.locked = this.locked;
+        
+        if (this.canvas) {
+            cloned.ctx.drawImage(this.canvas, 0, 0);
+        }
+        
+        return cloned;
+    }
+
+    /**
+     * Convert layer to dictionary
+     */
+    toDict() {
+        return {
+            id: this.id,
+            name: this.name,
+            visible: this.visible,
+            opacity: this.opacity,
+            blendMode: this.blendMode,
+            width: this.width,
+            height: this.height,
+            locked: this.locked,
+            data: this.toBase64()
+        };
+    }
+
+    /**
+     * Create layer from dictionary
+     */
+    static fromDict(data) {
+        const layer = new Layer(data.id, data.name, data.width, data.height);
+        layer.visible = data.visible;
+        layer.opacity = data.opacity;
+        layer.blendMode = data.blendMode;
+        layer.locked = data.locked;
+        layer.createCanvas(data.width, data.height);
+        
+        if (data.data) {
+            layer.fromBase64(data.data);
+        }
+        
+        return layer;
+    }
+}
+
+/**
+ * Manages multiple layers
+ */
+class LayerManager {
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.layers = [];
+        this.activeLayerId = null;
+
+        // Create default background layer
+        this.addLayer('Background');
+    }
+
+    /**
+     * Add a new layer
+     */
+    addLayer(name, index = null) {
+        const id = 'layer_' + Math.random().toString(36).substr(2, 9);
+        const layer = new Layer(id, name, this.width, this.height);
+        layer.createCanvas(this.width, this.height);
+
+        if (index === null) {
+            this.layers.push(layer);
+        } else {
+            this.layers.splice(index, 0, layer);
+        }
+
+        if (!this.activeLayerId) {
+            this.activeLayerId = id;
+        }
+
+        return layer;
+    }
+
+    /**
+     * Delete a layer
+     */
+    deleteLayer(layerId) {
+        const index = this.layers.findIndex(l => l.id === layerId);
+        if (index === -1 || this.layers.length <= 1) return false;
+
+        this.layers.splice(index, 1);
+
+        if (this.activeLayerId === layerId) {
+            this.activeLayerId = this.layers[0]?.id || null;
+        }
+
+        return true;
+    }
+
+    /**
+     * Get a layer by ID
+     */
+    getLayer(layerId) {
+        return this.layers.find(l => l.id === layerId);
+    }
+
+    /**
+     * Get the active layer
+     */
+    getActiveLayer() {
+        return this.getLayer(this.activeLayerId);
+    }
+
+    /**
+     * Set active layer
+     */
+    setActiveLayer(layerId) {
+        if (this.getLayer(layerId)) {
+            this.activeLayerId = layerId;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Reorder a layer
+     */
+    reorderLayer(layerId, newIndex) {
+        const index = this.layers.findIndex(l => l.id === layerId);
+        if (index === -1) return false;
+
+        const layer = this.layers.splice(index, 1)[0];
+        this.layers.splice(newIndex, 0, layer);
+        return true;
+    }
+
+    /**
+     * Merge layer down
+     */
+    mergeDown(layerId) {
+        const index = this.layers.findIndex(l => l.id === layerId);
+        if (index <= 0) return false;
+
+        const topLayer = this.layers[index];
+        const bottomLayer = this.layers[index - 1];
+
+        // Composite top layer onto bottom
+        this._compositeLayer(bottomLayer, topLayer);
+
+        // Remove top layer
+        this.layers.splice(index, 1);
+
+        if (this.activeLayerId === layerId) {
+            this.activeLayerId = bottomLayer.id;
+        }
+
+        return true;
+    }
+
+    /**
+     * Flatten all layers
+     */
+    flatten() {
+        if (this.layers.length <= 1) return false;
+
+        const baseLayer = this.layers[0];
+        baseLayer.clear();
+
+        for (let i = 1; i < this.layers.length; i++) {
+            this._compositeLayer(baseLayer, this.layers[i]);
+        }
+
+        // Remove all but first layer
+        this.layers = [baseLayer];
+        this.activeLayerId = baseLayer.id;
+
+        return true;
+    }
+
+    /**
+     * Composite a layer onto another
+     */
+    _compositeLayer(baseLayer, topLayer) {
+        if (!baseLayer.canvas || !topLayer.canvas) return;
+        if (!topLayer.visible) return;
+
+        const ctx = baseLayer.ctx;
+        ctx.globalAlpha = topLayer.opacity;
+        ctx.globalCompositeOperation = this._getCompositeOperation(topLayer.blendMode);
+        ctx.drawImage(topLayer.canvas, 0, 0);
+        ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
+    }
+
+    /**
+     * Get canvas composite operation for blend mode
+     */
+    _getCompositeOperation(blendMode) {
+        const modeMap = {
+            'normal': 'source-over',
+            'multiply': 'multiply',
+            'screen': 'screen',
+            'overlay': 'overlay',
+            'darken': 'darken',
+            'lighten': 'lighten',
+            'color-dodge': 'color-dodge',
+            'color-burn': 'color-burn',
+            'hard-light': 'hard-light',
+            'soft-light': 'soft-light'
+        };
+        return modeMap[blendMode] || 'source-over';
+    }
+
+    /**
+     * Get all visible layers
+     */
+    getVisibleLayers() {
+        return this.layers.filter(l => l.visible);
+    }
+
+    /**
+     * Resize all layers
+     */
+    resize(width, height) {
+        const oldWidth = this.width;
+        const oldHeight = this.height;
+        this.width = width;
+        this.height = height;
+
+        for (const layer of this.layers) {
+            const newCanvas = document.createElement('canvas');
+            newCanvas.width = width;
+            newCanvas.height = height;
+            const newCtx = newCanvas.getContext('2d');
+
+            if (layer.canvas) {
+                newCtx.drawImage(layer.canvas, 0, 0);
+            }
+
+            layer.canvas = newCanvas;
+            layer.ctx = newCtx;
+            layer.width = width;
+            layer.height = height;
+        }
+    }
+
+    /**
+     * Convert to dictionary for persistence
+     */
+    toDict() {
+        return {
+            width: this.width,
+            height: this.height,
+            activeLayerId: this.activeLayerId,
+            layers: this.layers.map(l => l.toDict())
+        };
+    }
+
+    /**
+     * Create from dictionary
+     */
+    static fromDict(data) {
+        const manager = new LayerManager(data.width, data.height);
+        manager.layers = [];
+        manager.activeLayerId = data.activeLayerId;
+
+        for (const layerData of data.layers) {
+            const layer = Layer.fromDict(layerData);
+            manager.layers.push(layer);
+        }
+
+        return manager;
+    }
+}
+
 // ------------------------------------------------------------
 // Main Canvas Class: ForgeCanvas
 // ------------------------------------------------------------
@@ -379,6 +725,10 @@ class ForgeCanvas {
         this.backgroundGradioBind = new GradioTextAreaBind(this.uuid, 'logical_image_background');
         this.foregroundGradioBind = new GradioTextAreaBind(this.uuid, 'logical_image_foreground');
 
+        // Layer System
+        this.layerManager = new LayerManager(512, 512); // Default size, will be resized
+        this.layersPanelVisible = true;
+
     // Token for a server-stored background image (forge-canvas://id)
     this.imgToken = null;
     // Current object URL created from a fetched background blob (for revocation)
@@ -453,6 +803,9 @@ class ForgeCanvas {
         this.backgroundGradioBind.listen(base64Data => this.uploadBase64(base64Data));
         this.foregroundGradioBind.listen(base64Data => this.uploadBase64DrawingCanvas(base64Data));
 
+        // Initialize layer panel
+        this.initLayerPanel();
+
         // Prevent default scroll on the drawing canvas
         if (this.drawingCanvas) {
             this.drawingCanvas.addEventListener('wheel', e => e.preventDefault(), { passive: false });
@@ -475,7 +828,10 @@ class ForgeCanvas {
             'scribbleColor', 'scribbleColorBlock', 'scribbleWidth', 'widthLabel',
             'scribbleWidthBlock', 'scribbleAlpha', 'alphaLabel', 'scribbleAlphaBlock',
             'scribbleSoftness', 'softnessLabel', 'scribbleSoftnessBlock', 'eraserButton',
-            'brushButton', 'brushDropdown', 'toolbarMessage'
+            'brushButton', 'brushDropdown', 'toolbarMessage',
+            // Layer panel elements
+            'layersPanel', 'layersList', 'toggleLayersButton', 'addLayerButton',
+            'deleteLayerButton', 'mergeDownButton', 'flattenButton'
         ];
 
         this.elems = {};
@@ -533,6 +889,29 @@ class ForgeCanvas {
             } catch (e) {
                 // some older browsers may not support setTransform with these args
                 this.drawingCtx.scale(DPR, DPR);
+            }
+            
+            // Initialize layer canvases with DPR-scaled dimensions to match main canvas
+            // This ensures layer coordinates match the main drawing context
+            const scaledWidth = Math.round(cssWidth * DPR);
+            const scaledHeight = Math.round(cssHeight * DPR);
+            
+            this.layerManager.width = scaledWidth;
+            this.layerManager.height = scaledHeight;
+            for (const layer of this.layerManager.layers) {
+                if (!layer.canvas) {
+                    layer.createCanvas(scaledWidth, scaledHeight);
+                    layer.width = scaledWidth;
+                    layer.height = scaledHeight;
+                    // Apply DPR scaling to layer context like we do for main context
+                    if (layer.ctx) {
+                        try {
+                            layer.ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+                        } catch (e) {
+                            layer.ctx.scale(DPR, DPR);
+                        }
+                    }
+                }
             }
         }
 
@@ -821,6 +1200,10 @@ class ForgeCanvas {
         if (drawingCanvas) {
             drawingCanvas.addEventListener('pointerdown', e => {
                 if (!this.img || e.button !== 0 || this.noScribbles || this.isZooming || (this.currentTool !== 'brush' && this.currentTool !== 'eraser')) return;
+                
+                // Prevent drawing on locked layers
+                const activeLayer = this.layerManager?.getActiveLayer();
+                if (activeLayer && activeLayer.locked) return;
 
                 this.drawing = true;
                 if (!this.isZooming) {
@@ -1156,6 +1539,11 @@ class ForgeCanvas {
                     }
                 }
                 this.brushStrokes = []; // Clear
+                
+                // After drawing strokes, redraw layers to main canvas
+                if (this.layerManager && this.layerManager.layers.length > 0) {
+                    this.redrawLayers();
+                }
             }
 
             lastTime = currentTime;
@@ -1171,6 +1559,11 @@ class ForgeCanvas {
      */
     handlePointerMoveCanvas(e) {
         if (!this.drawing || !this.img || this.noScribbles || this.isZooming || this.isHandTool || (this.currentTool !== 'brush' && this.currentTool !== 'eraser')) return;
+        
+        // Prevent drawing on locked layers
+        const activeLayer = this.layerManager?.getActiveLayer();
+        if (activeLayer && activeLayer.locked) return;
+        
         const rect = this.drawingCanvas.getBoundingClientRect();
         const x = (e.clientX - rect.left) / this.imgScale;
         const y = (e.clientY - rect.top) / this.imgScale;
@@ -1192,7 +1585,20 @@ class ForgeCanvas {
      * Single line approach for brush drawing
      */
     drawBrushLine(x0, y0, x1, y1) {
-        const ctx = this.drawingCtx;
+        // Get context from active layer or fallback to main drawing context
+        const activeLayer = this.layerManager?.getActiveLayer();
+        const layerCtx = activeLayer?.ctx;
+        const ctx = layerCtx || this.drawingCtx;
+        
+        if (!ctx) return;
+        
+        // Scale coordinates by DPR if using layer context (layers are DPR-scaled)
+        const DPR = layerCtx ? (window.devicePixelRatio || 1) : 1;
+        const scaledX0 = x0 * DPR;
+        const scaledY0 = y0 * DPR;
+        const scaledX1 = x1 * DPR;
+        const scaledY1 = y1 * DPR;
+        
         ctx.save();
 
         // For mask mode
@@ -1203,8 +1609,8 @@ class ForgeCanvas {
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.beginPath();
-            ctx.moveTo(x0, y0);
-            ctx.lineTo(x1, y1);
+            ctx.moveTo(scaledX0, scaledY0);
+            ctx.lineTo(scaledX1, scaledY1);
             ctx.stroke();
             ctx.restore();
             return;
@@ -1223,8 +1629,8 @@ class ForgeCanvas {
         ctx.shadowBlur = this.scribbleSoftness;
 
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
+        ctx.moveTo(scaledX0, scaledY0);
+        ctx.lineTo(scaledX1, scaledY1);
         ctx.stroke();
 
         ctx.restore();
@@ -1234,7 +1640,20 @@ class ForgeCanvas {
      * Single line approach for eraser
      */
     drawEraserLine(x0, y0, x1, y1) {
-        const ctx = this.drawingCtx;
+        // Get context from active layer or fallback to main drawing context
+        const activeLayer = this.layerManager?.getActiveLayer();
+        const layerCtx = activeLayer?.ctx;
+        const ctx = layerCtx || this.drawingCtx;
+        
+        if (!ctx) return;
+        
+        // Scale coordinates by DPR if using layer context (layers are DPR-scaled)
+        const DPR = layerCtx ? (window.devicePixelRatio || 1) : 1;
+        const scaledX0 = x0 * DPR;
+        const scaledY0 = y0 * DPR;
+        const scaledX1 = x1 * DPR;
+        const scaledY1 = y1 * DPR;
+        
         ctx.save();
         ctx.globalCompositeOperation = 'destination-out';
         ctx.strokeStyle = 'rgba(0,0,0,1)';
@@ -1243,8 +1662,8 @@ class ForgeCanvas {
         ctx.lineWidth = (this.scribbleWidth / this.imgScale) * 20;
 
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
+        ctx.moveTo(scaledX0, scaledY0);
+        ctx.lineTo(scaledX1, scaledY1);
         ctx.stroke();
 
         ctx.restore();
@@ -1254,7 +1673,20 @@ class ForgeCanvas {
      * Single line approach for pencil (thin, sharp brush)
      */
     drawPencilLine(x0, y0, x1, y1) {
-        const ctx = this.drawingCtx;
+        // Get context from active layer or fallback to main drawing context
+        const activeLayer = this.layerManager?.getActiveLayer();
+        const layerCtx = activeLayer?.ctx;
+        const ctx = layerCtx || this.drawingCtx;
+        
+        if (!ctx) return;
+        
+        // Scale coordinates by DPR if using layer context (layers are DPR-scaled)
+        const DPR = layerCtx ? (window.devicePixelRatio || 1) : 1;
+        const scaledX0 = x0 * DPR;
+        const scaledY0 = y0 * DPR;
+        const scaledX1 = x1 * DPR;
+        const scaledY1 = y1 * DPR;
+        
         ctx.save();
 
         // For mask mode
@@ -1265,8 +1697,8 @@ class ForgeCanvas {
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.beginPath();
-            ctx.moveTo(x0, y0);
-            ctx.lineTo(x1, y1);
+            ctx.moveTo(scaledX0, scaledY0);
+            ctx.lineTo(scaledX1, scaledY1);
             ctx.stroke();
             ctx.restore();
             return;
@@ -1285,8 +1717,8 @@ class ForgeCanvas {
         ctx.shadowBlur = 0;
 
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
+        ctx.moveTo(scaledX0, scaledY0);
+        ctx.lineTo(scaledX1, scaledY1);
         ctx.stroke();
 
         ctx.restore();
@@ -1296,7 +1728,20 @@ class ForgeCanvas {
      * Single line approach for spray (airbrush effect)
      */
     drawSprayLine(x0, y0, x1, y1) {
-        const ctx = this.drawingCtx;
+        // Get context from active layer or fallback to main drawing context
+        const activeLayer = this.layerManager?.getActiveLayer();
+        const layerCtx = activeLayer?.ctx;
+        const ctx = layerCtx || this.drawingCtx;
+        
+        if (!ctx) return;
+        
+        // Scale coordinates by DPR if using layer context (layers are DPR-scaled)
+        const DPR = layerCtx ? (window.devicePixelRatio || 1) : 1;
+        const scaledX0 = x0 * DPR;
+        const scaledY0 = y0 * DPR;
+        const scaledX1 = x1 * DPR;
+        const scaledY1 = y1 * DPR;
+        
         ctx.save();
 
         // For mask mode
@@ -1310,14 +1755,14 @@ class ForgeCanvas {
         }
 
         // Draw multiple small dots along the line
-        const distance = Math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2);
+        const distance = Math.sqrt((scaledX1 - scaledX0) ** 2 + (scaledY1 - scaledY0) ** 2);
         const steps = Math.max(1, Math.floor(distance / 2)); // Density
-        const dx = (x1 - x0) / steps;
-        const dy = (y1 - y0) / steps;
+        const dx = (scaledX1 - scaledX0) / steps;
+        const dy = (scaledY1 - scaledY0) / steps;
 
         for (let i = 0; i <= steps; i++) {
-            const cx = x0 + dx * i;
-            const cy = y0 + dy * i;
+            const cx = scaledX0 + dx * i;
+            const cy = scaledY0 + dy * i;
             const radius = (this.scribbleWidth / this.imgScale) * Math.random() * 5; // Random size
             ctx.beginPath();
             ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -1654,6 +2099,7 @@ class ForgeCanvas {
 
                     this.adjustInitialPositionAndScale();
                     this.drawImage();
+                    this.resizeLayersForImage();
                     this.onImageUpload();
                     this.saveState();
                     this.setUploadHintVisibility(false);
@@ -1696,6 +2142,7 @@ class ForgeCanvas {
 
             this.adjustInitialPositionAndScale();
             this.drawImage();
+            this.resizeLayersForImage();
             this.onImageUpload();
             this.saveState();
             this.setUploadHintVisibility(false);
@@ -1845,6 +2292,10 @@ class ForgeCanvas {
 
     removeImage() {
         this.img = null;
+        
+        // Hide layer panel when image is removed
+        this.setLayerPanelVisibility(false);
+        
         const { image, drawingCanvas } = this.elems;
         if (drawingCanvas) {
             this.drawingCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
@@ -1861,6 +2312,46 @@ class ForgeCanvas {
         this.onImageUpload();
         this.clearHistory();
         this.cleanupToast(); // Clean up any active toast notifications
+    }
+
+    /**
+     * Resize layers to match the uploaded image and draw the background image to the background layer
+     */
+    resizeLayersForImage() {
+        if (!this.originalWidth || !this.originalHeight || !this.layerManager) return;
+
+        const DPR = window.devicePixelRatio || 1;
+        const scaledWidth = Math.round(this.originalWidth * DPR);
+        const scaledHeight = Math.round(this.originalHeight * DPR);
+
+        // Resize all layers to match image dimensions
+        this.layerManager.resize(scaledWidth, scaledHeight);
+
+        // Draw the background image to the background layer (first layer) and lock it
+        const backgroundLayer = this.layerManager.layers[0];
+        if (backgroundLayer && backgroundLayer.ctx && this.img) {
+            const img = new Image();
+            img.onload = () => {
+                // Clear the background layer and draw the image
+                backgroundLayer.ctx.clearRect(0, 0, backgroundLayer.canvas.width, backgroundLayer.canvas.height);
+                backgroundLayer.ctx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+                // Lock the background layer so it can't be edited
+                backgroundLayer.locked = true;
+                backgroundLayer.name = 'Background (Locked)';
+                
+                // Auto-create a drawing layer if only background exists
+                if (this.layerManager.layers.length === 1) {
+                    const drawingLayer = this.layerManager.addLayer('Layer 1');
+                    this.layerManager.setActiveLayer(drawingLayer.id);
+                    this.updateLayersPanel();
+                    this.showToast('✨ Drawing layer created', 800);
+                }
+                
+                // Trigger a redraw of the composite
+                this.redrawLayers();
+            };
+            img.src = this.img;
+        }
     }
 
     /**
@@ -2275,8 +2766,12 @@ class ForgeCanvas {
     onImageUpload() {
         if (!this.img) {
             this.backgroundGradioBind.setValue('');
+            this.setLayerPanelVisibility(false);
             return;
         }
+
+        // Show layer panel when image is uploaded
+        this.setLayerPanelVisibility(true);
 
         const { image } = this.elems;
         if (!image) return;
@@ -2898,6 +3393,357 @@ class ForgeCanvas {
                 submitButton.click();
             }
         }
+    }
+
+    // ============================================================
+    // 9) LAYER SYSTEM METHODS
+    // ============================================================
+
+    /**
+     * Initialize the layer panel UI
+     */
+    initLayerPanel() {
+        const { layersPanel, layersList, addLayerButton, deleteLayerButton, mergeDownButton, flattenButton, toggleLayersButton } = this.elems;
+
+        if (!layersPanel) return;
+
+        // Toggle panel visibility
+        if (toggleLayersButton) {
+            toggleLayersButton.addEventListener('click', () => {
+                this.toggleLayersPanel();
+            });
+        }
+
+        // Add layer button
+        if (addLayerButton) {
+            addLayerButton.addEventListener('click', () => {
+                this.addNewLayer();
+            });
+        }
+
+        // Delete layer button
+        if (deleteLayerButton) {
+            deleteLayerButton.addEventListener('click', () => {
+                const active = this.layerManager.getActiveLayer();
+                if (active) {
+                    this.deleteLayer(active.id);
+                }
+            });
+        }
+
+        // Merge down button
+        if (mergeDownButton) {
+            mergeDownButton.addEventListener('click', () => {
+                const active = this.layerManager.getActiveLayer();
+                if (active) {
+                    this.mergeLayerDown(active.id);
+                }
+            });
+        }
+
+        // Flatten button
+        if (flattenButton) {
+            flattenButton.addEventListener('click', () => {
+                this.flattenLayers();
+            });
+        }
+
+        // Initial render
+        this.updateLayersPanel();
+        
+        // Hide layer panel until image is uploaded
+        this.setLayerPanelVisibility(false);
+    }
+
+    /**
+     * Show or hide the layer panel based on image state
+     */
+    setLayerPanelVisibility(visible) {
+        const { layersPanel } = this.elems;
+        if (!layersPanel) return;
+        
+        if (visible) {
+            layersPanel.style.display = 'block';
+        } else {
+            layersPanel.style.display = 'none';
+        }
+    }
+
+    /**
+     * Update the layers panel UI
+     */
+    updateLayersPanel() {
+        const { layersList } = this.elems;
+        if (!layersList) return;
+
+        layersList.innerHTML = '';
+
+        // Render layers in reverse order (top layer first)
+        for (let i = this.layerManager.layers.length - 1; i >= 0; i--) {
+            const layer = this.layerManager.layers[i];
+            const layerEl = this.createLayerElement(layer);
+            layersList.appendChild(layerEl);
+        }
+    }
+
+    /**
+     * Create a DOM element for a layer
+     */
+    createLayerElement(layer) {
+        const container = document.createElement('div');
+        container.className = 'forge-layer-item';
+        if (layer.id === this.layerManager.activeLayerId) {
+            container.classList.add('active');
+        }
+        container.dataset.layerId = layer.id;
+
+        // Visibility toggle
+        const visBtn = document.createElement('button');
+        visBtn.className = 'forge-layer-visibility';
+        visBtn.textContent = layer.visible ? '👁️' : '🚫';
+        visBtn.title = layer.visible ? 'Hide layer' : 'Show layer';
+        visBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleLayerVisibility(layer.id);
+        });
+        container.appendChild(visBtn);
+
+        // Layer name
+        const nameEl = document.createElement('span');
+        nameEl.className = 'forge-layer-name';
+        nameEl.textContent = layer.name;
+        nameEl.title = layer.name;
+        container.appendChild(nameEl);
+
+        // Opacity slider
+        const opacitySlider = document.createElement('input');
+        opacitySlider.type = 'range';
+        opacitySlider.className = 'forge-layer-opacity';
+        opacitySlider.min = '0';
+        opacitySlider.max = '100';
+        opacitySlider.value = Math.round(layer.opacity * 100);
+        opacitySlider.addEventListener('change', (e) => {
+            e.stopPropagation();
+            this.setLayerOpacity(layer.id, parseInt(e.target.value) / 100);
+        });
+        container.appendChild(opacitySlider);
+
+        // Lock button
+        const lockBtn = document.createElement('button');
+        lockBtn.className = 'forge-layer-lock';
+        lockBtn.textContent = layer.locked ? '🔒' : '🔓';
+        
+        // Disable lock button for background layer (always locked)
+        const isBackgroundLayer = this.layerManager.layers[0]?.id === layer.id;
+        if (isBackgroundLayer) {
+            lockBtn.disabled = true;
+            lockBtn.title = 'Background layer is always locked';
+            lockBtn.style.opacity = '0.5';
+            lockBtn.style.cursor = 'not-allowed';
+        } else {
+            lockBtn.title = layer.locked ? 'Unlock layer' : 'Lock layer';
+            lockBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleLayerLock(layer.id);
+            });
+        }
+        container.appendChild(lockBtn);
+
+        // Click to select
+        container.addEventListener('click', () => {
+            this.selectLayer(layer.id);
+        });
+
+        return container;
+    }
+
+    /**
+     * Add a new layer
+     */
+    addNewLayer(name = 'New Layer') {
+        const layer = this.layerManager.addLayer(name);
+        this.selectLayer(layer.id);
+        this.updateLayersPanel();
+        this.saveState();
+        this.showToast('➕ Layer added', 1000);
+        return layer;
+    }
+
+    /**
+     * Delete a layer
+     */
+    deleteLayer(layerId) {
+        if (this.layerManager.layers.length <= 1) {
+            this.showToast('⚠️ Cannot delete only layer', 1500);
+            return false;
+        }
+
+        if (this.layerManager.deleteLayer(layerId)) {
+            this.updateLayersPanel();
+            this.saveState();
+            this.redrawLayers();
+            this.showToast('🗑️ Layer deleted', 1000);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Select a layer
+     */
+    selectLayer(layerId) {
+        if (this.layerManager.setActiveLayer(layerId)) {
+            this.updateLayersPanel();
+            this.showToast(`Selected: ${this.layerManager.getActiveLayer()?.name}`, 800);
+        }
+    }
+
+    /**
+     * Toggle layer visibility
+     */
+    toggleLayerVisibility(layerId) {
+        const layer = this.layerManager.getLayer(layerId);
+        if (layer) {
+            layer.visible = !layer.visible;
+            this.updateLayersPanel();
+            this.redrawLayers();
+            this.saveState();
+            const status = layer.visible ? '👁️ Visible' : '🚫 Hidden';
+            this.showToast(status, 800);
+        }
+    }
+
+    /**
+     * Set layer opacity
+     */
+    setLayerOpacity(layerId, opacity) {
+        const layer = this.layerManager.getLayer(layerId);
+        if (layer) {
+            layer.opacity = Math.max(0, Math.min(1, opacity));
+            this.updateLayersPanel();
+            this.redrawLayers();
+            this.saveNonDrawingState();
+        }
+    }
+
+    /**
+     * Toggle layer lock
+     */
+    toggleLayerLock(layerId) {
+        const layer = this.layerManager.getLayer(layerId);
+        if (layer) {
+            // Prevent unlocking the background layer (always keep it locked)
+            const isBackgroundLayer = this.layerManager.layers[0]?.id === layerId;
+            if (isBackgroundLayer && layer.locked) {
+                this.showToast('🔒 Background layer cannot be unlocked', 1000);
+                return;
+            }
+            
+            layer.locked = !layer.locked;
+            this.updateLayersPanel();
+            const status = layer.locked ? '🔒 Locked' : '🔓 Unlocked';
+            this.showToast(status, 800);
+        }
+    }
+
+    /**
+     * Merge layer down
+     */
+    mergeLayerDown(layerId) {
+        if (this.layerManager.mergeDown(layerId)) {
+            this.updateLayersPanel();
+            this.redrawLayers();
+            this.saveState();
+            this.showToast('⬇️ Layers merged', 1000);
+            return true;
+        }
+
+        this.showToast('⚠️ Cannot merge bottom layer', 1500);
+        return false;
+    }
+
+    /**
+     * Flatten all layers
+     */
+    flattenLayers() {
+        if (this.layerManager.flatten()) {
+            this.updateLayersPanel();
+            this.redrawLayers();
+            this.saveState();
+            this.showToast('⊡ Image flattened', 1000);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Toggle layers panel visibility
+     */
+    toggleLayersPanel() {
+        const { layersPanel } = this.elems;
+        if (!layersPanel) return;
+
+        this.layersPanelVisible = !this.layersPanelVisible;
+        layersPanel.style.display = this.layersPanelVisible ? 'flex' : 'none';
+    }
+
+    /**
+     * Composite all visible layers to a single image
+     */
+    composeLayers() {
+        const { drawingCanvas } = this.elems;
+        if (!drawingCanvas || !this.layerManager.layers.length) return null;
+
+        // Create composite canvas
+        const composite = document.createElement('canvas');
+        composite.width = drawingCanvas.width;
+        composite.height = drawingCanvas.height;
+        const ctx = composite.getContext('2d');
+
+        // Draw each visible layer (skip the locked background layer at index 0)
+        for (let i = 1; i < this.layerManager.layers.length; i++) {
+            const layer = this.layerManager.layers[i];
+            if (!layer.visible || !layer.canvas) continue;
+
+            ctx.globalAlpha = layer.opacity;
+            // Use the layer's actual blend mode instead of hardcoding 'source-over'
+            ctx.globalCompositeOperation = layer.blendMode || 'source-over';
+            ctx.drawImage(layer.canvas, 0, 0);
+        }
+
+        ctx.globalAlpha = 1.0;
+        return composite;
+    }
+
+    /**
+     * Redraw all layers to the main canvas
+     */
+    redrawLayers() {
+        const composite = this.composeLayers();
+        if (!composite || !this.drawingCtx || !this.elems.drawingCanvas) return;
+
+        const DPR = window.devicePixelRatio || 1;
+        // Clear and redraw - note that the context is already scaled by DPR via setTransform
+        // so we use logical (CSS) dimensions for the rect
+        this.drawingCtx.clearRect(0, 0, this.elems.drawingCanvas.width / DPR, this.elems.drawingCanvas.height / DPR);
+        this.drawingCtx.drawImage(composite, 0, 0, composite.width / DPR, composite.height / DPR);
+    }
+
+    /**
+     * Get the active layer's canvas for drawing
+     */
+    getActiveLayerCanvas() {
+        const layer = this.layerManager.getActiveLayer();
+        return layer ? layer.canvas : null;
+    }
+
+    /**
+     * Ensure all layers are resized to match canvas dimensions
+     */
+    resizeLayers(width, height) {
+        this.layerManager.resize(width, height);
     }
 }
 

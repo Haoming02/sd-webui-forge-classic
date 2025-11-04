@@ -60,7 +60,7 @@ function setTitle(progress) {
         title = "[" + progress.trim() + "] " + title;
     }
 
-    if (document.title != title) {
+    if (document.title !== title) {
         document.title = title;
     }
 }
@@ -173,7 +173,7 @@ function requestProgress(
 
                 setTitle(progressText);
 
-                if (res.textinfo && res.textinfo.indexOf("\n") == -1) {
+                if (res.textinfo && res.textinfo.indexOf("\n") === -1) {
                     progressText = res.textinfo + " " + progressText;
                 }
 
