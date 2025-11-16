@@ -7,6 +7,8 @@ import json
 import torch
 import tqdm
 
+from backend.utils import load_torch_file
+
 from modules import shared, images, sd_models, sd_vae, errors
 from modules.ui_common import plaintext_to_html
 import gradio as gr
@@ -124,14 +126,14 @@ def run_modelmerger(id_task, primary_model_name, secondary_model_name, tertiary_
     if theta_func2:
         shared.state.textinfo = "Loading B"
         print(f"Loading {secondary_model_info.filename}...")
-        theta_1 = sd_models.load_torch_file(secondary_model_info.filename)
+        theta_1 = load_torch_file(secondary_model_info.filename)
     else:
         theta_1 = None
 
     if theta_func1:
         shared.state.textinfo = "Loading C"
         print(f"Loading {tertiary_model_info.filename}...")
-        theta_2 = sd_models.load_torch_file(tertiary_model_info.filename)
+        theta_2 = load_torch_file(tertiary_model_info.filename)
 
         shared.state.textinfo = 'Merging B and C'
         shared.state.sampling_steps = len(theta_1.keys())
@@ -153,7 +155,7 @@ def run_modelmerger(id_task, primary_model_name, secondary_model_name, tertiary_
 
     shared.state.textinfo = f"Loading {primary_model_info.filename}..."
     print(f"Loading {primary_model_info.filename}...")
-    theta_0 = sd_models.load_torch_file(primary_model_info.filename)
+    theta_0 = load_torch_file(primary_model_info.filename)
 
     print("Merging...")
     shared.state.textinfo = 'Merging A and B'
@@ -196,7 +198,7 @@ def run_modelmerger(id_task, primary_model_name, secondary_model_name, tertiary_
     if bake_in_vae_filename is not None:
         print(f"Baking in VAE from {bake_in_vae_filename}")
         shared.state.textinfo = 'Baking in VAE'
-        vae_dict = sd_vae.load_torch_file(bake_in_vae_filename)
+        vae_dict = load_torch_file(bake_in_vae_filename)
 
         for key in vae_dict.keys():
             theta_0_key = 'first_stage_model.' + key
@@ -281,10 +283,24 @@ def run_modelmerger(id_task, primary_model_name, secondary_model_name, tertiary_
 
         metadata["sd_merge_recipe"] = json.dumps(merge_recipe)
         metadata["sd_merge_models"] = json.dumps(sd_merge_models)
-
+    
+    def sanitize_metadata(meta_dict):
+        sanitized = {}
+        for key, value in meta_dict.items():
+            if value is None:
+                sanitized[key] = ""
+            elif isinstance(value, str):
+                sanitized[key] = value
+            elif isinstance(value, (dict, list)):
+                sanitized[key] = json.dumps(value)
+            else:
+                sanitized[key] = str(value)
+        return sanitized
+        
     _, extension = os.path.splitext(output_modelname)
     if extension.lower() == ".safetensors":
-        safetensors.torch.save_file(theta_0, output_modelname, metadata=metadata if len(metadata)>0 else None)
+        safe_metadata = sanitize_metadata(metadata) if len(metadata) > 0 else None
+        safetensors.torch.save_file(theta_0, output_modelname, metadata=safe_metadata)
     else:
         torch.save(theta_0, output_modelname)
 

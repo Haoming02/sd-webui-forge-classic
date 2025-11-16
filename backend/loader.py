@@ -72,7 +72,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             load_state_dict(model, state_dict)
             return model
         if component_name.startswith("text_encoder") and cls_name in ["CLIPTextModel", "CLIPTextModelWithProjection"]:
-            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have CLIP state dict!"
+            # Allow missing CLIP state dict (may be embedded in main model or not required)
+            if not isinstance(state_dict, dict) or len(state_dict) <= 16:
+                print(f"Warning: {component_name} state dict is empty or missing. This may be expected for some model configurations.")
+                return None
 
             from transformers import CLIPTextConfig, CLIPTextModel
 

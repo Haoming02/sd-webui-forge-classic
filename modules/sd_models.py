@@ -450,7 +450,7 @@ def forge_model_reload():
             except AttributeError:
                 pass
 
-        del model_data.sd_model
+        model_data.sd_model = None
         memory_management.soft_empty_cache()
         gc.collect()
 
