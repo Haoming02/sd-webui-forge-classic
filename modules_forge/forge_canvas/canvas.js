@@ -94,6 +94,8 @@ class ForgeCanvas {
         this._held_W = false;
         this._held_A = false;
         this._held_S = false;
+        this.brushShape = "circle";  // "circle" or "rectangle"
+        this.lastLinePoint = null;  // Track last point for straight line drawing
     }
 
     init() {
@@ -112,6 +114,7 @@ class ForgeCanvas {
         const resetButton = document.getElementById(`resetButton_${self.uuid}`);
         const undoButton = document.getElementById(`undoButton_${self.uuid}`);
         const redoButton = document.getElementById(`redoButton_${self.uuid}`);
+        const brushShapeButton = document.getElementById(`brushShapeButton_${self.uuid}`);
 
         const uploadHint = document.getElementById(`uploadHint_${self.uuid}`);
         const scribbleIndicator = document.getElementById(`scribbleIndicator_${self.uuid}`);
@@ -148,6 +151,7 @@ class ForgeCanvas {
         const indicatorSize = self.scribbleWidth * 4;
         scribbleIndicator.style.width = `${indicatorSize}px`;
         scribbleIndicator.style.height = `${indicatorSize}px`;
+        scribbleIndicator.style.borderRadius = self.brushShape === "rectangle" ? "0" : "50%";
 
         container.style.height = `${self.initial_height}px`;
         drawingCanvas.width = imageContainer.clientWidth;
@@ -190,6 +194,8 @@ class ForgeCanvas {
             scribbleIndicator.style.height = `${indicatorSize}px`;
             scribbleIndicator.style.left = `${e.clientX - rect.left - indicatorSize / 2}px`;
             scribbleIndicator.style.top = `${e.clientY - rect.top - indicatorSize / 2}px`;
+            // Maintain brush shape
+            scribbleIndicator.style.borderRadius = self.brushShape === "rectangle" ? "0" : "50%";
         }
 
         const resizeObserver = new ResizeObserver(() => {
@@ -229,6 +235,11 @@ class ForgeCanvas {
             self.redo();
         });
 
+        brushShapeButton.addEventListener("click", () => {
+            self.toggleBrushShape();
+            brushShapeButton.textContent = self.brushShape === "circle" ? "○" : "□";
+        });
+
         scribbleColor.addEventListener("input", (e) => {
             self.scribbleColor = e.target.value;
             scribbleIndicator.style.borderColor = self.scribbleColor;
@@ -240,6 +251,8 @@ class ForgeCanvas {
             const indicatorSize = self.scribbleWidth * (self.scribbleWidthConsistent ? 1.0 : self.imgScale) * 4;
             scribbleIndicator.style.width = `${indicatorSize}px`;
             scribbleIndicator.style.height = `${indicatorSize}px`;
+            // Maintain brush shape
+            scribbleIndicator.style.borderRadius = self.brushShape === "rectangle" ? "0" : "50%";
         });
 
         scribbleAlpha.addEventListener("input", (e) => {
@@ -255,11 +268,26 @@ class ForgeCanvas {
         drawingCanvas.addEventListener("pointerdown", (e) => {
             if (!self.img || e.button !== 0 || self.no_scribbles) return;
             const rect = drawingCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / self.imgScale;
+            const y = (e.clientY - rect.top) / self.imgScale;
+
+            // Ctrl+Click for straight line from last point
+            if (e.ctrlKey && self.lastLinePoint !== null) {
+                self.temp_draw_bg = drawContext.getImageData(0, 0, drawingCanvas.width, drawingCanvas.height);
+                self.temp_draw_points = [self.lastLinePoint, [x, y]];
+                self.handleDraw(e);
+                self.saveState();
+                self.lastLinePoint = [x, y];  // Update last point
+                return;
+            }
+
+            // Normal drawing start
             self.drawing = true;
             drawingCanvas.style.cursor = "crosshair";
             scribbleIndicator.style.display = "none";
-            self.temp_draw_points = [[(e.clientX - rect.left) / self.imgScale, (e.clientY - rect.top) / self.imgScale]];
+            self.temp_draw_points = [[x, y]];
             self.temp_draw_bg = drawContext.getImageData(0, 0, drawingCanvas.width, drawingCanvas.height);
+            self.lastLinePoint = [x, y];  // Track starting point for straight lines
             self.handleDraw(e);
         });
 
@@ -277,12 +305,20 @@ class ForgeCanvas {
         });
 
         drawingCanvas.addEventListener("pointerup", () => {
+            // Update last point to end of current stroke for straight line continuation
+            if (self.temp_draw_points.length > 0) {
+                self.lastLinePoint = self.temp_draw_points[self.temp_draw_points.length - 1];
+            }
             self.drawing = false;
             drawingCanvas.style.cursor = "";
             self.saveState();
         });
 
         drawingCanvas.addEventListener("pointerout", () => {
+            // Update last point if we had a stroke in progress
+            if (self.temp_draw_points.length > 0) {
+                self.lastLinePoint = self.temp_draw_points[self.temp_draw_points.length - 1];
+            }
             self.drawing = false;
             drawingCanvas.style.cursor = "";
             scribbleIndicator.style.display = "none";
@@ -473,6 +509,10 @@ class ForgeCanvas {
                 else
                     maxButton.click();
             }
+            if (e.key === "b") {
+                self.toggleBrushShape();
+                brushShapeButton.textContent = self.brushShape === "circle" ? "○" : "□";
+            }
 
             if (e.key === "w") this._held_W = true;
             if (e.key === "a") this._held_A = true;
@@ -520,8 +560,14 @@ class ForgeCanvas {
             ctx.lineTo(this.temp_draw_points[i][0], this.temp_draw_points[i][1]);
         }
 
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
+        // Apply brush shape
+        if (this.brushShape === "rectangle") {
+            ctx.lineCap = "square";
+            ctx.lineJoin = "miter";
+        } else {
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+        }
         ctx.lineWidth = this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0) * 4;
 
         if (this.contrast_scribbles) {
@@ -696,6 +742,7 @@ class ForgeCanvas {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         this.adjustInitialPositionAndScale();
         this.drawImage();
+        this.lastLinePoint = null;  // Clear straight line starting point
         this.saveState();
     }
 
@@ -708,6 +755,7 @@ class ForgeCanvas {
         image.src = "";
         image.style.width = "0";
         image.style.height = "0";
+        this.lastLinePoint = null;  // Clear straight line starting point
         this.saveState();
         if (!this.no_upload) {
             document.getElementById(`uploadHint_${this.uuid}`).style.display = "inline-block";
@@ -833,6 +881,22 @@ class ForgeCanvas {
         this.dragging = false;
         image.style.cursor = "grab";
         drawingCanvas.style.cursor = "grab";
+    }
+
+    toggleBrushShape() {
+        this.brushShape = this.brushShape === "circle" ? "rectangle" : "circle";
+        console.log(`Brush shape changed to: ${this.brushShape}`);
+
+        // Update cursor indicator shape to match brush shape
+        const scribbleIndicator = document.getElementById(`scribbleIndicator_${this.uuid}`);
+        if (scribbleIndicator) {
+            const newBorderRadius = this.brushShape === "rectangle" ? "0" : "50%";
+            scribbleIndicator.style.borderRadius = newBorderRadius;
+            console.log(`Cursor indicator borderRadius set to: ${newBorderRadius}`);
+            console.log(`Actual borderRadius is: ${scribbleIndicator.style.borderRadius}`);
+        } else {
+            console.error(`Could not find scribbleIndicator_${this.uuid}`);
+        }
     }
 }
 
