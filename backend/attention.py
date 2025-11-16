@@ -56,7 +56,7 @@ FORCE_UPCAST_ATTENTION_DTYPE = memory_management.force_upcast_attention_dtype()
 
 
 def get_attn_precision(attn_precision, current_dtype):
-    if args.dont_upcast_attention:
+    if args.disable_attention_upcast:
         return None
     if FORCE_UPCAST_ATTENTION_DTYPE is not None:
         return FORCE_UPCAST_ATTENTION_DTYPE.get(current_dtype, attn_precision)

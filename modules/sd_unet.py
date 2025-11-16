@@ -1,20 +1,16 @@
-import torch.nn
+from modules import script_callbacks, shared
 
-from modules import script_callbacks, shared, devices
-
-unet_options = []
+unet_options: list["SdUnetOption"] = []
 current_unet_option = None
 current_unet = None
-original_forward = None  # not used, only left temporarily for compatibility
+
 
 def list_unets():
-    new_unets = script_callbacks.list_unets_callback()
-
     unet_options.clear()
-    unet_options.extend(new_unets)
+    unet_options.extend(script_callbacks.list_unets_callback())
 
 
-def get_unet_option(option=None):
+def get_unet_option(option=None) -> "SdUnetOption":
     option = option or shared.opts.sd_unet
 
     if option == "None":
@@ -63,25 +59,3 @@ class SdUnetOption:
     def create_unet(self):
         """returns SdUnet object to be used as a Unet instead of built-in unet when making pictures"""
         raise NotImplementedError()
-
-
-class SdUnet(torch.nn.Module):
-    def forward(self, x, timesteps, context, *args, **kwargs):
-        raise NotImplementedError()
-
-    def activate(self):
-        pass
-
-    def deactivate(self):
-        pass
-
-
-def create_unet_forward(original_forward):
-    def UNetModel_forward(self, x, timesteps=None, context=None, *args, **kwargs):
-        if current_unet is not None:
-            return current_unet.forward(x, timesteps, context, *args, **kwargs)
-
-        return original_forward(self, x, timesteps, context, *args, **kwargs)
-
-    return UNetModel_forward
-

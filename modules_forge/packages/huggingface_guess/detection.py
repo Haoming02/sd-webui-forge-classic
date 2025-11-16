@@ -38,6 +38,21 @@ def calculate_transformer_depth(prefix, state_dict_keys, state_dict):
 def detect_unet_config(state_dict: dict, key_prefix: str):
     state_dict_keys = list(state_dict.keys())
 
+    if "{}cap_embedder.1.weight".format(key_prefix) in state_dict_keys:  # Lumina 2
+        dit_config = {}
+        dit_config["image_model"] = "lumina2"
+        dit_config["patch_size"] = 2
+        dit_config["in_channels"] = 16
+        dit_config["dim"] = 2304
+        dit_config["cap_feat_dim"] = int(state_dict["{}cap_embedder.1.weight".format(key_prefix)].shape[1])
+        dit_config["n_layers"] = count_blocks(state_dict_keys, "{}layers.".format(key_prefix) + "{}.")
+        dit_config["n_heads"] = 24
+        dit_config["n_kv_heads"] = 8
+        dit_config["qk_norm"] = True
+        dit_config["axes_dims"] = [32, 32, 32]
+        dit_config["axes_lens"] = [300, 512, 512]
+        return dit_config
+
     if "{}head.modulation".format(key_prefix) in state_dict_keys:  # Wan 2.1
         dit_config = {}
         dit_config["image_model"] = "wan2.1"

@@ -4,7 +4,6 @@ import csv
 import os
 import typing
 import shutil
-import modules.processing_scripts.comments as comments
 
 
 class PromptStyle(typing.NamedTuple):
@@ -14,18 +13,13 @@ class PromptStyle(typing.NamedTuple):
     path: str | None = None
 
 
-def apply_styles_to_prompt(prompt, styles):
-    prompt = comments.strip_comments(prompt).strip()
-
+def apply_styles_to_prompt(prompt: str, styles: list[str]) -> str:
     for style in styles:
-        style = comments.strip_comments(style).strip()
-
         if "{prompt}" in style:
             prompt = style.replace("{prompt}", prompt)
-        elif style != "":
-            if prompt != "":
-                prompt += ", "
-            prompt += style
+        else:
+            parts = filter(None, (prompt.strip(), style.strip()))
+            prompt = ", ".join(parts)
 
     return prompt
 
@@ -40,7 +34,7 @@ def extract_style_text_from_prompt(style_text, prompt):
     """
 
     stripped_prompt = prompt.strip()
-    stripped_style_text = comments.strip_comments(style_text).strip()
+    stripped_style_text = style_text.strip()
 
     if "{prompt}" in stripped_style_text:
         left, _, right = stripped_style_text.partition("{prompt}")
@@ -198,9 +192,6 @@ class StyleDatabase:
         extracted = []
 
         applicable_styles = list(self.styles.values())
-
-        positive = comments.strip_comments(positive)
-        negative = comments.strip_comments(negative)
 
         while True:
             found_style = None

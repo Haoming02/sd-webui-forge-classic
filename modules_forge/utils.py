@@ -1,10 +1,10 @@
-import torch
-import numpy as np
-import os
-import time
 import random
 import string
+import time
+
 import cv2
+import numpy as np
+import torch
 
 from backend import memory_management
 
@@ -12,37 +12,26 @@ from backend import memory_management
 def prepare_free_memory(aggressive=False):
     if aggressive:
         memory_management.unload_all_models()
-        print('Cleanup all memory.')
+        print("Cleanup all memory...")
         return
 
-    memory_management.free_memory(memory_required=memory_management.minimum_inference_memory(),
-                                 device=memory_management.get_torch_device())
-    print('Cleanup minimal inference memory.')
-    return
+    memory_management.free_memory(memory_required=memory_management.minimum_inference_memory(), device=memory_management.get_torch_device())
+    print("Cleanup minimal inference memory...")
 
 
 def apply_circular_forge(model, tiling_enabled=False):
+    if not model.is_webui_legacy_model():
+        return
     if model.tiling_enabled == tiling_enabled:
         return
 
-    print(f'Tiling: {tiling_enabled}')
     model.tiling_enabled = tiling_enabled
 
-    # def flatten(el):
-    #     flattened = [flatten(children) for children in el.children()]
-    #     res = [el]
-    #     for c in flattened:
-    #         res += c
-    #     return res
-    #
-    # layers = flatten(model)
-    #
-    # for layer in [layer for layer in layers if 'Conv' in type(layer).__name__]:
-    #     layer.padding_mode = 'circular' if tiling_enabled else 'zeros'
+    unet: torch.nn.Module = model.forge_objects.unet.model.diffusion_model
+    for layer in [layer for layer in unet.modules() if isinstance(layer, torch.nn.Conv2d)]:
+        layer.padding_mode = "circular" if tiling_enabled else "zeros"
 
-    print(f'Tiling is currently under maintenance and unavailable. Sorry for the inconvenience.')
-
-    return
+    print(f"Tiling: {tiling_enabled}")
 
 
 def HWC3(x):
@@ -66,7 +55,7 @@ def HWC3(x):
 
 def generate_random_filename(extension=".txt"):
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    random_string = ''.join(random.choices(string.ascii_lowercase + string.digits, k=5))
+    random_string = "".join(random.choices(string.ascii_lowercase + string.digits, k=5))
     filename = f"{timestamp}-{random_string}{extension}"
     return filename
 
@@ -74,7 +63,7 @@ def generate_random_filename(extension=".txt"):
 @torch.no_grad()
 @torch.inference_mode()
 def pytorch_to_numpy(x):
-    return [np.clip(255. * y.cpu().numpy(), 0, 255).astype(np.uint8) for y in x]
+    return [np.clip(255.0 * y.cpu().numpy(), 0, 255).astype(np.uint8) for y in x]
 
 
 @torch.no_grad()
@@ -85,47 +74,6 @@ def numpy_to_pytorch(x):
     y = np.ascontiguousarray(y.copy())
     y = torch.from_numpy(y).float()
     return y
-
-
-def write_images_to_mp4(frame_list: list, filename=None, fps=6):
-    from modules.paths_internal import default_output_dir
-
-    video_folder = os.path.join(default_output_dir, 'svd')
-    os.makedirs(video_folder, exist_ok=True)
-
-    if filename is None:
-        filename = generate_random_filename('.mp4')
-
-    full_path = os.path.join(video_folder, filename)
-
-    try:
-        import av
-    except ImportError:
-        from launch import run_pip
-        run_pip(
-            "install imageio[pyav]",
-            "imageio[pyav]",
-        )
-        import av
-
-    options = {
-        "crf": str(23)
-    }
-
-    output = av.open(full_path, "w")
-
-    stream = output.add_stream('libx264', fps, options=options)
-    stream.width = frame_list[0].shape[1]
-    stream.height = frame_list[0].shape[0]
-    for img in frame_list:
-        frame = av.VideoFrame.from_ndarray(img)
-        packet = stream.encode(frame)
-        output.mux(packet)
-    packet = stream.encode(None)
-    output.mux(packet)
-    output.close()
-
-    return full_path
 
 
 def pad64(x):
@@ -145,15 +93,9 @@ def resize_image_with_pad(img, resolution):
     W_target = int(np.round(float(W_raw) * k))
     img = cv2.resize(img, (W_target, H_target), interpolation=interpolation)
     H_pad, W_pad = pad64(H_target), pad64(W_target)
-    img_padded = np.pad(img, [[0, H_pad], [0, W_pad], [0, 0]], mode='edge')
+    img_padded = np.pad(img, [[0, H_pad], [0, W_pad], [0, 0]], mode="edge")
 
     def remove_pad(x):
         return safer_memory(x[:H_target, :W_target])
 
     return safer_memory(img_padded), remove_pad
-
-
-def lazy_memory_management(model):
-    required_memory = memory_management.module_size(model) + memory_management.minimum_inference_memory()
-    memory_management.free_memory(required_memory, device=memory_management.get_torch_device())
-    return

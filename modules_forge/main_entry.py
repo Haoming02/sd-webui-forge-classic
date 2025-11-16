@@ -4,7 +4,7 @@ import gradio as gr
 import torch
 from gradio.context import Context
 
-from backend import memory_management, stream
+from backend import memory_management, operations, stream
 from backend.args import dynamic_args
 from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
 
@@ -27,13 +27,17 @@ forge_unet_storage_dtype_options = {
     "Automatic (fp16 LoRA)": (None, True),
     "float8-e4m3fn": (torch.float8_e4m3fn, False),
     "float8-e4m3fn (fp16 LoRA)": (torch.float8_e4m3fn, True),
+}
+
+bnb_storage_dtype_options = {
     "bnb-nf4": ("nf4", False),
     "bnb-nf4 (fp16 LoRA)": ("nf4", True),
     "bnb-fp4": ("fp4", False),
     "bnb-fp4 (fp16 LoRA)": ("fp4", True),
-    # "float8-e5m2": (torch.float8_e5m2, False),
-    # "float8-e5m2 (fp16 LoRA)": (torch.float8_e5m2, True),
 }
+
+if operations.bnb_available:
+    forge_unet_storage_dtype_options.update(bnb_storage_dtype_options)
 
 module_list = {}
 
@@ -58,7 +62,7 @@ def make_checkpoint_manager_ui():
         if len(sd_models.checkpoints_list) > 0:
             shared.opts.set("sd_model_checkpoint", next(iter(sd_models.checkpoints_list.values())).name)
 
-    ui_forge_preset = gr.Radio(label="UI Preset", value=lambda: shared.opts.forge_preset, choices=("sd", "xl", "flux", "qwen", "wan"), elem_id="forge_ui_preset")
+    ui_forge_preset = gr.Radio(label="UI Preset", value=lambda: shared.opts.forge_preset, choices=("sd", "xl", "flux", "qwen", "lumina", "wan"), elem_id="forge_ui_preset")
 
     ui_checkpoint = gr.Dropdown(label="Checkpoint", value=None, choices=None, elem_classes=["model_selection"])
 
@@ -303,10 +307,10 @@ def on_preset_change(preset: str):
     if model_mem < 0 or model_mem > total_vram:
         model_mem = total_vram - 1024
 
-    show_clip_skip = preset not in ("qwen", "wan")
+    show_clip_skip = preset not in ("qwen", "lumina", "wan")
     show_basic_mem = preset != "sd"
-    show_adv_mem = preset in ("flux", "qwem", "wan")
-    distilled = preset in ("flux", "wan")
+    show_adv_mem = preset in ("flux", "qwen", "wan")
+    distilled = preset in ("flux", "lumina", "wan")
     d_label = "Distilled CFG Scale" if preset == "flux" else "Shift"
     batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch size", "value": 1}
 
@@ -315,7 +319,7 @@ def on_preset_change(preset: str):
     return [
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),  # ui_checkpoint
         gr.update(value=additional_modules),  # ui_vae
-        gr.update(visible=show_clip_skip, value=getattr(shared.opts, "CLIP_stop_at_last_layers", 1)),  # ui_clip_skip
+        gr.update(visible=show_clip_skip, value=getattr(shared.opts, "CLIP_stop_at_last_layers", 2)),  # ui_clip_skip
         gr.update(visible=show_basic_mem, value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),  # ui_forge_unet_storage_dtype_options
         gr.update(visible=show_adv_mem, value=getattr(shared.opts, "forge_async_loading", "Queue")),  # ui_forge_async_loading
         gr.update(visible=show_adv_mem, value=getattr(shared.opts, "forge_pin_shared_memory", "CPU")),  # ui_forge_pin_shared_memory

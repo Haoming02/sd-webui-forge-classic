@@ -16,7 +16,8 @@ class PresetArch(Enum):
     xl = 2
     flux = 3
     qwen = 4
-    wan = 5
+    lumina = 5
+    wan = 6
 
 
 SAMPLERS = {
@@ -24,6 +25,7 @@ SAMPLERS = {
     PresetArch.xl: "DPM++ 2M SDE",
     PresetArch.flux: "Euler",
     PresetArch.qwen: "LCM",
+    PresetArch.lumina: "Res Multistep",
     PresetArch.wan: "Euler",
 }
 
@@ -32,6 +34,7 @@ SCHEDULERS = {
     PresetArch.xl: "Karras",
     PresetArch.flux: "Beta",
     PresetArch.qwen: "Normal",
+    PresetArch.lumina: "Linear Quadratic",
     PresetArch.wan: "Simple",
 }
 
@@ -40,6 +43,7 @@ WIDTH = {
     PresetArch.xl: 896,
     PresetArch.flux: 896,
     PresetArch.qwen: 896,
+    PresetArch.lumina: 1024,
     PresetArch.wan: 1152,
 }
 
@@ -48,6 +52,7 @@ HEIGHT = {
     PresetArch.xl: 1152,
     PresetArch.flux: 1152,
     PresetArch.qwen: 1152,
+    PresetArch.lumina: 1024,
     PresetArch.wan: 896,
 }
 
@@ -56,6 +61,7 @@ CFG = {
     PresetArch.xl: 4.0,
     PresetArch.flux: 1.0,
     PresetArch.qwen: 1.0,
+    PresetArch.lumina: 4.5,
     PresetArch.wan: 1.0,
 }
 
@@ -115,6 +121,17 @@ def register(options_templates: dict, options_section: Callable, OptionInfo: "Op
                 "flux_t2i_d_cfg": OptionInfo(3.0, "txt2img Distilled CFG", gr.Slider, {"minimum": 1, "maximum": 10, "step": 0.1}),
                 "flux_t2i_hr_d_cfg": OptionInfo(3.0, "txt2img Distilled Hires. CFG", gr.Slider, {"minimum": 1, "maximum": 10, "step": 0.1}),
                 "flux_i2i_d_cfg": OptionInfo(3.0, "img2img Distilled CFG", gr.Slider, {"minimum": 1, "maximum": 10, "step": 0.1}),
+            },
+        )
+    )
+
+    options_templates.update(
+        options_section(
+            ("ui_lumina", "LUMINA", "presets"),
+            {
+                "lumina_t2i_d_cfg": OptionInfo(6.0, "txt2img Shift", gr.Slider, {"minimum": 1, "maximum": 10, "step": 0.1}),
+                "lumina_t2i_hr_d_cfg": OptionInfo(6.0, "txt2img Hires. Shift", gr.Slider, {"minimum": 1, "maximum": 10, "step": 0.1}),
+                "lumina_i2i_d_cfg": OptionInfo(6.0, "img2img Shift", gr.Slider, {"minimum": 1, "maximum": 10, "step": 0.1}),
             },
         )
     )

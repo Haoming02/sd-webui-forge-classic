@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import re
 from collections import namedtuple
-import lark
 
-# a prompt like this: "fantasy landscape with a [mountain:lake:0.25] and [an oak:a christmas tree:0.75][ in foreground::0.6][: in background:0.25] [shoddy:masterful:0.5]"
+import lark
+import torch
+
+# a prompt like this: "fantasy landscape with a [mountain:lake:0.25] and [an oak:a christmas tree:0.75] [in foreground::0.6] [:in background:0.25] [shoddy:masterful:0.5]"
 # will be represented with prompt_schedule like this (assuming steps=100):
-# [25, 'fantasy landscape with a mountain and an oak in foreground shoddy']
-# [50, 'fantasy landscape with a lake and an oak in foreground in background shoddy']
-# [60, 'fantasy landscape with a lake and an oak in foreground in background masterful']
-# [75, 'fantasy landscape with a lake and an oak in background masterful']
+# [25,  'fantasy landscape with a mountain and an oak in foreground shoddy']
+# [50,  'fantasy landscape with a lake and an oak in foreground in background shoddy']
+# [60,  'fantasy landscape with a lake and an oak in foreground in background masterful']
+# [75,  'fantasy landscape with a lake and an oak in background masterful']
 # [100, 'fantasy landscape with a lake and a christmas tree in background masterful']
 
-schedule_parser = lark.Lark(r"""
+schedule_parser = lark.Lark(
+    r"""
 !start: (prompt | /[][():]/+)*
 prompt: (emphasized | scheduled | alternate | plain | WHITESPACE)*
 !emphasized: "(" prompt ")"
@@ -23,10 +26,12 @@ alternate: "[" prompt ("|" [prompt])+ "]"
 WHITESPACE: /\s+/
 plain: /([^\\\[\]():|]|\\.)+/
 %import common.SIGNED_NUMBER -> NUMBER
-""")
+"""
+)
+
 
 def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=None, use_old_scheduling=False):
-    """
+    r"""
     >>> g = lambda p: get_learned_conditioning_prompt_schedules([p], 10)[0]
     >>> g("test")
     [[10, 'test']]
@@ -80,18 +85,18 @@ def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=N
                 s = tree.children[-2]
                 v = float(s)
                 if use_old_scheduling:
-                    v = v*steps if v<1 else v
+                    v = v * steps if v < 1 else v
                 else:
                     if "." in s:
                         v = (v - flt_offset) * steps
                     else:
-                        v = (v - int_offset)
+                        v = v - int_offset
                 tree.children[-2] = min(steps, int(v))
                 if tree.children[-2] >= 1:
                     res.append(tree.children[-2])
 
             def alternate(self, tree):
-                res.extend(range(1, steps+1))
+                res.extend(range(1, steps + 1))
 
         CollectSteps().visit(tree)
         return sorted(set(res))
@@ -101,9 +106,11 @@ def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=N
             def scheduled(self, args):
                 before, after, _, when, _ = args
                 yield before or () if step <= when else after
+
             def alternate(self, args):
                 args = ["" if not arg else arg for arg in args]
                 yield args[(step - 1) % len(args)]
+
             def start(self, args):
                 def flatten(x):
                     if isinstance(x, str):
@@ -111,12 +118,16 @@ def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=N
                     else:
                         for gen in x:
                             yield from flatten(gen)
-                return ''.join(flatten(args))
+
+                return "".join(flatten(args))
+
             def plain(self, args):
                 yield args[0].value
+
             def __default__(self, data, children, meta):
                 for child in children:
                     yield child
+
         return AtStep().transform(tree)
 
     def get_schedule(prompt):
@@ -125,6 +136,7 @@ def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=N
         except lark.exceptions.LarkError:
             if 0:
                 import traceback
+
                 traceback.print_exc()
             return [[steps, prompt]]
         return [[t, at_step(t, tree)] for t in collect_steps(steps, tree)]
@@ -141,6 +153,7 @@ class SdConditioning(list):
     A list with prompts for stable diffusion's conditioner model.
     Can also specify width and height of created image - SDXL needs it.
     """
+
     def __init__(self, prompts, is_negative_prompt=False, width=None, height=None, copy_from=None, distilled_cfg_scale=None):
         super().__init__()
         self.extend(prompts)
@@ -148,16 +161,16 @@ class SdConditioning(list):
         if copy_from is None:
             copy_from = prompts
 
-        self.is_negative_prompt = is_negative_prompt or getattr(copy_from, 'is_negative_prompt', False)
-        self.width = width or getattr(copy_from, 'width', None)
-        self.height = height or getattr(copy_from, 'height', None)
-        self.distilled_cfg_scale = distilled_cfg_scale or getattr(copy_from, 'distilled_cfg_scale', None)
-
+        self.is_negative_prompt = is_negative_prompt or getattr(copy_from, "is_negative_prompt", False)
+        self.width = width or getattr(copy_from, "width", None)
+        self.height = height or getattr(copy_from, "height", None)
+        self.distilled_cfg_scale = distilled_cfg_scale or getattr(copy_from, "distilled_cfg_scale", None)
 
 
 def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps, hires_steps=None, use_old_scheduling=False):
-    """converts a list of prompts into a list of prompt schedules - each schedule is a list of ScheduledPromptConditioning, specifying the comdition (cond),
-    and the sampling step at which this condition is to be replaced by the next one.
+    r"""
+    converts a list of prompts into a list of prompt schedules - each schedule is a list of ScheduledPromptConditioning,
+    specifying the condition (cond), and the sampling step at which this condition is to be replaced by the next one.
 
     Input:
     (model, ['a red crown', 'a [blue:green:5] jeweled crown'], 20)
@@ -251,10 +264,9 @@ class MulticondLearnedConditioning:
 
 
 def get_multicond_learned_conditioning(model, prompts, steps, hires_steps=None, use_old_scheduling=False) -> MulticondLearnedConditioning:
-    """same as get_learned_conditioning, but returns a list of ScheduledPromptConditioning along with the weight objects for each prompt.
+    """
+    same as get_learned_conditioning, but returns a list of ScheduledPromptConditioning along with the weight objects for each prompt.
     For each prompt, the list is obtained by splitting the prompt using the AND separator.
-
-    https://energy-based-model.github.io/Compositional-Visual-Generation-with-Composable-Diffusion-Models/
     """
 
     res_indexes, prompt_flat_list, prompt_indexes = get_multicond_prompt_list(prompts)
@@ -365,7 +377,8 @@ def reconstruct_multicond_batch(c: MulticondLearnedConditioning, current_step):
     return conds_list, stacked
 
 
-re_attention = re.compile(r"""
+re_attention = re.compile(
+    r"""
 \\\(|
 \\\)|
 \\\[|
@@ -379,12 +392,15 @@ re_attention = re.compile(r"""
 ]|
 [^\\()\[\]:]+|
 :
-""", re.X)
+""",
+    re.X,
+)
 
 re_break = re.compile(r"\s*\bBREAK\b\s*", re.S)
 
+
 def parse_prompt_attention(text):
-    """
+    r"""
     Parses a string with attention tokens and returns a list of pairs: text and its associated weight.
     Accepted tokens are:
       (abc) - increases attention to abc by a multiplier of 1.1
@@ -434,17 +450,17 @@ def parse_prompt_attention(text):
         text = m.group(0)
         weight = m.group(1)
 
-        if text.startswith('\\'):
+        if text.startswith("\\"):
             res.append([text[1:], 1.0])
-        elif text == '(':
+        elif text == "(":
             round_brackets.append(len(res))
-        elif text == '[':
+        elif text == "[":
             square_brackets.append(len(res))
         elif weight is not None and round_brackets:
             multiply_range(round_brackets.pop(), float(weight))
-        elif text == ')' and round_brackets:
+        elif text == ")" and round_brackets:
             multiply_range(round_brackets.pop(), round_bracket_multiplier)
-        elif text == ']' and square_brackets:
+        elif text == "]" and square_brackets:
             multiply_range(square_brackets.pop(), square_bracket_multiplier)
         else:
             parts = re.split(re_break, text)
@@ -472,9 +488,3 @@ def parse_prompt_attention(text):
             i += 1
 
     return res
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod(optionflags=doctest.NORMALIZE_WHITESPACE)
-else:
-    import torch  # doctest faster

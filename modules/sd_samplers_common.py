@@ -156,6 +156,36 @@ def replace_torchsde_browinan():
 
 replace_torchsde_browinan()
 
+LORA_REPLACEMENTS = None
+
+
+def _parse_replacements():
+    global LORA_REPLACEMENTS
+    LORA_REPLACEMENTS = []
+
+    for entry in opts.refiner_lora_replacement.split("\n"):
+        before, after = entry.split("=", 1)
+        LORA_REPLACEMENTS.append((before.strip(), after.strip()))
+
+
+def apply_lora_for_refiner(loras: list[extra_networks.ExtraNetworkParams]):
+    if not loras:
+        return []
+
+    if LORA_REPLACEMENTS is None:
+        _parse_replacements()
+
+    result = []
+
+    for lora in loras:
+        items: list[str | float] = lora.items
+        assert isinstance(items[0], str)
+        for before, after in LORA_REPLACEMENTS:
+            items[0] = items[0].replace(before, after)
+        result.append(extra_networks.ExtraNetworkParams(items))
+
+    return result
+
 
 def apply_refiner(cfg_denoiser, x, sigma):
     refiner_switch_at = cfg_denoiser.p.refiner_switch_at
@@ -189,6 +219,8 @@ def apply_refiner(cfg_denoiser, x, sigma):
         main_entry.checkpoint_change(original_checkpoint, preset=None, save=False, refresh=True)
 
     if not cfg_denoiser.p.disable_extra_networks:
+        loras = cfg_denoiser.p.extra_network_data.pop("lora", None)
+        cfg_denoiser.p.extra_network_data["lora"] = apply_lora_for_refiner(loras)
         extra_networks.activate(cfg_denoiser.p, cfg_denoiser.p.extra_network_data)
 
     cfg_denoiser.p.setup_conds()

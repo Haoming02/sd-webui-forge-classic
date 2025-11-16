@@ -1,4 +1,6 @@
-# implementation of Chroma for Forge, inspired by https://github.com/lodestone-rock/ComfyUI_FluxMod
+# implementation of Chroma for Forge
+# Credit:    croquelois
+# Reference: https://github.com/lodestone-rock/ComfyUI_FluxMod
 
 from dataclasses import dataclass
 
@@ -6,7 +8,15 @@ import torch
 from einops import rearrange, repeat
 from torch import nn
 
-from backend.nn.flux import EmbedND, MLPEmbedder, QKNorm, RMSNorm, SelfAttention, attention, timestep_embedding
+from backend.nn.flux import (
+    EmbedND,
+    MLPEmbedder,
+    QKNorm,
+    RMSNorm,
+    SelfAttention,
+    attention,
+    timestep_embedding,
+)
 from backend.utils import fp16_fix
 
 

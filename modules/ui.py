@@ -121,8 +121,8 @@ def update_token_counter(text, steps, styles, *, is_positive=True):
     if shared.opts.include_styles_into_token_counters:
         apply_styles = shared.prompt_styles.apply_styles_to_prompt if is_positive else shared.prompt_styles.apply_negative_styles_to_prompt
         text = apply_styles(text, styles)
-    else:
-        text = comments.strip_comments(text).strip()
+
+    text = comments.strip_comments(text).strip()
 
     try:
         text, _ = extra_networks.parse_prompt(text)
@@ -157,14 +157,14 @@ def update_negative_prompt_token_counter(*args):
 
 def apply_setting(key, value):
     if value is None:
-        return gr.update()
+        return gr.skip()
 
     if shared.cmd_opts.freeze_settings:
-        return gr.update()
+        return gr.skip()
 
     # dont allow model to be swapped when model hash exists in prompt
     if key == "sd_model_checkpoint" and opts.disable_weights_auto_swap:
-        return gr.update()
+        return gr.skip()
 
     if key == "sd_model_checkpoint":
         ckpt_info = sd_models.get_closet_checkpoint_match(value)
@@ -172,7 +172,7 @@ def apply_setting(key, value):
         if ckpt_info is not None:
             value = ckpt_info.title
         else:
-            return gr.update()
+            return gr.skip()
 
     comp_args = opts.data_labels[key].component_args
     if comp_args and isinstance(comp_args, dict) and comp_args.get("visible") is False:
@@ -203,7 +203,7 @@ def create_override_settings_dropdown(tabname, row):
     dropdown = gr.Dropdown([], label="Override settings", visible=False, elem_id=f"{tabname}_override_settings", multiselect=True)
 
     dropdown.change(
-        fn=lambda x: gr.Dropdown.update(visible=bool(x)),
+        fn=lambda x: gr.update(visible=bool(x)),
         inputs=[dropdown],
         outputs=[dropdown],
     )
@@ -453,7 +453,7 @@ def create_ui():
                 PasteField(width, "Size-1", api="width"),
                 PasteField(height, "Size-2", api="height"),
                 PasteField(batch_size, "Batch size", api="batch_size"),
-                PasteField(toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.update(), api="styles"),
+                PasteField(toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.skip(), api="styles"),
                 PasteField(denoising_strength, "Denoising strength", api="denoising_strength"),
                 PasteField(enable_hr, lambda d: "Denoising strength" in d and ("Hires upscale" in d or "Hires upscaler" in d or "Hires resize-1" in d), api="enable_hr"),
                 PasteField(hr_scale, "Hires upscale", api="hr_scale"),
@@ -465,12 +465,12 @@ def create_ui():
                 PasteField(hr_additional_modules, "Hires VAE/TE", api="hr_additional_modules"),
                 PasteField(hr_sampler_name, sd_samplers.get_hr_sampler_from_infotext, api="hr_sampler_name"),
                 PasteField(hr_scheduler, sd_samplers.get_hr_scheduler_from_infotext, api="hr_scheduler"),
-                PasteField(hr_sampler_container, lambda d: gr.update(visible=True) if d.get("Hires sampler", "Use same sampler") != "Use same sampler" or d.get("Hires checkpoint", "Use same checkpoint") != "Use same checkpoint" or d.get("Hires schedule type", "Use same scheduler") != "Use same scheduler" else gr.update()),
+                PasteField(hr_sampler_container, lambda d: gr.update(visible=True) if d.get("Hires sampler", "Use same sampler") != "Use same sampler" or d.get("Hires checkpoint", "Use same checkpoint") != "Use same checkpoint" or d.get("Hires schedule type", "Use same scheduler") != "Use same scheduler" else gr.skip()),
                 PasteField(hr_prompt, "Hires prompt", api="hr_prompt"),
                 PasteField(hr_negative_prompt, "Hires negative prompt", api="hr_negative_prompt"),
                 PasteField(hr_cfg, "Hires CFG Scale", api="hr_cfg"),
                 PasteField(hr_distilled_cfg, "Hires Distilled CFG Scale", api="hr_distilled_cfg"),
-                PasteField(hr_prompts_container, lambda d: gr.update(visible=True) if d.get("Hires prompt", "") != "" or d.get("Hires negative prompt", "") != "" else gr.update()),
+                PasteField(hr_prompts_container, lambda d: gr.update(visible=True) if d.get("Hires prompt", "") != "" or d.get("Hires negative prompt", "") != "" else gr.skip()),
                 *scripts.scripts_txt2img.infotext_fields,
             ]
             parameters_copypaste.add_paste_fields("txt2img", None, txt2img_paste_fields, override_settings)
@@ -538,19 +538,19 @@ def create_ui():
                             img2img_selected_tab = gr.Number(value=0, visible=False)
 
                             with gr.TabItem("img2img", id="img2img", elem_id="img2img_img2img_tab") as tab_img2img:
-                                init_img = ForgeCanvas(elem_id="img2img_image", height=512, no_scribbles=True)
+                                init_img = ForgeCanvas(elem_id="img2img_image", no_scribbles=True)
                                 add_copy_image_controls("img2img", init_img)
 
                             with gr.TabItem("Sketch", id="img2img_sketch", elem_id="img2img_img2img_sketch_tab") as tab_sketch:
-                                sketch = ForgeCanvas(elem_id="img2img_sketch", height=512, scribble_color=opts.img2img_sketch_default_brush_color)
+                                sketch = ForgeCanvas(elem_id="img2img_sketch", scribble_color=opts.img2img_sketch_default_brush_color)
                                 add_copy_image_controls("sketch", sketch)
 
                             with gr.TabItem("Inpaint", id="inpaint", elem_id="img2img_inpaint_tab") as tab_inpaint:
-                                init_img_with_mask = ForgeCanvas(elem_id="img2maskimg", height=512, contrast_scribbles=opts.img2img_inpaint_mask_high_contrast, scribble_color=opts.img2img_inpaint_mask_brush_color, scribble_color_fixed=True, scribble_alpha=opts.img2img_inpaint_mask_scribble_alpha, scribble_alpha_fixed=True, scribble_softness_fixed=True)
+                                init_img_with_mask = ForgeCanvas(elem_id="img2maskimg", contrast_scribbles=opts.img2img_inpaint_mask_high_contrast, scribble_color=opts.img2img_inpaint_mask_brush_color, scribble_color_fixed=True, scribble_alpha=opts.img2img_inpaint_mask_scribble_alpha, scribble_alpha_fixed=True, scribble_softness_fixed=True)
                                 add_copy_image_controls("inpaint", init_img_with_mask)
 
                             with gr.TabItem("Inpaint sketch", id="inpaint_sketch", elem_id="img2img_inpaint_sketch_tab") as tab_inpaint_color:
-                                inpaint_color_sketch = ForgeCanvas(elem_id="inpaint_sketch", height=512, scribble_color=opts.img2img_inpaint_sketch_default_brush_color)
+                                inpaint_color_sketch = ForgeCanvas(elem_id="inpaint_sketch", scribble_color=opts.img2img_inpaint_sketch_default_brush_color)
                                 add_copy_image_controls("inpaint_sketch", inpaint_color_sketch)
 
                             with gr.TabItem("Inpaint upload", id="inpaint_upload", elem_id="img2img_inpaint_upload_tab") as tab_inpaint_upload:
@@ -781,7 +781,7 @@ def create_ui():
             res_switch_btn.click(lambda w, h: (h, w), inputs=[width, height], outputs=[width, height], show_progress=False)
 
             detect_image_size_btn.click(
-                fn=lambda w, h: (w or gr.update(), h or gr.update()),
+                fn=lambda w, h: (w or gr.skip(), h or gr.skip()),
                 _js="currentImg2imgSourceResolution",
                 inputs=[dummy_component, dummy_component],
                 outputs=[width, height],
@@ -808,7 +808,7 @@ def create_ui():
             toprow.token_button.click(fn=update_token_counter, inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.negative_token_button.click(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
 
-            img2img_paste_fields = [(toprow.prompt, "Prompt"), (toprow.negative_prompt, "Negative prompt"), (cfg_scale, "CFG scale"), (distilled_cfg_scale, "Distilled CFG Scale"), (image_cfg_scale, "Image CFG scale"), (width, "Size-1"), (height, "Size-2"), (batch_size, "Batch size"), (toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.update()), (denoising_strength, "Denoising strength"), (mask_blur, "Mask blur"), (inpainting_mask_invert, "Mask mode"), (inpainting_fill, "Masked content"), (inpaint_full_res, "Inpaint area"), (inpaint_full_res_padding, "Masked area padding"), *scripts.scripts_img2img.infotext_fields]
+            img2img_paste_fields = [(toprow.prompt, "Prompt"), (toprow.negative_prompt, "Negative prompt"), (cfg_scale, "CFG scale"), (distilled_cfg_scale, "Distilled CFG Scale"), (image_cfg_scale, "Image CFG scale"), (width, "Size-1"), (height, "Size-2"), (batch_size, "Batch size"), (toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.skip()), (denoising_strength, "Denoising strength"), (mask_blur, "Mask blur"), (inpainting_mask_invert, "Mask mode"), (inpainting_fill, "Masked content"), (inpaint_full_res, "Inpaint area"), (inpaint_full_res_padding, "Masked area padding"), *scripts.scripts_img2img.infotext_fields]
             parameters_copypaste.add_paste_fields("img2img", init_img.background, img2img_paste_fields, override_settings)
             parameters_copypaste.add_paste_fields("inpaint", init_img_with_mask.background, img2img_paste_fields, override_settings)
             parameters_copypaste.register_paste_params_button(

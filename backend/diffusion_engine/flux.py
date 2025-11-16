@@ -43,7 +43,6 @@ class Flux(ForgeDiffusionEngine):
             embedding_dir=dynamic_args["embedding_dir"],
             embedding_key="clip_l",
             embedding_expected_shape=768,
-            emphasis_name=dynamic_args["emphasis_name"],
             text_projection=False,
             minimal_clip_skip=1,
             clip_skip=1,
@@ -59,6 +58,8 @@ class Flux(ForgeDiffusionEngine):
         self.forge_objects = ForgeObjects(unet=unet, clip=clip, vae=vae, clipvision=None)
         self.forge_objects_original = self.forge_objects.shallow_copy()
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
+
+        self.is_flux = True
 
     def set_clip_skip(self, clip_skip):
         self.text_processing_engine_l.clip_skip = clip_skip

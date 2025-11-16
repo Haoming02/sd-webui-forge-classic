@@ -15,11 +15,6 @@ def shush():
 
 
 def imports():
-    import torch  # noqa: F401
-    import torchvision  # noqa: F401
-    import pytorch_lightning  # noqa: F401
-    startup_timer.record("import torch")
-
     os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 
     import gradio  # noqa: F401

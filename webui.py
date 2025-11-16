@@ -20,8 +20,7 @@ startup_timer.record("launcher")
 
 initialize.shush()
 
-initialize_forge()
-startup_timer.record("forge init")
+initialize_forge(startup_timer)
 
 initialize.imports()
 

@@ -22,22 +22,22 @@ function dimensionChange(e, is_width, is_height) {
     if (tabIndex == 0) {
         // img2img
         targetElement = gradioApp().querySelector(
-            "#img2img_image div[class=forge-image-container] img",
+            "#img2img_image div.forge-image-container img",
         );
     } else if (tabIndex == 1) {
         // Sketch
         targetElement = gradioApp().querySelector(
-            "#img2img_sketch div[class=forge-image-container] img",
+            "#img2img_sketch div.forge-image-container img",
         );
     } else if (tabIndex == 2) {
         // Inpaint
         targetElement = gradioApp().querySelector(
-            "#img2maskimg div[class=forge-image-container] img",
+            "#img2maskimg div.forge-image-container img",
         );
     } else if (tabIndex == 3) {
         // Inpaint sketch
         targetElement = gradioApp().querySelector(
-            "#inpaint_sketch div[class=forge-image-container] img",
+            "#inpaint_sketch div.forge-image-container img",
         );
     } else if (tabIndex == 4) {
         // Inpaint upload

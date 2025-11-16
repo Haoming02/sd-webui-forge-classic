@@ -36,10 +36,8 @@ class Wan(ForgeDiffusionEngine):
         self.forge_objects_original = self.forge_objects.shallow_copy()
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
 
+        self.use_shift = True
         self.is_wan = True
-
-    def set_clip_skip(self, clip_skip):
-        pass
 
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):

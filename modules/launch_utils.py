@@ -283,6 +283,7 @@ def prepare_environment():
     torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.8.0+cu128 torchvision==0.23.0+cu128 --extra-index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.32.post2 --extra-index-url {torch_index_url}")
     sage_package = os.environ.get("SAGE_PACKAGE", "sageattention==1.0.6")
+    bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.48.1")
 
     clip_package = os.environ.get("CLIP_PACKAGE", "https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip")
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==24.2")
@@ -358,13 +359,13 @@ def prepare_environment():
         run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
         startup_timer.record("install xformers")
 
-    if args.sage and not is_installed("sageattention"):
-        run_pip(f"install -U --no-deps {sage_package}", "sageattention")
-        try:
-            run_pip(f"install -U --no-deps {triton_package}", "triton")
-        except RuntimeError:
-            print("Failed to install triton; Please manually install it")
-        startup_timer.record("install sageattention")
+    if args.sage:
+        if not is_installed("sageattention"):
+            run_pip(f"install -U -I --no-deps {sage_package}", "sageattention")
+            startup_timer.record("install sageattention")
+        if not is_installed("triton"):
+            run_pip(f"install -U -I --no-deps {triton_package}", "triton")
+            startup_timer.record("install triton")
 
     if args.flash and not is_installed("flash_attn"):
         try:
@@ -381,6 +382,14 @@ def prepare_environment():
             print("Failed to install nunchaku; Please manually install it")
         else:
             startup_timer.record("install nunchaku")
+
+    if not args.disable_bnb and not is_installed("bitsandbytes"):
+        try:
+            run_pip(f"install {bnb_package}", "bitsandbytes")
+        except RuntimeError:
+            print("Failed to install bitsandbytes; Please manually install it")
+        else:
+            startup_timer.record("install bitsandbytes")
 
     if not is_installed("ngrok") and args.ngrok:
         run_pip("install ngrok", "ngrok")

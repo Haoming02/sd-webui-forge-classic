@@ -22,7 +22,7 @@ def modelmerger(*args):
     except Exception as e:
         errors.report("Error loading/saving model file", exc_info=True)
         sd_models.list_models()  # to remove the potentially missing models from the list
-        return [*[gr.Dropdown.update(choices=sd_models.checkpoint_tiles()) for _ in range(4)], f"Error merging checkpoints: {e}"]
+        return [*[gr.update(choices=sd_models.checkpoint_tiles()) for _ in range(4)], f"Error merging checkpoints: {e}"]
     return results
 
 
@@ -122,7 +122,7 @@ class UiCheckpointMerger:
 
         self.modelmerger_merge.click(fn=lambda: '', inputs=[], outputs=[self.modelmerger_result])
         self.modelmerger_merge.click(
-            fn=call_queue.wrap_gradio_gpu_call(modelmerger, extra_outputs=lambda: [gr.update() for _ in range(4)]),
+            fn=call_queue.wrap_gradio_gpu_call(modelmerger, extra_outputs=lambda: [gr.skip() for _ in range(4)]),
             _js='modelmerger',
             inputs=[
                 dummy_component,

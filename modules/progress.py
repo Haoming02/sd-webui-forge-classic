@@ -135,6 +135,7 @@ def progressapi(req: ProgressRequest):
                         save_kwargs = {"optimize": False, "compress_level": 1}
 
                 else:
+                    image = image.convert("RGB")
                     save_kwargs = {}
 
                 image.save(buffered, format=opts.live_previews_image_format, **save_kwargs)
@@ -153,4 +154,4 @@ def restore_progress(id_task):
     if res is not None:
         return res
 
-    return gr.update(), gr.update(), gr.update(), f"Couldn't restore progress for {id_task}: results either have been discarded or never were obtained"
+    return gr.skip(), gr.skip(), gr.skip(), f"Couldn't restore progress for {id_task}: results either have been discarded or never were obtained"

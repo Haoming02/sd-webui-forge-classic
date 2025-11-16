@@ -1,7 +1,4 @@
-"""
-Credit: ComfyUI
-https://github.com/comfyanonymous/ComfyUI/blob/v0.3.48/comfy_extras/nodes_model_advanced.py#L274
-"""
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy_extras/nodes_model_advanced.py#L274
 
 import gradio as gr
 import torch

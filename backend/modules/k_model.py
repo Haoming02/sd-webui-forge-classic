@@ -7,7 +7,7 @@ from backend.modules.k_prediction import k_prediction_from_diffusers_scheduler
 
 
 class KModel(torch.nn.Module):
-    def __init__(self, model, diffusers_scheduler, k_predictor=None, config=None):
+    def __init__(self, model: torch.nn.Module, diffusers_scheduler, k_predictor=None, config=None):
         super().__init__()
 
         self.config = config
@@ -18,6 +18,8 @@ class KModel(torch.nn.Module):
         print(f"K-Model Created: {dict(storage_dtype=self.storage_dtype, computation_dtype=self.computation_dtype)}")
 
         self.diffusion_model = model
+        self.diffusion_model.eval()
+        self.diffusion_model.requires_grad_(False)
 
         if k_predictor is None:
             self.predictor = k_prediction_from_diffusers_scheduler(diffusers_scheduler)
@@ -48,7 +50,7 @@ class KModel(torch.nn.Module):
         return self.predictor.calculate_denoised(sigma, model_output, x)
 
     def memory_required(self, input_shape: list[int]) -> float:
-        """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.56/comfy/model_base.py#L350"""
+        """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/model_base.py#L354"""
         input_shapes = [input_shape]
         area = sum(map(lambda input_shape: input_shape[0] * math.prod(input_shape[2:]), input_shapes))
 

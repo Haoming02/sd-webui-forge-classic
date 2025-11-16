@@ -19,8 +19,28 @@ from nunchaku.ops.fused import fused_gelu_mlp
 from nunchaku.utils import load_state_dict_in_safetensors
 
 from backend.args import dynamic_args
+from backend.nn._qwen_lora import compose_loras_v2, reset_lora_v2
 from backend.utils import process_img
 from modules import shared
+
+
+class NunchakuModelMixin:
+    offload: bool = False
+
+    def set_offload(self, offload: bool, use_pin_memory: bool, num_blocks_on_gpu: int):
+        raise NotImplementedError
+
+    def to(self, *args, **kwargs):
+        args = (arg for arg in args if not isinstance(arg, torch.dtype))
+        kwargs.pop("dtype", None)
+
+        dev: bool = any(isinstance(arg, torch.device) for arg in args) or "device" in kwargs
+
+        if self.offload and dev:
+            return self
+        else:
+            return super().to(*args, **kwargs)
+
 
 # ========== Flux ========== #
 
@@ -81,7 +101,7 @@ class SVDQFluxTransformer2DModel(nn.Module):
                 else:
                     h_offset = h
 
-                kontext, kontext_ids = process_img(ref, index=1, h_offset=h_offset, w_offset=w_offset)
+                kontext, kontext_ids = process_img(ref.to(x), index=1, h_offset=h_offset, w_offset=w_offset)
                 img = torch.cat([img, kontext], dim=1)
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
                 h = max(h, ref.shape[-2] + h_offset)
@@ -495,7 +515,7 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
         return encoder_hidden_states, hidden_states
 
 
-class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel):
+class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransformer2DModel):
     """https://github.com/nunchaku-tech/ComfyUI-nunchaku/blob/v1.0.1/models/qwenimage.py"""
 
     def __init__(
@@ -553,13 +573,14 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel):
             bias=True,
         )
 
-        self.offload = False
-
         self.set_offload(
             offload=shared.opts.svdq_cpu_offload,
             use_pin_memory=shared.opts.svdq_use_pin_memory,
             num_blocks_on_gpu=shared.opts.svdq_num_blocks_on_gpu,
         )
+
+        self.loras = []
+        self._applied_loras = []
 
     def forward(
         self,
@@ -585,6 +606,9 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel):
         hidden_states, img_ids, orig_shape = self.process_img(x)
         num_embeds = hidden_states.shape[1]
 
+        if dynamic_args.get("ref_latents", None) is not None:
+            ref_latents = dynamic_args["ref_latents"]
+
         if ref_latents is not None:
             h = 0
             w = 0
@@ -606,7 +630,7 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel):
                     h = max(h, ref.shape[-2] + h_offset)
                     w = max(w, ref.shape[-1] + w_offset)
 
-                kontext, kontext_ids, _ = self.process_img(ref, index=index, h_offset=h_offset, w_offset=w_offset)
+                kontext, kontext_ids, _ = self.process_img(ref.to(x), index=index, h_offset=h_offset, w_offset=w_offset)
                 hidden_states = torch.cat([hidden_states, kontext], dim=1)
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
 
@@ -627,6 +651,22 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel):
 
         if guidance is not None:
             guidance = guidance * 1000
+
+        if self.loras != self._applied_loras:
+            self._applied_loras = self.loras.copy()
+
+            reset_lora_v2(self)
+            self.set_offload(False, None, None)
+
+            print("[Qwen] Composing LoRAs...")
+            compose_loras_v2(self, self.loras)
+            print("[Qwen] LoRAs Composed~")
+
+            self.set_offload(
+                offload=shared.opts.svdq_cpu_offload,
+                use_pin_memory=shared.opts.svdq_use_pin_memory,
+                num_blocks_on_gpu=shared.opts.svdq_num_blocks_on_gpu,
+            )
 
         temb = self.time_text_embed(timestep, hidden_states) if guidance is None else self.time_text_embed(timestep, guidance, hidden_states)
 
@@ -722,14 +762,3 @@ class NunchakuQwenImageTransformer2DModel(QwenImageTransformer2DModel):
             self.offload_manager = None
             gc.collect()
             torch.cuda.empty_cache()
-
-    def to(self, *args, **kwargs):
-        args = (arg for arg in args if not isinstance(arg, torch.dtype))
-        kwargs.pop("dtype", None)
-
-        dev: bool = any(isinstance(arg, torch.device) for arg in args) or "device" in kwargs
-
-        if self.offload and dev:
-            return self
-        else:
-            return super().to(*args, **kwargs)

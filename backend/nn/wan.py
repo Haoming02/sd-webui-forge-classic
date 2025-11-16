@@ -1,5 +1,7 @@
-# original version: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/model.py
-# Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/ldm/wan/model.py
+# Copyright Wan 2024-2025
+# Reference: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/model.py
+
 import math
 
 import torch
@@ -279,41 +281,6 @@ class WanModel(nn.Module):
         eps=1e-6,
         flf_pos_embed_token_number=None,
     ):
-        r"""
-        Initialize the diffusion model backbone.
-
-        Args:
-            model_type (`str`, *optional*, defaults to 't2v'):
-                Model variant - 't2v' (text-to-video) or 'i2v' (image-to-video)
-            patch_size (`tuple`, *optional*, defaults to (1, 2, 2)):
-                3D patch dimensions for video embedding (t_patch, h_patch, w_patch)
-            text_len (`int`, *optional*, defaults to 512):
-                Fixed length for text embeddings
-            in_dim (`int`, *optional*, defaults to 16):
-                Input video channels (C_in)
-            dim (`int`, *optional*, defaults to 2048):
-                Hidden dimension of the transformer
-            ffn_dim (`int`, *optional*, defaults to 8192):
-                Intermediate dimension in feed-forward network
-            freq_dim (`int`, *optional*, defaults to 256):
-                Dimension for sinusoidal time embeddings
-            text_dim (`int`, *optional*, defaults to 4096):
-                Input dimension for text embeddings
-            out_dim (`int`, *optional*, defaults to 16):
-                Output video channels (C_out)
-            num_heads (`int`, *optional*, defaults to 16):
-                Number of attention heads
-            num_layers (`int`, *optional*, defaults to 32):
-                Number of transformer blocks
-            window_size (`tuple`, *optional*, defaults to (-1, -1)):
-                Window size for local attention (-1 indicates global attention)
-            qk_norm (`bool`, *optional*, defaults to True):
-                Enable query/key normalization
-            cross_attn_norm (`bool`, *optional*, defaults to False):
-                Enable cross-attention normalization
-            eps (`float`, *optional*, defaults to 1e-6):
-                Epsilon value for normalization layers
-        """
 
         super().__init__()
 
@@ -367,27 +334,7 @@ class WanModel(nn.Module):
         transformer_options={},
         **kwargs,
     ):
-        r"""
-        Forward pass through the diffusion model
 
-        Args:
-            x (Tensor):
-                List of input video tensors with shape [B, C_in, F, H, W]
-            t (Tensor):
-                Diffusion timesteps tensor of shape [B]
-            context (List[Tensor]):
-                List of text embeddings each with shape [B, L, C]
-            seq_len (`int`):
-                Maximum sequence length for positional encoding
-            clip_fea (Tensor, *optional*):
-                CLIP image features for image-to-video mode
-            y (List[Tensor], *optional*):
-                Conditional video inputs for image-to-video mode, same shape as x
-
-        Returns:
-            List[Tensor]:
-                List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
-        """
         # embeddings
         x = self.patch_embedding(x).to(x.dtype)
         grid_sizes = x.shape[2:]
@@ -460,20 +407,7 @@ class WanModel(nn.Module):
         return self.forward_orig(x, timestep, context, clip_fea=clip_fea, freqs=freqs, transformer_options=transformer_options, **kwargs)[:, :, :t, :h, :w]
 
     def unpatchify(self, x, grid_sizes):
-        r"""
-        Reconstruct video tensors from patch embeddings.
-
-        Args:
-            x (List[Tensor]):
-                List of patchified features, each with shape [L, C_out * prod(patch_size)]
-            grid_sizes (Tensor):
-                Original spatial-temporal grid dimensions before patching,
-                    shape [B, 3] (3 dimensions correspond to F_patches, H_patches, W_patches)
-
-        Returns:
-            List[Tensor]:
-                Reconstructed video tensors with shape [L, C_out, F, H / 8, W / 8]
-        """
+        """Reconstruct video tensors from patch embeddings"""
 
         c = self.out_dim
         u = x

@@ -95,6 +95,23 @@ def get_align_your_steps_sigmas(n, sigma_min, sigma_max, device):
     return torch.FloatTensor(sigmas).to(device)
 
 
+def linear_quadratic(n, sigma_min, sigma_max, device, *, threshold_noise=0.025):
+    if n == 1:
+        sigma_schedule = [1.0, 0.0]
+    else:
+        linear_steps = n // 2
+        linear_sigma_schedule = [i * threshold_noise / linear_steps for i in range(linear_steps)]
+        threshold_noise_step_diff = linear_steps - threshold_noise * n
+        quadratic_steps = n - linear_steps
+        quadratic_coef = threshold_noise_step_diff / (linear_steps * quadratic_steps**2)
+        linear_coef = threshold_noise / linear_steps - 2 * threshold_noise_step_diff / (quadratic_steps**2)
+        const = quadratic_coef * (linear_steps**2)
+        quadratic_sigma_schedule = [quadratic_coef * (i**2) + linear_coef * i + const for i in range(linear_steps, n)]
+        sigma_schedule = linear_sigma_schedule + quadratic_sigma_schedule + [1.0]
+        sigma_schedule = [1.0 - x for x in sigma_schedule]
+    return torch.FloatTensor(sigma_schedule).to(device) * sigma_max
+
+
 def kl_optimal(n, sigma_min, sigma_max, device):
     alpha_min = torch.arctan(torch.tensor(sigma_min, device=device))
     alpha_max = torch.arctan(torch.tensor(sigma_max, device=device))
@@ -192,6 +209,7 @@ schedulers = [
     Scheduler("simple", "Simple", simple_scheduler, need_inner_model=True),
     Scheduler("uniform", "Uniform", uniform, need_inner_model=True),
     Scheduler("sgm_uniform", "SGM Uniform", sgm_uniform, need_inner_model=True, aliases=["SGMUniform"]),
+    Scheduler("linear_quadratic", "Linear Quadratic", linear_quadratic),
     Scheduler("kl_optimal", "KL Optimal", kl_optimal),
     Scheduler("ddim", "DDIM", ddim_scheduler, need_inner_model=True),
     Scheduler("align_your_steps", "Align Your Steps", get_align_your_steps_sigmas),

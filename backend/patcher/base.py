@@ -4,6 +4,10 @@
 # are from Forge, implemented from scratch (after forge-v1.0.1), and may have
 # certain level of differences.
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
 
 import copy
 import inspect
@@ -51,7 +55,7 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
 class ModelPatcher:
     def __init__(self, model, load_device, offload_device, size=0, current_device=None, **kwargs):
         self.size = size
-        self.model = model
+        self.model: "torch.nn.Module" = model
         self.lora_patches = {}
         self.object_patches = {}
         self.object_patches_backup = {}
@@ -272,3 +276,18 @@ class ModelPatcher:
 
         self.object_patches_backup = {}
         return
+
+    def to_load_list(self) -> list["torch.nn.Module"]:
+        loading = []
+        for n, m in self.model.named_modules():
+            params = []
+            skip = False
+            for name, param in m.named_parameters(recurse=False):
+                params.append(name)
+            for name, param in m.named_parameters(recurse=True):
+                if name not in params:
+                    skip = True
+                    break
+            if not skip and (hasattr(m, "parameters_manual_cast") or len(params) > 0):
+                loading.append(m)
+        return loading

@@ -1,5 +1,5 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.50/comfy/sd1_clip.py
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.50/comfy/text_encoders/wan.py
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/sd1_clip.py
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/text_encoders/wan.py
 
 import torch
 
@@ -15,33 +15,26 @@ class PromptChunk:
 
 
 class UMT5TextProcessingEngine:
-    def __init__(self, text_encoder, tokenizer, emphasis_name="Original", min_length=512):
+    def __init__(self, text_encoder, tokenizer, min_length=512):
         super().__init__()
 
         self.text_encoder = text_encoder.transformer
         self.tokenizer = tokenizer
         self.device = memory_management.text_encoder_device()
 
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
-
         self.max_length = 99999999
         self.min_length = min_length
 
         empty = self.tokenizer("")["input_ids"]
-        self.tokenizer_adds_end_token = True
         self.tokens_start = 0
         self.tokens_end = -1
-        self.start_token = None
         self.end_token = empty[0]
         self.pad_token = 0
-        self.pad_with_end = False
-        self.pad_to_max_length = False
-        self.min_padding = None
 
     def tokenize(self, texts):
         return self.tokenizer(texts)["input_ids"]
 
-    def _process_tokens(self, tokens):
+    def process_attn_mask(self, tokens):
         attention_masks = []
 
         for x in tokens:
@@ -119,19 +112,19 @@ class UMT5TextProcessingEngine:
                 chunks, _ = self.tokenize_line(line)
                 line_z_values = []
 
-                #   pad all chunks to length of longest chunk
-                max_tokens = 0
-                for chunk in chunks:
-                    max_tokens = max(len(chunk.tokens), max_tokens)
+                # pad all chunks to length of longest chunk
+                # max_tokens = 0
+                # for chunk in chunks:
+                #     max_tokens = max(len(chunk.tokens), max_tokens)
 
                 for chunk in chunks:
                     tokens = chunk.tokens
                     multipliers = chunk.multipliers
 
-                    remaining_count = max_tokens - len(tokens)
-                    if remaining_count > 0:
-                        tokens += [self.pad_token] * remaining_count
-                        multipliers += [1.0] * remaining_count
+                    # remaining_count = max_tokens - len(tokens)
+                    # if remaining_count > 0:
+                    #     tokens += [self.pad_token] * remaining_count
+                    #     multipliers += [1.0] * remaining_count
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     line_z_values.append(z)
@@ -144,7 +137,7 @@ class UMT5TextProcessingEngine:
     def process_tokens(self, batch_tokens, batch_multipliers):
         tokens = torch.asarray(batch_tokens)
 
-        attention_mask = self._process_tokens(batch_tokens)
+        attention_mask = self.process_attn_mask(batch_tokens)
         z = self.encode_with_transformers(tokens, attention_mask)
         z *= attention_mask.unsqueeze(-1).float()
 

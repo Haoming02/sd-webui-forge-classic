@@ -4,7 +4,9 @@ Tiny AutoEncoder for Stable Diffusion
 
 https://github.com/madebyollin/taesd
 """
+
 import os
+
 import torch
 import torch.nn as nn
 
@@ -35,23 +37,11 @@ class Block(nn.Module):
 
 
 def decoder(latent_channels=4):
-    return nn.Sequential(
-        Clamp(), conv(latent_channels, 64), nn.ReLU(),
-        Block(64, 64), Block(64, 64), Block(64, 64), nn.Upsample(scale_factor=2), conv(64, 64, bias=False),
-        Block(64, 64), Block(64, 64), Block(64, 64), nn.Upsample(scale_factor=2), conv(64, 64, bias=False),
-        Block(64, 64), Block(64, 64), Block(64, 64), nn.Upsample(scale_factor=2), conv(64, 64, bias=False),
-        Block(64, 64), conv(64, 3),
-    )
+    return nn.Sequential(Clamp(), conv(latent_channels, 64), nn.ReLU(), Block(64, 64), Block(64, 64), Block(64, 64), nn.Upsample(scale_factor=2), conv(64, 64, bias=False), Block(64, 64), Block(64, 64), Block(64, 64), nn.Upsample(scale_factor=2), conv(64, 64, bias=False), Block(64, 64), Block(64, 64), Block(64, 64), nn.Upsample(scale_factor=2), conv(64, 64, bias=False), Block(64, 64), conv(64, 3))
 
 
 def encoder(latent_channels=4):
-    return nn.Sequential(
-        conv(3, 64), Block(64, 64),
-        conv(64, 64, stride=2, bias=False), Block(64, 64), Block(64, 64), Block(64, 64),
-        conv(64, 64, stride=2, bias=False), Block(64, 64), Block(64, 64), Block(64, 64),
-        conv(64, 64, stride=2, bias=False), Block(64, 64), Block(64, 64), Block(64, 64),
-        conv(64, latent_channels),
-    )
+    return nn.Sequential(conv(3, 64), Block(64, 64), conv(64, 64, stride=2, bias=False), Block(64, 64), Block(64, 64), Block(64, 64), conv(64, 64, stride=2, bias=False), Block(64, 64), Block(64, 64), Block(64, 64), conv(64, 64, stride=2, bias=False), Block(64, 64), Block(64, 64), Block(64, 64), conv(64, latent_channels))
 
 
 class TAESDDecoder(nn.Module):
@@ -59,7 +49,6 @@ class TAESDDecoder(nn.Module):
     latent_shift = 0.5
 
     def __init__(self, decoder_path="taesd_decoder.pth", latent_channels=None):
-        """Initialize pretrained TAESD on the given device from the given checkpoints."""
         super().__init__()
 
         if latent_channels is None:
@@ -69,8 +58,7 @@ class TAESDDecoder(nn.Module):
                 latent_channels = 4
 
         self.decoder = decoder(latent_channels)
-        self.decoder.load_state_dict(
-            torch.load(decoder_path, map_location='cpu' if devices.device.type != 'cuda' else None))
+        self.decoder.load_state_dict(torch.load(decoder_path, map_location="cpu" if devices.device.type != "cuda" else None))
 
 
 class TAESDEncoder(nn.Module):
@@ -78,7 +66,6 @@ class TAESDEncoder(nn.Module):
     latent_shift = 0.5
 
     def __init__(self, encoder_path="taesd_encoder.pth", latent_channels=None):
-        """Initialize pretrained TAESD on the given device from the given checkpoints."""
         super().__init__()
 
         if latent_channels is None:
@@ -88,33 +75,32 @@ class TAESDEncoder(nn.Module):
                 latent_channels = 4
 
         self.encoder = encoder(latent_channels)
-        self.encoder.load_state_dict(
-            torch.load(encoder_path, map_location='cpu' if devices.device.type != 'cuda' else None))
+        self.encoder.load_state_dict(torch.load(encoder_path, map_location="cpu" if devices.device.type != "cuda" else None))
 
 
 def download_model(model_path, model_url):
     if not os.path.exists(model_path):
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
-        print(f'Downloading TAESD model to: {model_path}')
+        print(f"Downloading TAESD model to: {model_path}")
         torch.hub.download_url_to_file(model_url, model_path)
 
 
 def decoder_model():
-    if not shared.sd_model.is_webui_legacy_model():
-        if shared.sd_model.is_wan:
-            return None
+    if shared.sd_model.is_flux:
         model_name = "taef1_decoder.pth"
     elif shared.sd_model.is_sdxl:
         model_name = "taesdxl_decoder.pth"
-    else:
+    elif shared.sd_model.is_sd1:
         model_name = "taesd_decoder.pth"
+    else:
+        return None
 
     loaded_model = sd_vae_taesd_models.get(model_name)
 
     if loaded_model is None:
         model_path = os.path.join(paths_internal.models_path, "VAE-taesd", model_name)
-        download_model(model_path, 'https://github.com/madebyollin/taesd/raw/main/' + model_name)
+        download_model(model_path, "https://github.com/madebyollin/taesd/raw/main/" + model_name)
 
         if os.path.exists(model_path):
             loaded_model = TAESDDecoder(model_path)
@@ -122,24 +108,26 @@ def decoder_model():
             loaded_model.to(devices.device, devices.dtype)
             sd_vae_taesd_models[model_name] = loaded_model
         else:
-            raise FileNotFoundError('TAESD model not found')
+            raise FileNotFoundError("TAESD model not found...")
 
     return loaded_model.decoder
 
 
 def encoder_model():
-    if not shared.sd_model.is_webui_legacy_model():
+    if shared.sd_model.is_flux:
         model_name = "taef1_encoder.pth"
     elif shared.sd_model.is_sdxl:
         model_name = "taesdxl_encoder.pth"
-    else:
+    elif shared.sd_model.is_sd1:
         model_name = "taesd_encoder.pth"
+    else:
+        return None
 
     loaded_model = sd_vae_taesd_models.get(model_name)
 
     if loaded_model is None:
         model_path = os.path.join(paths_internal.models_path, "VAE-taesd", model_name)
-        download_model(model_path, 'https://github.com/madebyollin/taesd/raw/main/' + model_name)
+        download_model(model_path, "https://github.com/madebyollin/taesd/raw/main/" + model_name)
 
         if os.path.exists(model_path):
             loaded_model = TAESDEncoder(model_path)
@@ -147,6 +135,6 @@ def encoder_model():
             loaded_model.to(devices.device, devices.dtype)
             sd_vae_taesd_models[model_name] = loaded_model
         else:
-            raise FileNotFoundError('TAESD model not found')
+            raise FileNotFoundError("TAESD model not found...")
 
     return loaded_model.encoder

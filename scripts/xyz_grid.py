@@ -419,13 +419,12 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
     return processed_result
 
 
-class SharedSettingsStackHelper(object):
+class SharedSettingsStackHelper:
     def __enter__(self):
         pass
 
-    def __exit__(self, exc_type, exc_value, tb):
-        modules.sd_models.reload_model_weights()
-        modules.sd_vae.reload_vae_weights()
+    def __exit__(self, *args, **kwargs):
+        pass
 
 
 re_range = re.compile(r"\s*([+-]?\s*\d+)\s*-\s*([+-]?\s*\d+)(?:\s*\(([+-]\d+)\s*\))?\s*")
@@ -496,11 +495,11 @@ class Script(scripts.Script):
             axis = self.current_axis_options[axis_type]
             if axis.choices:
                 if csv_mode:
-                    return list_to_csv_string(axis.choices()), gr.update()
+                    return list_to_csv_string(axis.choices()), gr.skip()
                 else:
-                    return gr.update(), axis.choices()
+                    return gr.skip(), axis.choices()
             else:
-                return gr.update(), gr.update()
+                return gr.skip(), gr.skip()
 
         fill_x_button.click(fn=fill, inputs=[x_type, csv_mode], outputs=[x_values, x_values_dropdown])
         fill_y_button.click(fn=fill, inputs=[y_type, csv_mode], outputs=[y_values, y_values_dropdown])
@@ -523,7 +522,7 @@ class Script(scripts.Script):
                         axis_values_dropdown = list(filter(lambda x: x in choices, csv_string_to_list_strip(axis_values)))
                         axis_values = ""
 
-            return (gr.Button.update(visible=has_choices), gr.Textbox.update(visible=not has_choices or csv_mode, value=axis_values),
+            return (gr.update(visible=has_choices), gr.update(visible=not has_choices or csv_mode, value=axis_values),
                     gr.update(choices=choices if has_choices else None, visible=has_choices and not csv_mode, value=axis_values_dropdown))
 
         x_type.change(fn=select_axis, inputs=[x_type, x_values, x_values_dropdown, csv_mode], outputs=[fill_x_button, x_values, x_values_dropdown])

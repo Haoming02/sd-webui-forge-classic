@@ -36,6 +36,11 @@ def patch(symlink: bool):
         if symlink:
             modified_command.extend(["--link-mode", "symlink"])
 
-        return subprocess.__original_run(shlex.join([*modified_command, *_args]), **kwargs)
+        if kwargs.get("shell", False):
+            command = shlex.join([*modified_command, *_args])
+        else:
+            command = [*modified_command, *_args]
+
+        return subprocess.__original_run(command, **kwargs)
 
     subprocess.run = patched_run

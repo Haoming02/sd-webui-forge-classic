@@ -1,9 +1,9 @@
 import weakref
 
-from modules_forge.packages.comfy import lora as comfy_lora
 import torch
 
 from backend import memory_management, utils
+from modules_forge.packages.comfy import lora as comfy_lora
 
 extra_weight_calculators = {}
 

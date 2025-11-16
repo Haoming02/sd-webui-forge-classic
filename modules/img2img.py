@@ -2,18 +2,25 @@ import os
 from contextlib import closing
 from pathlib import Path
 
-from PIL import Image, ImageOps, ImageFilter, ImageEnhance, UnidentifiedImageError
 import gradio as gr
+from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 
-from modules import images
-from modules.infotext_utils import create_override_settings_dict, parse_generation_parameters
-from modules.processing import Processed, StableDiffusionProcessingImg2Img, process_images
-from modules.shared import opts, state
-from modules.sd_models import get_closet_checkpoint_match
-import modules.shared as shared
 import modules.processing as processing
-from modules.ui import plaintext_to_html
 import modules.scripts
+import modules.shared as shared
+from modules import images
+from modules.infotext_utils import (
+    create_override_settings_dict,
+    parse_generation_parameters,
+)
+from modules.processing import (
+    Processed,
+    StableDiffusionProcessingImg2Img,
+    process_images,
+)
+from modules.sd_models import get_closet_checkpoint_match
+from modules.shared import opts, state
+from modules.ui import plaintext_to_html
 from modules_forge import main_thread
 
 
@@ -113,19 +120,19 @@ def process_batch(p, input, output_dir, inpaint_mask_dir, args, to_scale=False, 
 
             model_info = get_closet_checkpoint_match(parsed_parameters.get("Model hash", None))
             if model_info is not None:
-                p.override_settings['sd_model_checkpoint'] = model_info.name
+                p.override_settings["sd_model_checkpoint"] = model_info.name
             elif sd_model_checkpoint_override:
-                p.override_settings['sd_model_checkpoint'] = sd_model_checkpoint_override
+                p.override_settings["sd_model_checkpoint"] = sd_model_checkpoint_override
             else:
                 p.override_settings.pop("sd_model_checkpoint", None)
 
         if output_dir:
             p.outpath_samples = output_dir
-            p.override_settings['save_to_dirs'] = False
+            p.override_settings["save_to_dirs"] = False
 
         if opts.img2img_batch_use_original_name:
-            filename_pattern = f'{image_path.stem}-[generation_number]' if p.n_iter > 1 or p.batch_size > 1 else f'{image_path.stem}'
-            p.override_settings['samples_filename_pattern'] = filename_pattern
+            filename_pattern = f"{image_path.stem}-[generation_number]" if p.n_iter > 1 or p.batch_size > 1 else f"{image_path.stem}"
+            p.override_settings["samples_filename_pattern"] = filename_pattern
 
         proc = modules.scripts.scripts_img2img.run(p, *args)
 
@@ -141,8 +148,8 @@ def process_batch(p, input, output_dir, inpaint_mask_dir, args, to_scale=False, 
 
             if 0 <= shared.opts.img2img_batch_show_results_limit < len(batch_results.images):
                 discard_further_results = True
-                batch_results.images = batch_results.images[:int(shared.opts.img2img_batch_show_results_limit)]
-                batch_results.infotexts = batch_results.infotexts[:int(shared.opts.img2img_batch_show_results_limit)]
+                batch_results.images = batch_results.images[: int(shared.opts.img2img_batch_show_results_limit)]
+                batch_results.infotexts = batch_results.infotexts[: int(shared.opts.img2img_batch_show_results_limit)]
 
     return batch_results
 
@@ -166,15 +173,15 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
         image = Image.alpha_composite(sketch, sketch_fg)
     elif mode == 2:  # inpaint
         image = init_img_with_mask
-        mask = init_img_with_mask_fg.getchannel('A').convert('L')
-        mask = Image.merge('RGBA', (mask, mask, mask, Image.new('L', mask.size, 255)))
+        mask = init_img_with_mask_fg.getchannel("A").convert("L")
+        mask = Image.merge("RGBA", (mask, mask, mask, Image.new("L", mask.size, 255)))
     elif mode == 3:  # inpaint sketch
         image = Image.alpha_composite(inpaint_color_sketch, inpaint_color_sketch_fg)
-        mask = inpaint_color_sketch_fg.getchannel('A').convert('L')
+        mask = inpaint_color_sketch_fg.getchannel("A").convert("L")
         short_side = min(mask.size)
         dilation_size = int(0.015 * short_side) * 2 + 1
         mask = mask.filter(ImageFilter.MaxFilter(dilation_size))
-        mask = Image.merge('RGBA', (mask, mask, mask, Image.new('L', mask.size, 255)))
+        mask = Image.merge("RGBA", (mask, mask, mask, Image.new("L", mask.size, 255)))
     elif mode == 4:  # inpaint upload mask
         image = init_img_inpaint
         mask = init_mask_inpaint
@@ -193,7 +200,7 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
         height = int(image.height * scale_by)
         height -= height % 8
 
-    assert 0. <= denoising_strength <= 1., 'can only work with strength in [0.0, 1.0]'
+    assert 0.0 <= denoising_strength <= 1.0, "can only work with strength in [0.0, 1.0]"
 
     p = StableDiffusionProcessingImg2Img(
         outpath_samples=opts.outdir_samples or opts.outdir_img2img_samples,
@@ -217,7 +224,7 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
         inpaint_full_res_padding=inpaint_full_res_padding,
         inpainting_mask_invert=inpainting_mask_invert,
         override_settings=override_settings,
-        distilled_cfg_scale=distilled_cfg_scale
+        distilled_cfg_scale=distilled_cfg_scale,
     )
 
     p.scripts = modules.scripts.scripts_img2img
@@ -236,7 +243,7 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
                 inpaint_mask_dir = ""
                 png_info_dir = img2img_batch_png_info_dir if not shared.cmd_opts.hide_ui_dir_config else ""
                 processed = process_batch(p, img2img_batch_upload, output_dir, inpaint_mask_dir, args, to_scale=selected_scale_tab == 1, scale_by=scale_by, use_png_info=img2img_batch_use_png_info, png_info_props=img2img_batch_png_info_props, png_info_dir=png_info_dir)
-            else: # "from dir"
+            else:  # "from dir"
                 assert not shared.cmd_opts.hide_ui_dir_config, "Launched with --hide-ui-dir-config, batch img2img disabled"
                 processed = process_batch(p, img2img_batch_input_dir, img2img_batch_output_dir, img2img_batch_inpaint_mask_dir, args, to_scale=selected_scale_tab == 1, scale_by=scale_by, use_png_info=img2img_batch_use_png_info, png_info_props=img2img_batch_png_info_props, png_info_dir=img2img_batch_png_info_dir)
 

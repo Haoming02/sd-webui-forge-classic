@@ -2,7 +2,6 @@ import torch
 from huggingface_guess import model_list
 
 from backend import memory_management
-from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.modules.k_prediction import PredictionFlux
 from backend.patcher.clip import CLIP
@@ -35,8 +34,7 @@ class Chroma(ForgeDiffusionEngine):
         self.forge_objects_original = self.forge_objects.shallow_copy()
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
 
-    def set_clip_skip(self, clip_skip):
-        pass
+        self.is_flux = True
 
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):

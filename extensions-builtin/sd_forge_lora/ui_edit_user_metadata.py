@@ -127,7 +127,7 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
         return [
             *values[0:5],
             item.get("sd_version", "Unknown"),
-            gr.HighlightedText.update(value=gradio_tags, visible=True if tags else False),
+            gr.update(value=gradio_tags, visible=True if tags else False),
             user_metadata.get("activation text", ""),
             float(user_metadata.get("preferred weight", 0.0)),
             user_metadata.get("negative text", ""),

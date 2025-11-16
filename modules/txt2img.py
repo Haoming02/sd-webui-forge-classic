@@ -1,14 +1,17 @@
 import json
 from contextlib import closing
 
-import modules.scripts
-from modules import processing, infotext_utils
-from modules.infotext_utils import create_override_settings_dict, parse_generation_parameters
-from modules.shared import opts
-import modules.shared as shared
-from modules.ui import plaintext_to_html
-from PIL import Image
 import gradio as gr
+
+import modules.scripts
+import modules.shared as shared
+from modules import infotext_utils, processing
+from modules.infotext_utils import (
+    create_override_settings_dict,
+    parse_generation_parameters,
+)
+from modules.shared import opts
+from modules.ui import plaintext_to_html
 from modules_forge import main_thread
 
 
@@ -37,10 +40,10 @@ def txt2img_create_processing(id_task: str, request: gr.Request, prompt: str, ne
         hr_second_pass_steps=hr_second_pass_steps,
         hr_resize_x=hr_resize_x,
         hr_resize_y=hr_resize_y,
-        hr_checkpoint_name=None if hr_checkpoint_name == 'Use same checkpoint' else hr_checkpoint_name,
+        hr_checkpoint_name=None if hr_checkpoint_name == "Use same checkpoint" else hr_checkpoint_name,
         hr_additional_modules=hr_additional_modules,
-        hr_sampler_name=None if hr_sampler_name == 'Use same sampler' else hr_sampler_name,
-        hr_scheduler=None if hr_scheduler == 'Use same scheduler' else hr_scheduler,
+        hr_sampler_name=None if hr_sampler_name == "Use same sampler" else hr_sampler_name,
+        hr_scheduler=None if hr_scheduler == "Use same scheduler" else hr_scheduler,
         hr_prompt=hr_prompt,
         hr_negative_prompt=hr_negative_prompt,
         hr_cfg=hr_cfg,
@@ -60,19 +63,19 @@ def txt2img_create_processing(id_task: str, request: gr.Request, prompt: str, ne
 
 
 def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery_index, generation_info, *args):
-    assert len(gallery) > 0, 'No image to upscale'
+    assert len(gallery) > 0, "No image to upscale"
 
     if gallery_index < 0 or gallery_index >= len(gallery):
-        return gallery, generation_info, f'Bad image index: {gallery_index}', ''
+        return gallery, generation_info, f"Bad image index: {gallery_index}", ""
 
     geninfo = json.loads(generation_info)
 
-    #   catch situation where user tries to hires-fix the grid: probably a mistake, results can be bad aspect ratio - just don't do it
-    first_image_index = geninfo.get('index_of_first_image', 0)
-    #   catch if user tries to upscale a control image, this function will fail later trying to get infotext that doesn't exist
-    count_images = len(geninfo.get('infotexts'))        #   note: we have batch_size in geninfo, but not batch_count
+    # catch situation where user tries to hires-fix the grid: probably a mistake, results can be bad aspect ratio - just don't do it
+    first_image_index = geninfo.get("index_of_first_image", 0)
+    # catch if user tries to upscale a control image, this function will fail later trying to get infotext that doesn't exist
+    count_images = len(geninfo.get("infotexts"))  # note: we have batch_size in geninfo, but not batch_count
     if len(gallery) > 1 and (gallery_index < first_image_index or gallery_index >= count_images):
-        return gallery, generation_info, 'Unable to upscale grid or control images.', ''
+        return gallery, generation_info, "Unable to upscale grid or control images.", ""
 
     p = txt2img_create_processing(id_task, request, *args, force_enable_hr=True)
     p.batch_size = 1
@@ -83,16 +86,16 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery
     image_info = gallery[gallery_index]
     p.firstpass_image = infotext_utils.image_from_url_text(image_info)
 
-    parameters = parse_generation_parameters(geninfo.get('infotexts')[gallery_index], [])
-    p.seed = parameters.get('Seed', -1)
-    p.subseed = parameters.get('Variation seed', -1)
+    parameters = parse_generation_parameters(geninfo.get("infotexts")[gallery_index], [])
+    p.seed = parameters.get("Seed", -1)
+    p.subseed = parameters.get("Variation seed", -1)
 
-    #   update processing width/height based on actual dimensions of source image
+    # update processing width/height based on actual dimensions of source image
     p.width = gallery[gallery_index][0].size[0]
     p.height = gallery[gallery_index][0].size[1]
-    p.extra_generation_params['Original Size'] = f'{args[8]}x{args[7]}'
+    p.extra_generation_params["Original Size"] = f"{args[8]}x{args[7]}"
 
-    p.override_settings['save_images_before_highres_fix'] = False
+    p.override_settings["save_images_before_highres_fix"] = False
 
     with closing(p):
         processed = modules.scripts.scripts_txt2img.run(p, *p.script_args)
@@ -102,11 +105,11 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery
 
     shared.total_tqdm.clear()
 
-    insert = getattr(shared.opts, 'hires_button_gallery_insert', False)
+    insert = getattr(shared.opts, "hires_button_gallery_insert", False)
     new_gallery = []
     for i, image in enumerate(gallery):
         if insert or i != gallery_index:
-            image[0].already_saved_as = image[0].filename.rsplit('?', 1)[0]
+            image[0].already_saved_as = image[0].filename.rsplit("?", 1)[0]
             new_gallery.append(image)
         if i == gallery_index:
             new_gallery.extend(processed.images)

@@ -19,7 +19,7 @@ import string
 import json
 import hashlib
 
-from modules import sd_samplers, shared, script_callbacks, errors, stealth_infotext
+from modules import sd_samplers, shared, script_callbacks, errors
 from modules.paths_internal import roboto_ttf_file
 from modules.shared import opts
 
@@ -711,8 +711,6 @@ def save_image(image, path, basename, seed=None, prompt=None, extension='png', i
         pnginfo[pnginfo_section_name] = info
 
     params = script_callbacks.ImageSaveParams(image, p, fullfn, pnginfo)
-    if opts.enable_pnginfo:
-        stealth_infotext.add_stealth_pnginfo(params)
     script_callbacks.before_image_saved_callback(params)
 
     image = params.image
@@ -834,8 +832,6 @@ def read_info_from_image(image: Image.Image) -> tuple[str | None, dict]:
         return geninfo, items
 
     geninfo, items = read_standard()
-    if geninfo is None:
-        geninfo = stealth_infotext.read_info_from_image_stealth(image)
 
     return geninfo, items
 
@@ -858,7 +854,7 @@ def image_data(data):
     except Exception:
         pass
 
-    return gr.update(), None
+    return gr.skip(), None
 
 
 def flatten(img, bgcolor):

@@ -6,19 +6,7 @@
     user-select: none;
 }
 
-.forge-image-container-plain {
-    width: 100%;
-    height: calc(100% - 6px);
-    position: relative;
-    overflow: hidden;
-    background-color: #808080;
-}
-
-.forge-image-container {
-    width: 100%;
-    height: calc(100% - 6px);
-    position: relative;
-    overflow: hidden;
+.forge-image-container:not(.plain) {
     background-color: #cccccc;
     background-image:
         linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee),
@@ -27,6 +15,13 @@
     background-position:
         0 0,
         10px 10px;
+}
+
+.forge-image-container {
+    width: 100%;
+    height: calc(100% - 6px);
+    position: relative;
+    overflow: hidden;
 }
 
 .forge-image {
@@ -46,18 +41,6 @@
 
 .forge-file-upload {
     display: none;
-}
-
-.forge-resize-line {
-    width: 100%;
-    height: 6px;
-    background-image: linear-gradient(to bottom, grey 50%, darkgrey 50%);
-    background-size: 4px 4px;
-    background-repeat: repeat;
-    cursor: ns-resize;
-    position: absolute;
-    bottom: 0;
-    left: 0;
 }
 
 .forge-toolbar-static {

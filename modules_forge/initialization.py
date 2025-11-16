@@ -43,7 +43,7 @@ def fix_logging():
     logging.basicConfig = _original
 
 
-def initialize_forge():
+def initialize_forge(startup_timer):
     global INITIALIZED
 
     if INITIALIZED:
@@ -66,6 +66,10 @@ def initialize_forge():
 
     from backend import memory_management
     import torch
+    import torchvision  # noqa: F401
+    import pytorch_lightning  # noqa: F401
+
+    startup_timer.record("import torch")
 
     monitor_module_moving()
 
@@ -100,3 +104,5 @@ def initialize_forge():
 
     from backend.huggingface import process
     process()
+
+    startup_timer.record("forge init")

@@ -1,7 +1,6 @@
 GitPython==3.1.44
 Pillow==11.3.0
 accelerate==1.10.1
-bitsandbytes==0.48.0
 clean-fid==0.1.35
 diffusers==0.35.1
 diskcache==5.6.3
@@ -40,4 +39,4 @@ torchdiffeq==0.2.5
 torchsde==0.2.6
 tqdm==4.67.1
 transformers==4.56.2
-torch
+torch<2.9.0

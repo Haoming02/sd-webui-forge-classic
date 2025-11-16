@@ -75,7 +75,7 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
             def on_selected_upscale_method(upscale_method: str) -> int | None:
                 match = re.search(r"(\d)[xX]|[xX](\d)", upscale_method)
                 if not match:
-                    return gr.update()
+                    return gr.skip()
 
                 return gr.update(value=int(match.group(1) or match.group(2)))
 

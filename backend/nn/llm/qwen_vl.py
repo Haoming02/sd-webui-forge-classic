@@ -1,3 +1,5 @@
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/text_encoders/qwen_vl.py
+
 import math
 from typing import Optional, Tuple
 

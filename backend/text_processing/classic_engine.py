@@ -50,7 +50,7 @@ class CLIPEmbeddingForTextualInversion(torch.nn.Module):
 
 
 class ClassicTextProcessingEngine:
-    def __init__(self, text_encoder, tokenizer, chunk_length=75, embedding_dir=None, embedding_key="clip_l", embedding_expected_shape=768, emphasis_name="Original", text_projection=False, minimal_clip_skip=1, clip_skip=1, return_pooled=False, final_layer_norm=True):
+    def __init__(self, text_encoder, tokenizer, chunk_length=75, embedding_dir=None, embedding_key="clip_l", embedding_expected_shape=768, text_projection=False, minimal_clip_skip=1, clip_skip=1, return_pooled=False, final_layer_norm=True):
         super().__init__()
 
         self.embeddings = EmbeddingDatabase(tokenizer, embedding_expected_shape)
@@ -63,8 +63,8 @@ class ClassicTextProcessingEngine:
 
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
-
         self.emphasis = emphasis.get_current_option(opts.emphasis)()
+
         self.text_projection = text_projection
         self.minimal_clip_skip = minimal_clip_skip
         self.clip_skip = clip_skip

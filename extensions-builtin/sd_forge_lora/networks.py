@@ -31,12 +31,14 @@ def load_lora_for_models(model: "UnetPatcher", clip, lora, strength_model, stren
     lora_unet, lora_unmatch = load_lora(lora_unmatch, unet_keys)
     lora_clip, lora_unmatch = load_lora(lora_unmatch, clip_keys)
 
-    if len(lora_unmatch) > 12:
-        print(f"[LORA] LoRA version mismatch for {model_flag}: {filename}")
+    _unmatches = len(lora_unmatch)
+
+    if _unmatches / len(lora) > 0.5:
+        print(f"[LORA] LoRA mismatch for {model_flag}: {filename}")
         return model, clip
 
-    if len(lora_unmatch) > 0:
-        print(f"[LORA] Loading {filename} for {model_flag} with unmatched keys {list(lora_unmatch.keys())}")
+    if _unmatches > 0:
+        print(f"[LORA] Loading {filename} for {model_flag} with {_unmatches} unmatched keys")
 
     new_model = model.clone() if model is not None else None
     new_clip = clip.clone() if clip is not None else None

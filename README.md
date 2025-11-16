@@ -22,7 +22,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Oct. 08]
+## Features [Oct. 29]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -30,22 +30,29 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
     - `txt2img`, `img2img`, `txt2vid`, `img2vid`
     - use `Refiner` to achieve **High Noise** / **Low Noise** switching
-        - enable `Refiner` in **Settings/UI Alternatives**
+        - enable `Refiner` in **Settings/Refiner**
 
 > [!Important]
 > To export a video, you need to have **[FFmpeg](https://ffmpeg.org/)** installed
 
-- [X] Support [Qwen-Image](https://github.com/QwenLM/Qwen-Image)
-    - **not** `qwen-image-edit`
-- [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
-    - `dev`, `krea`, `kontext`, `qwen-image`, `t5`
-- [X] Support [Flux Kontext](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev)
+- [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image)
+- [X] Support [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
     - `img2img`, `inpaint`
-    - support multi-image inputs
 
 > [!Note]
-> Since the `state_dict` between **Flux-Dev**, **Flux-Krea**, and **Flux-Kontext** are exactly the same, to be properly detected as a **Kontext** model, the model needs to include "`kontext`" in its path, either the file or folder name.
+> Since the layers between **Qwen-Image** and **Qwen-Image-Edit** are exactly the same, to be properly detected as an **Edit** model, the model needs to include "`qwen`" and "`edit`" in its path, either the file name or folder name.
 
+- [X] Support [Flux Kontext](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev)
+    - `img2img`, `inpaint`
+
+> [!Note]
+> Since the layers between **Flux-Dev**, **Flux-Krea**, and **Flux-Kontext** are exactly the same, to be properly detected as a **Kontext** model, the model needs to include "`kontext`" in its path, either the file name or folder name.
+
+- [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
+- [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
+    - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `t5`
+- [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
+    - `Neta-Lumina`, `NetaYume-Lumina`
 - [X] Support [Chroma](https://huggingface.co/lodestones/Chroma)
     - special thanks: [@croquelois](https://github.com/lllyasviel/stable-diffusion-webui-forge/pull/2925)
 - [X] Rewrite Preset System
@@ -62,6 +69,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Implement MaHiRo
     - alternative CFG calculation; improve prompt adherence
     - enable in **Settings/UI Alternatives**
+- [X] Implement [Epsilon Scaling](https://github.com/comfyanonymous/ComfyUI/pull/10132)
+    - enable in **Settings/Stable Diffusion**
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
     - enable in **Settings/Upscaling**
@@ -102,6 +111,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Improve `ForgeCanvas`
     - hotkeys
     - brush adjustments
+    - customization
     - deobfuscate
 - [X] Optimize upscaler logics
 - [X] Optimize certain operations in `Spandrel`
@@ -114,7 +124,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Check for Extension updates in parallel
 - [X] Move `embeddings` folder into `models` folder
 - [X] Disable Refiner by default
-    - enable again in **Settings/UI Alternatives**
+    - enable again in **Settings/Refiner**
 - [X] Lint & Format
 - [X] Update `Pillow`
     - faster image processing

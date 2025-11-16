@@ -6,9 +6,7 @@ from dataclasses import dataclass
 from modules import extra_networks, hashes, paths, sd_models, shared
 
 vae_path = os.path.abspath(os.path.join(paths.models_path, "VAE"))
-vae_ignore_keys = {"model_ema.decay", "model_ema.num_updates"}
 vae_dict = {}
-
 
 base_vae = None
 loaded_vae_file = None
@@ -55,7 +53,6 @@ def restore_base_vae(model):
     global loaded_vae_file
     if base_vae is not None and checkpoint_info == model.sd_checkpoint_info:
         print("Restoring base VAE")
-        _load_vae_dict(model, base_vae)
         loaded_vae_file = None
     delete_base_vae()
 
@@ -166,27 +163,3 @@ def resolve_vae(checkpoint_file) -> VaeResolution:
     res = resolve_vae_from_setting()
 
     return res
-
-
-def load_vae_dict(filename, map_location):
-    pass
-
-
-def load_vae(model, vae_file=None, vae_source="from unknown source"):
-    pass
-
-
-# don't call this from outside
-def _load_vae_dict(model, vae_dict_1):
-    pass
-
-
-def clear_loaded_vae():
-    pass
-
-
-unspecified = object()
-
-
-def reload_vae_weights(sd_model=None, vae_file=unspecified):
-    pass

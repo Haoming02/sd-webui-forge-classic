@@ -6,9 +6,8 @@ import shutil
 from huggingface_hub import snapshot_download
 
 PIPELINE_PATHS = (
-    # "Wan-AI/Wan2.1-T2V-14B-Diffusers",
-    # "Wan-AI/Wan2.1-I2V-14B-720P-Diffusers",
-    "Qwen/Qwen-Image",
+    # "Qwen/Qwen-Image",
+    "neta-art/Neta-Lumina-Diffusers",
 )
 
 for pretrained in PIPELINE_PATHS:

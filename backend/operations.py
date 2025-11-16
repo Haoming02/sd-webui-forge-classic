@@ -330,12 +330,13 @@ class ForgeOperations:
 
     class RMSNorm(torch.nn.RMSNorm):
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args, add=False, **kwargs):
             kwargs["device"] = current_device
             kwargs["dtype"] = current_dtype
             super().__init__(*args, **kwargs)
             self.parameters_manual_cast = current_manual_cast_enabled
             self.bias = None
+            self.add = add  # add is used by Gemma2 2B
 
         def reset_parameters(self):
             self.bias = None
@@ -345,8 +346,12 @@ class ForgeOperations:
             if self.parameters_manual_cast:
                 weight, bias, signal = weights_manual_cast(self, x)
                 with main_stream_worker(weight, bias, signal):
+                    if self.add:
+                        return torch.nn.functional.rms_norm(x, self.normalized_shape, weight + 1.0, self.eps)
                     return torch.nn.functional.rms_norm(x, self.normalized_shape, weight, self.eps)
             else:
+                if self.add:
+                    return torch.nn.functional.rms_norm(x, self.normalized_shape, self.weight + 1.0, self.eps)
                 return super().forward(x)
 
     class Embedding(torch.nn.Embedding):
@@ -373,10 +378,13 @@ class ForgeOperations:
 try:
     from backend.operations_bnb import (
         ForgeLoader4Bit,
-        ForgeParams4bit,
         functional_dequantize_4bit,
         functional_linear_4bits,
     )
+except ImportError:
+    bnb_available = False
+else:
+    bnb_available = True
 
     class ForgeOperationsBNB4bits(ForgeOperations):
         class Linear(ForgeLoader4Bit):
@@ -409,10 +417,6 @@ try:
                     weight, bias, signal = weights_manual_cast(self, x, skip_weight_dtype=True, skip_bias_dtype=True)
                     with main_stream_worker(weight, bias, signal):
                         return functional_linear_4bits(x, weight, bias)
-
-    bnb_available = True
-except:
-    bnb_available = False
 
 
 from backend.operations_gguf import dequantize_tensor
@@ -462,6 +466,44 @@ class ForgeOperationsGGUF(ForgeOperations):
             weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, bias_fn=None, skip_bias_dtype=True)
             with main_stream_worker(weight, bias, signal):
                 return torch.nn.functional.linear(x, weight, bias)
+
+    class Embedding(torch.nn.Embedding):
+        def __init__(self, *args, **kwargs):
+            kwargs["device"] = current_device
+            kwargs["dtype"] = current_dtype
+            super().__init__(*args, **kwargs)
+            self.dummy = torch.nn.Parameter(torch.empty(1, device=current_device, dtype=current_dtype))
+            self.bias = None
+            self.parameters_manual_cast = current_manual_cast_enabled
+
+        def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+            if hasattr(self, "dummy"):
+                computation_dtype = self.dummy.dtype
+                if computation_dtype not in [torch.float16, torch.bfloat16]:
+                    # GGUF cast only supports 16bits otherwise super slow
+                    computation_dtype = torch.float16
+                if prefix + "weight" in state_dict:
+                    self.weight = state_dict[prefix + "weight"].to(device=self.dummy.device)
+                    self.weight.computation_dtype = computation_dtype
+                del self.dummy
+            else:
+                if prefix + "weight" in state_dict:
+                    self.weight = state_dict[prefix + "weight"]
+            return
+
+        def _apply(self, fn, recurse=True):
+            for k, p in self.named_parameters(recurse=False, remove_duplicate=True):
+                setattr(self, k, utils.tensor2parameter(fn(p)))
+            return self
+
+        def reset_parameters(self):
+            self.bias = None
+            return None
+
+        def forward(self, x):
+            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, bias_fn=None, skip_weight_dtype=True, skip_bias_dtype=True)
+            with main_stream_worker(weight, bias, signal):
+                return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
 @contextlib.contextmanager

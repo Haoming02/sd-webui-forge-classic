@@ -1,4 +1,4 @@
-# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.55/comfy/sd.py#L270
+# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/sd.py#L273
 
 import itertools
 import math
@@ -11,7 +11,7 @@ from backend.patcher.base import ModelPatcher
 
 @torch.inference_mode()
 def tiled_scale_multidim(samples, function, tile=(64, 64), overlap=8, upscale_amount=4, out_channels=3, output_device="cpu", downscale=False, index_formulas=None):
-    """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.55/comfy/utils.py#L901"""
+    """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/utils.py#L901"""
     dims = len(tile)
 
     if not (isinstance(upscale_amount, (tuple, list))):

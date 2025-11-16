@@ -1,4 +1,5 @@
-# https://github.com/QwenLM/Qwen-Image (Apache 2.0)
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/ldm/qwen_image/model.py
+# Reference: https://github.com/QwenLM/Qwen-Image
 
 import math
 from typing import Optional, Tuple
@@ -15,6 +16,7 @@ if xformers_enabled():
 else:
     from backend.attention import attention_pytorch as attention_function
 
+from backend.args import dynamic_args
 from backend.nn.flux import EmbedND
 from backend.utils import pad_to_patch_size
 
@@ -400,6 +402,9 @@ class QwenImageTransformer2DModel(nn.Module):
         hidden_states, img_ids, orig_shape = self.process_img(x)
         num_embeds = hidden_states.shape[1]
 
+        if dynamic_args.get("ref_latents", None) is not None:
+            ref_latents = dynamic_args["ref_latents"]
+
         if ref_latents is not None:
             h = 0
             w = 0
@@ -421,7 +426,7 @@ class QwenImageTransformer2DModel(nn.Module):
                     h = max(h, ref.shape[-2] + h_offset)
                     w = max(w, ref.shape[-1] + w_offset)
 
-                kontext, kontext_ids, _ = self.process_img(ref, index=index, h_offset=h_offset, w_offset=w_offset)
+                kontext, kontext_ids, _ = self.process_img(ref.to(x), index=index, h_offset=h_offset, w_offset=w_offset)
                 hidden_states = torch.cat([hidden_states, kontext], dim=1)
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
 

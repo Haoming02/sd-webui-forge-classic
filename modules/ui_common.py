@@ -1,35 +1,35 @@
 import csv
 import dataclasses
-import json
 import html
+import json
 import os
 from contextlib import nullcontext
 
 import gradio as gr
 
-from modules import call_queue, shared, ui_tempdir, util
 import modules.images
-from modules.ui_components import ToolButton
 import modules.infotext_utils as parameters_copypaste
+from modules import call_queue, shared, ui_tempdir, util
+from modules.ui_components import ToolButton
 
-folder_symbol = '\U0001f4c2'  # 📂
-refresh_symbol = '\U0001f504'  # 🔄
+folder_symbol = "\U0001f4c2"  # 📂
+refresh_symbol = "\U0001f504"  # 🔄
 
 
 def update_generation_info(generation_info, html_info, img_index):
     try:
         generation_info = json.loads(generation_info)
         if img_index < 0 or img_index >= len(generation_info["infotexts"]):
-            return html_info, gr.update()
-        return plaintext_to_html(generation_info["infotexts"][img_index]), gr.update()
+            return html_info, gr.skip()
+        return plaintext_to_html(generation_info["infotexts"][img_index]), gr.skip()
     except Exception:
         pass
     # if the json parse or anything else fails, just return the old html_info
-    return html_info, gr.update()
+    return html_info, gr.skip()
 
 
 def plaintext_to_html(text, classname=None):
-    content = "<br>\n".join(html.escape(x) for x in text.split('\n'))
+    content = "<br>\n".join(html.escape(x) for x in text.split("\n"))
 
     return f"<p class='{classname}'>{content}</p>" if classname else f"<p>{content}</p>"
 
@@ -106,7 +106,7 @@ def save_files(js_data, images, do_make_zip, index):
     if shared.opts.save_write_log_csv and os.path.exists(logfile_path):
         update_logfile(logfile_path, fields)
 
-    with (open(logfile_path, "a", encoding="utf8", newline='') if shared.opts.save_write_log_csv else nullcontext()) as file:
+    with open(logfile_path, "a", encoding="utf8", newline="") if shared.opts.save_write_log_csv else nullcontext() as file:
         if file:
             at_start = file.tell() == 0
             writer = csv.writer(file)
@@ -116,11 +116,17 @@ def save_files(js_data, images, do_make_zip, index):
         for image_index, filedata in enumerate(images, start_index):
             image = filedata[0]
             is_grid = image_index < p.index_of_first_image
-            p.batch_index = image_index-1
+            p.batch_index = image_index - 1
 
-            parameters = parameters_copypaste.parse_generation_parameters(data["infotexts"][image_index], [])
+            try:
+                parameters = parameters_copypaste.parse_generation_parameters(data["infotexts"][image_index], [])
+            except IndexError:
+                fullfn, _ = modules.images.save_image(image, path, "", seed=None, prompt=None, extension=extension, info=None, grid=is_grid, p=p, save_to_dirs=save_to_dirs)
+                filename = os.path.relpath(fullfn, path)
+                return gr.update(value=[fullfn], visible=True), plaintext_to_html(f"Saved: {filename}")
+
             parsed_infotexts.append(parameters)
-            fullfn, txt_fullfn = modules.images.save_image(image, path, "", seed=parameters['Seed'], prompt=parameters['Prompt'], extension=extension, info=p.infotexts[image_index], grid=is_grid, p=p, save_to_dirs=save_to_dirs)
+            fullfn, txt_fullfn = modules.images.save_image(image, path, "", seed=parameters["Seed"], prompt=parameters["Prompt"], extension=extension, info=p.infotexts[image_index], grid=is_grid, p=p, save_to_dirs=save_to_dirs)
 
             filename = os.path.relpath(fullfn, path)
             filenames.append(filename)
@@ -130,23 +136,24 @@ def save_files(js_data, images, do_make_zip, index):
                 fullfns.append(txt_fullfn)
 
         if file:
-            writer.writerow([parsed_infotexts[0]['Prompt'], parsed_infotexts[0]['Seed'], data["width"], data["height"], data["sampler_name"], data["cfg_scale"], data["steps"], filenames[0], parsed_infotexts[0]['Negative prompt'], data["sd_model_name"], data["sd_model_hash"]])
+            writer.writerow([parsed_infotexts[0]["Prompt"], parsed_infotexts[0]["Seed"], data["width"], data["height"], data["sampler_name"], data["cfg_scale"], data["steps"], filenames[0], parsed_infotexts[0]["Negative prompt"], data["sd_model_name"], data["sd_model_hash"]])
 
     # Make Zip
     if do_make_zip:
-        p.all_seeds = [parameters['Seed'] for parameters in parsed_infotexts]
-        namegen = modules.images.FilenameGenerator(p, parsed_infotexts[0]['Seed'], parsed_infotexts[0]['Prompt'], image, True)
+        p.all_seeds = [parameters["Seed"] for parameters in parsed_infotexts]
+        namegen = modules.images.FilenameGenerator(p, parsed_infotexts[0]["Seed"], parsed_infotexts[0]["Prompt"], image, True)
         zip_filename = namegen.apply(shared.opts.grid_zip_filename_pattern or "[datetime]_[[model_name]]_[seed]-[seed_last]")
         zip_filepath = os.path.join(path, f"{zip_filename}.zip")
 
         from zipfile import ZipFile
+
         with ZipFile(zip_filepath, "w") as zip_file:
             for i in range(len(fullfns)):
                 with open(fullfns[i], mode="rb") as f:
                     zip_file.writestr(filenames[i], f.read())
         fullfns.insert(0, zip_filepath)
 
-    return gr.File.update(value=fullfns, visible=True), plaintext_to_html(f"Saved: {filenames[0]}")
+    return gr.update(value=fullfns, visible=True), plaintext_to_html(f"Saved: {filenames[0]}")
 
 
 @dataclasses.dataclass
@@ -167,9 +174,9 @@ def create_output_panel(tabname, outdir, toprow=None):
             return
 
         try:
-            if 'Sub' in shared.opts.open_dir_button_choice:
-                image_dir = os.path.split(images[index]["name"].rsplit('?', 1)[0])[0]
-                if 'temp' in shared.opts.open_dir_button_choice or not ui_tempdir.is_gradio_temp_path(image_dir):
+            if "Sub" in shared.opts.open_dir_button_choice:
+                image_dir = os.path.split(images[index]["name"].rsplit("?", 1)[0])[0]
+                if "temp" in shared.opts.open_dir_button_choice or not ui_tempdir.is_gradio_temp_path(image_dir):
                     f = image_dir
         except Exception:
             pass
@@ -180,26 +187,26 @@ def create_output_panel(tabname, outdir, toprow=None):
         if toprow:
             toprow.create_inline_toprow_image()
 
-        with gr.Column(variant='panel', elem_id=f"{tabname}_results_panel"):
+        with gr.Column(variant="panel", elem_id=f"{tabname}_results_panel"):
             with gr.Group(elem_id=f"{tabname}_gallery_container"):
                 res.gallery = gr.Gallery(label="Output", show_label=False, elem_id=f"{tabname}_gallery", columns=4, preview=True, height=shared.opts.gallery_height or None, interactive=False, type="pil", object_fit="contain")
                 res.player = gr.Video(label="Output", show_label=False, elem_id=f"{tabname}_player", height=shared.opts.gallery_height or None, interactive=False, autoplay=shared.opts.video_player_auto, loop=shared.opts.video_player_loop, include_audio=False, show_download_button=False, show_share_button=False, visible=False)
 
             with gr.Row(elem_id=f"image_buttons_{tabname}", elem_classes="image-buttons"):
-                open_folder_button = ToolButton(folder_symbol, elem_id=f'{tabname}_open_folder', visible=not shared.cmd_opts.hide_ui_dir_config, tooltip="Open images output directory.")
+                open_folder_button = ToolButton(folder_symbol, elem_id=f"{tabname}_open_folder", visible=not shared.cmd_opts.hide_ui_dir_config, tooltip="Open images output directory.")
 
                 if tabname != "extras":
-                    save = ToolButton('💾', elem_id=f'save_{tabname}', tooltip=f"Save the image to a dedicated directory ({shared.opts.outdir_save}).")
-                    save_zip = ToolButton('🗃️', elem_id=f'save_zip_{tabname}', tooltip=f"Save zip archive with images to a dedicated directory ({shared.opts.outdir_save})")
+                    save = ToolButton("💾", elem_id=f"save_{tabname}", tooltip=f"Save the image to a dedicated directory ({shared.opts.outdir_save}).")
+                    save_zip = ToolButton("🗃️", elem_id=f"save_zip_{tabname}", tooltip=f"Save zip archive with images to a dedicated directory ({shared.opts.outdir_save})")
 
                 buttons = {
-                    'img2img': ToolButton('🖼️', elem_id=f'{tabname}_send_to_img2img', tooltip="Send image and generation parameters to img2img tab."),
-                    'inpaint': ToolButton('🎨️', elem_id=f'{tabname}_send_to_inpaint', tooltip="Send image and generation parameters to img2img inpaint tab."),
-                    'extras': ToolButton('📐', elem_id=f'{tabname}_send_to_extras', tooltip="Send image and generation parameters to extras tab.")
+                    "img2img": ToolButton("🖼️", elem_id=f"{tabname}_send_to_img2img", tooltip="Send image and generation parameters to img2img tab."),
+                    "inpaint": ToolButton("🎨️", elem_id=f"{tabname}_send_to_inpaint", tooltip="Send image and generation parameters to img2img inpaint tab."),
+                    "extras": ToolButton("📐", elem_id=f"{tabname}_send_to_extras", tooltip="Send image and generation parameters to extras tab."),
                 }
 
-                if tabname == 'txt2img':
-                    res.button_upscale = ToolButton('✨', elem_id=f'{tabname}_upscale', tooltip="Create an upscaled version of the current image using hires fix settings.")
+                if tabname == "txt2img":
+                    res.button_upscale = ToolButton("✨", elem_id=f"{tabname}_upscale", tooltip="Create an upscaled version of the current image using hires fix settings.")
 
             open_folder_button.click(
                 fn=lambda images, index: open_folder(shared.opts.outdir_samples or outdir, images, index),
@@ -212,14 +219,14 @@ def create_output_panel(tabname, outdir, toprow=None):
             )
 
             if tabname != "extras":
-                download_files = gr.File(None, file_count="multiple", interactive=False, show_label=False, visible=False, elem_id=f'download_files_{tabname}')
+                download_files = gr.File(None, file_count="multiple", interactive=False, show_label=False, visible=False, elem_id=f"download_files_{tabname}")
 
                 with gr.Group():
-                    res.infotext = gr.HTML(elem_id=f'html_info_{tabname}', elem_classes="infotext")
-                    res.html_log = gr.HTML(elem_id=f'html_log_{tabname}', elem_classes="html-log")
+                    res.infotext = gr.HTML(elem_id=f"html_info_{tabname}", elem_classes="infotext")
+                    res.html_log = gr.HTML(elem_id=f"html_log_{tabname}", elem_classes="html-log")
 
-                    res.generation_info = gr.Textbox(visible=False, elem_id=f'generation_info_{tabname}')
-                    if tabname == 'txt2img' or tabname == 'img2img':
+                    res.generation_info = gr.Textbox(visible=False, elem_id=f"generation_info_{tabname}")
+                    if tabname == "txt2img" or tabname == "img2img":
                         generation_info_button = gr.Button(visible=False, elem_id=f"{tabname}_generation_info_button")
                         generation_info_button.click(
                             fn=update_generation_info,
@@ -257,13 +264,13 @@ def create_output_panel(tabname, outdir, toprow=None):
                         outputs=[
                             download_files,
                             res.html_log,
-                        ]
+                        ],
                     )
 
             else:
-                res.generation_info = gr.HTML(elem_id=f'html_info_x_{tabname}')
-                res.infotext = gr.HTML(elem_id=f'html_info_{tabname}', elem_classes="infotext")
-                res.html_log = gr.HTML(elem_id=f'html_log_{tabname}')
+                res.generation_info = gr.HTML(elem_id=f"html_info_x_{tabname}")
+                res.infotext = gr.HTML(elem_id=f"html_info_{tabname}", elem_classes="infotext")
+                res.html_log = gr.HTML(elem_id=f"html_log_{tabname}")
 
             paste_field_names = []
             if tabname == "txt2img":
@@ -272,10 +279,15 @@ def create_output_panel(tabname, outdir, toprow=None):
                 paste_field_names = modules.scripts.scripts_img2img.paste_field_names
 
             for paste_tabname, paste_button in buttons.items():
-                parameters_copypaste.register_paste_params_button(parameters_copypaste.ParamBinding(
-                    paste_button=paste_button, tabname=paste_tabname, source_tabname="txt2img" if tabname == "txt2img" else None, source_image_component=res.gallery,
-                    paste_field_names=paste_field_names
-                ))
+                parameters_copypaste.register_paste_params_button(
+                    parameters_copypaste.ParamBinding(
+                        paste_button=paste_button,
+                        tabname=paste_tabname,
+                        source_tabname="txt2img" if tabname == "txt2img" else None,
+                        source_image_component=res.gallery,
+                        paste_field_names=paste_field_names,
+                    )
+                )
 
     return res
 
@@ -285,7 +297,7 @@ def create_refresh_button(refresh_component, refresh_method, refreshed_args, ele
 
     label = None
     for comp in refresh_components:
-        label = getattr(comp, 'label', None)
+        label = getattr(comp, "label", None)
         if label is not None:
             break
 
@@ -300,11 +312,7 @@ def create_refresh_button(refresh_component, refresh_method, refreshed_args, ele
         return [gr.update(**(args or {})) for _ in refresh_components] if len(refresh_components) > 1 else gr.update(**(args or {}))
 
     refresh_button = ToolButton(value=refresh_symbol, elem_id=elem_id, tooltip=f"{label}: refresh" if label else "Refresh")
-    refresh_button.click(
-        fn=refresh,
-        inputs=[],
-        outputs=refresh_components
-    )
+    refresh_button.click(fn=refresh, outputs=refresh_components)
     return refresh_button
 
 
@@ -315,10 +323,8 @@ def setup_dialog(button_show, dialog, *, button_close=None):
 
     button_show.click(
         fn=lambda: gr.update(visible=True),
-        inputs=[],
         outputs=[dialog],
     ).then(fn=None, _js="function(){ popupId('" + dialog.elem_id + "'); }")
 
     if button_close:
         button_close.click(fn=None, _js="closePopup")
-

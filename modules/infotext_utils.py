@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import base64
 import io
 import json
@@ -7,18 +8,18 @@ import re
 import sys
 
 import gradio as gr
-from modules.paths import data_path
-from modules import shared, ui_tempdir, script_callbacks, processing, infotext_versions, images, prompt_parser, errors
 from PIL import Image
 
+from modules import errors, images, infotext_versions, processing, prompt_parser, script_callbacks, shared, ui_tempdir
+from modules.paths import data_path
 from modules_forge import main_entry
 
-sys.modules['modules.generation_parameters_copypaste'] = sys.modules[__name__]  # alias for old name
+sys.modules["modules.generation_parameters_copypaste"] = sys.modules[__name__]  # alias for old name
 
 re_param_code = r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
 re_imagesize = re.compile(r"^(\d+)x(\d+)$")
-type_of_gr_update = type(gr.update())
+type_of_gr_update = type(gr.skip())
 
 
 class ParamBinding:
@@ -55,7 +56,7 @@ def reset():
 
 
 def quote(text):
-    if ',' not in str(text) and '\n' not in str(text) and ':' not in str(text):
+    if "," not in str(text) and "\n" not in str(text) and ":" not in str(text):
         return text
 
     return json.dumps(text, ensure_ascii=False)
@@ -93,16 +94,16 @@ def image_from_url_text(filedata):
 
     if filename:
         is_in_right_dir = ui_tempdir.check_tmp_file(shared.demo, filename)
-        assert is_in_right_dir, 'trying to open image file outside of allowed directories'
+        assert is_in_right_dir, "trying to open image file outside of allowed directories"
 
-        filename = filename.rsplit('?', 1)[0]
+        filename = filename.rsplit("?", 1)[0]
         return images.read(filename)
 
     if isinstance(filedata, str):
         if filedata.startswith("data:image/png;base64,"):
-            filedata = filedata[len("data:image/png;base64,"):]
+            filedata = filedata[len("data:image/png;base64,") :]
 
-        filedata = base64.decodebytes(filedata.encode('utf-8'))
+        filedata = base64.decodebytes(filedata.encode("utf-8"))
         image = images.read(io.BytesIO(filedata))
         return image
 
@@ -120,9 +121,10 @@ def add_paste_fields(tabname, init_img, fields, override_settings_component=None
 
     # backwards compatibility for existing extensions
     import modules.ui
-    if tabname == 'txt2img':
+
+    if tabname == "txt2img":
         modules.ui.txt2img_paste_fields = fields
-    elif tabname == 'img2img':
+    elif tabname == "img2img":
         modules.ui.img2img_paste_fields = fields
 
 
@@ -156,7 +158,7 @@ def connect_paste_params_buttons():
         destination_height_component = next(iter([field for field, name in fields if name == "Size-2"] if fields else []), None)
 
         if binding.source_image_component and destination_image_component:
-            need_send_dementions = destination_width_component and binding.tabname != 'inpaint'
+            need_send_dementions = destination_width_component and binding.tabname != "inpaint"
             if isinstance(binding.source_image_component, gr.Gallery):
                 func = send_image_and_dimensions if need_send_dementions else image_from_url_text
                 jsfunc = "extract_image_from_gallery"
@@ -202,39 +204,41 @@ def connect_paste_params_buttons():
 def send_image_and_dimensions(x):
     if isinstance(x, Image.Image):
         img = x
-        if img.mode == 'RGBA':
-            img = img.convert('RGB')
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
     elif isinstance(x, list) and isinstance(x[0], tuple):
         img = x[0][0]
     else:
         img = image_from_url_text(x)
-        if img is not None and img.mode == 'RGBA':
-            img = img.convert('RGB')
+        if img is not None and img.mode == "RGBA":
+            img = img.convert("RGB")
 
     if shared.opts.send_size and isinstance(img, Image.Image):
         w = img.width
         h = img.height
     else:
-        w = gr.update()
-        h = gr.update()
+        w = gr.skip()
+        h = gr.skip()
 
     return img, w, h
 
 
 def restore_old_hires_fix_params(res):
-    """for infotexts that specify old First pass size parameter, convert it into
-    width, height, and hr scale"""
+    """
+    for infotexts that specify old First pass size parameter,
+    convert it into width, height, and hr scale
+    """
 
-    firstpass_width = res.get('First pass size-1', None)
-    firstpass_height = res.get('First pass size-2', None)
+    firstpass_width = res.get("First pass size-1", None)
+    firstpass_height = res.get("First pass size-2", None)
 
     if shared.opts.use_old_hires_fix_width_height:
         hires_width = int(res.get("Hires resize-1", 0))
         hires_height = int(res.get("Hires resize-2", 0))
 
         if hires_width and hires_height:
-            res['Size-1'] = hires_width
-            res['Size-2'] = hires_height
+            res["Size-1"] = hires_width
+            res["Size-2"] = hires_height
             return
 
     if firstpass_width is None or firstpass_height is None:
@@ -247,21 +251,21 @@ def restore_old_hires_fix_params(res):
     if firstpass_width == 0 or firstpass_height == 0:
         firstpass_width, firstpass_height = processing.old_hires_fix_first_pass_dimensions(width, height)
 
-    res['Size-1'] = firstpass_width
-    res['Size-2'] = firstpass_height
-    res['Hires resize-1'] = width
-    res['Hires resize-2'] = height
+    res["Size-1"] = firstpass_width
+    res["Size-2"] = firstpass_height
+    res["Hires resize-1"] = width
+    res["Hires resize-2"] = height
 
 
 def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     """parses generation parameters string, the one you see in text field under the picture in UI:
-```
-girl with an artist's beret, determined, blue eyes, desert scene, computer monitors, heavy makeup, by Alphonse Mucha and Charlie Bowater, ((eyeshadow)), (coquettish), detailed, intricate
-Negative prompt: ugly, fat, obese, chubby, (((deformed))), [blurry], bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), messy drawing
-Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model hash: 45dee52b
-```
+    ```
+    girl with an artist's beret, determined, blue eyes, desert scene, computer monitors, heavy makeup, by Alphonse Mucha and Charlie Bowater, ((eyeshadow)), (coquettish), detailed, intricate
+    Negative prompt: ugly, fat, obese, chubby, (((deformed))), [blurry], bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), messy drawing
+    Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model hash: 45dee52b
+    ```
 
-    returns a dict with field values
+        returns a dict with field values
     """
     if skip_fields is None:
         skip_fields = shared.opts.infotext_skip_pasting
@@ -276,7 +280,7 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
     *lines, lastline = x.strip().split("\n")
     if len(re_param.findall(lastline)) < 3:
         lines.append(lastline)
-        lastline = ''
+        lastline = ""
 
     for line in lines:
         line = line.strip()
@@ -288,27 +292,13 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
         else:
             prompt += ("" if prompt == "" else "\n") + line
 
-    if 'Civitai' in lastline and 'FLUX' in lastline:
-        # Civitai really like to add random Clip skip to Flux metadata, where Clip skip is not a thing.
-        lastline = lastline.replace('Clip skip: 0, ', '')
-        lastline = lastline.replace('Clip skip: 1, ', '')
-        lastline = lastline.replace('Clip skip: 2, ', '')
-        lastline = lastline.replace('Clip skip: 3, ', '')
-        lastline = lastline.replace('Clip skip: 4, ', '')
-        lastline = lastline.replace('Clip skip: 5, ', '')
-        lastline = lastline.replace('Clip skip: 6, ', '')
-        lastline = lastline.replace('Clip skip: 7, ', '')
-        lastline = lastline.replace('Clip skip: 8, ', '')
-
-        # Civitai also add Sampler: Undefined
-        lastline = lastline.replace('Sampler: Undefined, ', 'Sampler: Euler, Schedule type: Simple, ')  # <- by lllyasviel, seem to give similar results to Civitai "Undefined" Sampler
-
-        # Civitai also confuse CFG scale and Distilled CFG Scale
-        lastline = lastline.replace('CFG scale: ', 'CFG scale: 1, Distilled CFG Scale: ')
-
-        print('Applied Forge Fix to broken Civitai Flux Meta.')
+    if "Civitai" in lastline and "FLUX" in lastline:
+        lastline = lastline.replace("Sampler: Undefined,", "Sampler: Euler, Schedule type: Simple,")
+        lastline = lastline.replace("CFG scale: ", "CFG scale: 1, Distilled CFG Scale: ")
 
     for k, v in re_param.findall(lastline):
+        if k == "Noise Schedule":
+            continue
         try:
             if v[0] == '"' and v[-1] == '"':
                 v = unquote(v)
@@ -320,7 +310,7 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
             else:
                 res[k] = v
         except Exception:
-            print(f"Error parsing \"{k}: {v}\"")
+            print(f'Error parsing "{k}: {v}"')
 
     # Extract styles from prompt
     if shared.opts.infotext_styles != "Ignore":
@@ -331,20 +321,18 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
             hr_prompt, hr_negative_prompt = res.get("Hires prompt", prompt), res.get("Hires negative prompt", negative_prompt)
             hr_found_styles, hr_prompt_no_styles, hr_negative_prompt_no_styles = shared.prompt_styles.extract_styles_from_prompt(hr_prompt, hr_negative_prompt)
             if same_hr_styles := found_styles == hr_found_styles:
-                res["Hires prompt"] = '' if hr_prompt_no_styles == prompt_no_styles else hr_prompt_no_styles
-                res['Hires negative prompt'] = '' if hr_negative_prompt_no_styles == negative_prompt_no_styles else hr_negative_prompt_no_styles
+                res["Hires prompt"] = "" if hr_prompt_no_styles == prompt_no_styles else hr_prompt_no_styles
+                res["Hires negative prompt"] = "" if hr_negative_prompt_no_styles == negative_prompt_no_styles else hr_negative_prompt_no_styles
 
         if same_hr_styles:
             prompt, negative_prompt = prompt_no_styles, negative_prompt_no_styles
             if (shared.opts.infotext_styles == "Apply if any" and found_styles) or shared.opts.infotext_styles == "Apply":
-                res['Styles array'] = found_styles
+                res["Styles array"] = found_styles
 
     res["Prompt"] = prompt
     res["Negative prompt"] = negative_prompt
 
-    # Missing CLIP skip means it was set to 1 (the default)
-    if "Clip skip" not in res:
-        res["Clip skip"] = "1"
+    res.pop("Clip skip", None)
 
     if "Hires resize-1" not in res:
         res["Hires resize-1"] = 0
@@ -369,7 +357,7 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
         res["Mask mode"] = "Inpaint masked"
 
     if "Masked content" not in res:
-        res["Masked content"] = 'original'
+        res["Masked content"] = "original"
 
     if "Inpaint area" not in res:
         res["Inpaint area"] = "Whole picture"
@@ -401,20 +389,17 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
     if "VAE Decoder" not in res:
         res["VAE Decoder"] = "Full"
 
-    if "FP8 weight" not in res:
-        res["FP8 weight"] = "Disable"
-
-    if "Cache FP16 weight for LoRA" not in res and res["FP8 weight"] != "Disable":
-        res["Cache FP16 weight for LoRA"] = False
-
     prompt_attention = prompt_parser.parse_prompt_attention(prompt)
     prompt_attention += prompt_parser.parse_prompt_attention(negative_prompt)
-    prompt_uses_emphasis = len(prompt_attention) != len([p for p in prompt_attention if p[1] == 1.0 or p[0] == 'BREAK'])
+    prompt_uses_emphasis = len(prompt_attention) != len([p for p in prompt_attention if p[1] == 1.0 or p[0] == "BREAK"])
     if "Emphasis" not in res and prompt_uses_emphasis:
         res["Emphasis"] = "Original"
 
     if "Refiner switch by sampling steps" not in res:
         res["Refiner switch by sampling steps"] = False
+
+    if "Shift" in res:
+        res["Distilled CFG Scale"] = res.pop("Shift")
 
     infotext_versions.backcompat(res)
 
@@ -422,17 +407,17 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
         res.pop(key, None)
 
     # checkpoint override is not supported
-    res.pop('Model', None)
+    res.pop("Model", None)
 
     # VAE / TE
     modules = []
     hr_modules = []
-    vae = res.pop('VAE', None)  # old form
+    vae = res.pop("VAE", None)
     if vae:
         modules = [vae]
     else:
         for key in res:
-            if key.startswith('Module '):
+            if key.startswith("Module "):
                 added = False
                 for knownmodule in main_entry.module_list.keys():
                     filename, _ = os.path.splitext(knownmodule)
@@ -441,8 +426,8 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
                         modules.append(knownmodule)
                         break
                 if not added:
-                    modules.append(res[key])   # so it shows in the override section (consistent with checkpoint and old vae)
-            elif key.startswith('Hires Module '):
+                    modules.append(res[key])  # so it shows in the override section (consistent with checkpoint and old vae)
+            elif key.startswith("Hires Module "):
                 for knownmodule in main_entry.module_list.keys():
                     filename, _ = os.path.splitext(knownmodule)
                     if res[key] == filename:
@@ -456,26 +441,26 @@ Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model
             basename_modules.append(os.path.basename(m))
 
         if sorted(modules) != sorted(basename_modules):
-            res['VAE/TE'] = modules
+            res["VAE/TE"] = modules
 
     # if 'Use same choices' was the selection for Hires VAE / Text Encoder, it will be the only Hires Module
     # if the selection was empty, it will be the only Hires Module, saved as 'Built-in'
-    if 'Hires Module 1' in res:
-        if res['Hires Module 1'] == 'Use same choices':
-            hr_modules = ['Use same choices']
-        elif res['Hires Module 1'] == 'Built-in':
+    if "Hires Module 1" in res:
+        if res["Hires Module 1"] == "Use same choices":
+            hr_modules = ["Use same choices"]
+        elif res["Hires Module 1"] == "Built-in":
             hr_modules = []
 
-        res['Hires VAE/TE'] = hr_modules
+        res["Hires VAE/TE"] = hr_modules
     else:
         # no Hires Module infotext, use default
-        res['Hires VAE/TE'] = ['Use same choices']
+        res["Hires VAE/TE"] = ["Use same choices"]
 
     return res
 
 
 infotext_to_setting_name_mapping = [
-    ('VAE/TE', 'forge_additional_modules'),
+    ("VAE/TE", "forge_additional_modules"),
 ]
 """Mapping of infotext labels to setting names. Only left for backwards compatibility - use OptionInfo(..., infotext='...') instead.
 Example content:
@@ -488,6 +473,8 @@ infotext_to_setting_name_mapping = [
 ]
 """
 from ast import literal_eval
+
+
 def create_override_settings_dict(text_pairs):
     """creates processing's override_settings parameters from gradio's multiselect
 
@@ -593,7 +580,7 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
                 v = params.get(key, None)
 
             if v is None:
-                res.append(gr.update())
+                res.append(gr.skip())
             elif isinstance(v, type_of_gr_update):
                 res.append(v)
             else:
@@ -609,7 +596,7 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
 
                     res.append(gr.update(value=val))
                 except Exception:
-                    res.append(gr.update())
+                    res.append(gr.skip())
 
         return res
 
@@ -621,7 +608,7 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
 
             vals_pairs = [f"{infotext_text}: {value}" for infotext_text, setting_name, value in vals]
 
-            return gr.Dropdown.update(value=vals_pairs, choices=vals_pairs, visible=bool(vals_pairs))
+            return gr.update(value=vals_pairs, choices=vals_pairs, visible=bool(vals_pairs))
 
         paste_fields = paste_fields + [(override_settings_component, paste_settings)]
 
@@ -638,4 +625,3 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
         outputs=[],
         show_progress=False,
     )
-

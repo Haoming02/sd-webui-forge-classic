@@ -1,25 +1,17 @@
-# High Quality Edge Thinning using Pure Python
-# Written by Lvmin Zhang
-# 2023 April
-# Stanford University
-# If you use this, please Cite "High Quality Edge Thinning using Pure Python", Lvmin Zhang, In Mikubill/sd-webui-controlnet.
+"""
+High Quality Edge Thinning using Pure Python
+written by. Lvmin Zhang
 
+2023 April.
+Stanford University
+"""
 
 import cv2
 import numpy as np
 
-
 lvmin_kernels_raw = [
-    np.array([
-        [-1, -1, -1],
-        [0, 1, 0],
-        [1, 1, 1]
-    ], dtype=np.int32),
-    np.array([
-        [0, -1, -1],
-        [1, 1, -1],
-        [0, 1, 0]
-    ], dtype=np.int32)
+    np.array([[-1, -1, -1], [0, 1, 0], [1, 1, 1]], dtype=np.int32),
+    np.array([[0, -1, -1], [1, 1, -1], [0, 1, 0]], dtype=np.int32),
 ]
 
 lvmin_kernels = []
@@ -29,16 +21,8 @@ lvmin_kernels += [np.rot90(x, k=2, axes=(0, 1)) for x in lvmin_kernels_raw]
 lvmin_kernels += [np.rot90(x, k=3, axes=(0, 1)) for x in lvmin_kernels_raw]
 
 lvmin_prunings_raw = [
-    np.array([
-        [-1, -1, -1],
-        [-1, 1, -1],
-        [0, 0, -1]
-    ], dtype=np.int32),
-    np.array([
-        [-1, -1, -1],
-        [-1, 1, -1],
-        [-1, 0, 0]
-    ], dtype=np.int32)
+    np.array([[-1, -1, -1], [-1, 1, -1], [0, 0, -1]], dtype=np.int32),
+    np.array([[-1, -1, -1], [-1, 1, -1], [-1, 0, 0]], dtype=np.int32),
 ]
 
 lvmin_prunings = []
@@ -67,7 +51,7 @@ def thin_one_time(x, kernels):
 
 def lvmin_thin(x, prunings=True):
     y = x
-    for i in range(32):
+    for _ in range(32):
         y, is_done = thin_one_time(y, lvmin_kernels)
         if is_done:
             break
@@ -82,7 +66,6 @@ def nake_nms(x):
     f3 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.uint8)
     f4 = np.array([[0, 0, 1], [0, 1, 0], [1, 0, 0]], dtype=np.uint8)
     y = np.zeros_like(x)
-    for f in [f1, f2, f3, f4]:
+    for f in (f1, f2, f3, f4):
         np.putmask(y, cv2.dilate(x, kernel=f) == x, x)
     return y
-

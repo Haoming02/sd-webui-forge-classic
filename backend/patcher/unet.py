@@ -5,11 +5,18 @@ import torch
 from backend.modules.k_model import KModel
 from backend.patcher.base import ModelPatcher
 
+try:
+    from backend.nn.svdq import NunchakuModelMixin
+except ImportError:
+    NunchakuModelMixin = type(None)
+
 
 class UnetPatcher(ModelPatcher):
     @classmethod
     def from_model(cls, model, diffusers_scheduler, config, k_predictor=None):
         model = KModel(model=model, diffusers_scheduler=diffusers_scheduler, k_predictor=k_predictor, config=config)
+        if isinstance(model.diffusion_model, NunchakuModelMixin):
+            return NunchakuPatcher(model, load_device=model.diffusion_model.load_device, offload_device=model.diffusion_model.offload_device, current_device=model.diffusion_model.initial_device)
         return UnetPatcher(model, load_device=model.diffusion_model.load_device, offload_device=model.diffusion_model.offload_device, current_device=model.diffusion_model.initial_device)
 
     def __init__(self, *args, **kwargs):
@@ -186,3 +193,22 @@ class UnetPatcher(ModelPatcher):
 
         self.add_patches(filename=filename, patches=patch_flat, strength_patch=float(strength), strength_model=1.0)
         return
+
+
+class NunchakuPatcher(UnetPatcher):
+
+    def clone(self):
+        n = NunchakuPatcher(self.model, self.load_device, self.offload_device, self.size, self.current_device)
+        return n
+
+    def forge_patch_model(self, target_device=None):
+        if target_device is not None:
+            self.model.diffusion_model.to(target_device)
+        return self.model
+
+    def forge_unpatch_model(self, target_device=None):
+        if target_device is not None and hasattr(self.model, "diffusion_model"):  # k_model/KModel/cleanup()
+            self.model.diffusion_model.to(target_device)
+
+    def to_load_list(self):
+        return []

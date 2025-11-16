@@ -1,4 +1,4 @@
-# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.63/comfy/extra_samplers/uni_pc.py
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/extra_samplers/uni_pc.py
 
 import math
 

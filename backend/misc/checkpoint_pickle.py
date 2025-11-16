@@ -8,6 +8,7 @@ class Empty:
 
 
 class RestrictedUnpickler(pickle.Unpickler):
+
     def find_class(self, module: str, name: str):
         if module.startswith("pytorch_lightning"):
             return Empty
@@ -16,3 +17,6 @@ class RestrictedUnpickler(pickle.Unpickler):
             return super().find_class(module, name)
 
         raise NotImplementedError(f'"{module}.{name}" is forbidden')
+
+
+Unpickler = RestrictedUnpickler

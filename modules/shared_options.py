@@ -219,7 +219,8 @@ options_templates.update(
             "sd_model_checkpoint": OptionInfo("", "(Managed by Forge)", gr.State, infotext="Model"),
             "sd_unet": OptionInfo("Automatic", "SD UNet", gr.Dropdown, lambda: {"choices": shared_items.sd_unet_items()}, refresh=shared_items.refresh_unet_list),
             "emphasis": OptionInfo("Original", "Emphasis Mode", gr.Radio, lambda: {"choices": [x.name for x in sd_emphasis.options]}, infotext="Emphasis").info("pay (more:1.1) or (less:0.9) attention to prompts").html(sd_emphasis.get_options_descriptions()),
-            "CLIP_stop_at_last_layers": OptionInfo(1, "Clip Skip", gr.Slider, {"minimum": 1, "maximum": 12, "step": 1}, infotext="Clip skip").link("wiki", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#clip-skip").info("1 = disable, 2 = skip one layer, etc."),
+            "scaling_factor": OptionInfo(1.0, "Epsilon Scaling", gr.Slider, {"minimum": 1.0, "maximum": 1.05, "step": 0.005}, infotext="eps_scaling_factor").info("1.0 = disabled; higher = more detail").link("PR", "https://github.com/comfyanonymous/ComfyUI/pull/10132"),
+            "CLIP_stop_at_last_layers": OptionInfo(2, "Clip Skip", gr.Slider, {"minimum": 1, "maximum": 12, "step": 1}, infotext="Clip skip").link("wiki", "https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#clip-skip").info("1 = disable, 2 = skip one layer, etc."),
             "comma_padding_backtrack": OptionInfo(16, "Token Wrap Length", gr.Slider, {"minimum": 0, "maximum": 74, "step": 1}).info("for prompts shorter than the threshold, move them to the next chunk of 75 tokens if they do not fit inside the current chunk"),
             "tiling": OptionInfo(False, "Tiling", infotext="Tiling").info("produce a tileable image"),
             "randn_source": OptionInfo("CPU", "Random Number Generator", gr.Radio, {"choices": ("CPU", "GPU", "NV")}, infotext="RNG").info("use <b>CPU</b> for the maximum recreatability across different systems"),
@@ -228,6 +229,19 @@ options_templates.update(
             "sdxl_crop_left": OptionInfo(0, "[SDXL] Crop-Left Coordinate"),
             "sdxl_refiner_low_aesthetic_score": OptionInfo(2.5, "[SDXL] Low Aesthetic Score", gr.Number),
             "sdxl_refiner_high_aesthetic_score": OptionInfo(6.0, "[SDXL] High Aesthetic Score", gr.Number),
+            "divlumina": OptionDiv(),
+            "neta_template_positive": OptionInfo(
+                "You are an assistant designed to generate anime images with the highest degree of image-text alignment based on danbooru tags. <Prompt Start>",
+                "[Lumina] Positive Template",
+                gr.Textbox,
+                {"lines": 3, "max_lines": 6, "placeholder": "<Prompt Start>"},
+            ),
+            "neta_template_negative": OptionInfo(
+                "You are an assistant designed to generate low-quality images based on textual prompts. <Prompt Start>",
+                "[Lumina] Negative Template",
+                gr.Textbox,
+                {"lines": 3, "max_lines": 6, "placeholder": "<Prompt Start>"},
+            ),
         },
     )
 )
@@ -281,7 +295,7 @@ options_templates.update(
         ("optimizations", "Optimizations", "sd"),
         {
             "cross_attention_optimization": OptionInfo("Automatic", "Cross Attention Optimization", gr.Dropdown, {"choices": ("Automatic",), "interactive": False}),
-            "persistent_cond_cache": OptionInfo(True, "Persistent Cond Cache").info("do not recalculate conds if the prompts and parameters have not changed since previous generation"),
+            "persistent_cond_cache": OptionInfo(True, "Persistent Cond Cache").info("do not re-encode prompts if only the Seed changes ; <b>Note:</b> only applies to SD1 and SDXL checkpoints"),
             "skip_early_cond": OptionInfo(0.0, "Ignore Negative Prompt during Early Steps", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Skip Early CFG").info("in percentage of total steps; 0 = disable; higher = faster"),
             "s_min_uncond": OptionInfo(0.0, "Skip Negative Prompt during Later Steps", gr.Slider, {"minimum": 0.0, "maximum": 8.0, "step": 0.05}).info('in "sigma"; 0 = disable; higher = faster'),
             "s_min_uncond_all": OptionInfo(False, "For the above option, skip every step", infotext="NGMS all steps").info("otherwise, only skip every other step"),
@@ -348,6 +362,27 @@ options_templates.update(
 
 options_templates.update(
     options_section(
+        ("refiner", "Refiner", "sd"),
+        {
+            "show_refiner": OptionInfo(False, "Display the Refiner Accordion").info("Refiner swaps the model in the middle of generation; useful for Wan 2.2 <b>High Noise</b> to <b>Low Noise</b> switching").needs_reload_ui(),
+            "refiner_lora_replacement": OptionInfo(
+                "high_noise=low_noise",
+                "Lora Replacements",
+                gr.Textbox,
+                {"lines": 3, "max_lines": 12, "placeholder": "high_noise=low_noise"},
+            ),
+            "refiner_lora_explanation": OptionHTML(
+                """
+Use the "Lora Replacements" to load different LoRAs between the normal pass and the refiner pass.<br>
+Separate the original and the target with an equal sign; Place each entry in its own line.
+                """
+            ),
+        },
+    )
+)
+
+options_templates.update(
+    options_section(
         ("ui_prompt_editing", "Prompt Editing", "ui"),
         {
             "keyedit_precision_attention": OptionInfo(0.1, "Precision for (attention:1.1) when editing the prompt with Ctrl + Up/Down", gr.Slider, {"minimum": 0.05, "maximum": 0.25, "step": 0.05}),
@@ -385,11 +420,22 @@ options_templates.update(
     options_section(
         ("ui_alternatives", "UI Alternatives", "ui"),
         {
-            "show_refiner": OptionInfo(False, "Display the Refiner Accordion").info('"deprecated" feature for SDXL').needs_reload_ui(),
             "show_rescale_cfg": OptionInfo(False, "Display the Rescale CFG Slider").info("feature for v-pred checkpoints").needs_reload_ui(),
             "show_mahiro": OptionInfo(False, "Display the MaHiRo Toggle").info('see <a href="https://huggingface.co/spaces/yoinked/blue-arxiv">blue-arxiv</a> - <b>id:</b> <ins>2024-1208.1</ins>').needs_reload_ui(),
             "paste_safe_guard": OptionInfo(False, 'Disable the "Read generation parameters" button (↙️) when negative prompt is not empty'),
             "ctrl_enter_interrupt": OptionInfo(False, "Revert [Ctrl + Enter] to only interrupt the generation").info('the current "intended" behavior is to interrupt the current generation then immediately start a new one'),
+            "quicksettings_accordion": OptionInfo(False, "Place the Quicksettings under an Accordion").needs_reload_ui(),
+            "quicksettings_style": OptionInfo("default", "Quicksettings Style", gr.Radio, {"choices": ("default", "clip-modules", "scrollbar")}).needs_reload_ui(),
+            "qs_style_exp": OptionHTML(
+                """
+<ul>
+<li><b>default:</b> Same as the original Webui - excess elements get pushed into a new row</li>
+<li><b>clip-modules:</b> Display the full name of the modules only when hovering the "VAE / Text Encoder" dropdown</li>
+<li><b>scrollbar:</b> Keep all elements within the same row, showing a scrollbar if necessary</li>
+</ul>
+                """.strip()
+            ),
+            "forbidden_knowledge": OptionInfo(False, "Forbidden Knowledge").needs_restart(),
             "div_classic": OptionDiv(),
             "compact_prompt_box": OptionInfo(False, "Compact Prompt Layout").info("put prompts inside the Generate tab, leaving more space for the gallery").needs_reload_ui(),
             "dimensions_and_batch_together": OptionInfo(True, "Show Width/Height and Batch sliders in same row").needs_reload_ui(),
@@ -429,7 +475,6 @@ options_templates.update(
         {
             "infotext_explanation": OptionHTML("Infotext is what the webui calls the text that contains generation parameters, and can be used to generate the same image again."),
             "enable_pnginfo": OptionInfo(True, "Write infotext to metadata of generated images"),
-            "stealth_pnginfo_option": OptionInfo("None", "Stealth Infotext Mode", gr.Radio, {"choices": ("Alpha", "RGB", "None")}),
             "save_txt": OptionInfo(False, "Write infotext to a text file next to every generated image"),
             "add_model_name_to_info": OptionInfo(True, "Add model name to infotext"),
             "add_model_hash_to_info": OptionInfo(True, "Add model hash to infotext"),

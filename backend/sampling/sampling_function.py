@@ -345,7 +345,7 @@ def sampling_function(self, denoiser_params, cond_scale, cond_composition, extra
     else:
         image_cond_in = denoiser_params.image_cond
 
-    if isinstance(image_cond_in, torch.Tensor):
+    if isinstance(image_cond_in, torch.Tensor) and self.inner_model.inner_model.is_inpaint:
         if image_cond_in.shape[0] == x.shape[0] and image_cond_in.shape[2] == x.shape[2] and image_cond_in.shape[3] == x.shape[3]:
             if uncond is not None:
                 for i in range(len(uncond)):
