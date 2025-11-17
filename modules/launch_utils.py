@@ -504,4 +504,3 @@ def dump_sysinfo():
         file.write(text)
 
     return filename
-
