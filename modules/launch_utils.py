@@ -94,8 +94,7 @@ def _torch_version() -> str:
 
     ver = importlib.metadata.version("torch")
     ver = ver.split("+", 1)[0]
-    ver = ".".join(ver.split(".")[:3])
-    return ver
+    return re.search(r"[\d.]+[\d]", ver).group(0)
 
 
 def is_installed(package):
@@ -504,3 +503,4 @@ def dump_sysinfo():
         file.write(text)
 
     return filename
+
