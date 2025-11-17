@@ -94,7 +94,7 @@ def _torch_version() -> str:
 
     ver = importlib.metadata.version("torch")
     ver = ver.split("+", 1)[0]
-    assert len(ver.split(".")) == 3
+    ver = ".".join(ver.split(".")[:3])
     return ver
 
 
@@ -504,3 +504,4 @@ def dump_sysinfo():
         file.write(text)
 
     return filename
+
