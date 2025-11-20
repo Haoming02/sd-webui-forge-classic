@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__github__list_commits",
+      "Bash(git pull:*)",
+      "Bash(cp:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push myfork neo)",
+      "Bash(gh pr create:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(python:*)",
+      "Bash(git clone:*)",
+      "Bash(git log:*)",
+      "WebSearch",
+      "WebFetch(domain:stable-diffusion-art.com)",
+      "WebFetch(domain:www.stablediffusiontutorials.com)",
+      "Bash(venv/Scripts/python.exe -m pip install:*)",
+      "WebFetch(domain:civitai.com)",
+      "Bash(rm:*)",
+      "Bash(git rebase:*)",
+      "Bash(git push:*)",
+      "Bash(git restore:*)",
+      "Bash(gh repo view:*)",
+      "mcp__github__get_file_contents",
+      "Bash(git fetch:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git remote:*)",
+      "Bash(git merge:*)",
+      "Bash(git checkout:*)",
+      "Bash(git config:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

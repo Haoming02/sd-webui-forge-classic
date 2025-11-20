@@ -1,0 +1,45 @@
+=====================================
+RTX 4060 Ti 16GB Setup Guide for Forge Neo
+=====================================
+
+GPU SPECIFICATIONS:
+- NVIDIA RTX 4060 Ti 16GB
+- Ada Lovelace Architecture
+- 16GB VRAM (excellent for large models)
+
+OPTIMAL LAUNCH ARGUMENTS:
+--sage              # SageAttention (best performance)
+--flash             # FlashAttention (secondary performance boost)  
+--xformers          # Xformers optimization
+--fast-fp16         # Fast FP16 accumulation (requires PyTorch 2.7.0+)
+--cuda-malloc       # CUDA memory allocation optimization
+--cuda-stream       # CUDA stream optimization
+--pin-shared-memory # Pin shared memory for better performance
+
+BATCH FILES CREATED:
+1. run_forge_neo_optimized.bat   - Maximum performance for your RTX 4060 Ti
+2. run_forge_neo_conservative.bat - Stable/conservative settings
+3. run_forge_neo_uv.bat          - Uses UV package manager for faster startup
+4. run_forge_neo.bat             - Basic launch (original)
+
+PERFORMANCE HIERARCHY:
+SageAttention ≥ FlashAttention > xformers > PyTorch >> Basic
+
+MEMORY MANAGEMENT:
+- With 16GB VRAM, you can run large models comfortably
+- If you get OOM errors, try conservative mode first
+- The --always-normal-vram flag helps with memory management
+
+UV PACKAGE MANAGER:
+- Installed at: C:\Users\littl\.local\bin\uv.exe
+- Much faster than pip for package operations
+- Use run_forge_neo_uv.bat to leverage UV
+
+TROUBLESHOOTING:
+- If optimized mode fails, try conservative mode
+- Always use both positive and negative prompts
+- SageAttention 2 may require specific prompt formatting
+
+RECOMMENDED FIRST RUN:
+Start with run_forge_neo_optimized.bat for best performance.
+If issues occur, fall back to run_forge_neo_conservative.bat.

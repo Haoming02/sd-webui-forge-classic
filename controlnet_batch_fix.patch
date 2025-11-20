@@ -1,0 +1,67 @@
+diff --git a/extensions-builtin/sd_forge_controlnet/scripts/controlnet.py.backup b/extensions-builtin/sd_forge_controlnet/scripts/controlnet.py
+index a9376562..aa3f4911 100644
+--- a/extensions-builtin/sd_forge_controlnet/scripts/controlnet.py.backup
++++ b/extensions-builtin/sd_forge_controlnet/scripts/controlnet.py
+@@ -344,16 +344,30 @@ class ControlNetForForgeOfficial(scripts.Script):
+             if input_mask is not None:
+                 control_masks.append(input_mask)
+ 
++            # Note: Removed early break to allow all batch images to be processed
++            # Previous code would stop after first image if preprocessor output wasn't standard image format
+             if len(input_list) > 1 and not preprocessor_output_is_image:
+-                logger.info('Batch wise input only support controlnet, control-lora, and t2i adapters!')
+-                break
++                logger.warning('Non-image preprocessor output detected in batch mode. Processing all images anyway.')
++                # Continue processing remaining images instead of breaking
+ 
+         if has_high_res_fix:
+             hr_option = HiResFixOption.from_value(unit.hr_option)
+         else:
+             hr_option = HiResFixOption.BOTH
+ 
+-        alignment_indices = [i % len(preprocessor_outputs) for i in range(p.batch_size)]
++        # Fixed: Proper batch handling - when multiple images are provided, use 1:1 mapping
++        # instead of repeating/cycling through images
++        if len(input_list) > 1:
++            # Batch mode: each preprocessed image should map to one generation
++            # Update batch_size to match number of input images
++            original_batch_size = p.batch_size
++            p.batch_size = len(preprocessor_outputs)
++            alignment_indices = list(range(len(preprocessor_outputs)))
++            if original_batch_size != p.batch_size:
++                logger.info(f'Batch mode: Adjusted batch_size from {original_batch_size} to {p.batch_size} to match input images')
++        else:
++            # Single image mode: repeat the same control for batch_size generations
++            alignment_indices = [i % len(preprocessor_outputs) for i in range(p.batch_size)]
+         def attach_extra_result_image(img: np.ndarray, is_high_res: bool = False):
+             if (
+                 (is_high_res and hr_option.high_res_enabled) or
+@@ -370,14 +384,26 @@ class ControlNetForForgeOfficial(scripts.Script):
+                 attach_extra_result_image(external_code.visualize_inpaint_mask(control_cond))
+                 params.control_cond.append(numpy_to_pytorch(control_cond).movedim(-1, 1))
+ 
+-            params.control_cond = torch.cat(params.control_cond, dim=0)[alignment_indices].contiguous()
++            # Fixed: Add safety check for indexing
++            params.control_cond = torch.cat(params.control_cond, dim=0)
++            if len(alignment_indices) <= len(params.control_cond):
++                params.control_cond = params.control_cond[alignment_indices].contiguous()
++            else:
++                logger.warning(f"Batch size mismatch: {len(alignment_indices)} requested but only {len(params.control_cond)} control conditions available")
++                params.control_cond = params.control_cond.contiguous()
+ 
+             if has_high_res_fix:
+                 for preprocessor_output in preprocessor_outputs:
+                     control_cond_for_hr_fix = crop_and_resize_image(preprocessor_output, resize_mode, hr_y, hr_x)
+                     attach_extra_result_image(external_code.visualize_inpaint_mask(control_cond_for_hr_fix), is_high_res=True)
+                     params.control_cond_for_hr_fix.append(numpy_to_pytorch(control_cond_for_hr_fix).movedim(-1, 1))
+-                params.control_cond_for_hr_fix = torch.cat(params.control_cond_for_hr_fix, dim=0)[alignment_indices].contiguous()
++                # Fixed: Add safety check for high-res indexing
++                params.control_cond_for_hr_fix = torch.cat(params.control_cond_for_hr_fix, dim=0)
++                if len(alignment_indices) <= len(params.control_cond_for_hr_fix):
++                    params.control_cond_for_hr_fix = params.control_cond_for_hr_fix[alignment_indices].contiguous()
++                else:
++                    logger.warning(f"High-res batch size mismatch: {len(alignment_indices)} requested but only {len(params.control_cond_for_hr_fix)} available")
++                    params.control_cond_for_hr_fix = params.control_cond_for_hr_fix.contiguous()
+             else:
+                 params.control_cond_for_hr_fix = params.control_cond
+         else:
