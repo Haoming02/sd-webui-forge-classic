@@ -94,8 +94,7 @@ def _torch_version() -> str:
 
     ver = importlib.metadata.version("torch")
     ver = ver.split("+", 1)[0]
-    assert len(ver.split(".")) == 3
-    return ver
+    return re.search(r"[\d.]+[\d]", ver).group(0)
 
 
 def is_installed(package):
@@ -280,10 +279,9 @@ def requirements_met(requirements_file):
 
 def prepare_environment():
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu128")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.8.0+cu128 torchvision==0.23.0+cu128 --extra-index-url {torch_index_url}")
-    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.32.post2 --extra-index-url {torch_index_url}")
-    sage_package = os.environ.get("SAGE_PACKAGE", "sageattention==1.0.6")
-    bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.48.1")
+    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.9.1+cu128 torchvision==0.24.1+cu128 --extra-index-url {torch_index_url}")
+    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.33.post1 --extra-index-url {torch_index_url}")
+    bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.48.2")
 
     clip_package = os.environ.get("CLIP_PACKAGE", "https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip")
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==24.2")
@@ -320,30 +318,34 @@ def prepare_environment():
         run_pip(f"install {packaging_package}", "packaging")
 
     ver_PY = f"cp{sys.version_info.major}{sys.version_info.minor}"
-    ver_FLASH = "2.8.2"
-    ver_TRITON = "3.4.0"
-    ver_NUNCHAKU = "1.0.1"
+    ver_SAGE = "2.2.0"
+    ver_FLASH = "2.8.3"
+    ver_TRITON = "3.5.1"
+    ver_NUNCHAKU = "1.0.2"
     ver_TORCH = _torch_version()
 
     if os.name == "nt":
-        ver_TRITON += ".post20"
+        post_SAGE = ".post3"
+        ver_TRITON += ".post21"
 
+        sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows{post_SAGE}/sageattention-{ver_SAGE}+cu128torch{ver_TORCH.replace('.1', '.0')}{post_SAGE}-cp39-abi3-win_amd64.whl")
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/kingbri1/flash-attention/releases/download/v{ver_FLASH}/flash_attn-{ver_FLASH}+cu128torch{ver_TORCH}cxx11abiFALSE-{ver_PY}-{ver_PY}-win_amd64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
         nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+torch{ver_TORCH[:3]}-{ver_PY}-{ver_PY}-win_amd64.whl")
 
     else:
+        sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/Dao-AILab/flash-attention/releases/download/v{ver_FLASH}/flash_attn-{ver_FLASH}+cu12torch{ver_TORCH[:3]}cxx11abiFALSE-{ver_PY}-{ver_PY}-linux_x86_64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
         nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+torch{ver_TORCH[:3]}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
 
     def _verify_nunchaku() -> bool:
+        if not is_installed("nunchaku"):
+            return False
+
         import importlib.metadata
 
         import packaging.version
-
-        if not is_installed("nunchaku"):
-            return False
 
         ver_installed: str = importlib.metadata.version("nunchaku")
         current: tuple[int] = packaging.version.parse(ver_installed)
@@ -360,18 +362,21 @@ def prepare_environment():
         startup_timer.record("install xformers")
 
     if args.sage:
-        if not is_installed("sageattention"):
-            run_pip(f"install -U -I --no-deps {sage_package}", "sageattention")
-            startup_timer.record("install sageattention")
         if not is_installed("triton"):
             run_pip(f"install -U -I --no-deps {triton_package}", "triton")
             startup_timer.record("install triton")
+        if not is_installed("sageattention"):
+            run_pip(f"install -U -I --no-deps {sage_package}", "sageattention")
+            startup_timer.record("install sageattention")
 
     if args.flash and not is_installed("flash_attn"):
         try:
             run_pip(f"install {flash_package}", "flash_attn")
         except RuntimeError:
-            print("Failed to install flash_attn; Please manually install it")
+            if "9" in ver_TORCH and os.name == "nt":
+                print("There is currently no flash_attn built for PyTorch 2.9.0 on Windows...")
+            else:
+                print("Failed to install flash_attn; Please manually install it")
         else:
             startup_timer.record("install flash_attn")
 

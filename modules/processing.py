@@ -849,9 +849,11 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     _is_video = False
     video_path = None
     if shared.sd_model.is_wan:
-        _times = ((getattr(p, "batch_size", 1) - 1) // 4) + 1  # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.52/comfy_extras/nodes_wan.py#L41
+        _times = ((getattr(p, "batch_size", 1) - 1) // 4) + 1  # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy_extras/nodes_wan.py#L41
         p.batch_size = (_times - 1) * 4 + 1
         _is_video: bool = _times > 1
+        if _is_video:
+            p.do_not_save_grid = True
 
     if isinstance(p.prompt, list):
         assert(len(p.prompt) > 0)

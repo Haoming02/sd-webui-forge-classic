@@ -365,6 +365,7 @@ options_templates.update(
         ("refiner", "Refiner", "sd"),
         {
             "show_refiner": OptionInfo(False, "Display the Refiner Accordion").info("Refiner swaps the model in the middle of generation; useful for Wan 2.2 <b>High Noise</b> to <b>Low Noise</b> switching").needs_reload_ui(),
+            "refiner_use_steps": OptionInfo(False, 'Switch based on "steps" instead').info('by default, Refiner swaps the model based on "sigmas" to match <a href="https://www.reddit.com/r/StableDiffusion/comments/1n3qns1/wan_22_how_many_highsteps_are_needed_a_simple/">Wan 2.2</a> \'s behavior'),
             "refiner_lora_replacement": OptionInfo(
                 "high_noise=low_noise",
                 "Lora Replacements",
@@ -482,7 +483,6 @@ options_templates.update(
             "add_vae_hash_to_info": OptionInfo(True, "Add VAE hash to infotext"),
             "add_user_name_to_info": OptionInfo(False, "Add user name to infotext when authenticated"),
             "add_version_to_infotext": OptionInfo(True, "Add webui version to infotext"),
-            "disable_weights_auto_swap": OptionInfo(True, "Ignore checkpoint information when reading infotext"),
             "infotext_skip_pasting": OptionInfo([], "Ignore fields when reading infotext", ui_components.DropdownMulti, lambda: {"choices": shared_items.get_infotext_names()}),
             "infotext_styles": OptionInfo("Apply if any", "Infer Styles when reading infotext", gr.Radio, {"choices": ("Ignore", "Apply", "Apply if any", "Discard")}).html(
                 """

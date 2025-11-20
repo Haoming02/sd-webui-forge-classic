@@ -382,7 +382,10 @@ class WanModel(nn.Module):
 
         if c < self.in_dim:
             assert "ref_latents" in args.dynamic_args
-            x = torch.cat((x, args.dynamic_args["ref_latents"].to(x)), dim=1)
+            r = args.dynamic_args["ref_latents"].to(x)
+            if x.shape[0] == 2:  # batch_cond_uncond
+                r = torch.cat((r, r), dim=0)
+            x = torch.cat((x, r), dim=1)
             bs, c, t, h, w = x.shape
 
         x = pad_to_patch_size(x, self.patch_size)

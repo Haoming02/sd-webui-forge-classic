@@ -188,9 +188,15 @@ def apply_lora_for_refiner(loras: list[extra_networks.ExtraNetworkParams]):
 
 
 def apply_refiner(cfg_denoiser, x, sigma):
-    refiner_switch_at = cfg_denoiser.p.refiner_switch_at
-    if refiner_switch_at is None or float(sigma) > refiner_switch_at:
+    if not (refiner_switch_at := cfg_denoiser.p.refiner_switch_at):
         return False
+
+    if opts.refiner_use_steps:
+        if refiner_switch_at > cfg_denoiser.step / cfg_denoiser.total_steps:
+            return False
+    else:
+        if float(sigma) > refiner_switch_at:
+            return False
 
     refiner_checkpoint_info = cfg_denoiser.p.refiner_checkpoint_info
     if refiner_checkpoint_info is None or shared.sd_model.sd_checkpoint_info == refiner_checkpoint_info:

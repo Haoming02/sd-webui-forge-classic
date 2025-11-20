@@ -163,16 +163,8 @@ def apply_setting(key, value):
         return gr.skip()
 
     # dont allow model to be swapped when model hash exists in prompt
-    if key == "sd_model_checkpoint" and opts.disable_weights_auto_swap:
+    if key in ("sd_model_checkpoint", "forge_additional_modules"):
         return gr.skip()
-
-    if key == "sd_model_checkpoint":
-        ckpt_info = sd_models.get_closet_checkpoint_match(value)
-
-        if ckpt_info is not None:
-            value = ckpt_info.title
-        else:
-            return gr.skip()
 
     comp_args = opts.data_labels[key].component_args
     if comp_args and isinstance(comp_args, dict) and comp_args.get("visible") is False:
