@@ -24,6 +24,7 @@ samplers_k_diffusion = [
     ("Heun", "sample_heun", ["k_heun"], {"second_order": True}),
     ("DPM2", "sample_dpm_2", ["k_dpm_2"], {"scheduler": "karras", "discard_next_to_last_sigma": True, "second_order": True}),
     ("Res Multistep", "res_multistep", ["res_multistep"], {}),
+    ("Kohaku LoNyu Yog", "sample_Kohaku_LoNyu_Yog", ["sample_Kohaku_LoNyu_Yog"], {}),
     ("Restart", sd_samplers_extra.restart_sampler, ["restart"], {"scheduler": "karras", "second_order": True}),
     ("UniPC", sd_samplers_extra.sample_unipc, ["unipc"], {"discard_next_to_last_sigma": True}),
 ]
