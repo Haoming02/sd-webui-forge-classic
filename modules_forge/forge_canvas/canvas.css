@@ -87,6 +87,17 @@
 
 .forge-toolbar-box-a {
     flex-wrap: wrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.forge-toolbar-hint {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    font-style: italic;
+    margin-left: 8px;
+    white-space: nowrap;
 }
 
 .forge-toolbar-box-b {

@@ -46,6 +46,8 @@ class ForgeCanvas {
         scribbleAlphaFixed = false,
         scribbleSoftness = 0,
         scribbleSoftnessFixed = false,
+        scribbleRotation = 0,
+        scribbleRotationFixed = false,
     ) {
         this.gradio_config = gradio_config;
         this.uuid = uuid;
@@ -76,6 +78,8 @@ class ForgeCanvas {
         this.scribbleAlphaFixed = scribbleAlphaFixed;
         this.scribbleSoftness = scribbleSoftness;
         this.scribbleSoftnessFixed = scribbleSoftnessFixed;
+        this.scribbleRotation = scribbleRotation;
+        this.scribbleRotationFixed = scribbleRotationFixed;
 
         this.history = [];
         this.historyIndex = -1;
@@ -93,6 +97,7 @@ class ForgeCanvas {
         this._held_W = false;
         this._held_A = false;
         this._held_S = false;
+        this._held_D = false;
         this.brushShape = "circle";  // "circle" or "rectangle"
         this.lastLinePoint = null;  // Track last point for straight line drawing
 
@@ -149,10 +154,18 @@ class ForgeCanvas {
         scribbleSoftness.value = self.scribbleSoftness;
         scribbleSoftnessLabel.textContent = `Brush Softness (${self.scribbleSoftness})`;
 
+        const scribbleRotationBlock = document.getElementById(`scribbleRotationBlock_${self.uuid}`);
+        if (self.scribbleRotationFixed) scribbleRotationBlock.style.display = "none";
+        const scribbleRotation = document.getElementById(`scribbleRotation_${self.uuid}`);
+        const scribbleRotationLabel = document.getElementById(`rotationLabel_${self.uuid}`);
+        scribbleRotation.value = self.scribbleRotation;
+        scribbleRotationLabel.textContent = `Brush Rotation (${self.scribbleRotation}°)`;
+
         const indicatorSize = self.scribbleWidth * 4;
         scribbleIndicator.style.width = `${indicatorSize}px`;
         scribbleIndicator.style.height = `${indicatorSize}px`;
         scribbleIndicator.style.borderRadius = self.brushShape === "rectangle" ? "0" : "50%";
+        scribbleIndicator.style.transform = `rotate(${self.scribbleRotation}deg)`;
 
         container.style.height = `${self.initial_height}px`;
         drawingCanvas.width = imageContainer.clientWidth;
@@ -198,6 +211,8 @@ class ForgeCanvas {
             scribbleIndicator.style.top = `${e.clientY - rect.top - indicatorSize / 2}px`;
             // Maintain brush shape
             scribbleIndicator.style.borderRadius = self.brushShape === "rectangle" ? "0" : "50%";
+            // Apply rotation
+            scribbleIndicator.style.transform = `rotate(${self.scribbleRotation}deg)`;
         }
 
         const resizeObserver = new ResizeObserver(() => {
@@ -253,8 +268,9 @@ class ForgeCanvas {
             const indicatorSize = self.scribbleWidth * (self.scribbleWidthConsistent ? 1.0 : self.imgScale) * 4;
             scribbleIndicator.style.width = `${indicatorSize}px`;
             scribbleIndicator.style.height = `${indicatorSize}px`;
-            // Maintain brush shape
+            // Maintain brush shape and rotation
             scribbleIndicator.style.borderRadius = self.brushShape === "rectangle" ? "0" : "50%";
+            scribbleIndicator.style.transform = `rotate(${self.scribbleRotation}deg)`;
         });
 
         scribbleAlpha.addEventListener("input", (e) => {
@@ -265,6 +281,13 @@ class ForgeCanvas {
         scribbleSoftness.addEventListener("input", (e) => {
             self.scribbleSoftness = e.target.value;
             scribbleSoftnessLabel.textContent = `Brush Softness (${self.scribbleSoftness})`;
+        });
+
+        scribbleRotation.addEventListener("input", (e) => {
+            self.scribbleRotation = e.target.value;
+            scribbleRotationLabel.textContent = `Brush Rotation (${self.scribbleRotation}°)`;
+            // Update indicator rotation
+            scribbleIndicator.style.transform = `rotate(${self.scribbleRotation}deg)`;
         });
 
         drawingCanvas.addEventListener("pointerdown", (e) => {
@@ -388,6 +411,12 @@ class ForgeCanvas {
                 updateInput(scribbleSoftness);
                 scale = false;
             }
+            if (this._held_D) {
+                // Rotation
+                scribbleRotation.value = parseInt(scribbleRotation.value) - Math.sign(e.deltaY) * 5;
+                updateInput(scribbleRotation);
+                scale = false;
+            }
 
             if (!scale) return;
 
@@ -503,12 +532,14 @@ class ForgeCanvas {
             if (e.key === "w") this._held_W = true;
             if (e.key === "a") this._held_A = true;
             if (e.key === "s") this._held_S = true;
+            if (e.key === "d") this._held_D = true;
         });
 
         document.addEventListener("keyup", () => {
             this._held_W = false;
             this._held_A = false;
             this._held_S = false;
+            this._held_D = false;
 
             if (this._original_alpha !== null) {
                 scribbleAlpha.value = this._original_alpha;
@@ -546,39 +577,79 @@ class ForgeCanvas {
 
         this.temp_draw_points.push([x, y]);
         ctx.putImageData(this.temp_draw_bg, 0, 0);
-        ctx.beginPath();
-        ctx.moveTo(this.temp_draw_points[0][0], this.temp_draw_points[0][1]);
 
-        for (let i = 1; i < this.temp_draw_points.length; i++) {
-            ctx.lineTo(this.temp_draw_points[i][0], this.temp_draw_points[i][1]);
-        }
+        // Check if we need stamp-based rendering (rectangle with rotation)
+        const needsStampRendering = this.brushShape === "rectangle" && this.scribbleRotation > 0;
 
-        // Apply brush shape
-        if (this.brushShape === "rectangle") {
-            ctx.lineCap = "square";
-            ctx.lineJoin = "miter";
+        if (needsStampRendering) {
+            this.drawWithRotatedStamps(ctx, canvas);
         } else {
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
+            // Use traditional line-based rendering
+            ctx.beginPath();
+            ctx.moveTo(this.temp_draw_points[0][0], this.temp_draw_points[0][1]);
+
+            for (let i = 1; i < this.temp_draw_points.length; i++) {
+                ctx.lineTo(this.temp_draw_points[i][0], this.temp_draw_points[i][1]);
+            }
+
+            // Apply brush shape
+            if (this.brushShape === "rectangle") {
+                ctx.lineCap = "square";
+                ctx.lineJoin = "miter";
+            } else {
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+            }
+            ctx.lineWidth = this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0) * 4;
+
+            if (this.contrast_scribbles) {
+                ctx.strokeStyle = this.contrast_pattern;
+                ctx.stroke();
+                return;
+            }
+
+            ctx.strokeStyle = this.scribbleColor;
+
+            if (this.scribbleAlpha <= 0) {
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.globalAlpha = 1.0;
+                ctx.stroke();
+                return;
+            }
+
+            ctx.globalCompositeOperation = "source-over";
+
+            canvas.style.opacity = 1.0;
+            let drawingAlpha = this.scribbleAlpha;
+
+            if (this.scribbleAlphaFixed) {
+                canvas.style.opacity = this.scribbleAlpha / 100.0;
+                drawingAlpha = 100.0;
+            }
+
+            if (this.scribbleSoftness <= 0) {
+                ctx.globalAlpha = drawingAlpha / 100.0;
+                ctx.stroke();
+                return;
+            }
+
+            const innerWidth = ctx.lineWidth * (1 - this.scribbleSoftness / 96);
+            const outerWidth = ctx.lineWidth * (1 + this.scribbleSoftness / 96);
+            const steps = Math.round(5 + this.scribbleSoftness / 5);
+            const stepWidth = (outerWidth - innerWidth) / (steps - 1);
+
+            ctx.globalAlpha = 1.0 - Math.pow(1.0 - Math.min(drawingAlpha / 100, 0.95), 1.0 / steps);
+
+            for (let i = 0; i < steps; i++) {
+                ctx.lineWidth = innerWidth + stepWidth * i;
+                ctx.stroke();
+            }
         }
-        ctx.lineWidth = this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0) * 4;
+    }
 
-        if (this.contrast_scribbles) {
-            ctx.strokeStyle = this.contrast_pattern;
-            ctx.stroke();
-            return;
-        }
-
-        ctx.strokeStyle = this.scribbleColor;
-
-        if (this.scribbleAlpha <= 0) {
-            ctx.globalCompositeOperation = "destination-out";
-            ctx.globalAlpha = 1.0;
-            ctx.stroke();
-            return;
-        }
-
-        ctx.globalCompositeOperation = "source-over";
+    drawWithRotatedStamps(ctx, canvas) {
+        const brushSize = this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0) * 4;
+        const rotationRad = (this.scribbleRotation * Math.PI) / 180;
 
         canvas.style.opacity = 1.0;
         let drawingAlpha = this.scribbleAlpha;
@@ -588,22 +659,67 @@ class ForgeCanvas {
             drawingAlpha = 100.0;
         }
 
-        if (this.scribbleSoftness <= 0) {
-            ctx.globalAlpha = drawingAlpha / 100.0;
-            ctx.stroke();
-            return;
+        if (this.scribbleAlpha <= 0) {
+            ctx.globalCompositeOperation = "destination-out";
+            ctx.globalAlpha = 1.0;
+        } else {
+            ctx.globalCompositeOperation = "source-over";
         }
 
-        const innerWidth = ctx.lineWidth * (1 - this.scribbleSoftness / 96);
-        const outerWidth = ctx.lineWidth * (1 + this.scribbleSoftness / 96);
-        const steps = Math.round(5 + this.scribbleSoftness / 5);
-        const stepWidth = (outerWidth - innerWidth) / (steps - 1);
+        ctx.fillStyle = this.scribbleColor;
 
-        ctx.globalAlpha = 1.0 - Math.pow(1.0 - Math.min(drawingAlpha / 100, 0.95), 1.0 / steps);
+        // Calculate spacing between stamps to ensure smooth appearance
+        const spacing = brushSize * 0.1; // 10% of brush size for smooth coverage
 
-        for (let i = 0; i < steps; i++) {
-            ctx.lineWidth = innerWidth + stepWidth * i;
-            ctx.stroke();
+        // Interpolate between points to draw stamps
+        for (let i = 0; i < this.temp_draw_points.length; i++) {
+            const [px, py] = this.temp_draw_points[i];
+
+            // If there's a next point, interpolate between current and next
+            if (i < this.temp_draw_points.length - 1) {
+                const [nx, ny] = this.temp_draw_points[i + 1];
+                const dist = Math.sqrt((nx - px) ** 2 + (ny - py) ** 2);
+                const steps = Math.max(1, Math.ceil(dist / spacing));
+
+                for (let step = 0; step <= steps; step++) {
+                    const t = step / steps;
+                    const ix = px + (nx - px) * t;
+                    const iy = py + (ny - py) * t;
+                    this.drawRotatedRectangleStamp(ctx, ix, iy, brushSize, rotationRad, drawingAlpha);
+                }
+            } else {
+                // Last point
+                this.drawRotatedRectangleStamp(ctx, px, py, brushSize, rotationRad, drawingAlpha);
+            }
+        }
+    }
+
+    drawRotatedRectangleStamp(ctx, x, y, size, rotation, alpha) {
+        if (this.scribbleSoftness <= 0) {
+            // Simple rectangle without softness
+            ctx.globalAlpha = alpha / 100.0;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rotation);
+            ctx.fillRect(-size / 2, -size / 2, size, size);
+            ctx.restore();
+        } else {
+            // Rectangle with softness (multiple layers)
+            const innerSize = size * (1 - this.scribbleSoftness / 96);
+            const outerSize = size * (1 + this.scribbleSoftness / 96);
+            const steps = Math.round(5 + this.scribbleSoftness / 5);
+            const stepSize = (outerSize - innerSize) / (steps - 1);
+
+            ctx.globalAlpha = 1.0 - Math.pow(1.0 - Math.min(alpha / 100, 0.95), 1.0 / steps);
+
+            for (let i = 0; i < steps; i++) {
+                const currentSize = innerSize + stepSize * i;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(rotation);
+                ctx.fillRect(-currentSize / 2, -currentSize / 2, currentSize, currentSize);
+                ctx.restore();
+            }
         }
     }
 
@@ -885,6 +1001,8 @@ class ForgeCanvas {
         if (scribbleIndicator) {
             const newBorderRadius = this.brushShape === "rectangle" ? "0" : "50%";
             scribbleIndicator.style.borderRadius = newBorderRadius;
+            // Maintain rotation
+            scribbleIndicator.style.transform = `rotate(${this.scribbleRotation}deg)`;
             console.log(`Cursor indicator borderRadius set to: ${newBorderRadius}`);
             console.log(`Actual borderRadius is: ${scribbleIndicator.style.borderRadius}`);
         } else {

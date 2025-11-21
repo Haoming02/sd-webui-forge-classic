@@ -28,6 +28,7 @@
                 <button id="resetButton_forge_mixin" class="forge-btn" title="Reset [Ctrl + X]">🔄</button>
                 <button id="undoButton_forge_mixin" class="forge-btn" title="Undo [Ctrl + Z]">↩️</button>
                 <button id="redoButton_forge_mixin" class="forge-btn" title="Redo [Ctrl + Y]">↪️</button>
+                <span class="forge-toolbar-hint">Hold Ctrl + Click for straight line</span>
             </div>
             <div class="forge-toolbar-box-b">
                 <div class="forge-color-picker-block" title="Color Picker [E]" id="scribbleColorBlock_forge_mixin">
@@ -50,6 +51,12 @@
                     id="scribbleSoftnessBlock_forge_mixin">
                     <div id="softnessLabel_forge_mixin" class="forge-toolbar-label">Brush Softness</div>
                     <input type="range" id="scribbleSoftness_forge_mixin" class="forge-toolbar-range" min="0" max="100"
+                        value="0">
+                </div>
+                <div class="forge-range-row" title="adjust with [D] + [Scroll Wheel]"
+                    id="scribbleRotationBlock_forge_mixin">
+                    <div id="rotationLabel_forge_mixin" class="forge-toolbar-label">Brush Rotation</div>
+                    <input type="range" id="scribbleRotation_forge_mixin" class="forge-toolbar-range" min="0" max="360"
                         value="0">
                 </div>
             </div>
