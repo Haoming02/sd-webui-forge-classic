@@ -89,36 +89,44 @@ class T5TextProcessingEngine:
 
     def __call__(self, texts):
         zs = []
-        cache = {}
+        z_cache = {}
+        all_chunks = []
+        max_chunk_tokens = 0
+        token_cache = {}
 
         self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         for line in texts:
-            if line in cache:
-                line_z_values = cache[line]
+            if line in token_cache:
+                chunks = token_cache[line]
+                all_chunks.append((line, chunks))
             else:
                 chunks, token_count = self.tokenize_line(line)
-                line_z_values = []
-
-                # pad all chunks to length of longest chunk
-                # max_tokens = 0
-                # for chunk in chunks:
-                #     max_tokens = max(len(chunk.tokens), max_tokens)
+                token_cache[line] = chunks
+                all_chunks.append((line, chunks))
 
                 for chunk in chunks:
-                    tokens = chunk.tokens
-                    multipliers = chunk.multipliers
+                    max_chunk_tokens = max(max_chunk_tokens, len(chunk.tokens))
 
-                    # remaining_count = max_tokens - len(tokens)
-                    # if remaining_count > 0:
-                    #     tokens += [self.id_pad] * remaining_count
-                    #     multipliers += [1.0] * remaining_count
+        for line, chunks in all_chunks:
+            if line in z_cache:
+                zs.extend(z_cache[line])
+            else:
+                line_z_values = []
+                for chunk in chunks:
+                    tokens = chunk.tokens[:]
+                    multipliers = chunk.multipliers[:]
+
+                    padding_needed = max_chunk_tokens - len(tokens)
+                    if padding_needed > 0:
+                        tokens += [self.id_pad] * padding_needed
+                        multipliers += [1.0] * padding_needed
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     line_z_values.append(z)
-                cache[line] = line_z_values
 
-            zs.extend(line_z_values)
+                z_cache[line] = line_z_values
+                zs.extend(line_z_values)
 
         return torch.stack(zs)
 
