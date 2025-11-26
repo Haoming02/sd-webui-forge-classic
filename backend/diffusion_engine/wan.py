@@ -100,7 +100,7 @@ class Wan(ForgeDiffusionEngine):
         else:
             z = torch.cat((mask, image), dim=1)
 
-        args.dynamic_args["ref_latents"] = z
+        args.dynamic_args["concat_latent"] = z
 
     @torch.inference_mode()
     def encode_first_stage(self, x):

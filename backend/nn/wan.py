@@ -381,8 +381,8 @@ class WanModel(nn.Module):
         bs, c, t, h, w = x.shape
 
         if c < self.in_dim:
-            assert "ref_latents" in args.dynamic_args
-            r = args.dynamic_args["ref_latents"].to(x)
+            assert "concat_latent" in args.dynamic_args
+            r = args.dynamic_args["concat_latent"].to(x)
             if x.shape[0] == 2:  # batch_cond_uncond
                 r = torch.cat((r, r), dim=0)
             x = torch.cat((x, r), dim=1)
