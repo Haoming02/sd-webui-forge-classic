@@ -66,11 +66,8 @@ class ImageStitch(scripts.Script):
         image = np.moveaxis(image, 2, 0)
         image = torch.from_numpy(image).to(device=device, dtype=torch.float32)
 
-        ref = images_tensor_to_samples(
+        images_tensor_to_samples(
             image.unsqueeze(0),
             approximation_indexes.get(opts.sd_vae_encode_method),
             p.sd_model,
         )
-
-        if dynamic_args["kontext"]:
-            dynamic_args["ref_latents"] = ref

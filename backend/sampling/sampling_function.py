@@ -367,12 +367,7 @@ def sampling_function(self, denoiser_params, cond_scale, cond_composition, extra
     return denoised, cond_pred, uncond_pred
 
 
-def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor, *, is_img2img: bool = False):
-    if is_img2img and dynamic_args.get("kontext", False):
-        unet.set_transformer_option("ref_latents", x.detach().clone())
-    else:
-        unet.set_transformer_option("ref_latents", None)
-
+def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
     shape = list(x.shape)
     mem_shape = [2 * shape[0]] + shape[1:]
 

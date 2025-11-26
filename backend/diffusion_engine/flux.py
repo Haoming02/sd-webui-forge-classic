@@ -1,3 +1,8 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules.prompt_parser import SdConditioning
+
 import torch
 from huggingface_guess import model_list
 
@@ -61,11 +66,13 @@ class Flux(ForgeDiffusionEngine):
 
         self.is_flux = True
 
+        self.ref_latents = []
+
     def set_clip_skip(self, clip_skip):
         self.text_processing_engine_l.clip_skip = clip_skip
 
     @torch.inference_mode()
-    def get_learned_conditioning(self, prompt: list[str]):
+    def get_learned_conditioning(self, prompt: "SdConditioning"):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
         cond_l, pooled_l = self.text_processing_engine_l(prompt)
         cond_t5 = self.text_processing_engine_t5(prompt)
@@ -76,7 +83,11 @@ class Flux(ForgeDiffusionEngine):
             cond["guidance"] = torch.FloatTensor([distilled_cfg_scale] * len(prompt))
             print(f"Distilled CFG Scale: {distilled_cfg_scale}")
         else:
-            print("Distilled CFG Scale will be ignored for Schnell")
+            print("Distilled CFG Scale is ignored for Schnell")
+
+        if not prompt.is_negative_prompt and dynamic_args["kontext"]:
+            dynamic_args["ref_latents"] = self.ref_latents.copy()
+            self.ref_latents.clear()
 
         return cond
 
@@ -89,6 +100,7 @@ class Flux(ForgeDiffusionEngine):
     def encode_first_stage(self, x):
         sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+        self.ref_latents.append(sample.cpu())
         return sample.to(x)
 
     @torch.inference_mode()
