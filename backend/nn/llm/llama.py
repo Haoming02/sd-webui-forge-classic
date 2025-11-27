@@ -1,4 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/text_encoders/llama.py
+# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.75/comfy/text_encoders/llama.py
 
 import math
 from dataclasses import asdict, dataclass
@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 
 from backend.memory_management import (
-    cast_to_device,
     is_device_cpu,
     text_encoder_device,
     xformers_enabled,
@@ -41,6 +40,8 @@ class Qwen3_4BConfig:
     rope_dims = None
     q_norm = "gemma3"
     k_norm = "gemma3"
+    rope_scale = None
+    final_norm: bool = True
 
 
 @dataclass
@@ -60,6 +61,10 @@ class Qwen25_7BVLI_Config:
     mlp_activation = "silu"
     qkv_bias = True
     rope_dims = [16, 24, 24]
+    q_norm = None
+    k_norm = None
+    rope_scale = None
+    final_norm: bool = True
 
 
 @dataclass
@@ -79,25 +84,11 @@ class Gemma2_2B_Config:
     mlp_activation = "gelu_pytorch_tanh"
     qkv_bias = False
     rope_dims = None
-
-
-def _rms_norm(x, weight, eps):
-    return nn.functional.rms_norm(x, weight.shape, weight=cast_to_device(weight, device=x.device, dtype=x.dtype), eps=eps)
-
-
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float, add=False):
-        super().__init__()
-        self.weight = nn.Parameter(torch.empty(dim))
-        self.eps = eps
-        self.add = add
-
-    def forward(self, x: torch.Tensor):
-        w = self.weight
-        if self.add:
-            w = w + 1.0
-
-        return _rms_norm(x, w, self.eps)
+    q_norm = None
+    k_norm = None
+    sliding_attention = None
+    rope_scale = None
+    final_norm: bool = True
 
 
 def rotate_half(x):
@@ -107,14 +98,20 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def precompute_freqs_cis(head_dim, position_ids, theta, rope_dims=None, device=None):
+def precompute_freqs_cis(head_dim, position_ids, theta, rope_scale=None, rope_dims=None, device=None):
     if not isinstance(theta, list):
         theta = [theta]
 
     out = []
-    for t in theta:
+    for index, t in enumerate(theta):
         theta_numerator = torch.arange(0, head_dim, 2, device=device).float()
         inv_freq = 1.0 / (t ** (theta_numerator / head_dim))
+
+        if rope_scale is not None:
+            if isinstance(rope_scale, list):
+                inv_freq /= rope_scale[index]
+            else:
+                inv_freq /= rope_scale
 
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -161,13 +158,13 @@ class Attention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.qkv_bias)
         self.o_proj = nn.Linear(self.inner_size, config.hidden_size, bias=False)
 
-        if getattr(config, "q_norm", None) == "gemma3":
-            self.q_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        if config.q_norm == "gemma3":
+            self.q_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, add=config.rms_norm_add)
         else:
             self.q_norm = None
 
-        if getattr(config, "k_norm", None) == "gemma3":
-            self.k_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        if config.k_norm == "gemma3":
+            self.k_norm = nn.RMSNorm(self.head_dim, eps=config.rms_norm_eps, add=config.rms_norm_add)
         else:
             self.k_norm = None
 
@@ -186,6 +183,11 @@ class Attention(nn.Module):
         xq = xq.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         xk = xk.view(batch_size, seq_length, self.num_kv_heads, self.head_dim).transpose(1, 2)
         xv = xv.view(batch_size, seq_length, self.num_kv_heads, self.head_dim).transpose(1, 2)
+
+        if self.q_norm is not None:
+            xq = self.q_norm(xq)
+        if self.k_norm is not None:
+            xk = self.k_norm(xk)
 
         xq, xk = apply_rope(xq, xk, freqs_cis=freqs_cis)
 
@@ -216,8 +218,8 @@ class TransformerBlock(nn.Module):
         super().__init__()
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
-        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -251,11 +253,16 @@ class TransformerBlockGemma2(nn.Module):
         super().__init__()
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
-        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
-        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
-        self.pre_feedforward_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
-        self.post_feedforward_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
-        self.sliding_attention = False
+        self.input_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        self.post_attention_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        self.pre_feedforward_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        self.post_feedforward_layernorm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
+
+        if config.sliding_attention is not None:
+            self.sliding_attention = config.sliding_attention[index % len(config.sliding_attention)]
+        else:
+            self.sliding_attention = False
+
         self.transformer_type = config.transformer_type
 
     def forward(
@@ -265,6 +272,13 @@ class TransformerBlockGemma2(nn.Module):
         freqs_cis: Optional[torch.Tensor] = None,
         optimized_attention=None,
     ):
+        if self.transformer_type == "gemma3":
+            if self.sliding_attention:
+                assert x.shape[1] <= self.sliding_attention
+                freqs_cis = freqs_cis[1]
+            else:
+                freqs_cis = freqs_cis[0]
+
         # Self Attention
         residual = x
         x = self.input_layernorm(x)
@@ -295,7 +309,7 @@ class Llama2_(nn.Module):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-        if self.config.transformer_type == "gemma2":
+        if self.config.transformer_type == "gemma2" or self.config.transformer_type == "gemma3":
             transformer = TransformerBlockGemma2
             self.normalize_in = True
         else:
@@ -303,13 +317,17 @@ class Llama2_(nn.Module):
             self.normalize_in = False
 
         self.layers = nn.ModuleList([transformer(config, index=i) for i in range(config.num_hidden_layers)])
-        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
+
+        if config.final_norm:
+            self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        else:
+            self.norm = None
 
     def forward(self, x, attention_mask=None, embeds=None, num_tokens=None, intermediate_output=None, final_layer_norm_intermediate=True, dtype=None, position_ids=None, embeds_info=[]):
         if embeds is not None:
             x = embeds
         else:
-            x = self.embed_tokens(x)
+            x = self.embed_tokens(x, out_dtype=dtype)
 
         if self.normalize_in:
             x *= self.config.hidden_size**0.5
@@ -317,7 +335,7 @@ class Llama2_(nn.Module):
         if position_ids is None:
             position_ids = torch.arange(0, x.shape[1], device=x.device).unsqueeze(0)
 
-        freqs_cis = precompute_freqs_cis(self.config.head_dim, position_ids, self.config.rope_theta, self.config.rope_dims, device=x.device)
+        freqs_cis = precompute_freqs_cis(self.config.head_dim, position_ids, self.config.rope_theta, self.config.rope_scale, self.config.rope_dims, device=x.device)
 
         mask = None
         if attention_mask is not None:
@@ -332,8 +350,12 @@ class Llama2_(nn.Module):
 
         intermediate = None
         all_intermediate = None
+        only_layers = None
         if intermediate_output is not None:
-            if intermediate_output == "all":
+            if isinstance(intermediate_output, list):
+                all_intermediate = []
+                only_layers = set(intermediate_output)
+            elif intermediate_output == "all":
                 all_intermediate = []
                 intermediate_output = None
             elif intermediate_output < 0:
@@ -341,7 +363,8 @@ class Llama2_(nn.Module):
 
         for i, layer in enumerate(self.layers):
             if all_intermediate is not None:
-                all_intermediate.append(x.unsqueeze(1).clone())
+                if only_layers is None or (i in only_layers):
+                    all_intermediate.append(x.unsqueeze(1).clone())
             x = layer(
                 x=x,
                 attention_mask=mask,
@@ -351,14 +374,17 @@ class Llama2_(nn.Module):
             if i == intermediate_output:
                 intermediate = x.clone()
 
-        x = self.norm(x)
+        if self.norm is not None:
+            x = self.norm(x)
+
         if all_intermediate is not None:
-            all_intermediate.append(x.unsqueeze(1).clone())
+            if only_layers is None or ((i + 1) in only_layers):
+                all_intermediate.append(x.unsqueeze(1).clone())
 
         if all_intermediate is not None:
             intermediate = torch.cat(all_intermediate, dim=1)
 
-        if intermediate is not None and final_layer_norm_intermediate:
+        if intermediate is not None and final_layer_norm_intermediate and self.norm is not None:
             intermediate = self.norm(intermediate)
 
         return x, intermediate
