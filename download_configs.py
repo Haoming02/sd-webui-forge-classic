@@ -7,7 +7,8 @@ from huggingface_hub import snapshot_download
 
 PIPELINE_PATHS = (
     # "Qwen/Qwen-Image",
-    "neta-art/Neta-Lumina-Diffusers",
+    # "neta-art/Neta-Lumina-Diffusers",
+    "Tongyi-MAI/Z-Image-Turbo",
 )
 
 for pretrained in PIPELINE_PATHS:
