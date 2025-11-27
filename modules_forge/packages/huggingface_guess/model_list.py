@@ -319,6 +319,7 @@ class Lumina2(BASE):
 
     unet_config = {
         "image_model": "lumina2",
+        "dim": 2304,
     }
 
     sampling_settings = {
@@ -349,6 +350,25 @@ class Lumina2(BASE):
             return {"gemma2_2b.transformer": "text_encoder"}
         else:
             return {"gemma2_2b": "text_encoder"}
+
+
+class ZImage(Lumina2):
+    huggingface_repo = "Tongyi-MAI/Z-Image-Turbo"
+
+    unet_config = {
+        "image_model": "lumina2",
+        "dim": 3840,
+    }
+
+    sampling_settings = {
+        "multiplier": 1.0,
+        "shift": 3.0,
+    }
+
+    memory_usage_factor = 1.7
+
+    def clip_target(self, state_dict={}):
+        return {"qwen3_4b.transformer": "text_encoder"}
 
 
 class WAN21_T2V(BASE):
@@ -444,6 +464,7 @@ models = [
     FluxSchnell,
     Chroma,
     Lumina2,
+    ZImage,
     WAN21_T2V,
     WAN21_I2V,
     QwenImage,
