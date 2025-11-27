@@ -226,7 +226,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["transformer.encoder.embed_tokens.weight", "logit_scale"])
 
             return model
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel"]:
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
 
             model_loader = None
@@ -258,7 +258,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     from backend.nn.qwen import QwenImageTransformer2DModel
 
                     model_loader = lambda c: QwenImageTransformer2DModel(**c)
-            elif cls_name == "Lumina2Transformer2DModel":
+            elif cls_name in ("Lumina2Transformer2DModel", "ZImageTransformer2DModel"):
                 from backend.nn.lumina import NextDiT
 
                 model_loader = lambda c: NextDiT(**c)
@@ -561,23 +561,23 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
             sd[f"{text_encoder_key_prefix}t5xxl.transformer.{k}"] = True
         sd[f"{text_encoder_key_prefix}t5xxl.transformer.filename"] = str(path)
 
-    if "model.layers.0.self_attn.k_proj.bias" in asd:
-        weight = asd["model.layers.0.self_attn.k_proj.bias"]
-        assert weight.shape[0] == 512
-        for k, v in asd.items():
-            sd[f"{text_encoder_key_prefix}qwen25_7b.{k}"] = v
-
-    if "model.layers.0.post_attention_layernorm.weight" in asd:
-        assert "model.layers.0.self_attn.q_norm.weight" in asd
-        for k, v in asd.items():
-            sd[f"{text_encoder_key_prefix}qwen3_4b.transformer.{k}"] = v
-
     if "model.layers.0.post_feedforward_layernorm.weight" in asd:
         assert "model.layers.0.self_attn.q_norm.weight" not in asd
         for k, v in asd.items():
             if k == "spiece_model":
                 continue
             sd[f"{text_encoder_key_prefix}gemma2_2b.{k}"] = v
+
+    elif "model.layers.0.self_attn.k_proj.bias" in asd:
+        weight = asd["model.layers.0.self_attn.k_proj.bias"]
+        assert weight.shape[0] == 512
+        for k, v in asd.items():
+            sd[f"{text_encoder_key_prefix}qwen25_7b.{k}"] = v
+
+    elif "model.layers.0.post_attention_layernorm.weight" in asd:
+        assert "model.layers.0.self_attn.q_norm.weight" in asd
+        for k, v in asd.items():
+            sd[f"{text_encoder_key_prefix}qwen3_4b.transformer.{k}"] = v
 
     return sd
 
