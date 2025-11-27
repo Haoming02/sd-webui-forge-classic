@@ -23,6 +23,27 @@ from . import qwen_vl
 
 
 @dataclass
+class Qwen3_4BConfig:
+    vocab_size: int = 151936
+    hidden_size: int = 2560
+    intermediate_size: int = 9728
+    num_hidden_layers: int = 36
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    max_position_embeddings: int = 40960
+    rms_norm_eps: float = 1e-6
+    rope_theta: float = 1000000.0
+    transformer_type: str = "llama"
+    head_dim = 128
+    rms_norm_add = False
+    mlp_activation = "silu"
+    qkv_bias = False
+    rope_dims = None
+    q_norm = "gemma3"
+    k_norm = "gemma3"
+
+
+@dataclass
 class Qwen25_7BVLI_Config:
     vocab_size: int = 152064
     hidden_size: int = 3584
@@ -126,7 +147,7 @@ def apply_rope(xq, xk, freqs_cis):
 
 
 class Attention(nn.Module):
-    def __init__(self, config: Qwen25_7BVLI_Config | Gemma2_2B_Config):
+    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
         super().__init__()
         self.num_heads = config.num_attention_heads
         self.num_kv_heads = config.num_key_value_heads
@@ -139,6 +160,16 @@ class Attention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.qkv_bias)
         self.o_proj = nn.Linear(self.inner_size, config.hidden_size, bias=False)
+
+        if getattr(config, "q_norm", None) == "gemma3":
+            self.q_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        else:
+            self.q_norm = None
+
+        if getattr(config, "k_norm", None) == "gemma3":
+            self.k_norm = RMSNorm(self.head_dim, eps=config.rms_norm_eps, add=config.rms_norm_add)
+        else:
+            self.k_norm = None
 
     def forward(
         self,
@@ -166,7 +197,7 @@ class Attention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, config: Qwen25_7BVLI_Config | Gemma2_2B_Config):
+    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
         super().__init__()
         self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -181,7 +212,7 @@ class MLP(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, config: Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
+    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
         super().__init__()
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
@@ -216,7 +247,7 @@ class TransformerBlock(nn.Module):
 
 
 class TransformerBlockGemma2(nn.Module):
-    def __init__(self, config: Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
+    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
         super().__init__()
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
@@ -258,7 +289,7 @@ class TransformerBlockGemma2(nn.Module):
 
 
 class Llama2_(nn.Module):
-    def __init__(self, config: Qwen25_7BVLI_Config | Gemma2_2B_Config):
+    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
         super().__init__()
         self.config = config
         self.vocab_size = config.vocab_size
@@ -342,6 +373,21 @@ class BaseLlama:
 
     def forward(self, input_ids, *args, **kwargs):
         return self.model(input_ids, *args, **kwargs)
+
+
+class Qwen3_4B(BaseLlama, nn.Module):
+    def __init__(self, config_dict):
+        super().__init__()
+        config = Qwen3_4BConfig()
+
+        _config_dict = asdict(config)
+        for key, value in _config_dict.items():
+            if key in config_dict:
+                assert value == config_dict[key]
+
+        self.num_layers = config.num_hidden_layers
+
+        self.model = Llama2_(config)
 
 
 class Qwen25_7BVLI(BaseLlama, nn.Module):

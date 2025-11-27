@@ -152,6 +152,38 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=[])
 
             return model
+        if cls_name == "Qwen3Model":
+            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen3 state dict!"
+
+            from backend.nn.llm.llama import Qwen3_4B
+
+            config = read_arbitrary_config(config_path)
+
+            storage_dtype = memory_management.text_encoder_dtype()
+            state_dict_dtype = memory_management.state_dict_dtype(state_dict)
+
+            if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
+                print(f"Using Detected Qwen3 Data Type: {state_dict_dtype}")
+                storage_dtype = state_dict_dtype
+                if state_dict_dtype in ["nf4", "fp4", "gguf"]:
+                    print("Using pre-quant state dict!")
+                    if state_dict_dtype in ["gguf"]:
+                        beautiful_print_gguf_state_dict_statics(state_dict)
+            else:
+                print(f"Using Default Qwen3 Data Type: {storage_dtype}")
+
+            if storage_dtype in ["nf4", "fp4", "gguf"]:
+                with modeling_utils.no_init_weights():
+                    with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=False, bnb_dtype=storage_dtype):
+                        model = Qwen3_4B(config)
+            else:
+                with modeling_utils.no_init_weights():
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
+                        model = Qwen3_4B(config)
+
+            load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=[])
+
+            return model
         if cls_name in ["T5EncoderModel", "UMT5EncoderModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have T5 state dict!"
 
@@ -534,6 +566,11 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
         assert weight.shape[0] == 512
         for k, v in asd.items():
             sd[f"{text_encoder_key_prefix}qwen25_7b.{k}"] = v
+
+    if "model.layers.0.post_attention_layernorm.weight" in asd:
+        assert "model.layers.0.self_attn.q_norm.weight" in asd
+        for k, v in asd.items():
+            sd[f"{text_encoder_key_prefix}qwen3_4b.transformer.{k}"] = v
 
     if "model.layers.0.post_feedforward_layernorm.weight" in asd:
         assert "model.layers.0.self_attn.q_norm.weight" not in asd
