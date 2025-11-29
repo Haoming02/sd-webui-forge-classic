@@ -829,6 +829,10 @@ def read_info_from_image(image: Image.Image) -> tuple[str | None, dict]:
             except Exception:
                 errors.report("Error parsing NovelAI image generation parameters", exc_info=True)
 
+        # sanitize zero-width spaces from prompt text if present
+        if '\u200b' in geninfo:
+            geninfo = geninfo.replace('\u200b','')
+
         return geninfo, items
 
     geninfo, items = read_standard()
