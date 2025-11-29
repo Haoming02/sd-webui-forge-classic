@@ -76,6 +76,8 @@ parser.add_argument("--vae-dirs", type=normalized_filepath, action="append", hel
 parser.add_argument("--text-encoder-dirs", type=normalized_filepath, action="append", help="Directories for Text Encoder model(s)", default=[])
 parser.add_argument("--embeddings-dir", type=normalized_filepath, help="Directory for Textual Inversion model(s)", default=os.path.join(models_path, "embeddings"))
 parser.add_argument("--localizations-dir", type=normalized_filepath, help="Directory for localization file(s)", default=os.path.join(script_path, "localizations"))
+parser.add_argument("--controlnet-dir", type=normalized_filepath, help="Directory for ControlNet model(s)", default=[])
+parser.add_argument("--controlnet-preprocessor-models-dir", type=normalized_filepath, help="Path to directory with Annotator model(s)", default=[])
 
 parser.add_argument("--codeformer-models-path", type=normalized_filepath, help="Directory for CodeFormer model file(s)", default=os.path.join(models_path, "Codeformer"))
 parser.add_argument("--gfpgan-models-path", type=normalized_filepath, help="Directory for GFPGAN model file(s)", default=os.path.join(models_path, "GFPGAN"))

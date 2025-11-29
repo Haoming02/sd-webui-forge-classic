@@ -447,6 +447,8 @@ def configure_a1111_reference(a1111_home: Path):
         ModelRef(arg_name="--ckpt-dirs", relative_path="Stable-diffusion"),
         ModelRef(arg_name="--text-encoder-dirs", relative_path="text_encoder"),
         ModelRef(arg_name="--vae-dirs", relative_path="VAE"),
+        ModelRef(arg_name="--controlnet-dir", relative_path="ControlNet"),
+        ModelRef(arg_name="--controlnet-preprocessor-models-dir", relative_path="ControlNetPreprocessor"),
     )
 
     for ref in refs:
