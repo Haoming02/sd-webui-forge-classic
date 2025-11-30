@@ -602,8 +602,7 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         hidden_states, img_ids, orig_shape = self.process_img(x)
         num_embeds = hidden_states.shape[1]
 
-        if dynamic_args.get("ref_latents", None) is not None:
-            ref_latents = dynamic_args["ref_latents"]
+        ref_latents = dynamic_args.get("ref_latents", ref_latents)
 
         if ref_latents is not None:
             h = 0
