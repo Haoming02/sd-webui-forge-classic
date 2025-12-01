@@ -10,6 +10,7 @@ from backend import memory_management
 from backend.args import dynamic_args
 from backend.loader import forge_loader
 from modules import cache, devices, errors, extra_networks, hashes, modelloader, patches, paths, processing, script_callbacks, sd_hijack, sd_unet, sd_vae, shared  # noqa
+from modules.prompt_parser import DictWithShape, SdConditioning
 from modules.shared import cmd_opts, opts
 from modules.timer import Timer
 
@@ -373,12 +374,18 @@ def forge_model_reload():
     timer.record("calculate hash")
 
     shared.opts.data["sd_checkpoint_hash"] = checkpoint_info.sha256
-
     model_data.set_sd_model(sd_model)
 
     script_callbacks.model_loaded_callback(sd_model)
-
     timer.record("scripts callbacks")
+
+    if opts.early_empty_prompt > 0:
+        _cond = sd_model.get_learned_conditioning(SdConditioning([opts.empty_prompt_template]))
+        if isinstance(_cond, dict):
+            _cond = DictWithShape(_cond)
+
+        sd_model.empty_cond = _cond.to(devices.cpu)
+        timer.record("calculate empty prompt")
 
     print(f"Model loaded in {timer.summary()}.")
 

@@ -2,8 +2,8 @@ import torch
 
 import modules.shared as shared
 from backend.sampling.sampling_function import sampling_function
-from modules import prompt_parser, sd_samplers_common
-from modules.script_callbacks import AfterCFGCallbackParams, CFGDenoisedParams, CFGDenoiserParams, cfg_after_cfg_callback, cfg_denoised_callback, cfg_denoiser_callback
+from modules import processing, prompt_parser, sd_samplers_common
+from modules.script_callbacks import AfterCFGCallbackParams, CFGDenoiserParams, cfg_after_cfg_callback, cfg_denoiser_callback
 from modules.shared import opts, state
 
 
@@ -94,61 +94,11 @@ class CFGDenoiser(torch.nn.Module):
         self.sampler.sampler_extra_args["cond"] = c
         self.sampler.sampler_extra_args["uncond"] = uc
 
-    def pad_cond_uncond(self, cond, uncond):
-        empty = shared.sd_model.cond_stage_model_empty_prompt
-        num_repeats = (cond.shape[1] - uncond.shape[1]) // empty.shape[1]
+    def pad_cond_uncond(self, *args, **kwargs):
+        raise NotImplementedError
 
-        if num_repeats < 0:
-            cond = pad_cond(cond, -num_repeats, empty)
-            self.padded_cond_uncond = True
-        elif num_repeats > 0:
-            uncond = pad_cond(uncond, num_repeats, empty)
-            self.padded_cond_uncond = True
-
-        return cond, uncond
-
-    def pad_cond_uncond_v0(self, cond, uncond):
-        """
-        Pads the 'uncond' tensor to match the shape of the 'cond' tensor.
-
-        If 'uncond' is a dictionary, it is assumed that the 'crossattn' key holds the tensor to be padded.
-        If 'uncond' is a tensor, it is padded directly.
-
-        If the number of columns in 'uncond' is less than the number of columns in 'cond', the last column of 'uncond'
-        is repeated to match the number of columns in 'cond'.
-
-        If the number of columns in 'uncond' is greater than the number of columns in 'cond', 'uncond' is truncated
-        to match the number of columns in 'cond'.
-
-        Args:
-            cond (torch.Tensor or DictWithShape): The condition tensor to match the shape of 'uncond'.
-            uncond (torch.Tensor or DictWithShape): The tensor to be padded, or a dictionary containing the tensor to be padded.
-
-        Returns:
-            tuple: A tuple containing the 'cond' tensor and the padded 'uncond' tensor.
-
-        Note:
-            This is the padding that was always used in DDIM before version 1.6.0
-        """
-
-        is_dict_cond = isinstance(uncond, dict)
-        uncond_vec = uncond["crossattn"] if is_dict_cond else uncond
-
-        if uncond_vec.shape[1] < cond.shape[1]:
-            last_vector = uncond_vec[:, -1:]
-            last_vector_repeated = last_vector.repeat([1, cond.shape[1] - uncond_vec.shape[1], 1])
-            uncond_vec = torch.hstack([uncond_vec, last_vector_repeated])
-            self.padded_cond_uncond_v0 = True
-        elif uncond_vec.shape[1] > cond.shape[1]:
-            uncond_vec = uncond_vec[:, : cond.shape[1]]
-            self.padded_cond_uncond_v0 = True
-
-        if is_dict_cond:
-            uncond["crossattn"] = uncond_vec
-        else:
-            uncond = uncond_vec
-
-        return cond, uncond
+    def pad_cond_uncond_v0(self, *args, **kwargs):
+        raise NotImplementedError
 
     def forward(self, x, sigma, uncond, cond, cond_scale, s_min_uncond, image_cond, **kwargs):
         if state.interrupted or state.skipped:
@@ -177,6 +127,11 @@ class CFGDenoiser(torch.nn.Module):
             noisy_initial_latent = predictor.noise_scaling(sigma[:, None, None, None], torch.randn_like(self.init_latent).to(self.init_latent), self.init_latent, max_denoise=False)
             x = x * self.nmask + noisy_initial_latent * self.mask
 
+        if 0 < self.step <= opts.early_empty_prompt:
+            if isinstance(self.p, processing.StableDiffusionProcessingTxt2Img):
+                cond = shared.sd_model.empty_cond.to(original_x_device)
+                self.p.extra_generation_params["Empty Early CFG"] = opts.early_empty_prompt
+
         denoiser_params = CFGDenoiserParams(x, image_cond, sigma, state.sampling_step, state.sampling_steps, cond, uncond, self)
         cfg_denoiser_callback(denoiser_params)
 
@@ -184,14 +139,14 @@ class CFGDenoiser(torch.nn.Module):
         if self.p.is_hr_pass == True:
             cond_scale = self.p.hr_cfg
 
-        if shared.opts.skip_early_cond > 0 and self.step / self.total_steps <= shared.opts.skip_early_cond:
+        if 0 < self.step / self.total_steps <= opts.skip_early_cond:
             cond_scale = 1.0
-            self.p.extra_generation_params["Skip Early CFG"] = shared.opts.skip_early_cond
-        elif (self.step % 2 or shared.opts.s_min_uncond_all) and s_min_uncond > 0 and sigma[0] < s_min_uncond:
+            self.p.extra_generation_params["Skip Early CFG"] = opts.skip_early_cond
+        elif (self.step % 2 or opts.s_min_uncond_all) and (0 < sigma[0] < s_min_uncond):
             cond_scale = 1.0
             self.p.extra_generation_params["NGMS"] = s_min_uncond
-            if shared.opts.s_min_uncond_all:
-                self.p.extra_generation_params["NGMS all steps"] = shared.opts.s_min_uncond_all
+            if opts.s_min_uncond_all:
+                self.p.extra_generation_params["NGMS all steps"] = opts.s_min_uncond_all
 
         extra_model_options = kwargs.get("model_options", {})
         denoised, cond_pred, uncond_pred = sampling_function(self, denoiser_params=denoiser_params, cond_scale=cond_scale, cond_composition=cond_composition, extra_model_options=extra_model_options)
