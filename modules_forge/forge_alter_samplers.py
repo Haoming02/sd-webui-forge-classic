@@ -1,12 +1,14 @@
 import logging
 from typing import Callable
 
-from modules import sd_samplers_cfgpp, sd_samplers_common, sd_samplers_kdiffusion
+import k_diffusion.sampling
+
+from modules import sd_samplers_common, sd_samplers_kdiffusion
 
 
 class AlterSampler(sd_samplers_kdiffusion.KDiffusionSampler):
     def __init__(self, sd_model, sampler_name):
-        sampler_function: Callable = getattr(sd_samplers_cfgpp, f"sample_{sampler_name}", None)
+        sampler_function: Callable = getattr(k_diffusion.sampling, f"sample_{sampler_name}", None)
         if sampler_function is None:
             raise ValueError(f"Unknown sampler: {sampler_name}")
 
@@ -43,9 +45,6 @@ def create_cfg_pp_sampler(sampler_name: str, sampler_key: str) -> "sd_samplers_c
 
 samplers_data_alter = [
     create_cfg_pp_sampler("DPM++ 2M CFG++", "dpmpp_2m_cfg_pp"),
-    create_cfg_pp_sampler("DPM++ SDE CFG++", "dpmpp_sde_cfg_pp"),
-    create_cfg_pp_sampler("DPM++ 2M SDE CFG++", "dpmpp_2m_sde_cfg_pp"),
-    create_cfg_pp_sampler("DPM++ 3M SDE CFG++", "dpmpp_3m_sde_cfg_pp"),
     create_cfg_pp_sampler("Euler a CFG++", "euler_ancestral_cfg_pp"),
     create_cfg_pp_sampler("Euler CFG++", "euler_cfg_pp"),
 ]
