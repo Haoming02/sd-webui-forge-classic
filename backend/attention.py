@@ -7,7 +7,7 @@ from backend import memory_management
 from backend.args import SageAttentionFuncs, args
 from modules.errors import display_once
 
-if memory_management.xformers_enabled():
+if memory_management.xformers_enabled() or args.force_xformers_vae:
     import xformers
     import xformers.ops
 
