@@ -561,7 +561,7 @@ def pytorch_attention_single_head_spatial(q, k, v):
     return out
 
 
-if memory_management.xformers_enabled_vae():
+if memory_management.xformers_enabled_vae() or args.force_xformers_vae:
     print("Using xformers Attention for VAE")
     attention_function_single_head_spatial = xformers_attention_single_head_spatial
 elif memory_management.pytorch_attention_enabled():

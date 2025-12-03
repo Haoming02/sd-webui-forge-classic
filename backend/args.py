@@ -66,6 +66,8 @@ parser.add_argument("--disable-xformers", action="store_true")
 parser.add_argument("--disable-sage", action="store_true")
 parser.add_argument("--disable-flash", action="store_true")
 
+parser.add_argument("--force-xformers-vae", action="store_true")
+
 parser.add_argument("--directml", type=int, nargs="?", metavar="DIRECTML_DEVICE", const=-1)
 parser.add_argument("--disable-ipex-hijack", action="store_true")
 
