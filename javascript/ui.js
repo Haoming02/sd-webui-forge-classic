@@ -321,6 +321,8 @@ function setupResolutionPasting(tabname) {
 function restoreStyleDeselection(tabname) {
     const dropdown = document.getElementById(`${tabname}_styles`);
     dropdown.addEventListener("click", (e) => {
+        const remove = e.target.closest("div.token-remove");
+        if (remove) return;
         const style = e.target.closest("div.token");
         if (style) {
             style.querySelector("div.token-remove").click();
