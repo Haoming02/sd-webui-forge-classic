@@ -111,7 +111,17 @@ def process_batch(p, input, output_dir, inpaint_mask_dir, args, to_scale=False, 
             except Exception:
                 parsed_parameters = {}
 
-            p.prompt = prompt + (" " + parsed_parameters["Prompt"] if "Prompt" in parsed_parameters else "")
+            if "Filename" in png_info_props:
+                filename = image_path.stem
+                parsed_parameters["Filename"] = filename.replace("(", "\\(").replace(")", "\\)")
+
+            p.prompt = "".join(
+                [
+                    prompt,
+                    (" " + parsed_parameters["Prompt"] if "Prompt" in parsed_parameters else ""),
+                    (" " + parsed_parameters["Filename"] if "Filename" in parsed_parameters else ""),
+                ]
+            )
             p.negative_prompt = negative_prompt + (" " + parsed_parameters["Negative prompt"] if "Negative prompt" in parsed_parameters else "")
             p.seed = int(parsed_parameters.get("Seed", seed))
             p.cfg_scale = float(parsed_parameters.get("CFG scale", cfg_scale))
