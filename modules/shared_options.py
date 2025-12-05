@@ -445,6 +445,7 @@ options_templates.update(
             "paste_safe_guard": OptionInfo(False, 'Disable the "Read generation parameters" button (↙️) when negative prompt is not empty'),
             "ctrl_enter_interrupt": OptionInfo(False, "Revert [Ctrl + Enter] to only interrupt the generation").info('the current "intended" behavior is to interrupt the current generation then immediately start a new one'),
             "quicksettings_accordion": OptionInfo(False, "Place the Quicksettings under an Accordion").needs_reload_ui(),
+            "quicksettings_accordion_starts_closed": OptionInfo(False, "Close the Accordion on startup").info("for the above option").needs_reload_ui(),
             "quicksettings_style": OptionInfo("default", "Quicksettings Style", gr.Radio, {"choices": ("default", "clip-modules", "scrollbar")}).needs_reload_ui(),
             "qs_style_exp": OptionHTML(
                 """
