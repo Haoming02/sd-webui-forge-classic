@@ -35,27 +35,22 @@ class Qwen3TextProcessingEngine:
         llama_texts = [self.llama_template.format(text) for text in texts]
         return self.tokenizer(llama_texts)["input_ids"]
 
-    def tokenize_line(self, line):
-        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
+    def tokenize_line(self, line: str):
+        line = line.replace("BREAK", "")
 
+        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
         tokenized = self.tokenize([text for text, _ in parsed])
 
         chunks = []
         chunk = PromptChunk()
-        token_count = 0
 
         def next_chunk():
-            nonlocal token_count
             nonlocal chunk
 
             chunks.append(chunk)
             chunk = PromptChunk()
 
         for tokens, (text, weight) in zip(tokenized, parsed):
-            if text == "BREAK" and weight == -1:
-                next_chunk()
-                continue
-
             position = 0
             while position < len(tokens):
                 token = tokens[position]
@@ -66,7 +61,7 @@ class Qwen3TextProcessingEngine:
         if chunk.tokens or not chunks:
             next_chunk()
 
-        return chunks, token_count
+        return chunks
 
     def __call__(self, texts: "SdConditioning"):
         zs = []
@@ -78,22 +73,12 @@ class Qwen3TextProcessingEngine:
             if line in cache:
                 line_z_values = cache[line]
             else:
-                chunks, token_count = self.tokenize_line(line)
+                chunks = self.tokenize_line(line)
                 line_z_values = []
-
-                # pad all chunks to length of longest chunk
-                # max_tokens = 0
-                # for chunk in chunks:
-                #     max_tokens = max(len(chunk.tokens), max_tokens)
 
                 for chunk in chunks:
                     tokens = chunk.tokens
                     multipliers = chunk.multipliers
-
-                    # remaining_count = max_tokens - len(tokens)
-                    # if remaining_count > 0:
-                    #     tokens += [self.id_pad] * remaining_count
-                    #     multipliers += [1.0] * remaining_count
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     line_z_values.append(z)

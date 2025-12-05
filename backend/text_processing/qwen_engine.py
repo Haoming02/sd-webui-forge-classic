@@ -34,21 +34,19 @@ class QwenTextProcessingEngine:
         llama_texts = [(self.image_template if vision else self.llama_template).format(text) for text in texts]
         return self.tokenizer(llama_texts)["input_ids"]
 
-    def tokenize_line(self, line, images=None):
-        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
+    def tokenize_line(self, line: str, images=None):
+        line = line.replace("BREAK", "")
 
+        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
         tokenized = self.tokenize([text for text, _ in parsed], bool(images))
 
         chunks = []
         chunk = PromptChunk()
-        token_count = 0
 
         def next_chunk():
-            nonlocal token_count
             nonlocal chunk
 
             current_chunk_length = len(chunk.tokens)
-            token_count += current_chunk_length
             remaining_count = self.min_length - current_chunk_length
 
             if self.min_length > 0 and remaining_count > 0:
@@ -59,10 +57,6 @@ class QwenTextProcessingEngine:
             chunk = PromptChunk()
 
         for tokens, (text, weight) in zip(tokenized, parsed):
-            if text == "BREAK" and weight == -1:
-                next_chunk()
-                continue
-
             embed_count = 0
             position = 0
             while position < len(tokens):
@@ -79,7 +73,7 @@ class QwenTextProcessingEngine:
         if chunk.tokens or not chunks:
             next_chunk()
 
-        return chunks, token_count
+        return chunks
 
     def __call__(self, texts, images=None):
         zs = []
@@ -91,22 +85,12 @@ class QwenTextProcessingEngine:
             if line in cache:
                 line_z_values = cache[line]
             else:
-                chunks, _ = self.tokenize_line(line, images)
+                chunks = self.tokenize_line(line, images)
                 line_z_values = []
-
-                # pad all chunks to length of longest chunk
-                # max_tokens = 0
-                # for chunk in chunks:
-                #     max_tokens = max(len(chunk.tokens), max_tokens)
 
                 for chunk in chunks:
                     tokens = chunk.tokens
                     multipliers = chunk.multipliers
-
-                    # remaining_count = max_tokens - len(tokens)
-                    # if remaining_count > 0:
-                    #     tokens += [self.id_pad] * remaining_count
-                    #     multipliers += [1.0] * remaining_count
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     z = self.strip_template(z, tokens)

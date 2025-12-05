@@ -199,7 +199,12 @@ def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps, 
             continue
 
         texts = SdConditioning([x[1] for x in prompt_schedule], copy_from=prompts)
-        conds = model.get_learned_conditioning(texts)
+        try:
+            conds = model.get_learned_conditioning(texts)
+        except RuntimeError as e:
+            if "stack expects each tensor to be equal size" in repr(e):
+                raise NotImplementedError("Prompt Editing/Alternating is not supported in LLM Text Encoders")
+            raise e
 
         cond_schedule = []
         for i, (end_at_step, _) in enumerate(prompt_schedule):
