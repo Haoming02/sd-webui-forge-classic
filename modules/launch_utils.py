@@ -124,9 +124,12 @@ def run_pip(command, desc=None, live=default_command_live):
     return run(f'"{python}" -m pip {command} --prefer-binary{index_url_line}', desc=f"Installing {desc}", errdesc=f"Couldn't install {desc}", live=live)
 
 
-def check_run_python(code: str) -> bool:
+def check_run_python(code: str, *, return_error: bool = False) -> bool | tuple[bool, str]:
     result = subprocess.run([python, "-c", code], capture_output=True, shell=False)
-    return result.returncode == 0
+    if return_error:
+        return result.returncode == 0, result.stderr
+    else:
+        return result.returncode == 0
 
 
 def git_fix_workspace(*args, **kwargs):
@@ -311,7 +314,10 @@ def prepare_environment():
         startup_timer.record("install torch")
 
     if not args.skip_torch_cuda_test:
-        if not check_run_python("import torch; assert torch.cuda.is_available()"):
+        success, err = check_run_python("import torch; assert torch.cuda.is_available()", return_error=True)
+        if not success:
+            if "older driver" in str(err).lower():
+                raise SystemError("Please update your GPU driver to support cu130 ; or manually install older PyTorch")
             raise RuntimeError("PyTorch is not able to access CUDA")
         startup_timer.record("torch GPU test")
 
@@ -417,8 +423,8 @@ def prepare_environment():
         startup_timer.record("install requirements")
 
     if args.onnxruntime_gpu and not is_installed("onnxruntime-gpu"):
-        # https://onnxruntime.ai/docs/install/#install-onnx-runtime-gpu-cuda-12x
-        onnxruntime_package = os.environ.get("ONNX_PACKAGE", "onnxruntime-gpu --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/")
+        # https://onnxruntime.ai/docs/install/#nightly-for-cuda-13x
+        onnxruntime_package = os.environ.get("ONNX_PACKAGE", "onnxruntime-gpu --pre --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ort-cuda-13-nightly/pypi/simple/")
         run_pip(f"install {onnxruntime_package}", "onnxruntime-gpu")
         startup_timer.record("install onnxruntime-gpu")
 

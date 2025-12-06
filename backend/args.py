@@ -63,6 +63,7 @@ parser.add_argument("--sage", action="store_true", help="install sageattention")
 parser.add_argument("--flash", action="store_true", help="install flash_attn")
 parser.add_argument("--nunchaku", action="store_true", help="install nunchaku for SVDQ inference")
 parser.add_argument("--bnb", action="store_true", help="install bitsandbytes for 4-bit inference")
+parser.add_argument("--onnxruntime-gpu", action="store_true", help="install nightly onnxruntime-gpu with cu130 support")
 
 parser.add_argument("--disable-xformers", action="store_true")
 parser.add_argument("--disable-sage", action="store_true")
