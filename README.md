@@ -22,13 +22,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Nov]
+## Features [Dec.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
-
-> [!Tip]
-> [Download Models](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Download-Models)
 
 - [X] Support [Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
@@ -56,10 +53,14 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
     - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `t5`
     - support LoRAs
+    - see [Commandline](#by-neo)
 - [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
     - `Neta-Lumina`, `NetaYume-Lumina`
 - [X] Support [Chroma](https://huggingface.co/lodestones/Chroma)
     - special thanks: [@croquelois](https://github.com/lllyasviel/stable-diffusion-webui-forge/pull/2925)
+
+> [!Tip]
+> Check out [Download Models](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Download-Models) for where to get each model and the accompanying modules
 
 > [!Tip]
 > Check out [Inference References](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Inference-References) for how to use each model and the recommended parameters
@@ -89,8 +90,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable in **Settings/Upscaling**
 - [X] Update `spandrel`
     - support new Upscaler architectures
-- [X] Add `pillow-heif` package
-    - support `.avif` and `.heif` images
+- [X] Add support for `.avif`, `.heif`, and `.jxl` image formats
 
 #### Removed Features
 
@@ -146,11 +146,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update `protobuf`
     - faster `insightface` loading
 - [X] Update to latest PyTorch
-    - `torch==2.9.1+cu128`
+    - `torch==2.9.1+cu130`
     - `xformers==0.0.33`
 
 > [!Note]
-> If your GPU does not support the latest PyTorch, manually [install](#install-older-pytorch) older version of PyTorch
+> If your GPU does not support the latest PyTorch, manually [install](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations#older-pytorch) older version of PyTorch
 
 - [X] No longer install `open-clip` twice
 - [X] Update some packages to newer versions
@@ -201,7 +201,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > Using `symlink` means it will directly access the packages from the cache folders; refrain from clearing the cache when setting this option
 
-- `--forge-ref-comfy-home`: Point to an ComfyUI installation to load its `models` folders
+- `--forge-ref-comfy-home`: Point to a ComfyUI installation to load its `models` folders
     - **i.e.** `diffusion_models`, `clip`
 
 - `--model-ref`: Points to a central `models` folder that contains all your models
@@ -212,13 +212,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - `--sage`: Install the `sageattention` package to speed up generation
     - will also attempt to install `triton` automatically
-
-> [!Note]
-> For RTX **50** users, you may need to manually [install](#install-sageattention-2) `sageattention 2` instead
-
 - `--flash`: Install the `flash_attn` package to speed up generation
+- `--nunchaku`: Install the `nunchaku` package to inference SVDQ models
+- `--bnb`: Install the `bitsandbytes` package to do low-bits inference
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
-    - requires PyTorch **2.7.0** +
 
 <details>
 <summary>with SageAttention 2</summary>
@@ -230,10 +227,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
         - `fp16_cuda`
         - `fp8_cuda`
 
-- If you are getting `NaN` errors, try:
-```bash
---sage2-function fp16_cuda --sage-quant-gran per_warp --sage-accum-dtype fp16+fp32
-```
+> If you are getting `NaN` errors, try play around with them
 
 </details>
 
@@ -249,6 +243,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 2. Setup Python
 
+<br>
+
 <details>
 <summary>Recommended Method</summary>
 
@@ -262,13 +258,17 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 </details>
 
+<br>
+
 <details>
-<summary>Standard Method</summary>
+<summary>Deprecated Method</summary>
 
 - Install **[Python 3.11.9](https://www.python.org/downloads/release/python-3119/)**
     - Remember to enable `Add Python to PATH`
 
 </details>
+
+<br>
 
 3. **(Optional)** Configure [Commandline](#commandline)
 4. Launch the WebUI via `webui-user.bat`
@@ -277,87 +277,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-### Install sageattention 2
-
-<details>
-<summary>Expand</summary>
-
-0. Ensure the WebUI can properly launch already, by following the [installation](#installation) steps first
-1. Open the console in the WebUI directory
-    ```bash
-    cd sd-webui-forge-neo
-    ```
-2. Start the virtual environment
-    ```bash
-    venv\scripts\activate
-    ```
-3. Create a new folder
-    ```bash
-    mkdir repo
-    cd repo
-    ```
-4. Clone the repo
-    ```bash
-    git clone https://github.com/thu-ml/SageAttention
-    cd SageAttention
-    ```
-5. Install the library
-    ```
-    pip install -e . --no-build-isolation
-    ```
-
-    - If you installed `uv`, use `uv pip install` instead
-    - The installation takes a few minutes
-
-<br>
-
-### Alternatively
-> for **Windows**
-
-- Download the pre-built `.whl` package from https://github.com/woct0rdho/SageAttention/releases
-```bash
-pip install sageattention...win_amd64.whl
-```
-- If you installed `uv`, use `uv pip install` instead
-- **Important:** Download the correct `.whl` for your PyTorch version
-
-</details>
-
-### Install older PyTorch
-
-<details>
-<summary>Expand</summary>
-
-0. Navigate to the WebUI directory
-1. Edit the `webui-user.bat` file
-2. Add a new line to specify an older version:
-```bash
-set TORCH_COMMAND=pip install torch==2.1.2 torchvision==0.16.2 --extra-index-url https://download.pytorch.org/whl/cu121
-```
-
-</details>
-
-### Install FFmpeg
-
-<details>
-<summary>Expand</summary>
-
-> for Windows
-
-1. Download the FFmpeg [.7z](https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-essentials.7z)
-2. Extract the contents to a folder of choice
-3. Add the `bin` folder within to the system **PATH**
-    - `Edit the System Environment Variables` > `Environment Variables` > `Path`
-4. Verify the installation by entering `ffmpeg` in a command prompt
-
-</details>
-
-<br>
-
-## Attention
+## Attention Functions
 
 > [!Important]
-> The `--xformers` and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used *(this also means you can remove them once the packages are successfully installed)*
+> The `--xformers`, `--flash`, and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used *(this also means you can remove them once the packages are successfully installed)*
 
 **Forge Neo** tries to import the packages and automatically choose the first available attention function in the following order:
 
@@ -377,8 +300,10 @@ In my experience, the speed of each attention function for SDXL is ranked in the
 
 - `SageAttention` ≥ `FlashAttention` > `xformers` > `PyTorch` >> `Basic`
 
-> [!Note]
-> `SageAttention` is based on quantization, so its quality might be slightly worse than others
+<br>
+
+> [!Tip]
+> Check out the [Wiki]~
 
 <br>
 
