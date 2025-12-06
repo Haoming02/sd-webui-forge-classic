@@ -22,7 +22,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Nov.]
+## Features [Dec.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -31,29 +31,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - requires **manually** installing [uv](https://github.com/astral-sh/uv/releases)
     - drastically speed up installation
     - see [Commandline](#by-classic)
-- [X] Support [SageAttention](https://github.com/thu-ml/SageAttention)
-    - requires **manually** installing [triton](https://github.com/triton-lang/triton)
-        - [how to install](#install-triton)
-    - requires RTX **30** +
-    - ~10% speed up for SDXL
+- [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), and fast `fp16_accumulation`
     - see [Commandline](#by-classic)
-- [X] Support [FlashAttention](https://arxiv.org/abs/2205.14135)
-    - requires **manually** installing [flash-attn](https://github.com/Dao-AILab/flash-attention)
-        - [how to install](#install-flash-attn)
-    - ~10% speed up
-- [X] Support fast `fp16_accumulation`
-    - requires PyTorch **2.7.0** +
-    - ~25% speed up
-    - see [Commandline](#by-classic)
-- [X] Support fast `cublas` operation *(`CublasLinear`)*
-    - requires **manually** installing [cublas_ops](https://github.com/aredden/torch-cublas-hgemm)
-        - [how to install](#install-cublas)
-    - ~25% speed up
-    - enable in **Settings/Optimizations**
-
-> [!Important]
-> Both `fp16_accumulation` and `cublas_ops` achieve the same speed up; if you already install/update to PyTorch **2.7.0** +, there is little reason to go for `cublas_ops`
-
 - [X] Support fast `fp8` operation *(`torch._scaled_mm`)*
     - requires RTX **40** +
     - requires **UNet Weights in fp8** option
@@ -61,10 +40,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable in **Settings/Optimizations**
 
 > [!Note]
-> The `fp16_accumulation` and `cublas_ops` require `fp16` precision, thus is not compatible with the `fp8` operation
-
-> [!Tip]
-> **[Even Faster Speed](https://github.com/Haoming02/sd-webui-forge-classic/wiki/cuDNN)** 🤯
+> The `fp16_accumulation` requires `fp16` precision, thus is not compatible with the fast `fp8` operation
 
 <br>
 
@@ -114,8 +90,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support new LoRA architectures
 - [X] Update `spandrel`
     - support new Upscaler architectures
-- [X] Add `pillow-heif` package
-    - support `.avif` and `.heif` images
+- [X] Add support for `.avif`, `.heif`, and `.jxl` image formats
 - [X] Automatically determine the optimal row count for `X/Y/Z Plot`
 - [X] Support new LoRA architectures
 - [X] `DepthAnything v2` Preprocessor
@@ -207,7 +182,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - `xformers==0.0.33`
 
 > [!Note]
-> If your GPU does not support the latest PyTorch, manually [install](#install-older-pytorch) older version of PyTorch
+> If your GPU does not support the latest PyTorch, manually [install](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations#older-pytorch) older version of PyTorch
 
 - [X] No longer install `open-clip` twice
 - [X] Update some packages to newer versions
@@ -267,15 +242,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - no longer apply LoRA every single generation, if the weight is unchanged
     - save around 1 second per generation when using LoRA
 
-- `--fast-fp16`: Enable the `allow_fp16_accumulation` option
-    - requires PyTorch **2.7.0** +
 - `--sage`: Install the `sageattention` package to speed up generation
-    - requires **triton**
-    - requires RTX **30** +
-    - only affects **SDXL**
-
-> [!Note]
-> For RTX **50** users, you may need to manually [install](#install-sageattention-2) `sageattention 2` instead
+    - will also attempt to install `triton` automatically
+- `--flash`: Install the `flash_attn` package to speed up generation
+- `--fast-fp16`: Enable the `allow_fp16_accumulation` option
 
 <details>
 <summary>with SageAttention 2</summary>
@@ -303,6 +273,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 2. Setup Python
 
+<br>
+
 <details>
 <summary>Recommended Method</summary>
 
@@ -316,13 +288,17 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 </details>
 
+<br>
+
 <details>
-<summary>Standard Method</summary>
+<summary>Deprecated Method</summary>
 
 - Install **[Python 3.11.9](https://www.python.org/downloads/release/python-3119/)**
     - Remember to enable `Add Python to PATH`
 
 </details>
+
+<br>
 
 3. **(Optional)** Configure [Commandline](#commandline)
 4. Launch the WebUI via `webui-user.bat`
@@ -331,163 +307,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-### Install cublas
-
-<details>
-<summary>Expand</summary>
-
-0. Ensure the WebUI can properly launch already, by following the [installation](#installation) steps first
-1. Open the console in the WebUI directory
-    ```bash
-    cd sd-webui-forge-classic
-    ```
-2. Start the virtual environment
-    ```bash
-    venv\scripts\activate
-    ```
-3. Create a new folder
-    ```bash
-    mkdir repo
-    cd repo
-    ```
-4. Clone the repo
-    ```bash
-    git clone https://github.com/aredden/torch-cublas-hgemm
-    cd torch-cublas-hgemm
-    ```
-5. Install the library
-    ```
-    pip install -e . --no-build-isolation
-    ```
-
-    - If you installed `uv`, use `uv pip install` instead
-    - The installation takes a few minutes
-
-</details>
-
-### Install triton
-
-<details>
-<summary>Expand</summary>
-
-0. Ensure the WebUI can properly launch already, by following the [installation](#installation) steps first
-1. Open the console in the WebUI directory
-    ```bash
-    cd sd-webui-forge-classic
-    ```
-2. Start the virtual environment
-    ```bash
-    venv\scripts\activate
-    ```
-3. Install the library
-    - **Windows**
-        ```bash
-        pip install triton-windows
-        ```
-    - **Linux**
-        ```bash
-        pip install triton
-        ```
-    - If you installed `uv`, use `uv pip install` instead
-
-</details>
-
-### Install flash-attn
-
-<details>
-<summary>Expand</summary>
-
-0. Ensure the WebUI can properly launch already, by following the [installation](#installation) steps first
-1. Open the console in the WebUI directory
-    ```bash
-    cd sd-webui-forge-classic
-    ```
-2. Start the virtual environment
-    ```bash
-    venv\scripts\activate
-    ```
-3. Install the library
-    - **Windows**
-        - Download the pre-built `.whl` package from https://github.com/kingbri1/flash-attention/releases
-        ```bash
-        pip install flash_attn...win...whl
-        ```
-    - **Linux**
-        - Download the pre-built `.whl` package from https://github.com/Dao-AILab/flash-attention/releases
-        ```bash
-        pip install flash_attn...linux...whl
-        ```
-    - If you installed `uv`, use `uv pip install` instead
-    - **Important:** Download the correct `.whl` for your Python and PyTorch version
-
-</details>
-
-### Install sageattention 2
-
-<details>
-<summary>Expand</summary>
-
-0. Ensure the WebUI can properly launch already, by following the [installation](#installation) steps first
-1. Open the console in the WebUI directory
-    ```bash
-    cd sd-webui-forge-classic
-    ```
-2. Start the virtual environment
-    ```bash
-    venv\scripts\activate
-    ```
-3. Create a new folder
-    ```bash
-    mkdir repo
-    cd repo
-    ```
-4. Clone the repo
-    ```bash
-    git clone https://github.com/thu-ml/SageAttention
-    cd SageAttention
-    ```
-5. Install the library
-    ```
-    pip install -e . --no-build-isolation
-    ```
-
-    - If you installed `uv`, use `uv pip install` instead
-    - The installation takes a few minutes
-
-<br>
-
-### Alternatively
-> for **Windows**
-
-- Download the pre-built `.whl` package from https://github.com/woct0rdho/SageAttention/releases
-```bash
-pip install sageattention...win_amd64.whl
-```
-- If you installed `uv`, use `uv pip install` instead
-- **Important:** Download the correct `.whl` for your PyTorch version
-
-</details>
-
-### Install older PyTorch
-
-<details>
-<summary>Expand</summary>
-
-0. Navigate to the WebUI directory
-1. Edit the `webui-user.bat` file
-2. Add a new line to specify an older version:
-```bash
-set TORCH_COMMAND=pip install torch==2.1.2 torchvision==0.16.2 --extra-index-url https://download.pytorch.org/whl/cu121
-```
-
-</details>
-
-<br>
-
-## Attention
+## Attention Functions
 
 > [!Important]
-> The `--xformers` and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used *(this also means you can remove them once the packages are successfully installed)*
+> The `--xformers`, `--flash`, and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used *(this also means you can remove them once the packages are successfully installed)*
 
 **Forge Classic** tries to import the packages and automatically choose the first available attention function in the following order:
 
@@ -507,11 +330,13 @@ In my experience, the speed of each attention function for SDXL is ranked in the
 
 - `SageAttention` ≥ `FlashAttention` > `xformers` > `PyTorch` >> `Basic`
 
-> [!Note]
-> `SageAttention` is based on quantization, so its quality might be slightly worse than others
-
 > [!Important]
-> When using `SageAttention 2`, both positive prompts and negative prompts are required; omitting negative prompts can cause `NaN` issues
+> When using `SageAttention 2`, both positive prompts and negative prompts are required; omitting negative prompts may cause `NaN` issues
+
+<br>
+
+> [!Tip]
+> Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki)~
 
 <br>
 
