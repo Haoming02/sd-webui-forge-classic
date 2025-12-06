@@ -2,29 +2,31 @@ from __future__ import annotations
 
 import datetime
 import functools
-import pytz
+import hashlib
 import io
+import json
 import math
 import os
+import re
+import string
 import subprocess
 from collections import namedtuple
-import re
 
 import numpy as np
 import piexif
 import piexif.helper
-from PIL import Image, ImageFont, ImageDraw, ImageColor, PngImagePlugin, ImageOps
-from pillow_heif import AvifImagePlugin, HeifImagePlugin  # noqa: F401
-import string
-import json
-import hashlib
+import pillow_jxl  # noqa
+import pytz
+from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps, PngImagePlugin
+from pillow_heif import register_heif_opener
 
-from modules import sd_samplers, shared, script_callbacks, errors
+from modules import errors, script_callbacks, sd_samplers, shared
 from modules.paths_internal import roboto_ttf_file
 from modules.shared import opts
 
-LANCZOS = getattr(Image, "Resampling", Image).LANCZOS
-NEAREST = getattr(Image, "Resampling", Image).NEAREST
+register_heif_opener()
+LANCZOS = Image.Resampling.LANCZOS
+NEAREST = Image.Resampling.NEAREST
 
 
 def get_font(fontsize: int):
@@ -567,7 +569,7 @@ def get_next_sequence_number(path, basename):
     return result + 1
 
 
-def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_pnginfo=None, pnginfo_section_name='parameters'):
+def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_pnginfo=None, pnginfo_section_name="parameters"):
     """
     Saves image to filename, including geninfo as text information for generation info.
     For PNG images, geninfo is added to existing pnginfo dictionary using the pnginfo_section_name argument as key.
@@ -579,12 +581,10 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
 
     image_format = Image.registered_extensions()[extension]
 
-    if extension.lower() == '.png':
+    if extension.lower() == ".png":
         existing_pnginfo = existing_pnginfo or {}
         if opts.enable_pnginfo:
             existing_pnginfo[pnginfo_section_name] = geninfo
-
-        if opts.enable_pnginfo:
             pnginfo_data = PngImagePlugin.PngInfo()
             for k, v in (existing_pnginfo or {}).items():
                 pnginfo_data.add_text(k, str(v))
@@ -594,32 +594,32 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
         image.save(filename, format=image_format, quality=opts.jpeg_quality, pnginfo=pnginfo_data)
 
     elif extension.lower() in (".jpg", ".jpeg", ".webp"):
-        if image.mode == 'RGBA':
+        if image.mode == "RGBA":
             image = image.convert("RGB")
-        elif image.mode == 'I;16':
+        elif image.mode == "I;16":
             image = image.point(lambda p: p * 0.0038910505836576).convert("RGB" if extension.lower() == ".webp" else "L")
 
         image.save(filename, format=image_format, quality=opts.jpeg_quality, lossless=opts.webp_lossless)
 
         if opts.enable_pnginfo and geninfo is not None:
-            exif_bytes = piexif.dump({
-                "Exif": {
-                    piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(geninfo or "", encoding="unicode")
-                },
-            })
+            exif_bytes = piexif.dump(
+                {
+                    "Exif": {piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(geninfo or "", encoding="unicode")},
+                }
+            )
 
             piexif.insert(exif_bytes, filename)
-    elif extension.lower() == '.avif':
+    elif extension.lower() in (".avif", ".jxl"):
         if opts.enable_pnginfo and geninfo is not None:
-            exif_bytes = piexif.dump({
-                "Exif": {
-                    piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(geninfo or "", encoding="unicode")
-                },
-            })
+            exif_bytes = piexif.dump(
+                {
+                    "Exif": {piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(geninfo or "", encoding="unicode")},
+                }
+            )
         else:
             exif_bytes = None
 
-        image.save(filename,format=image_format, quality=opts.jpeg_quality, exif=exif_bytes)
+        image.save(filename, format=image_format, quality=opts.jpeg_quality, exif=exif_bytes)
     elif extension.lower() == ".gif":
         image.save(filename, format=image_format, comment=geninfo)
     else:
