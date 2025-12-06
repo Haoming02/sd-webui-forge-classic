@@ -2,29 +2,30 @@ from __future__ import annotations
 
 import datetime
 import functools
-
-import pytz
+import hashlib
 import io
+import json
 import math
 import os
-from collections import namedtuple
 import re
+import string
+from collections import namedtuple
 
 import numpy as np
 import piexif
 import piexif.helper
-from PIL import Image, ImageFont, ImageDraw, ImageColor, PngImagePlugin
-from pillow_heif import AvifImagePlugin, HeifImagePlugin  # noqa: F401
-import string
-import json
-import hashlib
+import pillow_jxl  # noqa
+import pytz
+from PIL import Image, ImageColor, ImageDraw, ImageFont, PngImagePlugin
+from pillow_heif import register_heif_opener
 
-from modules import sd_samplers, shared, script_callbacks, errors
+from modules import errors, script_callbacks, sd_samplers, shared
 from modules.paths_internal import roboto_ttf_file
 from modules.shared import opts
 
-LANCZOS = Image.LANCZOS if hasattr(Image, "LANCZOS") else Image.Resampling.LANCZOS
-NEAREST = Image.LANCZOS if hasattr(Image, "NEAREST") else Image.Resampling.NEAREST
+register_heif_opener()
+LANCZOS = Image.Resampling.LANCZOS
+NEAREST = Image.Resampling.NEAREST
 
 
 def get_font(fontsize: int):
@@ -592,7 +593,7 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
             )
 
             piexif.insert(exif_bytes, filename)
-    elif extension.lower() == ".avif":
+    elif extension.lower() in (".avif", ".jxl"):
         if opts.enable_pnginfo and geninfo is not None:
             exif_bytes = piexif.dump(
                 {
