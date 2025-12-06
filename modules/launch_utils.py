@@ -380,7 +380,7 @@ def prepare_environment():
         else:
             startup_timer.record("install flash_attn")
 
-    if not _verify_nunchaku():
+    if args.nunchaku and not _verify_nunchaku():
         try:
             run_pip(f"install {nunchaku_package}", "nunchaku")
         except RuntimeError:
@@ -388,7 +388,7 @@ def prepare_environment():
         else:
             startup_timer.record("install nunchaku")
 
-    if not args.disable_bnb and not is_installed("bitsandbytes"):
+    if args.bnb and not is_installed("bitsandbytes"):
         try:
             run_pip(f"install {bnb_package}", "bitsandbytes")
         except RuntimeError:
