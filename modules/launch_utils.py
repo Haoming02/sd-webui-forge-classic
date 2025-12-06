@@ -88,6 +88,15 @@ def run(command, desc=None, errdesc=None, custom_env=None, live=default_command_
     return result.stdout or ""
 
 
+def _torch_version() -> tuple[str, str]:
+    """Given `2.10.0.dev20251111+cu130` ; Return `("2.10.0", "cu130")`"""
+    import importlib.metadata
+
+    ver = importlib.metadata.version("torch")
+    m = re.search(r"(\d+\.\d+\.\d+)(?:[^+]+)?\+(.+)", ver)
+    return m.group(1), m.group(2)
+
+
 def is_installed(package):
     try:
         dist = importlib.metadata.distribution(package)
@@ -273,12 +282,11 @@ def requirements_met(requirements_file):
 def prepare_environment():
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
     torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.9.1+cu130 torchvision==0.24.1+cu130 --extra-index-url {torch_index_url}")
-    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.33.post1 --extra-index-url {torch_index_url}")
-    sage_package = os.environ.get("SAGE_PACKAGE", "sageattention==1.0.6")
+    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.33.post2 --extra-index-url {torch_index_url}")
 
     clip_package = os.environ.get("CLIP_PACKAGE", "https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip")
 
-    packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==24.2")
+    packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==25.0")
     gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==3.43.2")
     insightface_package = os.environ.get("INSIGHT_PACKAGE", "insightface==0.7.3")
     requirements_file = os.environ.get("REQS_FILE", "requirements.txt")
@@ -300,42 +308,81 @@ def prepare_environment():
     print(f"Python {sys.version}")
     print(f"Version: {tag}")
 
-    if not is_installed("torch") or not is_installed("torchvision") or args.reinstall_torch:
+    if args.reinstall_torch or not is_installed("torch") or not is_installed("torchvision"):
         run(f'"{python}" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
         startup_timer.record("install torch")
 
     if not args.skip_torch_cuda_test:
         success, err = check_run_python("import torch; assert torch.cuda.is_available()", return_error=True)
         if not success:
-            if "older driver" in str(err):
-                raise SystemError("Please update your GPU driver to support cu130 ; or manually install PyTorch cu128")
+            if "older driver" in str(err).lower():
+                raise SystemError("Please update your GPU driver to support cu130 ; or manually install older PyTorch")
             raise RuntimeError("PyTorch is not able to access CUDA")
         startup_timer.record("torch GPU test")
+
+    if not is_installed("packaging"):
+        run_pip(f"install {packaging_package}", "packaging")
+
+    ver_PY = f"cp{sys.version_info.major}{sys.version_info.minor}"
+    ver_SAGE = "2.2.0"
+    ver_FLASH = "2.8.3"
+    ver_TRITON = "3.5.1"
+    ver_TORCH, ver_CUDA = _torch_version()
+    v_TORCH = ver_TORCH.rsplit(".", 1)[0]
+
+    if os.name == "nt":
+        ver_TRITON += ".post21"
+
+        sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post4/sageattention-{ver_SAGE}+{ver_CUDA}torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.4.19/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
+
+    else:
+        sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.5.4/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
 
     if not is_installed("clip"):
         run_pip(f"install {clip_package}", "clip")
         startup_timer.record("install clip")
 
     if args.xformers and (not is_installed("xformers") or args.reinstall_xformers):
-        run_pip(f"install -U --no-deps {xformers_package}", "xformers")
+        run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
         startup_timer.record("install xformers")
 
-    if args.sage and not is_installed("sageattention"):
-        run_pip(f"install -U --no-deps {sage_package}", "sageattention")
-        startup_timer.record("install sageattention")
+    if args.sage:
+        if not is_installed("triton"):
+            try:
+                run_pip(f"install -U -I --no-deps {triton_package}", "triton")
+            except RuntimeError:
+                print("Failed to install triton; Please manually install it")
+            else:
+                startup_timer.record("install triton")
+        if not is_installed("sageattention"):
+            try:
+                run_pip(f"install -U -I --no-deps {sage_package}", "sageattention")
+            except RuntimeError:
+                print("Failed to install sageattention; Please manually install it")
+            else:
+                startup_timer.record("install sageattention")
+
+    if args.flash and not is_installed("flash_attn"):
+        try:
+            run_pip(f"install {flash_package}", "flash_attn")
+        except RuntimeError:
+            print("Failed to install flash_attn; Please manually install it")
+        else:
+            startup_timer.record("install flash_attn")
 
     if args.ngrok and not is_installed("ngrok"):
         run_pip("install ngrok", "ngrok")
         startup_timer.record("install ngrok")
 
-    if not os.path.isfile(requirements_file):
-        requirements_file = os.path.join(script_path, requirements_file)
-
-    if not is_installed("packaging"):
-        run_pip(f"install {packaging_package}", "packaging")
-
     if not is_installed("gradio"):
         run_pip(f"install {gradio_package}", "gradio")
+
+    if not os.path.isfile(requirements_file):
+        requirements_file = os.path.join(script_path, requirements_file)
 
     if not requirements_met(requirements_file):
         run_pip(f'install -r "{requirements_file}"', "requirements")
@@ -345,7 +392,9 @@ def prepare_environment():
         try:
             run_pip(f"install --no-deps {insightface_package}", "insightface")
         except RuntimeError:
-            print("Failed to install insightface; please manually install C++ build tools first")
+            print("Failed to install insightface; Please manually install it")
+        else:
+            startup_timer.record("install insightface")
 
     if not args.skip_install:
         run_extensions_installers(settings_file=args.ui_settings_file)
