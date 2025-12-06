@@ -303,7 +303,7 @@ In my experience, the speed of each attention function for SDXL is ranked in the
 <br>
 
 > [!Tip]
-> Check out the [Wiki]~
+> Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki)~
 
 <br>
 
