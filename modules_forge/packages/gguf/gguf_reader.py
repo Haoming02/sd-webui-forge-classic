@@ -86,9 +86,7 @@ class GGUFReader:
         GGUFValueType.BOOL: np.bool_,
     }
 
-    def __init__(
-        self, path: os.PathLike[str] | str, mode: Literal["r", "r+", "c"] = "r"
-    ):
+    def __init__(self, path: os.PathLike[str] | str, mode: Literal["r", "r+", "c"] = "r"):
         self.data = np.memmap(path, mode=mode)
         offs = 0
 
@@ -106,16 +104,10 @@ class GGUFReader:
             temp_version = temp_version.newbyteorder(self.byte_order)
         version = temp_version[0]
         if version not in READER_SUPPORTED_VERSIONS:
-            raise ValueError(
-                f"Sorry, file appears to be version {version} which we cannot handle"
-            )
+            raise ValueError(f"Sorry, file appears to be version {version} which we cannot handle")
         self.fields: OrderedDict[str, ReaderField] = OrderedDict()
         self.tensors: list[ReaderTensor] = []
-        offs += self._push_field(
-            ReaderField(
-                offs, "GGUF.version", [temp_version], [0], [GGUFValueType.UINT32]
-            )
-        )
+        offs += self._push_field(ReaderField(offs, "GGUF.version", [temp_version], [0], [GGUFValueType.UINT32]))
 
         # Check tensor count and kv count
         temp_counts = self._get(offs, np.uint64, 2)
@@ -128,11 +120,7 @@ class GGUFReader:
                 [GGUFValueType.UINT64],
             )
         )
-        offs += self._push_field(
-            ReaderField(
-                offs, "GGUF.kv_count", [temp_counts[1:]], [0], [GGUFValueType.UINT64]
-            )
-        )
+        offs += self._push_field(ReaderField(offs, "GGUF.kv_count", [temp_counts[1:]], [0], [GGUFValueType.UINT64]))
         tensor_count, kv_count = temp_counts
         offs = self._build_fields(offs, kv_count)
 
@@ -169,11 +157,8 @@ class GGUFReader:
         count = int(count)
         itemsize = int(np.empty([], dtype=dtype).itemsize)
         end_offs = offset + itemsize * count
-        return (
-            self.data[offset:end_offs]
-            .view(dtype=dtype)[:count]
-            .newbyteorder(override_order or self.byte_order)
-        )
+        arr: npt.NDArray[Any] = self.data[offset:end_offs].view(dtype=dtype)[:count]
+        return arr.view(arr.dtype.newbyteorder(override_order or self.byte_order))
 
     def _push_field(self, field: ReaderField, skip_sum: bool = False) -> int:
         if field.name in self.fields:
@@ -186,9 +171,7 @@ class GGUFReader:
             self.fields[field.name] = field
         return 0 if skip_sum else sum(int(part.nbytes) for part in field.parts)
 
-    def _get_str(
-        self, offset: int
-    ) -> tuple[npt.NDArray[np.uint64], npt.NDArray[np.uint8]]:
+    def _get_str(self, offset: int) -> tuple[npt.NDArray[np.uint64], npt.NDArray[np.uint8]]:
         slen = self._get(offset, np.uint64)
         return slen, self._get(offset + 8, np.uint8, slen[0])
 
@@ -220,9 +203,7 @@ class GGUFReader:
             aparts: list[npt.NDArray[Any]] = [raw_itype, alen]
             data_idxs: list[int] = []
             for idx in range(alen[0]):
-                curr_size, curr_parts, curr_idxs, curr_types = self._get_field_parts(
-                    offs, raw_itype[0]
-                )
+                curr_size, curr_parts, curr_idxs, curr_types = self._get_field_parts(offs, raw_itype[0])
                 if idx == 0:
                     types += curr_types
                 idxs_offs = len(aparts)
@@ -272,9 +253,7 @@ class GGUFReader:
             offs += int(raw_kv_type.nbytes)
             parts: list[npt.NDArray[Any]] = [kv_klen, kv_kdata, raw_kv_type]
             idxs_offs = len(parts)
-            field_size, field_parts, field_idxs, field_types = self._get_field_parts(
-                offs, raw_kv_type[0]
-            )
+            field_size, field_parts, field_idxs, field_types = self._get_field_parts(offs, raw_kv_type[0])
             parts += field_parts
             self._push_field(
                 ReaderField(
@@ -289,9 +268,7 @@ class GGUFReader:
             offs += field_size
         return offs
 
-    def _build_tensor_info(
-        self, offs: int, count: int
-    ) -> tuple[int, list[ReaderField]]:
+    def _build_tensor_info(self, offs: int, count: int) -> tuple[int, list[ReaderField]]:
         tensor_fields = []
         for _ in range(count):
             field = self._get_tensor_info_field(offs)
