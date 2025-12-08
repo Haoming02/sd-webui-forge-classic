@@ -42,6 +42,7 @@ class QwenImage(ForgeDiffusionEngine):
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
 
         self.is_wan = True
+        self.is_llm = True
 
         self.images_vl = []
         self.ref_latents = []

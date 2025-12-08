@@ -36,6 +36,7 @@ class ZImage(ForgeDiffusionEngine):
 
         self.use_shift = True
         self.is_flux = True
+        self.is_llm = True
 
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):

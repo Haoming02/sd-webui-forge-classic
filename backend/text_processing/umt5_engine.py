@@ -113,18 +113,18 @@ class UMT5TextProcessingEngine:
                 line_z_values = []
 
                 # pad all chunks to length of longest chunk
-                # max_tokens = 0
-                # for chunk in chunks:
-                #     max_tokens = max(len(chunk.tokens), max_tokens)
+                max_tokens = 0
+                for chunk in chunks:
+                    max_tokens = max(len(chunk.tokens), max_tokens)
 
                 for chunk in chunks:
                     tokens = chunk.tokens
                     multipliers = chunk.multipliers
 
-                    # remaining_count = max_tokens - len(tokens)
-                    # if remaining_count > 0:
-                    #     tokens += [self.pad_token] * remaining_count
-                    #     multipliers += [1.0] * remaining_count
+                    remaining_count = max_tokens - len(tokens)
+                    if remaining_count > 0:
+                        tokens += [self.pad_token] * remaining_count
+                        multipliers += [1.0] * remaining_count
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     line_z_values.append(z)
