@@ -242,25 +242,6 @@ options_templates.update(
                 gr.Textbox,
                 {"lines": 3, "max_lines": 6, "placeholder": "<Prompt Start>"},
             ),
-            "divdistill": OptionDiv(),
-            "early_empty_prompt": OptionInfo(
-                0,
-                "Steps to use Empty Prompt at the beginning",
-                gr.Slider,
-                {"minimum": 0, "maximum": 8, "step": 1},
-                infotext="Empty Early CFG",
-            )
-            .info("improve variance for distilled models")
-            .info("does not affect img2img")
-            .needs_restart(),
-            "empty_prompt_template": OptionInfo(
-                "",
-                "Prompt to Encode as the Empty Prompt",
-                gr.Textbox,
-                {"lines": 1, "max_lines": 3, "placeholder": "high quality"},
-            )
-            .info("default is empty")
-            .needs_restart(),
         },
     )
 )

@@ -1,8 +1,7 @@
 import torch
 
-import modules.shared as shared
 from backend.sampling.sampling_function import sampling_function
-from modules import processing, prompt_parser, sd_samplers_common
+from modules import prompt_parser, sd_samplers_common
 from modules.script_callbacks import AfterCFGCallbackParams, CFGDenoiserParams, cfg_after_cfg_callback, cfg_denoiser_callback
 from modules.shared import opts, state
 
@@ -126,11 +125,6 @@ class CFGDenoiser(torch.nn.Module):
             predictor = self.inner_model.inner_model.forge_objects.unet.model.predictor
             noisy_initial_latent = predictor.noise_scaling(sigma[:, None, None, None], torch.randn_like(self.init_latent).to(self.init_latent), self.init_latent, max_denoise=False)
             x = x * self.nmask + noisy_initial_latent * self.mask
-
-        if 0 < self.step <= opts.early_empty_prompt:
-            if isinstance(self.p, processing.StableDiffusionProcessingTxt2Img):
-                cond = shared.sd_model.empty_cond.to(original_x_device)
-                self.p.extra_generation_params["Empty Early CFG"] = opts.early_empty_prompt
 
         denoiser_params = CFGDenoiserParams(x, image_cond, sigma, state.sampling_step, state.sampling_steps, cond, uncond, self)
         cfg_denoiser_callback(denoiser_params)

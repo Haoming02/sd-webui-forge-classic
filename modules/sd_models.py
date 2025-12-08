@@ -379,16 +379,6 @@ def forge_model_reload():
     script_callbacks.model_loaded_callback(sd_model)
     timer.record("scripts callbacks")
 
-    if opts.early_empty_prompt > 0:
-        _cond = sd_model.get_learned_conditioning(SdConditioning([opts.empty_prompt_template]))
-        if isinstance(_cond, dict):
-            _cond = DictWithShape(_cond)
-        elif isinstance(_cond, list):
-            _cond = torch.stack(_cond)
-
-        sd_model.empty_cond = _cond.to(devices.cpu)
-        timer.record("calculate empty prompt")
-
     print(f"Model loaded in {timer.summary()}.")
 
     model_data.forge_hash = current_hash
