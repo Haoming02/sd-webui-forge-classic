@@ -27,11 +27,6 @@ def load_lora_for_models(model: "UnetPatcher", clip, lora, strength_model, stren
     unet_keys = model_lora_keys_unet(model.model) if model is not None else {}
     clip_keys = model_lora_keys_clip(clip.cond_stage_model) if clip is not None else {}
 
-    if "diffusion_model.final_layer.adaLN_modulation.1" in unet_keys.keys():  # z-image
-        from backend.nn._z_lora import convert_z_image_lora
-
-        lora = convert_z_image_lora(lora)
-
     lora_unmatch = lora
     lora_unet, lora_unmatch = load_lora(lora_unmatch, unet_keys)
     lora_clip, lora_unmatch = load_lora(lora_unmatch, clip_keys)
