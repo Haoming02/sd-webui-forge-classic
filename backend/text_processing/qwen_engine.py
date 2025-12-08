@@ -99,7 +99,7 @@ class QwenTextProcessingEngine:
 
             zs.extend(line_z_values)
 
-        return torch.stack(zs)
+        return zs
 
     def strip_template(self, out, tokens):
         template_end = 0

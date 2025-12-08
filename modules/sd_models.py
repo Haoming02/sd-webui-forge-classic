@@ -383,6 +383,8 @@ def forge_model_reload():
         _cond = sd_model.get_learned_conditioning(SdConditioning([opts.empty_prompt_template]))
         if isinstance(_cond, dict):
             _cond = DictWithShape(_cond)
+        elif isinstance(_cond, list):
+            _cond = torch.stack(_cond)
 
         sd_model.empty_cond = _cond.to(devices.cpu)
         timer.record("calculate empty prompt")

@@ -119,7 +119,7 @@ class GemmaTextProcessingEngine:
 
             zs.extend(line_z_values)
 
-        return torch.stack(zs)
+        return zs
 
     def process_embeds(self, batch_tokens):
         device = memory_management.text_encoder_device()
