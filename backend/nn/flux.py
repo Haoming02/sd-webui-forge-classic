@@ -44,14 +44,15 @@ def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     return out.to(dtype=torch.float32, device=pos.device)
 
 
-def _apply_rope(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
+def apply_rope1(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
     x_ = x.to(dtype=freqs_cis.dtype).reshape(*x.shape[:-1], -1, 1, 2)
-    x_out = freqs_cis[..., 0] * x_[..., 0] + freqs_cis[..., 1] * x_[..., 1]
+    x_out = freqs_cis[..., 0] * x_[..., 0]
+    x_out.addcmul_(freqs_cis[..., 1], x_[..., 1])
     return x_out.reshape(*x.shape).type_as(x)
 
 
 def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor):
-    return _apply_rope(xq, freqs_cis), _apply_rope(xk, freqs_cis)
+    return apply_rope1(xq, freqs_cis), apply_rope1(xk, freqs_cis)
 
 
 def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000, time_factor: float = 1000.0) -> torch.Tensor:

@@ -11,7 +11,7 @@ from einops import repeat
 from backend import args
 from backend.attention import attention_function as optimized_attention
 from backend.memory_management import cast_to_device
-from backend.nn.flux import EmbedND, _apply_rope
+from backend.nn.flux import EmbedND, apply_rope1
 from backend.utils import pad_to_patch_size
 
 
@@ -57,11 +57,11 @@ class WanSelfAttention(nn.Module):
 
         def qkv_fn_q(x):
             q = self.norm_q(self.q(x)).view(b, s, n, d)
-            return _apply_rope(q, freqs)
+            return apply_rope1(q, freqs)
 
         def qkv_fn_k(x):
             k = self.norm_k(self.k(x)).view(b, s, n, d)
-            return _apply_rope(k, freqs)
+            return apply_rope1(k, freqs)
 
         q = qkv_fn_q(x)
         k = qkv_fn_k(x)
