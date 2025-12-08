@@ -198,13 +198,20 @@ def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps, 
             res.append(cached)
             continue
 
-        texts = SdConditioning([x[1] for x in prompt_schedule], copy_from=prompts)
-        try:
+        if model.is_llm:
+            conds: list[torch.Tensor | dict] = []
+            for i, (_, prompt) in enumerate(prompt_schedule):
+                text = SdConditioning([prompt], copy_from=prompts)
+                conds.append(model.get_learned_conditioning(text))
+
+            if isinstance(conds[0], dict):
+                conds = {k: [d[k].squeeze(0) for d in conds] for k in conds[0]}
+            else:
+                conds = [c.squeeze(0) for c in conds]
+
+        else:
+            texts = SdConditioning([x[1] for x in prompt_schedule], copy_from=prompts)
             conds = model.get_learned_conditioning(texts)
-        except RuntimeError as e:
-            if "stack expects each tensor to be equal size" in repr(e):
-                raise NotImplementedError("Prompt Editing/Alternating is not supported in LLM Text Encoders")
-            raise e
 
         cond_schedule = []
         for i, (end_at_step, _) in enumerate(prompt_schedule):
