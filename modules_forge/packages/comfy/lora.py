@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+import torch
+
 from modules_forge.packages.comfy import weight_adapter
 
 from .utils import flux_to_diffusers, unet_to_diffusers, z_image_to_diffusers
@@ -33,6 +35,19 @@ LORA_CLIP_MAP = {
 
 
 def load_lora(lora, to_load):
+
+    def convert_lora_bfl_control(sd):  # BFL loras for Flux
+        sd_out = {}
+        for k in sd:
+            k_to = "diffusion_model.{}".format(k.replace(".lora_B.bias", ".diff_b").replace("_norm.scale", "_norm.scale.set_weight"))
+            sd_out[k_to] = sd[k]
+
+        sd_out["diffusion_model.img_in.reshape_weight"] = torch.tensor([sd["img_in.lora_B.weight"].shape[0], sd["img_in.lora_A.weight"].shape[1]])
+        return sd_out
+
+    if "img_in.lora_A.weight" in lora and "single_blocks.0.norm.key_norm.scale" in lora:
+        lora = convert_lora_bfl_control(lora)
+
     patch_dict = {}
     loaded_keys = set()
     for x in to_load:
