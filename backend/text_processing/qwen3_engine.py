@@ -36,8 +36,6 @@ class Qwen3TextProcessingEngine:
         return self.tokenizer(llama_texts)["input_ids"]
 
     def tokenize_line(self, line: str):
-        line = line.replace("BREAK", "")
-
         parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
         tokenized = self.tokenize([text for text, _ in parsed])
 
