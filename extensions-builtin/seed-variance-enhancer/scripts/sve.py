@@ -10,7 +10,15 @@ from modules.script_callbacks import CFGDenoiserParams, on_cfg_denoiser
 from modules.ui_components import InputAccordion
 
 
+info = """
+Improve seed-to-seed image variance for distilled models (<b>i.e.</b> CFG = <code>1.0</code>)<br>
+(default parameters are tuned for <b>Z-Image</b> ; lower the values for <b>Qwen-Image</b>)
+"""
+
+
 class SeedVarianceEnhancer(scripts.Script):
+    sorting_priority = 1125
+
     enable: bool
     steps: int
     percentage: float
@@ -25,6 +33,7 @@ class SeedVarianceEnhancer(scripts.Script):
 
     def ui(self, is_img2img):
         with InputAccordion(value=False, label=self.title()) as enable:
+            gr.HTML(info)
             with gr.Row():
                 steps = gr.Slider(value=3, minimum=0, maximum=8, step=1, label="Steps", info="the number of steps to inject random noise")
                 percentage = gr.Slider(value=0.6, minimum=0.0, maximum=1.0, step=0.05, label="Percentage", info="the percentage of conditioning to inject random noise")
