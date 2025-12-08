@@ -40,6 +40,7 @@ parser.add_argument("--esrgan-models-path", type=normalized_filepath, help="Path
 parser.add_argument("--xformers", action="store_true", help="install xformers for cross attention")
 parser.add_argument("--sage", action="store_true", help="install sageattention")
 parser.add_argument("--flash", action="store_true", help="install flash_attn")
+parser.add_argument("--onnxruntime-gpu", action="store_true", help="install nightly onnxruntime-gpu with cu130 support")
 parser.add_argument("--disable-nan-check", action="store_true", help="do not check if produced images/latent spaces have nans; useful for running without a checkpoint in CI")
 parser.add_argument("--use-cpu", nargs="+", help="use CPU as torch device for specified modules", default=[], type=str.lower)
 parser.add_argument("--use-ipex", action="store_true", help="use Intel XPU as torch device")
