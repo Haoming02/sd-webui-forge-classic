@@ -48,8 +48,8 @@ class SeedVarianceEnhancer(scripts.Script):
         return [enable, steps, percentage, strength]
 
     def before_process_batch(self, p: StableDiffusionProcessingTxt2Img, enable: bool, steps: int, percentage: float, strength: int, **kwargs):
-        SeedVarianceEnhancer.enable = enable and isinstance(p, StableDiffusionProcessingTxt2Img)
-        if not SeedVarianceEnhancer.enable:
+        SeedVarianceEnhancer.enable = enable
+        if not enable:
             return
 
         SeedVarianceEnhancer.steps = steps
@@ -68,7 +68,7 @@ class SeedVarianceEnhancer(scripts.Script):
     @classmethod
     @torch.inference_mode()
     def on_cfg(cls, params: CFGDenoiserParams):
-        if not cls.enable:
+        if not isinstance(params.denoiser.p, StableDiffusionProcessingTxt2Img) or not cls.enable:
             return
         if cls.steps < params.sampling_step:
             return
