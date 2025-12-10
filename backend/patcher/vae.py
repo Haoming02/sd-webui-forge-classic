@@ -142,8 +142,8 @@ class VAE:
             self.downscale_index_formula = (4, 8, 8)
             self.latent_dim = 3
             self.latent_channels = int(model.config.z_dim)  # 16
-            self.memory_used_encode = lambda shape, dtype: 6000 * shape[3] * shape[4] * memory_management.dtype_size(dtype)
-            self.memory_used_decode = lambda shape, dtype: 7000 * shape[3] * shape[4] * (8 * 8) * memory_management.dtype_size(dtype)
+            self.memory_used_encode = lambda shape, dtype: (1500 if shape[2] <= 4 else 6000) * shape[3] * shape[4] * memory_management.dtype_size(dtype)
+            self.memory_used_decode = lambda shape, dtype: (2200 if shape[2] <= 4 else 7000) * shape[3] * shape[4] * (8 * 8) * memory_management.dtype_size(dtype)
 
         self.output_channels = 3
         self.first_stage_model = model.eval()
