@@ -91,10 +91,11 @@ def run(command, desc=None, errdesc=None, custom_env=None, live: bool = default_
 
 def _torch_version() -> tuple[str, str]:
     """Given `2.10.0.dev20251111+cu130` ; Return `("2.10.0", "cu130")`"""
-    import importlib.metadata
-
-    ver = importlib.metadata.version("torch")
-    m = re.search(r"(\d+\.\d+\.\d+)(?:[^+]+)?\+(.+)", ver)
+    stdout: str = run("pip show torch")
+    for line in stdout.split("\n"):
+        if line.startswith("Version"):
+            m = re.search(r"(\d+\.\d+\.\d+)(?:[^+]+)?\+(.+)", line)
+            break
     return m.group(1), m.group(2)
 
 

@@ -28,7 +28,7 @@ def patch(symlink: bool):
 
         assert isinstance(command, list)
 
-        if "pip" not in command:
+        if "pip" not in command or "install" not in command:
             return subprocess.__original_run(*_original_args, **_original_kwargs)
 
         cmd = command[command.index("pip") + 1 :]
