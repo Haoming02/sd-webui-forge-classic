@@ -40,15 +40,17 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
     for network_on_disk, name in zip(networks_on_disk, names):
         try:
             net = load_network(name, network_on_disk)
-        except Exception as e:
-            errors.display(e, f"loading network {network_on_disk.filename}")
+            net.mentioned_name = name
+            network_on_disk.read_hash()
+            loaded_networks.append(net)
+        except Exception:
+            print(f'\nFailed to load LoRA: "{name}"\n')
             continue
-        net.mentioned_name = name
-        network_on_disk.read_hash()
-        loaded_networks.append(net)
 
     compiled_lora_targets = []
     for a, b, c in zip(networks_on_disk, unet_multipliers, te_multipliers):
+        if a is None:
+            continue
         compiled_lora_targets.append((a.filename, b, c))
 
     if shared.cached_lora_hash == compiled_lora_targets:
