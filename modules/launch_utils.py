@@ -250,7 +250,7 @@ def run_extensions_installers(settings_file):
     return
 
 
-re_requirement = re.compile(r"\s*([-_a-zA-Z0-9]+)\s*(?:==\s*([-+_.a-zA-Z0-9]+))?\s*")
+re_requirement = re.compile(r"\s*(\S+)\s*==\s*(\S+)\s*")
 
 
 def requirements_met(requirements_file):
@@ -268,22 +268,18 @@ def requirements_met(requirements_file):
             if line.strip() == "":
                 continue
 
-            m = re.match(re_requirement, line)
-            if m is None:
-                return False
-
-            package = m.group(1).strip()
-            version_required = (m.group(2) or "").strip()
-
-            if version_required == "":
+            if (m := re.match(re_requirement, line)) is None:
                 continue
+
+            package = m.group(1)
+            version_required = m.group(2)
 
             try:
                 version_installed = importlib.metadata.version(package)
             except Exception:
                 return False
 
-            if packaging.version.parse(version_required) != packaging.version.parse(version_installed):
+            if packaging.version.parse(version_installed) < packaging.version.parse(version_required):
                 return False
 
     return True
