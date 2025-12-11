@@ -100,15 +100,15 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
         list_available_networks()
         networks_on_disk = [available_networks.get(name, None) if name.lower() in forbidden_network_aliases else available_network_aliases.get(name, None) for name in names]
 
-    for i, (network_on_disk, name) in enumerate(zip(networks_on_disk, names)):
+    for network_on_disk, name in zip(networks_on_disk, names):
         try:
             net = load_network(name, network_on_disk)
-        except Exception as e:
-            errors.display(e, f"loading network {network_on_disk.filename}")
+            net.mentioned_name = name
+            network_on_disk.read_hash()
+            loaded_networks.append(net)
+        except Exception:
+            print(f'\nFailed to load LoRA: "{name}"\n')
             continue
-        net.mentioned_name = name
-        network_on_disk.read_hash()
-        loaded_networks.append(net)
 
     online_mode = dynamic_args.get("online_lora", False)
 
@@ -117,6 +117,8 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
 
     compiled_lora_targets = []
     for a, b, c in zip(networks_on_disk, unet_multipliers, te_multipliers):
+        if a is None:
+            continue
         compiled_lora_targets.append([a.filename, b, c, online_mode])
 
     compiled_lora_targets_hash = str(compiled_lora_targets)
