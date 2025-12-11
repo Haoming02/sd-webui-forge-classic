@@ -1,4 +1,4 @@
-# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.52/comfy/supported_models.py
+# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/supported_models.py
 
 from enum import Enum
 
@@ -327,7 +327,7 @@ class Lumina2(BASE):
         "shift": 6.0,
     }
 
-    memory_usage_factor = 1.2
+    memory_usage_factor = 1.4
 
     unet_extra_config = {}
     latent_format = latent.Flux
@@ -365,7 +365,7 @@ class ZImage(Lumina2):
         "shift": 3.0,
     }
 
-    memory_usage_factor = 1.7
+    memory_usage_factor = 2.0
 
     supported_inference_dtypes = [torch.bfloat16, torch.float16, torch.float32]
 
