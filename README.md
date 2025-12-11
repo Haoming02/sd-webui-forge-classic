@@ -140,6 +140,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - remove multi-inputs, as they are "[misleading](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/932)"
 - [X] Disable Refiner by default
     - enable again in **Settings/Refiner**
+- [X] No longer install `bitsandbytes` by default
+    - see [Commandline](#by-neo)
 - [X] Lint & Format
 - [X] Update `Pillow`
     - faster image processing
@@ -214,7 +216,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - will also attempt to install `triton` automatically
 - `--flash`: Install the `flash_attn` package to speed up generation
 - `--nunchaku`: Install the `nunchaku` package to inference SVDQ models
-- `--bnb`: Install the `bitsandbytes` package to do low-bits inference
+- `--bnb`: Install the `bitsandbytes` package to do low-bits (`nf4`) inference
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
 
 <details>
