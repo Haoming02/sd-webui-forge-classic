@@ -1,6 +1,6 @@
 import gradio as gr
 
-from modules import scripts
+from modules import scripts, shared, script_callbacks
 from backend import memory_management
 
 
@@ -18,13 +18,11 @@ class NeverOOMForForge(scripts.Script):
         return scripts.AlwaysVisible
 
     def ui(self, *args, **kwargs):
-        with gr.Accordion(open=False, label=self.title()):
-            unet_enabled = gr.Checkbox(label='Enabled for UNet (always maximize offload)', value=False)
-            vae_enabled = gr.Checkbox(label='Enabled for VAE (always tiled)', value=False)
-        return unet_enabled, vae_enabled
+        return []
 
     def process(self, p, *script_args, **kwargs):
-        unet_enabled, vae_enabled = script_args
+        unet_enabled = getattr(shared.opts, "forge_never_oom_unet", False)
+        vae_enabled = getattr(shared.opts, "forge_never_oom_vae", False)
 
         if unet_enabled:
             print('NeverOOM Enabled for UNet (always maximize offload)')
@@ -45,3 +43,16 @@ class NeverOOMForForge(scripts.Script):
             self.previous_unet_enabled = unet_enabled
 
         return
+
+def on_ui_settings():
+    section = ('never_oom', "Never OOM")
+    shared.opts.add_option(
+        "forge_never_oom_unet",
+        shared.OptionInfo(False, "Enabled for UNet (always maximize offload)", section=section)
+    )
+    shared.opts.add_option(
+        "forge_never_oom_vae",
+        shared.OptionInfo(False, "Enabled for VAE (always tiled)", section=section)
+    )
+
+script_callbacks.on_ui_settings(on_ui_settings)
