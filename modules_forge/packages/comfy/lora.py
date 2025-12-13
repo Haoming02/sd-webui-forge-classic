@@ -164,7 +164,7 @@ def model_lora_keys_clip(model, key_map={}):
 
             key_map["lora_te{}_{}".format(t5_index, l_key.replace(".", "_"))] = k
 
-    return sdk, key_map
+    return key_map
 
 
 def model_lora_keys_unet(model, key_map={}):
