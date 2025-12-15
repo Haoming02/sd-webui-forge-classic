@@ -51,8 +51,11 @@ class QwenImage(ForgeDiffusionEngine):
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: "SdConditioning"):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
-        if not prompt.is_negative_prompt and self.image_prompt:
-            return self.get_learned_conditioning_with_image(prompt)
+        if not prompt.is_negative_prompt:
+            if self.image_prompt:
+                return self.get_learned_conditioning_with_image(prompt)
+            else:
+                dynamic_args["ref_latents"] = None
         return self.text_processing_engine_qwen(prompt)
 
     @torch.inference_mode()

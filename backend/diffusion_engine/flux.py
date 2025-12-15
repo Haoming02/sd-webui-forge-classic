@@ -85,9 +85,12 @@ class Flux(ForgeDiffusionEngine):
         else:
             print("Distilled CFG Scale is ignored for Schnell")
 
-        if not prompt.is_negative_prompt and dynamic_args["kontext"]:
-            dynamic_args["ref_latents"] = self.ref_latents.copy()
-            self.ref_latents.clear()
+        if not prompt.is_negative_prompt:
+            if dynamic_args["kontext"] and self.ref_latents:
+                dynamic_args["ref_latents"] = self.ref_latents.copy()
+                self.ref_latents.clear()
+            else:
+                dynamic_args["ref_latents"] = None
 
         return cond
 
