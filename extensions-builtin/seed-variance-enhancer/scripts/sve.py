@@ -20,10 +20,10 @@ class SeedVarianceEnhancer(scripts.Script):
     sorting_priority = 1125
 
     enable: bool = False
-    steps: int = 0
+    steps: int = -1
     percentage: float = 0.0
     strength: float = 0.0
-    seed: int = 0
+    seed: int = -1
 
     def title(self):
         return "SeedVarianceEnhancer Integrated"
@@ -68,9 +68,7 @@ class SeedVarianceEnhancer(scripts.Script):
     @classmethod
     @torch.inference_mode()
     def on_cfg(cls, params: CFGDenoiserParams):
-        if not cls.enable:
-            return
-        if not isinstance(params.denoiser.p, StableDiffusionProcessingTxt2Img):
+        if not isinstance(params.denoiser.p, StableDiffusionProcessingTxt2Img) or not cls.enable:
             return
         if params.text_cond is None:
             return
