@@ -7,7 +7,8 @@ if TYPE_CHECKING:
 import torch
 from huggingface_guess import model_list
 
-from backend import args, memory_management
+from backend import memory_management
+from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.modules.k_prediction import PredictionDiscreteFlow
 from backend.patcher.clip import CLIP
@@ -57,8 +58,8 @@ class QwenImage(ForgeDiffusionEngine):
     @torch.inference_mode()
     def get_learned_conditioning_with_image(self, prompt: list[str]):
         cond = self.text_processing_engine_qwen([self.image_prompt + "".join(prompt)], images=self.images_vl)
-        args.dynamic_args["ref_latents"] = self.ref_latents.copy()
         self.images_vl.clear()
+        dynamic_args["ref_latents"] = self.ref_latents.copy()
         self.ref_latents.clear()
         self.image_prompt = ""
         return cond
