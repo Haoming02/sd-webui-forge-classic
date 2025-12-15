@@ -35,9 +35,9 @@ class SeedVarianceEnhancer(scripts.Script):
         with InputAccordion(value=False, label=self.title()) as enable:
             gr.HTML(info)
             with gr.Row():
-                steps = gr.Slider(value=3, minimum=0, maximum=8, step=1, label="Steps", info="the number of steps to inject random noise")
+                steps = gr.Slider(value=2, minimum=0, maximum=8, step=1, label="Steps", info="the number of steps to inject random noise")
                 percentage = gr.Slider(value=0.6, minimum=0.0, maximum=1.0, step=0.05, label="Percentage", info="the percentage of conditioning to inject random noise")
-                strength = gr.Slider(value=32, minimum=0, maximum=64, step=1, label="Strength", info="the strength of the random noise")
+                strength = gr.Slider(value=24, minimum=0, maximum=64, step=1, label="Strength", info="the strength of the random noise")
 
         self.infotext_fields = [
             PasteField(steps, "SVE Steps"),
