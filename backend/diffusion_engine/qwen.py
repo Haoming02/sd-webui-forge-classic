@@ -107,6 +107,8 @@ class QwenImage(ForgeDiffusionEngine):
 
     @torch.inference_mode()
     def decode_first_stage(self, x):
+        self.ref_latents.clear()
+        self.image_prompt = ""
         sample = self.forge_objects.vae.first_stage_model.process_out(x)
         sample = self.forge_objects.vae.decode(sample).movedim(-1, 2) * 2.0 - 1.0
         return sample.to(x)
