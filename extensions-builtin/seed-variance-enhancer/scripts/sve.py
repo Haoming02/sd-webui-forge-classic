@@ -19,11 +19,11 @@ Improve seed-to-seed image variance for distilled models (<b>i.e.</b> CFG = <cod
 class SeedVarianceEnhancer(scripts.Script):
     sorting_priority = 1125
 
-    enable: bool
-    steps: int
-    percentage: float
-    strength: float
-    seed: int
+    enable: bool = False
+    steps: int = -1
+    percentage: float = 0.0
+    strength: float = 0.0
+    seed: int = -1
 
     def title(self):
         return "SeedVarianceEnhancer Integrated"
@@ -69,6 +69,8 @@ class SeedVarianceEnhancer(scripts.Script):
     @torch.inference_mode()
     def on_cfg(cls, params: CFGDenoiserParams):
         if not isinstance(params.denoiser.p, StableDiffusionProcessingTxt2Img) or not cls.enable:
+            return
+        if params.text_cond is None:
             return
         if cls.steps < params.sampling_step:
             return
