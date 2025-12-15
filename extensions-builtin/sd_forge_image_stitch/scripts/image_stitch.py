@@ -1,16 +1,15 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from PIL import Image
-
     from modules.processing import StableDiffusionProcessing
 
 import gradio as gr
 import numpy as np
 import torch
+from PIL import Image
 
 from backend.args import dynamic_args
-from modules import images, scripts
+from modules import images, scripts, sd_models
 from modules.sd_samplers_common import approximation_indexes, images_tensor_to_samples
 from modules.shared import device, opts
 from modules.ui_components import InputAccordion
@@ -30,6 +29,7 @@ Use in <b>img2img</b> to achieve the effect of multiple input images<br>
 
 class ImageStitch(scripts.Script):
     sorting_priority = 529
+    cached_parameters: list[str, int] = None
 
     def title(self):
         return "ImageStitch Integrated"
@@ -60,11 +60,21 @@ class ImageStitch(scripts.Script):
 
         return [enable, references]
 
-    def process(self, p: "StableDiffusionProcessing", enable: bool, references: list["Image.Image"]):
+    def process(self, p: "StableDiffusionProcessing", enable: bool, references: list[Image.Image]):
         if not enable or not references:
             return
         if not any(dynamic_args[key] for key in ("kontext", "edit")):
             return
+
+        _cache = [sd_models.model_data.forge_hash]
+
+        for reference, _ in references:
+            _cache.append(self.hash_image(reference))
+
+        if self.cached_parameters == _cache:
+            return
+
+        self.cached_parameters = _cache
 
         for reference, _ in references:
             image = images.flatten(reference, opts.img2img_background_color)
@@ -77,3 +87,9 @@ class ImageStitch(scripts.Script):
                 approximation_indexes.get(opts.sd_vae_encode_method),
                 p.sd_model,
             )
+
+    @staticmethod
+    def hash_image(img: Image.Image) -> int:
+        img = img.resize((16, 16), Image.Resampling.LANCZOS)
+        img = img.convert("L")
+        return hash(str(list(img.getdata())))
