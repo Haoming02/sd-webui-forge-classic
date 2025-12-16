@@ -28,6 +28,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 #### New Features
 
 - [X] Support [Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)
+    - support LoRAs
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
     - `txt2img`, `img2img`, `txt2vid`, `img2vid`
     - use `Refiner` to achieve **High Noise** / **Low Noise** switching
@@ -75,6 +76,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - see [Commandline](#by-neo)
 - [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), and fast `fp16_accumulation`
     - see [Commandline](#by-neo)
+- [X] Implement Seed Variance Enhancer
+    - improve seed-to-seed variance for distilled models
 - [X] Implement RescaleCFG
     - reduce burnt colors; mainly for `v-pred` checkpoints
     - enable in **Settings/UI Alternatives**
@@ -130,6 +133,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Improve memory management
 - [X] Improve color correction
 - [X] Update the implementation for `uni_pc` and `LCM` samplers
+- [X] Update the implementation of LoRAs
 - [X] Revamp settings
     - improve formatting
     - update descriptions
@@ -217,6 +221,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - `--flash`: Install the `flash_attn` package to speed up generation
 - `--nunchaku`: Install the `nunchaku` package to inference SVDQ models
 - `--bnb`: Install the `bitsandbytes` package to do low-bits (`nf4`) inference
+- `--onnxruntime-gpu`: Install the `onnxruntime` with the latest GPU support
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
 
 <details>
