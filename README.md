@@ -245,6 +245,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - `--sage`: Install the `sageattention` package to speed up generation
     - will also attempt to install `triton` automatically
 - `--flash`: Install the `flash_attn` package to speed up generation
+- `--onnxruntime-gpu`: Install the `onnxruntime` with the latest GPU support
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
 
 <details>
