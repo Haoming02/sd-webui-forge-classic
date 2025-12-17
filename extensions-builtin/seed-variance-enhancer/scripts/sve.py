@@ -37,8 +37,6 @@ class SeedVarianceEnhancer(scripts.Script):
 
     DECAY_FUNCTIONS = {
         "No decay": lambda current_step, total_steps, strength: strength,
-        "Kastom": lambda current_step, total_steps, strength: 
-            strength * (0.3 + (current_step / (total_steps - 1)) * 0.7),
         "Linear": lambda current_step, total_steps, strength: 
             strength - (strength - 1) * (current_step / total_steps),
         "Cosine": lambda current_step, total_steps, strength: 
@@ -65,12 +63,12 @@ class SeedVarianceEnhancer(scripts.Script):
         with InputAccordion(value=False, label=self.title()) as enable:
             gr.HTML(info)
             with gr.Row():
-                steps = gr.Slider(value=2, minimum=0, maximum=150, step=1, label="Steps", info="the number of steps to inject random noise") # 1 min since most probably users don't know that internally steps start at 0, max because decay allows it
+                steps = gr.Slider(value=2, minimum=1, maximum=150, step=1, label="Steps", info="the number of steps to inject random noise") # max because decay allows it, minimub because makes no sense
                 percentage = gr.Slider(value=0.6, minimum=0.0, maximum=1.0, step=0.05, label="Percentage", info="the percentage of conditioning to inject random noise")
                 strength = gr.Slider(value=24, minimum=0, maximum=64, step=1, label="Strength", info="the strength of the random noise")
                 preset_checkbox = gr.Checkbox(value=False, label="Make it good button", info="Preset for Z-Image Turbo with DPM++ 2s a RF / Beta ")
             with gr.Row():
-                early_decay = gr.Dropdown(choices=["No decay", "Linear", "Cosine", "Exponential", "Quadratic", "Kastom"], value="No decay", label="Early Decay", info="Apply decaying function to strength on first third.", )
+                early_decay = gr.Dropdown(choices=["No decay", "Linear", "Cosine", "Exponential", "Quadratic"], value="No decay", label="Early Decay", info="Apply decaying function to strength on first third.", )
                 md_threshold1 = gr.Slider(value=0.3, minimum=0.0, maximum=1.0, step=0.05, label="Percentage for mid decay", info="Percentage threshold 1 to switch to second type of decay")#idk, but threshold1 and 2 breaks gradio paste
                 mid_decay = gr.Dropdown(choices=["No decay", "Linear", "Cosine", "Exponential", "Quadratic"], value="No decay", label="Mid Decay", info="Apply decaying function to strength on second third.")
                 threshold2 = gr.Slider(value=0.5, minimum=0.0, maximum=1.0, step=0.05, label="Percentage for late decay", info="Percentage threshold 2 to switch to third type of decay")
@@ -147,11 +145,11 @@ class SeedVarianceEnhancer(scripts.Script):
 
         return components
 
-    def process(self, p, enable: bool, steps: int, percentage: float, strength: int, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, *args, **kwargs):
+    def process(self, p, enable: bool, steps: int, percentage: float, strength: float, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, *args, **kwargs):
         # Apply overrides from  XYZ_CACHE
         steps = int(self.XYZ_CACHE.pop("steps", steps))
         percentage = float(self.XYZ_CACHE.pop("percentage", percentage))
-        strength = float(self.XYZ_CACHE.pop("strength", strength))
+        strength = int(self.XYZ_CACHE.pop("strength", strength))
         early_decay = str(self.XYZ_CACHE.pop("early_decay", early_decay))
         md_threshold1 = float(self.XYZ_CACHE.pop("md_threshold1", md_threshold1))
         mid_decay = str(self.XYZ_CACHE.pop("mid_decay", mid_decay))
@@ -170,7 +168,7 @@ class SeedVarianceEnhancer(scripts.Script):
         return p
 
 
-    def before_process_batch(self, p: StableDiffusionProcessingTxt2Img, enable: bool, steps: int, percentage: float, strength: int, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, **kwargs):
+    def before_process_batch(self, p: StableDiffusionProcessingTxt2Img, enable: bool, steps: int, percentage: float, strength: float, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, **kwargs):
         SeedVarianceEnhancer.enable = enable
         if not enable:
             return
@@ -194,7 +192,11 @@ class SeedVarianceEnhancer(scripts.Script):
             mid_decay = self.cached_mid_decay
         
         if hasattr(self, 'cached_threshold2'):
-            threshold2 = self.cached_threshold2
+            if self.cached_threshold2 < self.cached_md_threshold1:#guard for x/y/z
+                threshold2 = self.cached_md_threshold1
+                print("\n Threshold 2 cannot be < Threshold 1 \n")
+            else:
+                threshold2 = self.cached_threshold2
         
         if hasattr(self, 'cached_late_decay'):
             late_decay = self.cached_late_decay
@@ -280,30 +282,32 @@ class SeedVarianceEnhancer(scripts.Script):
             thresh2_strength = cls.apply_decay(
                     cls.mid_decay, end_step2, cls.steps - end_step1, thresh1_strength
                 )
-            if current_step == 0:
-                current_strength = 0.6 * cls.strength #Do not mess with step 0 too much, it is no good. Technically it leads to not reaching max strength, but it is better
-            elif current_step <= end_step1:
+            if current_step <= end_step1:
                 current_strength = cls.apply_decay(
                     cls.early_decay, current_step, cls.steps, cls.strength
                 )
+                #print("\n", cls.early_decay," ", current_strength, "\n")
             elif current_step <= end_step2:
                 current_strength = cls.apply_decay(
                     cls.mid_decay, current_step - end_step1, cls.steps - end_step1, thresh1_strength
                 )
+                #print("\n", cls.mid_decay," ", current_strength, "\n")
             else:
                 current_strength = cls.apply_decay(
                     cls.late_decay, current_step - end_step2, cls.steps - end_step2, thresh2_strength
                 )
+                #print("\n", cls.late_decay," ", current_strength, "\n")
 
         cond: torch.Tensor = params.text_cond
         torch.manual_seed(cls.seed)
-
-        noise = torch.rand_like(cond) * 2.0 * current_strength - current_strength
-        noise_mask = torch.bernoulli(torch.ones_like(cond) * cls.percentage).bool()
-
+        
+        noise_start = torch.rand_like(cond)# this change made randomness a lot more manageable
+        noise = noise_start * 2.0 * current_strength - current_strength
+        noise_mask = torch.bernoulli(noise_start * cls.percentage).bool()
+        
         modified_noise = noise * noise_mask
         params.text_cond = cond + modified_noise
-        print("\n Strength:", current_strength, "\n")
+        #print("\n Strength:", current_strength," Step ",current_step, "\n")
 
 
 on_cfg_denoiser(SeedVarianceEnhancer.on_cfg)

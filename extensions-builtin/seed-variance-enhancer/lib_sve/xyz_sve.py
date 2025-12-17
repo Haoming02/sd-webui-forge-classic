@@ -23,16 +23,13 @@ def xyz_support(cache: dict):
     def choices_decay():
         return ["No decay", "Linear", "Cosine", "Exponential", "Quadratic"]
     
-    def choices_decay1():
-        return ["No decay", "Linear", "Cosine", "Exponential", "Quadratic"]
-
     xyz_grid = grid_reference()
 
     extra_axis_options = [
         xyz_grid.AxisOption("SVE Steps", int, apply_field("steps")),
         xyz_grid.AxisOption("SVE Percentage", float, apply_field("percentage")),
         xyz_grid.AxisOption("SVE Strength", float, apply_field("strength")),
-        xyz_grid.AxisOption("SVE Early Decay", str, apply_field("early_decay"), choices=choices_decay1),
+        xyz_grid.AxisOption("SVE Early Decay", str, apply_field("early_decay"), choices=choices_decay),
         xyz_grid.AxisOption("SVE Mid Threshold", float, apply_field("md_threshold1")),
         xyz_grid.AxisOption("SVE Mid Decay", str, apply_field("mid_decay"), choices=choices_decay),
         xyz_grid.AxisOption("SVE Late Threshold", float, apply_field("threshold2")),
