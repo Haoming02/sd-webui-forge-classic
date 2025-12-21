@@ -34,6 +34,7 @@ class SeedVarianceEnhancer(scripts.Script):
     mid_decay: str = "No decay"
     threshold2: float = 0.5
     late_decay: str = "No decay"
+    clamping: float = 1.0
 
     DECAY_FUNCTIONS = {
         "No decay": lambda current_step, total_steps, strength: strength,
@@ -66,16 +67,17 @@ class SeedVarianceEnhancer(scripts.Script):
                 steps = gr.Slider(value=2, minimum=1, maximum=150, step=1, label="Steps", info="the number of steps to inject random noise") # max because decay allows it, minimub because makes no sense
                 percentage = gr.Slider(value=0.6, minimum=0.0, maximum=1.0, step=0.05, label="Percentage", info="the percentage of conditioning to inject random noise")
                 strength = gr.Slider(value=24, minimum=0, maximum=64, step=1, label="Strength", info="the strength of the random noise")
-                preset_checkbox = gr.Checkbox(value=False, label="Make it good button", info="Preset for Z-Image Turbo with DPM++ 2s a RF / Beta ")
+                preset_checkbox = gr.Checkbox(value=False, label="Recommended", info="Preset for Z-Image Turbo with DPM++ 2s a RF / Beta 8-10 steps")
             with gr.Row():
                 early_decay = gr.Dropdown(choices=["No decay", "Linear", "Cosine", "Exponential", "Quadratic"], value="No decay", label="Early Decay", info="Apply decaying function to strength on first third.", )
                 md_threshold1 = gr.Slider(value=0.3, minimum=0.0, maximum=1.0, step=0.05, label="Percentage for mid decay", info="Percentage threshold 1 to switch to second type of decay")#idk, but threshold1 and 2 breaks gradio paste
                 mid_decay = gr.Dropdown(choices=["No decay", "Linear", "Cosine", "Exponential", "Quadratic"], value="No decay", label="Mid Decay", info="Apply decaying function to strength on second third.")
                 threshold2 = gr.Slider(value=0.5, minimum=0.0, maximum=1.0, step=0.05, label="Percentage for late decay", info="Percentage threshold 2 to switch to third type of decay")
                 late_decay = gr.Dropdown(choices=["No decay", "Linear", "Cosine", "Exponential", "Quadratic"], value="No decay", label="Late Decay", info="Apply decaying function to strength on last part.")
+                clamping = gr.Slider(value=1.0, minimum=0.0, maximum=1.0, step=0.05, label="Clamping for noise", info="Reduce outliers by clamping initial noise. Reduces overall stength")
 
         
-        components = [enable, steps, percentage, strength, early_decay, md_threshold1, mid_decay, threshold2, late_decay]
+        components = [enable, steps, percentage, strength, preset_checkbox, early_decay, md_threshold1, mid_decay, threshold2, late_decay, clamping]
         
         def validate_thresholds(th1, th2):
             return max(th1, th2)
@@ -85,19 +87,20 @@ class SeedVarianceEnhancer(scripts.Script):
         
         # Function to handle checkbox change for components 
         def handle_lock_change(lock_state, steps_val, percentage_val,
-                            dt1_val, th1_val, dt2_val, th2_val, dt3_val):
+                            dt1_val, th1_val, dt2_val, th2_val, dt3_val, clmp_val):
             if lock_state:
                 # Lock ALL components from both rows
                 return [
                     # First row components
                     gr.update(interactive=False, value=steps_val),
-                    gr.update(interactive=False, value=percentage_val),
+                    gr.update(interactive=False, value=1.0),
                     # Second row components
-                    gr.update(interactive=False, value=dt1_val),
-                    gr.update(interactive=False, value=th1_val),
-                    gr.update(interactive=False, value=dt2_val),
-                    gr.update(interactive=False, value=th2_val),
-                    gr.update(interactive=False, value=dt3_val),
+                    gr.update(interactive=False, value="Quadratic"),
+                    gr.update(interactive=False, value=0.25),
+                    gr.update(interactive=False, value="Exponential"),
+                    gr.update(interactive=False, value=0.35),
+                    gr.update(interactive=False, value="Linear"),
+                    gr.update(interactive=False, value=0.75),
                 ]
             else:
                 # Unlock components from both rows
@@ -106,6 +109,7 @@ class SeedVarianceEnhancer(scripts.Script):
                     gr.update(interactive=True),
                     gr.update(interactive=True),
                     # Second row components
+                    gr.update(interactive=True),
                     gr.update(interactive=True),
                     gr.update(interactive=True),
                     gr.update(interactive=True),
@@ -121,13 +125,13 @@ class SeedVarianceEnhancer(scripts.Script):
                 # First row inputs
                 steps, percentage, 
                 # Second row inputs
-                early_decay, md_threshold1, mid_decay, threshold2, late_decay
+                early_decay, md_threshold1, mid_decay, threshold2, late_decay, clamping,
             ],
             outputs=[
                 # First row outputs
                 steps, percentage, 
                 # Second row outputs
-                early_decay, md_threshold1, mid_decay, threshold2, late_decay
+                early_decay, md_threshold1, mid_decay, threshold2, late_decay, clamping,
             ]
         )
 
@@ -141,11 +145,12 @@ class SeedVarianceEnhancer(scripts.Script):
             PasteField(mid_decay, "SVE Mid Decay"),
             PasteField(threshold2, "SVE Late Threshold"),
             PasteField(late_decay, "SVE Late Decay"),
+            PasteField(clamping, "SVE Clamping"),
         ]
 
         return components
 
-    def process(self, p, enable: bool, steps: int, percentage: float, strength: float, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, *args, **kwargs):
+    def process(self, p, enable: bool, steps: int, percentage: float, strength: float, preset_checkbox:bool, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, clamping: float, *args, **kwargs):
         # Apply overrides from  XYZ_CACHE
         steps = int(self.XYZ_CACHE.pop("steps", steps))
         percentage = float(self.XYZ_CACHE.pop("percentage", percentage))
@@ -155,6 +160,7 @@ class SeedVarianceEnhancer(scripts.Script):
         mid_decay = str(self.XYZ_CACHE.pop("mid_decay", mid_decay))
         threshold2 = float(self.XYZ_CACHE.pop("threshold2", threshold2))
         late_decay = str(self.XYZ_CACHE.pop("late_decay", late_decay))
+        clamping = float(self.XYZ_CACHE.pop("clamping", clamping))
         
         self.cached_steps = steps
         self.cached_percentage = percentage
@@ -164,11 +170,12 @@ class SeedVarianceEnhancer(scripts.Script):
         self.cached_mid_decay = mid_decay
         self.cached_threshold2 = threshold2
         self.cached_late_decay = late_decay
+        self.cached_clamping = clamping
         
         return p
 
 
-    def before_process_batch(self, p: StableDiffusionProcessingTxt2Img, enable: bool, steps: int, percentage: float, strength: float, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, **kwargs):
+    def before_process_batch(self, p: StableDiffusionProcessingTxt2Img, enable: bool, steps: int, percentage: float, strength: float, preset_checkbox: bool, early_decay: str, md_threshold1: float, mid_decay: str, threshold2: float, late_decay: str, clamping: float, **kwargs):
         SeedVarianceEnhancer.enable = enable
         if not enable:
             return
@@ -201,6 +208,9 @@ class SeedVarianceEnhancer(scripts.Script):
         if hasattr(self, 'cached_late_decay'):
             late_decay = self.cached_late_decay
         
+        if hasattr(self, 'cached_clamping'):
+            clamping = self.cached_clamping
+        
         SeedVarianceEnhancer.steps = steps
         SeedVarianceEnhancer.percentage = percentage
         SeedVarianceEnhancer.strength = strength
@@ -209,6 +219,7 @@ class SeedVarianceEnhancer(scripts.Script):
         SeedVarianceEnhancer.mid_decay = mid_decay
         SeedVarianceEnhancer.threshold2 = threshold2
         SeedVarianceEnhancer.late_decay = late_decay
+        SeedVarianceEnhancer.clamping = clamping
         SeedVarianceEnhancer.seed = kwargs["seeds"][0]
 
         p.extra_generation_params.update(
@@ -222,6 +233,7 @@ class SeedVarianceEnhancer(scripts.Script):
                 "SVE Mid Decay": mid_decay,
                 "SVE Late Threshold": threshold2,
                 "SVE Late Decay": late_decay,
+                "SVE Clamping": clamping,
             }
         )
 
@@ -249,6 +261,9 @@ class SeedVarianceEnhancer(scripts.Script):
         if hasattr(self, 'cached_late_decay'):
             del self.cached_late_decay
         
+        if hasattr(self, 'cached_clamping'):
+            del self.cached_clamping
+        
         self.XYZ_CACHE.clear()
 
     def apply_decay(decay_type, current_step, total_steps, strength):
@@ -264,7 +279,10 @@ class SeedVarianceEnhancer(scripts.Script):
             return
         if params.text_cond is None:
             return
-        if cls.steps <= params.sampling_step: # params.sampling_step starts at 0
+        all_steps = cls.steps
+        if cls.preset_checkbox == True:
+            all_steps = params.total_sampling_steps
+        if all_steps < params.sampling_step: # params.sampling_step starts at 0
             return
 
         # Apply decay logic to strength
@@ -273,40 +291,42 @@ class SeedVarianceEnhancer(scripts.Script):
         current_step = params.sampling_step
         
         if  cls.strength != 0: # = disabled
-            end_step1 = max(1, int(cls.md_threshold1 * cls.steps))
-            end_step2 = max(1, int(cls.threshold2 * cls.steps))
+            end_step1 = max(1, int(cls.md_threshold1 * all_steps))
+            end_step2 = max(1, int(cls.threshold2 * all_steps))
             #Calculate transition strength 1
             thresh1_strength = cls.apply_decay(
-                    cls.early_decay, end_step1, cls.steps, cls.strength
+                    cls.early_decay, end_step1, all_steps, cls.strength
                 )
             thresh2_strength = cls.apply_decay(
-                    cls.mid_decay, end_step2, cls.steps - end_step1, thresh1_strength
+                    cls.mid_decay, end_step2, all_steps - end_step1, thresh1_strength
                 )
             if current_step <= end_step1:
                 current_strength = cls.apply_decay(
-                    cls.early_decay, current_step, cls.steps, cls.strength
+                    cls.early_decay, current_step, all_steps, cls.strength
                 )
                 #print("\n", cls.early_decay," ", current_strength, "\n")
             elif current_step <= end_step2:
                 current_strength = cls.apply_decay(
-                    cls.mid_decay, current_step - end_step1, cls.steps - end_step1, thresh1_strength
+                    cls.mid_decay, current_step - end_step1, all_steps - end_step1, thresh1_strength
                 )
                 #print("\n", cls.mid_decay," ", current_strength, "\n")
             else:
                 current_strength = cls.apply_decay(
-                    cls.late_decay, current_step - end_step2, cls.steps - end_step2, thresh2_strength
+                    cls.late_decay, current_step - end_step2, all_steps - end_step2, thresh2_strength
                 )
                 #print("\n", cls.late_decay," ", current_strength, "\n")
 
         cond: torch.Tensor = params.text_cond
         torch.manual_seed(cls.seed)
         
-        noise_start = torch.rand_like(cond)# this change made randomness a lot more manageable
+        noise_start = torch.clamp(torch.rand_like(cond), min=-cls.clamping, max=cls.clamping)
         noise = noise_start * 2.0 * current_strength - current_strength
         noise_mask = torch.bernoulli(noise_start * cls.percentage).bool()
         
         modified_noise = noise * noise_mask
         params.text_cond = cond + modified_noise
+        #print(f"Min value: {noise_start.min():.6f}")
+        #print(f"Max value: {noise_start.max():.6f}")
         #print("\n Strength:", current_strength," Step ",current_step, "\n")
 
 

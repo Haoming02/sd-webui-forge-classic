@@ -34,6 +34,7 @@ def xyz_support(cache: dict):
         xyz_grid.AxisOption("SVE Mid Decay", str, apply_field("mid_decay"), choices=choices_decay),
         xyz_grid.AxisOption("SVE Late Threshold", float, apply_field("threshold2")),
         xyz_grid.AxisOption("SVE Late Decay", str, apply_field("late_decay"), choices=choices_decay),
+        xyz_grid.AxisOption("SVE Clamping", float, apply_field("clamping")),
         
     ]
 
