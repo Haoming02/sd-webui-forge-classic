@@ -16,6 +16,8 @@ from modules.ui_components import FormRow, ToolButton
 from modules_forge.forge_canvas.canvas import ForgeCanvas
 from modules_forge.utils import HWC3
 
+GLOBAL_CONTROLNET_BATCH_DIR = ""
+
 
 @dataclass
 class A1111Context:
@@ -822,11 +824,16 @@ class ControlNetUiGroup(object):
     def register_sync_batch_dir(self):
         def determine_batch_dir(batch_dir, fallback_dir, fallback_fallback_dir):
             if batch_dir:
-                return batch_dir
+                result = batch_dir
             elif fallback_dir:
-                return fallback_dir
+                result = fallback_dir
             else:
-                return fallback_fallback_dir
+                result = fallback_fallback_dir
+            
+            from . import controlnet_ui_group
+            controlnet_ui_group.GLOBAL_CONTROLNET_BATCH_DIR = result
+
+            return result
 
         batch_dirs = [
             ControlNetUiGroup.global_batch_input_dir,
@@ -839,7 +846,7 @@ class ControlNetUiGroup(object):
             subscriber(
                 fn=determine_batch_dir,
                 inputs=batch_dirs,
-                outputs=[self.batch_image_dir_state],
+                outputs=[self.batch_image_dir_state],  # <-- add textbox here
                 queue=False,
             )
 
