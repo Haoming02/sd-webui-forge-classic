@@ -28,7 +28,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 #### New Features
 
 - [X] Support [Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)
-    - support LoRAs
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
     - `txt2img`, `img2img`, `txt2vid`, `img2vid`
     - use `Refiner` to achieve **High Noise** / **Low Noise** switching
@@ -52,7 +51,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
-    - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `t5`
+    - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `t5`, `z-image-turbo`
     - support LoRAs
     - see [Commandline](#by-neo)
 - [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
@@ -120,6 +119,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Remove unused `shared_options`
 - [X] Remove legacy codes
 - [X] Fix some typos
+- [X] Fix automatic `Tiled VAE` fallback
+- [X] Pad conditioning for SDXL
 - [X] Remove redundant upscaler codes
     - put every upscaler inside the `ESRGAN` folder
 - [X] Improve `ForgeCanvas`
