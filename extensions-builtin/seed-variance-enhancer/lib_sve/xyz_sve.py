@@ -1,3 +1,4 @@
+from lib_sve import DecayMethod
 from modules import scripts
 
 
@@ -20,22 +21,15 @@ def xyz_support(cache: dict):
 
         return _
 
-    def choices_decay():
-        return ["No decay", "Linear", "Cosine", "Exponential", "Quadratic"]
-    
     xyz_grid = grid_reference()
 
     extra_axis_options = [
+        xyz_grid.AxisOption("SVE Enable", bool, apply_field("enable")),
         xyz_grid.AxisOption("SVE Steps", int, apply_field("steps")),
         xyz_grid.AxisOption("SVE Percentage", float, apply_field("percentage")),
-        xyz_grid.AxisOption("SVE Strength", float, apply_field("strength")),
-        xyz_grid.AxisOption("SVE Early Decay", str, apply_field("early_decay"), choices=choices_decay),
-        xyz_grid.AxisOption("SVE Mid Threshold", float, apply_field("md_threshold1")),
-        xyz_grid.AxisOption("SVE Mid Decay", str, apply_field("mid_decay"), choices=choices_decay),
-        xyz_grid.AxisOption("SVE Late Threshold", float, apply_field("threshold2")),
-        xyz_grid.AxisOption("SVE Late Decay", str, apply_field("late_decay"), choices=choices_decay),
+        xyz_grid.AxisOption("SVE Strength", int, apply_field("strength")),
+        xyz_grid.AxisOption("SVE Decay", str, apply_field("decay"), choices=DecayMethod.choices()),
         xyz_grid.AxisOption("SVE Clamping", float, apply_field("clamping")),
-        
     ]
 
     xyz_grid.axis_options.extend(extra_axis_options)
