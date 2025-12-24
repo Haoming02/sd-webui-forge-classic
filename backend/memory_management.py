@@ -138,13 +138,7 @@ try:
 except Exception:
     pass
 
-try:
-    OOM_EXCEPTION = torch.cuda.OutOfMemoryError
-except Exception:
-    OOM_EXCEPTION = Exception
-
-if directml_enabled:
-    OOM_EXCEPTION = Exception
+OOM_EXCEPTION = getattr(torch, "OutOfMemoryError", Exception)
 
 if args.fast_fp16:
     _ver = str(torch.version.__version__)
