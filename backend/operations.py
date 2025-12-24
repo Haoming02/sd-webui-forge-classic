@@ -129,7 +129,7 @@ class ForgeOperations:
             self.in_features = in_features
             self.out_features = out_features
             self.dummy = torch.nn.Parameter(torch.empty(1, device=current_device, dtype=current_dtype))
-            self.weight = None
+            self.weight = torch.empty([0], device=current_device, dtype=current_dtype)  # SVDQW4A4Linear.from_linear
             self.scale_weight = None
             self.bias = None
             self.parameters_manual_cast = current_manual_cast_enabled
@@ -137,6 +137,7 @@ class ForgeOperations:
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
             if hasattr(self, "dummy"):
                 if prefix + "weight" in state_dict:
+                    del self.weight
                     self.weight = torch.nn.Parameter(state_dict[prefix + "weight"].to(self.dummy))
                 if prefix + "scale_weight" in state_dict:
                     self.scale_weight = torch.nn.Parameter(state_dict[prefix + "scale_weight"])

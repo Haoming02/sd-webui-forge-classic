@@ -57,6 +57,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
             dit_config["rope_theta"] = 10000.0
             dit_config["ffn_dim_multiplier"] = 4.0
         elif dit_config["dim"] == 3840:  # Z-Image
+            dit_config["nunchaku"] = "{}layers.0.attention.to_out.0.qweight".format(key_prefix) in state_dict_keys
             dit_config["n_heads"] = 30
             dit_config["n_kv_heads"] = 30
             dit_config["axes_dims"] = [32, 48, 48]

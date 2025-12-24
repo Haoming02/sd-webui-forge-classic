@@ -260,9 +260,14 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
                     model_loader = lambda c: QwenImageTransformer2DModel(**c)
             elif cls_name in ("Lumina2Transformer2DModel", "ZImageTransformer2DModel"):
-                from backend.nn.lumina import NextDiT
+                if guess.nunchaku:
+                    from backend.nn.svdq import NunchakuZImageModel
 
-                model_loader = lambda c: NextDiT(**c)
+                    model_loader = lambda c: NunchakuZImageModel(**c)
+                else:
+                    from backend.nn.lumina import NextDiT
+
+                    model_loader = lambda c: NextDiT(**c)
 
             unet_config = guess.unet_config.copy()
             state_dict_parameters = memory_management.state_dict_parameters(state_dict)
@@ -598,7 +603,7 @@ def split_state_dict(sd, additional_state_dicts: list = None):
     sd = preprocess_state_dict(sd)
     guess = huggingface_guess.guess(sd)
 
-    if "Qwen" in guess.huggingface_repo and getattr(guess, "nunchaku", False):
+    if getattr(guess, "nunchaku", False) and ("Z-Image" in guess.huggingface_repo or "Qwen" in guess.huggingface_repo):
         import json
 
         from nunchaku.utils import get_precision_from_quantization_config

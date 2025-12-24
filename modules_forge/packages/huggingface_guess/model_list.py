@@ -61,6 +61,7 @@ class BASE:
 
     def __init__(self, unet_config):
         self.unet_config = unet_config.copy()
+        self.nunchaku: bool = self.unet_config.pop("nunchaku", False)
         self.sampling_settings = self.sampling_settings.copy()
         self.latent_format = self.latent_format()
         for x in self.unet_extra_config:
@@ -245,10 +246,6 @@ class Flux(BASE):
     text_encoder_key_prefix = ["text_encoders."]
 
     unet_target = "transformer"
-
-    def __init__(self, unet_config):
-        super().__init__(unet_config)
-        self.nunchaku: bool = self.unet_config.pop("nunchaku", False)
 
     def model_type(self, state_dict):
         return ModelType.FLUX
@@ -441,10 +438,6 @@ class QwenImage(BASE):
     text_encoder_key_prefix = ["text_encoders."]
 
     unet_target = "transformer"
-
-    def __init__(self, unet_config):
-        super().__init__(unet_config)
-        self.nunchaku: bool = self.unet_config.pop("nunchaku", False)
 
     def model_type(self, state_dict):
         return ModelType.FLOW
