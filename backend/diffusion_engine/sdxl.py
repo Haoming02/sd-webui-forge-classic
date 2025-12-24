@@ -91,6 +91,11 @@ class StableDiffusionXL(ForgeDiffusionEngine):
             cond_l = torch.zeros_like(cond_l)
             cond_g = torch.zeros_like(cond_g)
 
+        # Ensure cond_l and cond_g have the same size
+        max_len = max(cond_l.shape[1], cond_g.shape[1])
+        cond_l = torch.cat([cond_l, cond_l.new_zeros(cond_l.size(0), max_len - cond_l.shape[1], cond_l.size(2))], dim=1)
+        cond_g = torch.cat([cond_g, cond_g.new_zeros(cond_g.size(0), max_len - cond_g.shape[1], cond_g.size(2))], dim=1)
+
         cond = dict(
             crossattn=torch.cat([cond_l, cond_g], dim=2),
             vector=torch.cat([clip_pooled, flat], dim=1),
