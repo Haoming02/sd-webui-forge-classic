@@ -1,4 +1,5 @@
 import functools
+import os.path
 from typing import Optional
 
 import cv2
@@ -22,6 +23,7 @@ from lib_controlnet.utils import (
 from PIL import Image
 
 import modules.scripts as scripts
+import modules.util as util
 from modules import images, masking, script_callbacks, shared
 from modules.processing import (
     StableDiffusionProcessing,
@@ -115,7 +117,7 @@ class ControlNetForForgeOfficial(scripts.Script):
             input_image = np.stack(input_image, axis=2)
         return input_image
 
-    def get_input_data(self, p, unit, preprocessor, h, w):
+    def get_input_data(self, p, unit: ControlNetUnit, preprocessor, h, w):
         image_list = []
         resize_mode = external_code.resize_mode_from_value(unit.resize_mode)
 
@@ -134,16 +136,60 @@ class ControlNetForForgeOfficial(scripts.Script):
         unit_image_fg = unit.image_fg[:, :, 3] if unit.image_fg is not None else None
         unit_mask_image_fg = unit.mask_image_fg[:, :, 3] if unit.mask_image_fg is not None else None
 
-        if unit.use_preview_as_input and unit.generated_image is not None:
-            image = unit.generated_image
-        elif unit.image is None:
-            resize_mode = external_code.resize_mode_from_value(p.resize_mode)
-            image = HWC3(np.asarray(a1111_i2i_image))
-            using_a1111_data = True
-        elif (unit_image < 5).all() and (unit_image_fg > 5).any():
-            image = unit_image_fg
-        else:
-            image = unit_image
+        image: np.ndarray = None
+
+        # ---------------- BATCH DIR OVERRIDE ----------------
+        batch_dir: os.PathLike = ControlNetUiGroup.GLOBAL_CONTROLNET_BATCH_DIR.strip()
+        src_path: os.PathLike = getattr(a1111_i2i_image, "filename", "").strip()
+
+        if os.path.isdir(batch_dir):
+            matched_path: os.PathLike = None
+
+            control_files = list(
+                util.walk_files(
+                    batch_dir,
+                    allowed_extensions=(".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".avif"),
+                )
+            )
+
+            if os.path.isfile(src_path):
+                src_stem = os.path.splitext(os.path.basename(src_path))[0]
+                for fp in control_files:
+                    if os.path.splitext(os.path.basename(fp))[0] == src_stem:
+                        matched_path = fp
+                        break
+
+            if not matched_path and control_files:
+                if not hasattr(p, "_cnet_batch_dir_idx"):
+                    p._cnet_batch_dir_idx = {}
+
+                i = p._cnet_batch_dir_idx.pop(unit._idx, 0)
+                p._cnet_batch_dir_idx[unit._idx] = i + 1
+
+                matched_path = control_files[i % len(control_files)]
+
+            if matched_path:
+                try:
+                    img = Image.open(matched_path)
+                    image = HWC3(np.asarray(img))
+                    logger.info(f"[Batch Dir] (unit={unit._idx}, idx={i}) {os.path.basename(src_path)} <- {os.path.basename(matched_path)}")
+                    using_a1111_data = False
+                except Exception as e:
+                    logger.error(f'[Batch Dir] Failed to load "{matched_path}"\n{e}')
+                    image = None
+
+        # ---------------- Original Logics (if no batch dir) ----------------
+        if image is None:
+            if unit.use_preview_as_input and unit.generated_image is not None:
+                image = unit.generated_image
+            elif unit.image is None:
+                resize_mode = external_code.resize_mode_from_value(p.resize_mode)
+                image = HWC3(np.asarray(a1111_i2i_image))
+                using_a1111_data = True
+            elif (unit_image < 5).all() and (unit_image_fg > 5).any():
+                image = unit_image_fg
+            else:
+                image = unit_image
 
         if not isinstance(image, np.ndarray):
             raise ValueError("controlnet is enabled but no input image is given")
@@ -450,6 +496,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         enabled_units = self.get_enabled_units(args)
         Infotext.write_infotext(enabled_units, p)
         for i, unit in enumerate(enabled_units):
+            unit._idx = i
             self.bound_check_params(unit)
             params = ControlNetCachedParameters()
             self.process_unit_after_click_generate(p, unit, params, *args, **kwargs)

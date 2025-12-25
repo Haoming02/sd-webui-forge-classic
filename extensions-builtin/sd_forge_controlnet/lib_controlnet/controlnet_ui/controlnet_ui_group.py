@@ -99,7 +99,9 @@ class A1111Context:
             logger.debug(f"A1111 initialized {sum(c is not None for c in vars(self).values())}/{len(vars(self).keys())}.")
 
 
-class ControlNetUiGroup(object):
+class ControlNetUiGroup:
+    GLOBAL_CONTROLNET_BATCH_DIR: str = ""
+
     refresh_symbol = "\U0001f504"  # 🔄
     switch_values_symbol = "\U000021c5"  # ⇅
     camera_symbol = "\U0001f4f7"  # 📷
@@ -199,8 +201,6 @@ class ControlNetUiGroup(object):
         self.image_upload_panel = None
         self.save_detected_map = None
         self.hr_option = None
-        self.batch_image_dir_state = None
-        self.output_dir_state = None
 
         # Internal states for UI state pasting.
         self.prevent_next_n_module_update = 0
@@ -451,8 +451,6 @@ class ControlNetUiGroup(object):
             visible=False,
         )
 
-        self.batch_image_dir_state = gr.State("")
-        self.output_dir_state = gr.State("")
         unit_args = (
             self.use_preview_as_input,
             self.generated_image.background,
@@ -819,36 +817,22 @@ class ControlNetUiGroup(object):
                 show_progress=False,
             )
 
-    def register_sync_batch_dir(self):
-        def determine_batch_dir(batch_dir, fallback_dir, fallback_fallback_dir):
-            if batch_dir:
-                return batch_dir
-            elif fallback_dir:
-                return fallback_dir
-            else:
-                return fallback_fallback_dir
+    @classmethod
+    def register_sync_batch_dir(cls):
+        def determine_batch_dir(batch_dir: str, fallback_dir: str) -> str:
+            ControlNetUiGroup.GLOBAL_CONTROLNET_BATCH_DIR = batch_dir if batch_dir else fallback_dir
 
         batch_dirs = [
             ControlNetUiGroup.global_batch_input_dir,
             ControlNetUiGroup.a1111_context.img2img_batch_input_dir,
         ]
-        for batch_dir_comp in batch_dirs:
-            subscriber = getattr(batch_dir_comp, "blur", None)
-            if subscriber is None:
-                continue
-            subscriber(
+
+        for comp in batch_dirs:
+            comp.blur(
                 fn=determine_batch_dir,
                 inputs=batch_dirs,
-                outputs=[self.batch_image_dir_state],
                 queue=False,
             )
-
-        ControlNetUiGroup.a1111_context.img2img_batch_output_dir.blur(
-            fn=lambda a: a,
-            inputs=[ControlNetUiGroup.a1111_context.img2img_batch_output_dir],
-            outputs=[self.output_dir_state],
-            queue=False,
-        )
 
     def register_clear_preview(self):
         def clear_preview(x):
