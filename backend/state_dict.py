@@ -1,12 +1,5 @@
-import torch
-
-from backend.utils import DISABLE_MMAP, MMAP_TORCH_FILES
-
-
-@torch.no_grad()
-def load_state_dict(model: torch.nn.Module, sd, ignore_errors=[], log_name=None, ignore_start=None):
-    _assign = MMAP_TORCH_FILES or not DISABLE_MMAP
-    missing, unexpected = model.load_state_dict(sd, strict=False, assign=_assign)
+def load_state_dict(model, sd, ignore_errors=[], log_name=None, ignore_start=None):
+    missing, unexpected = model.load_state_dict(sd, strict=False)
     missing = [x for x in missing if x not in ignore_errors]
     unexpected = [x for x in unexpected if x not in ignore_errors]
 
