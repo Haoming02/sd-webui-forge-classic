@@ -172,6 +172,7 @@ class ControlNetUnit:
     pixel_perfect: bool = False
     control_mode: ControlMode | int | str = ControlMode.BALANCED
     save_detected_map: bool = True
+    _idx: int = -1
 
     @staticmethod
     def infotext_fields():

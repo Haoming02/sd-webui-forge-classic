@@ -1,4 +1,5 @@
 import functools
+import os.path
 from typing import Optional
 
 import cv2
@@ -8,7 +9,6 @@ import torch
 from lib_controlnet import external_code, global_state
 from lib_controlnet.api import controlnet_api
 from lib_controlnet.controlnet_ui.controlnet_ui_group import ControlNetUiGroup
-from lib_controlnet.controlnet_ui import controlnet_ui_group
 from lib_controlnet.enums import HiResFixOption
 from lib_controlnet.external_code import ControlNetUnit
 from lib_controlnet.infotext import Infotext
@@ -23,6 +23,7 @@ from lib_controlnet.utils import (
 from PIL import Image
 
 import modules.scripts as scripts
+import modules.util as util
 from modules import images, masking, script_callbacks, shared
 from modules.processing import (
     StableDiffusionProcessing,
@@ -32,9 +33,6 @@ from modules.processing import (
 from modules_forge.shared import try_load_supported_control_model
 from modules_forge.supported_controlnet import ControlModelPatcher
 from modules_forge.utils import HWC3, numpy_to_pytorch
-
-import modules.util as util
-import os
 
 global_state.update_controlnet_filenames()
 
@@ -118,7 +116,8 @@ class ControlNetForForgeOfficial(scripts.Script):
             input_image = [np.asarray(x)[:, :, 0] for x in input_image]
             input_image = np.stack(input_image, axis=2)
         return input_image
-    def get_input_data(self, p, unit, preprocessor, h, w):
+
+    def get_input_data(self, p, unit: ControlNetUnit, preprocessor, h, w):
         image_list = []
         resize_mode = external_code.resize_mode_from_value(unit.resize_mode)
 
@@ -137,14 +136,15 @@ class ControlNetForForgeOfficial(scripts.Script):
         unit_image_fg = unit.image_fg[:, :, 3] if unit.image_fg is not None else None
         unit_mask_image_fg = unit.mask_image_fg[:, :, 3] if unit.mask_image_fg is not None else None
 
-        # -------------------- NEW: BATCH DIR OVERRIDE COMES FIRST --------------------
-        batch_dir = getattr(controlnet_ui_group, "GLOBAL_CONTROLNET_BATCH_DIR", "").strip()
-        src_path = getattr(a1111_i2i_image, "filename", None)
+        image: np.ndarray = None
 
-        image = None
-        forced_from_batch_dir = False
+        # ---------------- BATCH DIR OVERRIDE ----------------
+        batch_dir: os.PathLike = ControlNetUiGroup.GLOBAL_CONTROLNET_BATCH_DIR.strip()
+        src_path: os.PathLike = getattr(a1111_i2i_image, "filename", "").strip()
 
-        if batch_dir and os.path.isdir(batch_dir):
+        if os.path.isdir(batch_dir):
+            matched_path: os.PathLike = None
+
             control_files = list(
                 util.walk_files(
                     batch_dir,
@@ -152,57 +152,41 @@ class ControlNetForForgeOfficial(scripts.Script):
                 )
             )
 
-            matched_path = None
-
-            # 1) filename stem match if we have a source filename
-            if src_path:
+            if os.path.isfile(src_path):
                 src_stem = os.path.splitext(os.path.basename(src_path))[0]
                 for fp in control_files:
                     if os.path.splitext(os.path.basename(fp))[0] == src_stem:
                         matched_path = fp
                         break
 
-            # 2) index fallback if no filename match
             if not matched_path and control_files:
-                unit_idx = int(getattr(unit, "_cn_unit_index", 0))
-                if not hasattr(p, "_cn_batch_i"):
-                    p._cn_batch_i = {}
-                if unit_idx not in p._cn_batch_i:
-                    p._cn_batch_i[unit_idx] = 0
+                if not hasattr(p, "_cnet_batch_dir_idx"):
+                    p._cnet_batch_dir_idx = {}
 
-                i = p._cn_batch_i[unit_idx]
-                p._cn_batch_i[unit_idx] += 1
+                i = p._cnet_batch_dir_idx.pop(unit._idx, 0)
+                p._cnet_batch_dir_idx[unit._idx] = i + 1
 
                 matched_path = control_files[i % len(control_files)]
-                print(
-                    f"[ControlNet] index fallback | unit={unit_idx} i={i} "
-                    f"src={os.path.basename(src_path) if src_path else None} "
-                    f"-> {os.path.basename(matched_path)}"
-                )
 
-            # Load it if we found something
             if matched_path:
                 try:
-                    cn_img = Image.open(matched_path).convert("RGB")
-                    image = np.asarray(cn_img)
-                    forced_from_batch_dir = True
+                    img = Image.open(matched_path)
+                    image = HWC3(np.asarray(img))
+                    logger.info(f"[Batch Dir] (unit={unit._idx}, idx={i}) {os.path.basename(src_path)} <- {os.path.basename(matched_path)}")
                     using_a1111_data = False
-                    print(f"[ControlNet] FORCED control input from dir: {matched_path}")
                 except Exception as e:
-                    print(f"[ControlNet] failed loading {matched_path}: {e}")
+                    logger.error(f'[Batch Dir] Failed to load "{matched_path}"\n{e}')
                     image = None
-        # ---------------------------------------------------------------------------
 
-        # If batch-dir override worked, we skip the normal selection logic.
+        # ---------------- Original Logics (if no batch dir) ----------------
         if image is None:
-            # original decision tree (unchanged)
             if unit.use_preview_as_input and unit.generated_image is not None:
                 image = unit.generated_image
-            elif (unit_image is None) and a1111_i2i_image is not None:
+            elif unit.image is None:
                 resize_mode = external_code.resize_mode_from_value(p.resize_mode)
                 image = HWC3(np.asarray(a1111_i2i_image))
                 using_a1111_data = True
-            elif unit_image_fg is not None and (unit_image < 5).all() and (unit_image_fg > 5).any():
+            elif (unit_image < 5).all() and (unit_image_fg > 5).any():
                 image = unit_image_fg
             else:
                 image = unit_image
@@ -212,8 +196,6 @@ class ControlNetForForgeOfficial(scripts.Script):
 
         image = HWC3(image)
 
-        # masks: if we forced from batch dir, we generally should NOT use a1111 mask automatically
-        # (keep existing behavior, but only apply a1111 mask when using_a1111_data == True)
         if using_a1111_data:
             mask = HWC3(np.asarray(a1111_i2i_mask)) if a1111_i2i_mask is not None else None
         elif unit_mask_image_fg is not None and (unit_mask_image_fg > 5).any():
@@ -228,11 +210,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         image = self.try_crop_image_with_a1111_mask(p, unit, image, resize_mode, preprocessor)
 
         if mask is not None:
-            mask = cv2.resize(
-                HWC3(mask),
-                (image.shape[1], image.shape[0]),
-                interpolation=cv2.INTER_NEAREST,
-            )
+            mask = cv2.resize(HWC3(mask), (image.shape[1], image.shape[0]), interpolation=cv2.INTER_NEAREST)
             mask = self.try_crop_image_with_a1111_mask(p, unit, mask, resize_mode, preprocessor)
 
         image_list = [[image, mask]]
@@ -518,6 +496,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         enabled_units = self.get_enabled_units(args)
         Infotext.write_infotext(enabled_units, p)
         for i, unit in enumerate(enabled_units):
+            unit._idx = i
             self.bound_check_params(unit)
             params = ControlNetCachedParameters()
             self.process_unit_after_click_generate(p, unit, params, *args, **kwargs)
