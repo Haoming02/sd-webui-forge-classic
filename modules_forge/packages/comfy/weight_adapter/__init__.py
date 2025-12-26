@@ -9,6 +9,7 @@ from .loha import LoHaAdapter
 from .lokr import LoKrAdapter
 from .lora import LoRAAdapter
 from .oft import OFTAdapter
+from .oftv2 import OFTv2Adapter
 
 adapters: Final[list[type[WeightAdapterBase]]] = [
     BOFTAdapter,
@@ -17,6 +18,7 @@ adapters: Final[list[type[WeightAdapterBase]]] = [
     LoKrAdapter,
     LoRAAdapter,
     OFTAdapter,
+    OFTv2Adapter,
 ]
 
 adapter_maps: Final[dict[str, type[WeightAdapterBase]]] = {
@@ -24,6 +26,7 @@ adapter_maps: Final[dict[str, type[WeightAdapterBase]]] = {
     "LoHa": LoHaAdapter,
     "LoKr": LoKrAdapter,
     "OFT": OFTAdapter,
+    "OFTv2": OFTv2Adapter,
     # "GLoRA": GLoRAAdapter,
     # "BOFT": BOFTAdapter,
 }
