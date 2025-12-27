@@ -9,6 +9,7 @@ from modules.timer import startup_timer
 
 def shush():
     logging.getLogger("torch.distributed.nn").setLevel(logging.ERROR)
+    logging.getLogger("transformers.dynamic_module_utils").setLevel(logging.ERROR)
     logging.getLogger("xformers").addFilter(lambda record: "triton" not in record.getMessage().lower())
     warnings.filterwarnings(action="ignore", category=DeprecationWarning, module="pytorch_lightning")
     warnings.filterwarnings(action="ignore", category=UserWarning, module="torchvision.transforms.functional_tensor")

@@ -81,10 +81,6 @@ def patch_all_basics():
     file_download.tqdm = always_show_tqdm
     file_download.logger.setLevel(logging.ERROR)
 
-    from transformers.dynamic_module_utils import logger
-
-    logger.setLevel(logging.ERROR)
-
     from huggingface_hub.file_download import _download_to_tmp_and_move as original_download_to_tmp_and_move
 
     @wraps(original_download_to_tmp_and_move)
