@@ -2,7 +2,6 @@ import sys
 import textwrap
 import traceback
 
-
 exception_records = []
 
 
@@ -55,10 +54,10 @@ def print_error_explanation(message):
     lines = message.strip().split("\n")
     max_len = max([len(x) for x in lines])
 
-    print('=' * max_len, file=sys.stderr)
+    print("=" * max_len, file=sys.stderr)
     for line in lines:
         print(line, file=sys.stderr)
-    print('=' * max_len, file=sys.stderr)
+    print("=" * max_len, file=sys.stderr)
 
 
 def display(e: Exception, task, *, full_traceback=False):
@@ -70,13 +69,6 @@ def display(e: Exception, task, *, full_traceback=False):
         # include frames leading up to the try-catch block
         te.stack = traceback.StackSummary(traceback.extract_stack()[:-2] + te.stack)
     print(*te.format(), sep="", file=sys.stderr)
-
-    message = str(e)
-    if "copying a param with shape torch.Size([640, 1024]) from checkpoint, the shape in current model is torch.Size([640, 768])" in message:
-        print_error_explanation("""
-The most likely cause of this is you are trying to load Stable Diffusion 2.0 model without specifying its config file.
-See https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#stable-diffusion-20 for how to solve this.
-        """)
 
 
 already_displayed = {}
@@ -103,20 +95,22 @@ def run(code, task):
 def check_versions():
     import gradio
     import torch
-    from modules import shared
     from packaging import version
 
-    expected_torch = "2.7.0"
-    expected_xformers = "0.0.30"
+    from modules import shared
+
+    expected_torch = "2.9.0"
+    expected_xformers = "0.0.33"
     expected_gradio = "4.40.0"
 
+    _outdated = False
+
     if version.parse(torch.__version__) < version.parse(expected_torch):
+        _outdated = True
         print_error_explanation(
             f"""
-            You are running torch {torch.__version__}, which is really outdated
+            You are running torch {torch.__version__}, which is really outdated.
             To install the latest version, run with commandline flag --reinstall-torch.
-
-            Use --skip-version-check commandline argument to disable this check.
             """.strip()
         )
 
@@ -124,22 +118,23 @@ def check_versions():
         import xformers
 
         if version.parse(xformers.__version__) < version.parse(expected_xformers):
+            _outdated = True
             print_error_explanation(
                 f"""
                 You are running xformers {xformers.__version__}, which is really outdated.
                 To install the latest version, run with commandline flag --reinstall-xformers.
-
-                Use --skip-version-check commandline argument to disable this check.
                 """.strip()
             )
 
     if version.parse(gradio.__version__) < version.parse(expected_gradio):
+        _outdated = True
         print_error_explanation(
             f"""
             You are running gradio {gradio.__version__}.
             This program was built on gradio {expected_gradio}.
             Using a different version of gradio is likely to break the program.
-
-            Use --skip-version-check commandline argument to disable this check.
             """.strip()
         )
+
+    if _outdated:
+        print("\nUse --skip-version-check commandline argument to disable the version check(s).\n")

@@ -1,8 +1,8 @@
 import json
 import os
+import re
 import signal
 import sys
-import re
 
 import starlette
 
@@ -21,20 +21,19 @@ def gradio_server_name():
 def fix_torch_version():
     import torch
 
-    # Truncate version number of nightly/local build of PyTorch to not cause exceptions with CodeFormer or Safetensors
+    # truncate version number of nightly/local build of PyTorch
     if ".dev" in torch.__version__ or "+git" in torch.__version__:
         torch.__long_version__ = torch.__version__
-        torch.__version__ = re.search(r'[\d.]+[\d]', torch.__version__).group(0)
+        torch.__version__ = re.search(r"[\d.]+[\d]", torch.__version__).group(0)
 
 
 def fix_asyncio_event_loop_policy():
     """
-        The default `asyncio` event loop policy only automatically creates
-        event loops in the main threads. Other threads must create event
-        loops explicitly or `asyncio.get_event_loop` (and therefore
-        `.IOLoop.current`) will fail. Installing this policy allows event
-        loops to be created automatically on any thread, matching the
-        behavior of Tornado versions prior to 5.0 (or 5.0 on Python 2).
+    The default `asyncio` event loop policy only automatically creates
+    event loops in the main threads. Other threads must create event
+    loops explicitly or `asyncio.get_event_loop` and `.IOLoop.current`
+    will fail. Installing this policy allows event loops to be created
+    automatically on any thread, matching the behavior of Tornado prior to 5.0
     """
 
     import asyncio
@@ -68,7 +67,7 @@ def fix_asyncio_event_loop_policy():
 
 
 def restore_config_state_file():
-    from modules import shared, config_states
+    from modules import config_states, shared
 
     config_state_file = shared.opts.restore_config_state_file
     if config_state_file == "":
@@ -117,18 +116,18 @@ def get_gradio_auth_creds():
         s = s.strip()
         if not s:
             return None
-        return tuple(s.split(':', 1))
+        return tuple(s.split(":", 1))
 
     if cmd_opts.gradio_auth:
-        for cred in cmd_opts.gradio_auth.split(','):
+        for cred in cmd_opts.gradio_auth.split(","):
             cred = process_credential_line(cred)
             if cred:
                 yield cred
 
     if cmd_opts.gradio_auth_path:
-        with open(cmd_opts.gradio_auth_path, 'r', encoding="utf8") as file:
+        with open(cmd_opts.gradio_auth_path, "r", encoding="utf8") as file:
             for line in file.readlines():
-                for cred in line.strip().split(','):
+                for cred in line.strip().split(","):
                     cred = process_credential_line(cred)
                     if cred:
                         yield cred
@@ -151,12 +150,12 @@ def dumpstacks():
 
 
 def configure_sigint_handler():
-    # make the program just exit at ctrl+c without waiting for anything
+    # make the program just exit at Ctrl + C without waiting for anything
 
     from modules import shared
 
     def sigint_handler(sig, frame):
-        print(f'Interrupted with signal {sig} in {frame}')
+        print(f"Interrupted with signal {sig} in {frame}")
 
         if shared.opts.dump_stacks_on_signal:
             dumpstacks()
@@ -187,6 +186,7 @@ def setup_middleware(app):
 
 def configure_cors_middleware(app):
     from starlette.middleware.cors import CORSMiddleware
+
     from modules.shared_cmd_options import cmd_opts
 
     cors_options = {
@@ -195,9 +195,8 @@ def configure_cors_middleware(app):
         "allow_credentials": True,
     }
     if cmd_opts.cors_allow_origins:
-        cors_options["allow_origins"] = cmd_opts.cors_allow_origins.split(',')
+        cors_options["allow_origins"] = cmd_opts.cors_allow_origins.split(",")
     if cmd_opts.cors_allow_origins_regex:
         cors_options["allow_origin_regex"] = cmd_opts.cors_allow_origins_regex
 
     app.user_middleware.insert(0, starlette.middleware.Middleware(CORSMiddleware, **cors_options))
-

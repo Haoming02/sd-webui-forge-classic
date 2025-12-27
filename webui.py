@@ -2,25 +2,25 @@ from __future__ import annotations
 
 import os
 import time
+from threading import Thread
 
 from fastapi import Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from modules import timer
-from modules import initialize_util
-from modules import initialize
-from threading import Thread
-from modules_forge.initialization import initialize_forge
+from modules import initialize, initialize_util, timer
 from modules_forge import main_thread
-
+from modules_forge.initialization import initialize_forge
 
 startup_timer = timer.startup_timer
 startup_timer.record("launcher")
 
 initialize.shush()
 
-initialize_forge(startup_timer)
+with startup_timer.subcategory("forge init"):
+    initialize_forge()
+
+initialize.shush_nunchaku()
 
 initialize.imports()
 
@@ -50,6 +50,7 @@ def create_api(app):
 
 def api_only_worker():
     from fastapi import FastAPI
+
     from modules.shared_cmd_options import cmd_opts
 
     app = FastAPI(exception_handlers={Exception: _handle_exception})
@@ -57,15 +58,12 @@ def api_only_worker():
     api = create_api(app)
 
     from modules import script_callbacks
+
     script_callbacks.before_ui_callback()
     script_callbacks.app_started_callback(None, app)
 
     print(f"Startup time: {startup_timer.summary()}.")
-    api.launch(
-        server_name=initialize_util.gradio_server_name(),
-        port=cmd_opts.port if cmd_opts.port else 7861,
-        root_path=f"/{cmd_opts.subpath}" if cmd_opts.subpath else ""
-    )
+    api.launch(server_name=initialize_util.gradio_server_name(), port=cmd_opts.port if cmd_opts.port else 7861, root_path=f"/{cmd_opts.subpath}" if cmd_opts.subpath else "")
 
 
 def webui_worker():
@@ -73,7 +71,14 @@ def webui_worker():
 
     launch_api = cmd_opts.api
 
-    from modules import shared, ui_tempdir, script_callbacks, ui, progress, ui_extra_networks
+    from modules import (
+        progress,
+        script_callbacks,
+        shared,
+        ui,
+        ui_extra_networks,
+        ui_tempdir,
+    )
 
     while 1:
         if shared.opts.clean_temp_dir_at_start:
@@ -92,7 +97,7 @@ def webui_worker():
         gradio_auth_creds = list(initialize_util.get_gradio_auth_creds()) or None
 
         auto_launch_browser = False
-        if os.getenv('SD_WEBUI_RESTARTING') != '1':
+        if os.getenv("SD_WEBUI_RESTARTING") != "1":
             if shared.opts.auto_launch_browser == "Remote" or cmd_opts.autolaunch:
                 auto_launch_browser = True
             elif shared.opts.auto_launch_browser == "Local":
@@ -126,7 +131,7 @@ def webui_worker():
         # an attacker to trick the user into opening a malicious HTML page, which makes a request to the
         # running web ui and do whatever the attacker wants, including installing an extension and
         # running its code. We disable this here. Suggested by RyotaK.
-        app.user_middleware = [x for x in app.user_middleware if x.cls.__name__ != 'CORSMiddleware']
+        app.user_middleware = [x for x in app.user_middleware if x.cls.__name__ != "CORSMiddleware"]
 
         initialize_util.setup_middleware(app)
 
@@ -155,7 +160,7 @@ def webui_worker():
                     else:
                         print(f"Unknown server command: {server_command}")
         except KeyboardInterrupt:
-            print('Caught KeyboardInterrupt, stopping...')
+            print("Caught KeyboardInterrupt, stopping...")
             server_command = "stop"
 
         if server_command == "stop":
@@ -165,9 +170,9 @@ def webui_worker():
             break
 
         # disable auto launch webui in browser for subsequent UI Reload
-        os.environ.setdefault('SD_WEBUI_RESTARTING', '1')
+        os.environ.setdefault("SD_WEBUI_RESTARTING", "1")
 
-        print('Restarting UI...')
+        print("Restarting UI...")
         shared.demo.close()
         time.sleep(0.5)
         startup_timer.reset()
