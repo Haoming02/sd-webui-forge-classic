@@ -6,9 +6,9 @@ import safetensors
 import torch
 from einops import rearrange, repeat
 
-import backend.misc.checkpoint_pickle
 from backend.args import args
 from backend.operations_gguf import ParameterGGUF
+from modules import safe
 
 MMAP_TORCH_FILES = args.mmap_torch_files
 DISABLE_MMAP = args.disable_mmap
@@ -46,7 +46,7 @@ def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=
         except Exception as e:
             if len(e.args) > 0:
                 if "HeaderTooLarge" in e.args[0] or "MetadataIncompleteBuffer" in e.args[0]:
-                    raise ValueError('\nModel: "{}" is corrupt or invalid...'.format(ckpt))
+                    raise ValueError(f'\nModel: "{ckpt}" is corrupt or invalid...\nPlease download the model again')
             raise e
 
     elif ckpt.lower().endswith(".gguf"):
@@ -59,7 +59,7 @@ def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=
         torch_args = {}
 
         if not safe_load:
-            torch_args["pickle_module"] = backend.misc.checkpoint_pickle
+            torch_args["pickle_module"] = safe
         else:
             torch_args["weights_only"] = True
             if MMAP_TORCH_FILES:
