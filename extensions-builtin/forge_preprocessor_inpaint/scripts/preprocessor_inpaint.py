@@ -5,7 +5,6 @@ import einops
 import numpy as np
 import torch
 import yaml
-from annotator.lama.saicinpainting.training.trainers import load_checkpoint
 from omegaconf import OmegaConf
 
 from modules.modelloader import load_file_from_url
@@ -102,6 +101,8 @@ class PreprocessorInpaintLama(PreprocessorInpaintOnly):
         self.name = "inpaint_only+lama"
 
     def load_model(self):
+        from annotator.lama.saicinpainting.training.trainers import load_checkpoint
+
         remote_model_path = "https://huggingface.co/lllyasviel/Annotators/resolve/main/ControlNetLama.pth"
         model_path = load_file_from_url(remote_model_path, model_dir=preprocessor_dir)
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lama_config.yaml")

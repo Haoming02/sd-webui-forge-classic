@@ -7,16 +7,14 @@ import pytorch_lightning as ptl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from torch.utils.data import DistributedSampler
-
-# from annotator.lama.saicinpainting.evaluation import make_evaluator
-# from annotator.lama.saicinpainting.training.data.datasets import make_default_train_dataloader, make_default_val_dataloader
-# from annotator.lama.saicinpainting.training.losses.adversarial import make_discrim_loss
-# from annotator.lama.saicinpainting.training.losses.perceptual import PerceptualLoss, ResNetPL
-from annotator.lama.saicinpainting.training.modules import make_generator  #, make_discriminator
-# from annotator.lama.saicinpainting.training.visualizers import make_visualizer
-from annotator.lama.saicinpainting.utils import add_prefix_to_keys, average_dicts, set_requires_grad, flatten_dict, \
-    get_has_ddp_rank
+from annotator.lama.saicinpainting.training.modules import make_generator
+from annotator.lama.saicinpainting.utils import (
+    add_prefix_to_keys,
+    average_dicts,
+    flatten_dict,
+    get_has_ddp_rank,
+    set_requires_grad,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -70,49 +68,6 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         if not get_has_ddp_rank():
             LOGGER.info(f'Generator\n{self.generator}')
 
-        # if not predict_only:
-        #     self.save_hyperparameters(self.config)
-        #     self.discriminator = make_discriminator(**self.config.discriminator)
-        #     self.adversarial_loss = make_discrim_loss(**self.config.losses.adversarial)
-        #     self.visualizer = make_visualizer(**self.config.visualizer)
-        #     self.val_evaluator = make_evaluator(**self.config.evaluator)
-        #     self.test_evaluator = make_evaluator(**self.config.evaluator)
-        #
-        #     if not get_has_ddp_rank():
-        #         LOGGER.info(f'Discriminator\n{self.discriminator}')
-        #
-        #     extra_val = self.config.data.get('extra_val', ())
-        #     if extra_val:
-        #         self.extra_val_titles = list(extra_val)
-        #         self.extra_evaluators = nn.ModuleDict({k: make_evaluator(**self.config.evaluator)
-        #                                                for k in extra_val})
-        #     else:
-        #         self.extra_evaluators = {}
-        #
-        #     self.average_generator = average_generator
-        #     self.generator_avg_beta = generator_avg_beta
-        #     self.average_generator_start_step = average_generator_start_step
-        #     self.average_generator_period = average_generator_period
-        #     self.generator_average = None
-        #     self.last_generator_averaging_step = -1
-        #     self.store_discr_outputs_for_vis = store_discr_outputs_for_vis
-        #
-        #     if self.config.losses.get("l1", {"weight_known": 0})['weight_known'] > 0:
-        #         self.loss_l1 = nn.L1Loss(reduction='none')
-        #
-        #     if self.config.losses.get("mse", {"weight": 0})['weight'] > 0:
-        #         self.loss_mse = nn.MSELoss(reduction='none')
-        #
-        #     if self.config.losses.perceptual.weight > 0:
-        #         self.loss_pl = PerceptualLoss()
-        #
-        #     # if self.config.losses.get("resnet_pl", {"weight": 0})['weight'] > 0:
-        #     #     self.loss_resnet_pl = ResNetPL(**self.config.losses.resnet_pl)
-        #     # else:
-        #     #     self.loss_resnet_pl = None
-        #
-        #     self.loss_resnet_pl = None
-
         self.visualize_each_iters = visualize_each_iters
         LOGGER.info('BaseInpaintingTrainingModule init done')
 
@@ -124,27 +79,10 @@ class BaseInpaintingTrainingModule(ptl.LightningModule):
         ]
 
     def train_dataloader(self):
-        kwargs = dict(self.config.data.train)
-        if self.use_ddp:
-            kwargs['ddp_kwargs'] = dict(num_replicas=self.trainer.num_nodes * self.trainer.num_processes,
-                                        rank=self.trainer.global_rank,
-                                        shuffle=True)
-        dataloader = make_default_train_dataloader(**self.config.data.train)
-        return dataloader
+        raise NotImplementedError
 
     def val_dataloader(self):
-        res = [make_default_val_dataloader(**self.config.data.val)]
-
-        if self.config.data.visual_test is not None:
-            res = res + [make_default_val_dataloader(**self.config.data.visual_test)]
-        else:
-            res = res + res
-
-        extra_val = self.config.data.get('extra_val', ())
-        if extra_val:
-            res += [make_default_val_dataloader(**extra_val[k]) for k in self.extra_val_titles]
-
-        return res
+        raise NotImplementedError
 
     def training_step(self, batch, batch_idx, optimizer_idx=None):
         self._is_training_step = True

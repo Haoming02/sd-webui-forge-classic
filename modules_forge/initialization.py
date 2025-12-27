@@ -31,7 +31,6 @@ def initialize_forge():
 
     startup_timer.record("memory_management")
 
-    import pytorch_lightning  # noqa: F401
     import torch
     import torchvision  # noqa: F401
 
