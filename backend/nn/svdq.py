@@ -908,8 +908,6 @@ class NunchakuZImageModel(NextDiT):
         _patch_transformer_block(self.noise_refiner)
         _patch_transformer_block(self.context_refiner)
 
-        self.norm_final = None
-
     def load_state_dict(self, sd, *args, **kwargs):
         sd = patch_z_image_state_dict(sd)
         return super().load_state_dict(sd, *args, **kwargs)

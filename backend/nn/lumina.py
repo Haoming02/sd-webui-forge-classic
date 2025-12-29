@@ -322,7 +322,6 @@ class NextDiT(nn.Module):
                 for layer_id in range(n_layers)
             ]
         )
-        self.norm_final = nn.RMSNorm(dim, eps=norm_eps, elementwise_affine=True)
         self.final_layer = FinalLayer(dim, patch_size, self.out_channels, z_image_modulation=z_image_modulation)
 
         if self.pad_tokens_multiple is not None:
