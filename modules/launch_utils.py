@@ -332,7 +332,7 @@ def prepare_environment():
     ver_SAGE = "2.2.0"
     ver_FLASH = "2.8.3"
     ver_TRITON = "3.5.1"
-    ver_NUNCHAKU = "1.1.0.dev20251111"
+    ver_NUNCHAKU = "1.1.0"
     ver_TORCH, ver_CUDA = _torch_version()
     v_TORCH = ver_TORCH.rsplit(".", 1)[0]
 
@@ -342,13 +342,13 @@ def prepare_environment():
         sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post4/sageattention-{ver_SAGE}+{ver_CUDA}torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl")
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.4.19/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v1.1.0dev20251111/nunchaku-{ver_NUNCHAKU}+torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
 
     else:
         sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.5.4/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v1.1.0dev20251111/nunchaku-{ver_NUNCHAKU}+torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
 
     def _verify_nunchaku() -> bool:
         if not is_installed("nunchaku"):
