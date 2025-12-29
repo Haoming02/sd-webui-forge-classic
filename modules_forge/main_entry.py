@@ -64,7 +64,7 @@ def make_checkpoint_manager_ui():
 
     ui_forge_preset = gr.Radio(label="UI Preset", value=lambda: shared.opts.forge_preset, choices=("sd", "xl", "flux", "qwen", "lumina", "wan"), elem_id="forge_ui_preset")
 
-    ui_checkpoint = gr.Dropdown(label="Checkpoint", value=None, choices=None, elem_classes=["model_selection"])
+    ui_checkpoint = gr.Dropdown(label="Checkpoint", value=None, choices=None, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
 
     ui_vae = gr.Dropdown(label="VAE / Text Encoder", value=None, choices=None, multiselect=True)
 
