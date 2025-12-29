@@ -383,7 +383,4 @@ def forge_model_reload():
 
     model_data.forge_hash = current_hash
 
-    dynamic_args.pop("ref_latents", None)
-    dynamic_args.pop("concat_latent", None)
-
     return sd_model, True
