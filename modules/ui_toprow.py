@@ -73,8 +73,16 @@ class Toprow:
 
         self.submit_box.render()
 
+    def _container_class(self) -> list[str]:
+        if self.is_compact:
+            return ["prompt-container-compact"]
+        elif shared.opts.scrollable_prompt_box:
+            return ["prompt-container-scroll"]
+        else:
+            return []
+
     def create_prompts(self):
-        with gr.Column(elem_id=f"{self.id_part}_prompt_container", elem_classes=["prompt-container-compact"] if self.is_compact else [], scale=6):
+        with gr.Column(elem_id=f"{self.id_part}_prompt_container", elem_classes=self._container_class(), scale=6):
             with gr.Row(elem_id=f"{self.id_part}_prompt_row", elem_classes=["prompt-row"]):
                 self.prompt = gr.Textbox(label="Prompt", elem_id=f"{self.id_part}_prompt", show_label=False, lines=3, placeholder="Prompt\n(Press Ctrl+Enter to generate, Alt+Enter to skip, Esc to interrupt)", elem_classes=["prompt"], value="")
                 self.prompt_img = gr.File(label="", elem_id=f"{self.id_part}_prompt_image", file_count="single", type="binary", visible=False)

@@ -1745,3 +1745,11 @@ body.resizing .resize-handle {
     min-width: 0 !important;
     margin: auto 2em;
 }
+
+#txt2img_prompt_container.prompt-container-scroll, #img2img_prompt_container.prompt-container-scroll {
+    display: flex;
+    flex-direction: row;
+    overflow: auto;
+    height: 185px;
+    padding: 1em;
+}
