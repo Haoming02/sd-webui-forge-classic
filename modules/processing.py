@@ -24,6 +24,7 @@ import modules.sd_vae as sd_vae
 import modules.shared as shared
 from backend import memory_management
 from backend.modules.k_prediction import rescale_zero_terminal_snr_sigmas
+from backend.utils import hash_tensor
 from modules import devices, errors, extra_networks, images, infotext_utils, masking, profiling, prompt_parser, rng, scripts, sd_samplers, sd_samplers_common, sd_unet, sd_vae_approx
 from modules.rng import get_noise_source_type, slerp  # noqa: F401
 from modules.sd_models import apply_token_merging, forge_model_reload
@@ -424,7 +425,7 @@ class StableDiffusionProcessing:
             self.width,
             self.height,
             opts.emphasis,
-            torch.hash_tensor(self.init_latent).item() if isinstance(self, StableDiffusionProcessingImg2Img) else None,
+            hash_tensor(self.init_latent) if isinstance(self, StableDiffusionProcessingImg2Img) else None,
         )
 
     def get_conds_with_caching(self, function, required_prompts, steps, caches, extra_network_data, hires_steps=None):

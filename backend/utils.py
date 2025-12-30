@@ -254,3 +254,15 @@ def join_dicts(base_dict: dict | None, update_dict: dict | None) -> dict:
             result[key] = value
 
     return result
+
+
+def hash_tensor(x: torch.Tensor) -> int | str:
+    if hasattr(torch, "hash_tensor"):
+        return torch.hash_tensor(x).item()
+
+    import hashlib
+
+    b = x.cpu().numpy().tobytes()
+    sha = hashlib.sha256()
+    sha.update(b)
+    return sha.hexdigest()
