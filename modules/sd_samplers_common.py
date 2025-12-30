@@ -94,13 +94,16 @@ def samples_to_image_grid(samples, approximation=None):
 
 def images_tensor_to_samples(image, approximation=None, model=None):
     """image[0, 1] -> latent"""
+    x_latent = None
+
     if approximation is None:
         approximation = approximation_indexes.get(opts.sd_vae_encode_method, 0)
 
     if approximation == 3:
-        image = image.to(devices.device, devices.dtype)
-        x_latent = sd_vae_taesd.encoder_model()(image)
-    else:
+        if (mdl := sd_vae_taesd.encoder_model()) is not None:
+            x_latent = mdl(image.to(devices.device, devices.dtype)).detach()
+
+    if x_latent is None:
         if model is None:
             model = shared.sd_model
 
