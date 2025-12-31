@@ -256,13 +256,8 @@ def join_dicts(base_dict: dict | None, update_dict: dict | None) -> dict:
     return result
 
 
-def hash_tensor(x: torch.Tensor) -> int | str:
+def hash_tensor(x: torch.Tensor) -> int:
     if hasattr(torch, "hash_tensor"):
         return torch.hash_tensor(x).item()
-
-    import hashlib
-
-    b = x.cpu().numpy().tobytes()
-    sha = hashlib.sha256()
-    sha.update(b)
-    return sha.hexdigest()
+    else:
+        return hash(tuple(x.reshape(-1).tolist()))
