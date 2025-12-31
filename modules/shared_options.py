@@ -242,6 +242,8 @@ options_templates.update(
                 gr.Textbox,
                 {"lines": 3, "max_lines": 6, "placeholder": "<Prompt Start>"},
             ),
+            "divqwen": OptionDiv(),
+            "qwen_vae_resize": OptionInfo(False, "Resize input image to 1 megapixel for Qwen-Image-Edit ref_latent"),
         },
     )
 )

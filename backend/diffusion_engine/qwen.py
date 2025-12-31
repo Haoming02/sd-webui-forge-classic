@@ -15,6 +15,7 @@ from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
 from backend.text_processing.qwen_engine import QwenTextProcessingEngine
+from modules.shared import opts
 
 
 class QwenImage(ForgeDiffusionEngine):
@@ -75,7 +76,7 @@ class QwenImage(ForgeDiffusionEngine):
         return token_count, max(999, token_count)
 
     @torch.inference_mode()
-    def encode_vision(self, image):
+    def encode_vision(self, image: torch.Tensor):
         samples = image.movedim(-1, 1)  # b, c, h, w
 
         total = int(384 * 384)
@@ -86,12 +87,15 @@ class QwenImage(ForgeDiffusionEngine):
         s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
         self.images_vl.append(s.movedim(1, -1))
 
-        total = int(1024 * 1024)
-        scale_by = math.sqrt(total / (samples.shape[3] * samples.shape[2]))
-        width = round(samples.shape[3] * scale_by / 8.0) * 8
-        height = round(samples.shape[2] * scale_by / 8.0) * 8
+        if opts.qwen_vae_resize:
+            total = int(1024 * 1024)
+            scale_by = math.sqrt(total / (samples.shape[3] * samples.shape[2]))
+            width = round(samples.shape[3] * scale_by / 32.0) * 32
+            height = round(samples.shape[2] * scale_by / 32.0) * 32
 
-        s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
+            s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
+        else:
+            s = samples.clone()
         sample = self.forge_objects.vae.encode(s.movedim(1, -1)[:, :, :, :3])
         self.ref_latents.append(self.forge_objects.vae.first_stage_model.process_in(sample))
 
