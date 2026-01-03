@@ -910,4 +910,20 @@ class NunchakuZImageModel(NextDiT):
 
     def load_state_dict(self, sd, *args, **kwargs):
         sd = patch_z_image_state_dict(sd)
+        return self._load_state_dict(sd, *args, **kwargs)
+
+    def _load_state_dict(self, sd, *args, **kwargs):
+        state_dict = self.state_dict()
+        for k in state_dict.keys():
+            if k not in sd:
+                if "dummy" in k:
+                    continue
+                if ".wcscales" not in k:
+                    raise ValueError(f"Key {k} not found in state_dict")
+                sd[k] = torch.ones_like(state_dict[k])
+        for n, m in self.named_modules():
+            if isinstance(m, SVDQW4A4Linear):
+                if m.wtscale is not None:
+                    m.wtscale = sd.pop(f"{n}.wtscale", 1.0)
+
         return super().load_state_dict(sd, *args, **kwargs)
