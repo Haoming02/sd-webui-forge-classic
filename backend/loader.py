@@ -231,6 +231,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
 
             model_loader = None
+            _nz = False  # Nunchaku Z-Image
+
             if cls_name == "UNet2DConditionModel":
                 model_loader = lambda c: IntegratedUNet2DConditionModel.from_config(c)
             elif cls_name == "FluxTransformer2DModel":
@@ -261,13 +263,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     model_loader = lambda c: QwenImageTransformer2DModel(**c)
             elif cls_name in ("Lumina2Transformer2DModel", "ZImageTransformer2DModel"):
                 if guess.nunchaku:
-                    from backend.nn.svdq import NunchakuZImageModel
+                    from backend.nn.svdq import patch_nunchaku_zimage
 
-                    model_loader = lambda c: NunchakuZImageModel(**c)
-                else:
-                    from backend.nn.lumina import NextDiT
+                    guess.unet_config.pop("filename")
+                    precision = guess.unet_config.pop("precision")
+                    rank = guess.unet_config.pop("rank")
+                    _nz = True
 
-                    model_loader = lambda c: NextDiT(**c)
+                from backend.nn.lumina import NextDiT
+
+                model_loader = lambda c: NextDiT(**c)
 
             unet_config = guess.unet_config.copy()
             state_dict_parameters = memory_management.state_dict_parameters(state_dict)
@@ -300,9 +305,11 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 need_manual_cast = storage_dtype != computation_dtype
                 to_args = dict(device=initial_device, dtype=storage_dtype)
 
-                with using_forge_operations(**to_args, manual_cast_enabled=need_manual_cast):
+                with using_forge_operations(operations=False if _nz else None, **to_args, manual_cast_enabled=need_manual_cast):
                     model = model_loader(unet_config).to(**to_args)
 
+            if _nz:
+                model = patch_nunchaku_zimage(model, precision, rank)
             load_state_dict(model, state_dict)
 
             if hasattr(model, "_internal_dict"):

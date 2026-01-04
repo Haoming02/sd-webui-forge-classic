@@ -513,6 +513,20 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
 
     current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype = device, dtype, manual_cast_enabled, bnb_dtype
 
+    if operations is False:
+        _dev = torch.get_default_device()
+        _dtype = torch.get_default_dtype()
+
+        torch.set_default_device(current_device)
+        torch.set_default_dtype(current_dtype)
+
+        yield
+
+        torch.set_default_device(_dev)
+        torch.set_default_dtype(_dtype)
+
+        return
+
     if operations is None:
         if bnb_dtype in ["gguf"]:
             operations = ForgeOperationsGGUF

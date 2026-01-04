@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from transformers import T5EncoderModel
@@ -15,6 +15,7 @@ from nunchaku.caching.diffusers_adapters.flux import apply_cache_on_transformer
 from nunchaku.caching.fbcache import cache_context, create_cache_context
 from nunchaku.lora.flux.compose import compose_lora
 from nunchaku.models.linear import AWQW4A16Linear, SVDQW4A4Linear
+from nunchaku.models.transformers.utils import patch_scale_key
 from nunchaku.models.utils import CPUOffloadManager
 from nunchaku.ops.fused import fused_gelu_mlp
 from nunchaku.utils import load_state_dict_in_safetensors
@@ -779,6 +780,8 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
 
 # region: Z-Image
 
+from functools import wraps
+
 from backend.nn.lumina import JointAttention, NextDiT, clamp_fp16
 
 
@@ -891,39 +894,26 @@ def patch_z_image_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, t
     return patched_state_dict
 
 
-class NunchakuZImageModel(NextDiT):
-    """https://github.com/nunchaku-tech/ComfyUI-nunchaku/blob/dev/models/zimage.py#L101"""
+def patch_nunchaku_zimage(model: NextDiT, precision: str, rank: int):
+    kwargs = {"precision": precision, "rank": rank}
 
-    def __init__(self, filename: str, precision: str, rank: int, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def patch_transformer_block(block_list: list[torch.nn.Module]):
+        for _, block in enumerate(block_list):
+            block.attention = NunchakuZImageAttention(block.attention, **kwargs)
+            block.feed_forward = NunchakuZImageFeedForward(block.feed_forward, **kwargs)
 
-        _kwargs = {"precision": precision, "rank": rank}
+    patch_transformer_block(model.layers)
+    patch_transformer_block(model.noise_refiner)
+    patch_transformer_block(model.context_refiner)
 
-        def _patch_transformer_block(block_list: list[torch.nn.Module]):
-            for _, block in enumerate(block_list):
-                block.attention = NunchakuZImageAttention(block.attention, **_kwargs)
-                block.feed_forward = NunchakuZImageFeedForward(block.feed_forward, **_kwargs)
+    _load_state_dict: Callable = model.load_state_dict
 
-        _patch_transformer_block(self.layers)
-        _patch_transformer_block(self.noise_refiner)
-        _patch_transformer_block(self.context_refiner)
-
-    def load_state_dict(self, sd, *args, **kwargs):
+    @wraps(_load_state_dict)
+    def load_state_dict(sd, *args, **kwargs):
         sd = patch_z_image_state_dict(sd)
-        return self._load_state_dict(sd, *args, **kwargs)
+        patch_scale_key(model, sd)
+        return _load_state_dict(sd, *args, **kwargs)
 
-    def _load_state_dict(self, sd, *args, **kwargs):
-        state_dict = self.state_dict()
-        for k in state_dict.keys():
-            if k not in sd:
-                if "dummy" in k:
-                    continue
-                if ".wcscales" not in k:
-                    raise ValueError(f"Key {k} not found in state_dict")
-                sd[k] = torch.ones_like(state_dict[k])
-        for n, m in self.named_modules():
-            if isinstance(m, SVDQW4A4Linear):
-                if m.wtscale is not None:
-                    m.wtscale = sd.pop(f"{n}.wtscale", 1.0)
+    model.load_state_dict = load_state_dict
 
-        return super().load_state_dict(sd, *args, **kwargs)
+    return model
