@@ -78,18 +78,14 @@ if args.deterministic:
 
 directml_enabled = False
 if args.directml is not None:
-    logger.warning("WARNING: torch-directml barely works, is very slow, has not been updated in over 1 year and might be removed soon, please don't use it, there are better options.")
+    logger.warning("torch-directml barely works; please don't use it, there are better options...")
     import torch_directml
 
     directml_enabled = True
-    device_index = args.directml
-    if device_index < 0:
-        directml_device = torch_directml.device()
-    else:
-        directml_device = torch_directml.device(device_index)
+    device_index: int = max(0, args.directml)
+    directml_device = torch_directml.device(device_index)
     logger.info("Using directml with device: {}".format(torch_directml.device_name(device_index)))
-    # torch_directml.disable_tiled_resources(True)
-    lowvram_available = False  # TODO: need to find a way to get free memory in directml before this can be enabled by default.
+    lowvram_available = False
 
 try:
     import intel_extension_for_pytorch as ipex  # noqa: F401
