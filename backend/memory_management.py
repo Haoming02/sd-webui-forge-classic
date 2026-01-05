@@ -384,6 +384,22 @@ except Exception:
     logger.warning("Could not determine default device...")
 
 
+def bake_gguf_model(model):
+    if getattr(model, "gguf_baked", False):
+        return
+
+    for p in model.parameters():
+        gguf_cls = getattr(p, "gguf_cls", None)
+        if gguf_cls is not None:
+            gguf_cls.bake(p)
+
+    global signal_empty_cache
+    signal_empty_cache = True
+
+    model.gguf_baked = True
+    return model
+
+
 current_loaded_models: list["LoadedModel"] = []
 
 
@@ -450,6 +466,11 @@ class LoadedModel:
         if is_intel_xpu() and not args.disable_ipex_optimize and "ipex" in globals() and real_model is not None:
             with torch.no_grad():
                 real_model = ipex.optimize(real_model.eval(), inplace=True, graph_mode=True, concat_linear=True)
+
+            global signal_empty_cache
+            signal_empty_cache = True
+
+        bake_gguf_model(real_model)
 
         self.real_model = weakref.ref(real_model)
         self.model_finalizer = weakref.finalize(real_model, cleanup_models)
