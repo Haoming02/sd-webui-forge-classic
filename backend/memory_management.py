@@ -50,11 +50,10 @@ class CPUState(Enum):
 
 
 # Determine VRAM State
+lowvram_available = True
 vram_state = VRAMState.NORMAL_VRAM
 set_vram_to = VRAMState.NORMAL_VRAM
 cpu_state = CPUState.GPU
-
-total_vram = 0
 
 FLOAT8_TYPES: list[torch.dtype] = []
 
@@ -64,16 +63,15 @@ for dtype in ("e4m3fn", "e4m3fnuz", "e5m2", "e5m2fnuz", "e8m0fnu"):
     except Exception:
         pass
 
-xpu_available = False
-torch_version = ""
 try:
-    torch_version = torch.version.__version__
-    temp = torch_version.split(".")
-    torch_version_numeric = (int(temp[0]), int(temp[1]))
+    torch_version: str = torch.__version__
+    _ver: list[str] = torch_version.split(".", 2)
+    torch_version_numeric: tuple[int, int] = (int(_ver[0]), int(_ver[1]))
 except Exception:
-    pass
+    logger.warning("Could not determine PyTorch version...")
+    torch_version = ""
+    torch_version_numeric = None
 
-lowvram_available = True
 if args.deterministic:
     logger.info("Using deterministic algorithms for pytorch")
     torch.use_deterministic_algorithms(True, warn_only=True)
