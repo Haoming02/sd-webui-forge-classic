@@ -19,17 +19,19 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import psutil
-import logging
-from enum import Enum
-from comfy.cli_args import args, PerformanceFeature
-import torch
-import sys
-import importlib
-import platform
-import weakref
 import gc
+import importlib
+import logging
 import os
+import platform
+import sys
+import weakref
+from enum import Enum
+
+import psutil
+import torch
+
+from backend.args import args
 
 logger = logging.getLogger("memory_management")
 
