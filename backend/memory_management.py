@@ -1220,12 +1220,8 @@ def supports_fp8_compute(device: torch.device = None) -> bool:
     return True
 
 
-def extended_fp16_support():
-    # TODO: check why some models work with fp16 on newer torch versions but not on older
-    if torch_version_numeric < (2, 7):
-        return False
-
-    return True
+def extended_fp16_support() -> bool:
+    return torch_version_numeric >= (2, 7)
 
 
 LORA_COMPUTE_DTYPES = {}
