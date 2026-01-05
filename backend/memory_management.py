@@ -944,7 +944,7 @@ def force_channels_last() -> bool:
     return args.force_channels_last
 
 
-def cast_to(weight, dtype=None, device=None, non_blocking=False, copy=False, stream=None):
+def cast_to(weight: torch.Tensor, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, stream: torch.Stream = None):
     if device is None or weight.device == device:
         if not copy:
             if dtype is None or weight.dtype == dtype:
@@ -967,10 +967,11 @@ def cast_to(weight, dtype=None, device=None, non_blocking=False, copy=False, str
     else:
         r = torch.empty_like(weight, dtype=dtype, device=device)
         r.copy_(weight, non_blocking=non_blocking)
+
     return r
 
 
-def cast_to_device(tensor, device, dtype, copy=False):
+def cast_to_device(tensor: torch.Tensor, device: torch.device, dtype: torch.dtype, copy: bool = False):
     non_blocking = device_supports_non_blocking(device)
     return cast_to(tensor, dtype=dtype, device=device, non_blocking=non_blocking, copy=copy)
 
