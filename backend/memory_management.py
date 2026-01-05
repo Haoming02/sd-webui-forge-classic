@@ -1058,45 +1058,36 @@ def get_free_memory(dev: torch.device = None, torch_free_too: bool = False) -> i
         return mem_free_total
 
 
-def cpu_mode():
-    global cpu_state
-    return cpu_state == CPUState.CPU
+def cpu_mode() -> bool:
+    return cpu_state is CPUState.CPU
 
 
-def mps_mode():
-    global cpu_state
-    return cpu_state == CPUState.MPS
+def mps_mode() -> bool:
+    return cpu_state is CPUState.MPS
 
 
-def is_device_type(device, type):
-    if hasattr(device, "type"):
-        if device.type == type:
-            return True
-    return False
+def is_device_type(device: torch.device, type: str) -> bool:
+    return getattr(device, "type", False) == type
 
 
-def is_device_cpu(device):
+def is_device_cpu(device: torch.device) -> bool:
     return is_device_type(device, "cpu")
 
 
-def is_device_mps(device):
+def is_device_mps(device: torch.device) -> bool:
     return is_device_type(device, "mps")
 
 
-def is_device_xpu(device):
+def is_device_xpu(device: torch.device) -> bool:
     return is_device_type(device, "xpu")
 
 
-def is_device_cuda(device):
+def is_device_cuda(device: torch.device) -> bool:
     return is_device_type(device, "cuda")
 
 
-def is_directml_enabled():
-    global directml_enabled
-    if directml_enabled:
-        return True
-
-    return False
+def is_directml_enabled() -> bool:
+    return directml_enabled
 
 
 def should_use_fp16(device=None, model_params=0, prioritize_performance=True, manual_cast=False):
