@@ -108,33 +108,7 @@ if args.cpu:
 
 
 def is_intel_xpu():
-    global cpu_state
-    global xpu_available
-    if cpu_state == CPUState.GPU:
-        if xpu_available:
-            return True
-    return False
-
-
-def is_ascend_npu():
-    global npu_available
-    if npu_available:
-        return True
-    return False
-
-
-def is_mlu():
-    global mlu_available
-    if mlu_available:
-        return True
-    return False
-
-
-def is_ixuca():
-    global ixuca_available
-    if ixuca_available:
-        return True
-    return False
+    return xpu_available and cpu_state is CPUState.GPU
 
 
 def get_torch_device():
@@ -150,10 +124,6 @@ def get_torch_device():
     else:
         if is_intel_xpu():
             return torch.device("xpu", torch.xpu.current_device())
-        elif is_ascend_npu():
-            return torch.device("npu", torch.npu.current_device())
-        elif is_mlu():
-            return torch.device("mlu", torch.mlu.current_device())
         else:
             return torch.device(torch.cuda.current_device())
 
@@ -176,18 +146,6 @@ def get_total_memory(dev=None, torch_total_too=False):
             mem_total_xpu = torch.xpu.get_device_properties(dev).total_memory
             mem_total_torch = mem_reserved
             mem_total = mem_total_xpu
-        elif is_ascend_npu():
-            stats = torch.npu.memory_stats(dev)
-            mem_reserved = stats["reserved_bytes.all.current"]
-            _, mem_total_npu = torch.npu.mem_get_info(dev)
-            mem_total_torch = mem_reserved
-            mem_total = mem_total_npu
-        elif is_mlu():
-            stats = torch.mlu.memory_stats(dev)
-            mem_reserved = stats["reserved_bytes.all.current"]
-            _, mem_total_mlu = torch.mlu.mem_get_info(dev)
-            mem_total_torch = mem_reserved
-            mem_total = mem_total_mlu
         else:
             stats = torch.cuda.memory_stats(dev)
             mem_reserved = stats["reserved_bytes.all.current"]
@@ -301,7 +259,7 @@ try:
         if torch_version_numeric[0] >= 2:
             if ENABLE_PYTORCH_ATTENTION == False and args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
                 ENABLE_PYTORCH_ATTENTION = True
-    if is_intel_xpu() or is_ascend_npu() or is_mlu() or is_ixuca():
+    if is_intel_xpu():
         if args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
             ENABLE_PYTORCH_ATTENTION = True
 except Exception:
@@ -414,10 +372,6 @@ def get_torch_device_name(device):
             return "{}".format(device.type)
     elif is_intel_xpu():
         return "{} {}".format(device, torch.xpu.get_device_name(device))
-    elif is_ascend_npu():
-        return "{} {}".format(device, torch.npu.get_device_name(device))
-    elif is_mlu():
-        return "{} {}".format(device, torch.mlu.get_device_name(device))
     else:
         return "CUDA {}: {}".format(device, torch.cuda.get_device_name(device))
 
@@ -1237,12 +1191,6 @@ def xformers_enabled():
         return False
     if is_intel_xpu():
         return False
-    if is_ascend_npu():
-        return False
-    if is_mlu():
-        return False
-    if is_ixuca():
-        return False
     if directml_enabled:
         return False
     return XFORMERS_IS_AVAILABLE
@@ -1275,14 +1223,8 @@ def pytorch_attention_flash_attention():
             return True
         if is_intel_xpu():
             return True
-        if is_ascend_npu():
-            return True
-        if is_mlu():
-            return True
         if is_amd():
             return True  # if you have pytorch attention enabled on AMD it probably supports at least mem efficient attention
-        if is_ixuca():
-            return True
     return False
 
 
@@ -1318,20 +1260,6 @@ def get_free_memory(dev=None, torch_free_too=False):
             mem_free_xpu = torch.xpu.get_device_properties(dev).total_memory - mem_reserved
             mem_free_torch = mem_reserved - mem_active
             mem_free_total = mem_free_xpu + mem_free_torch
-        elif is_ascend_npu():
-            stats = torch.npu.memory_stats(dev)
-            mem_active = stats["active_bytes.all.current"]
-            mem_reserved = stats["reserved_bytes.all.current"]
-            mem_free_npu, _ = torch.npu.mem_get_info(dev)
-            mem_free_torch = mem_reserved - mem_active
-            mem_free_total = mem_free_npu + mem_free_torch
-        elif is_mlu():
-            stats = torch.mlu.memory_stats(dev)
-            mem_active = stats["active_bytes.all.current"]
-            mem_reserved = stats["reserved_bytes.all.current"]
-            mem_free_mlu, _ = torch.mlu.mem_get_info(dev)
-            mem_free_torch = mem_reserved - mem_active
-            mem_free_total = mem_free_mlu + mem_free_torch
         else:
             stats = torch.cuda.memory_stats(dev)
             mem_active = stats["active_bytes.all.current"]
@@ -1413,15 +1341,6 @@ def should_use_fp16(device=None, model_params=0, prioritize_performance=True, ma
         else:
             return torch.xpu.get_device_properties(device).has_fp16
 
-    if is_ascend_npu():
-        return True
-
-    if is_mlu():
-        return True
-
-    if is_ixuca():
-        return True
-
     if torch.version.hip:
         return True
 
@@ -1483,12 +1402,6 @@ def should_use_bf16(device=None, model_params=0, prioritize_performance=True, ma
         else:
             return torch.xpu.is_bf16_supported()
 
-    if is_ascend_npu():
-        return True
-
-    if is_ixuca():
-        return True
-
     if is_amd():
         arch = torch.cuda.get_device_properties(device).gcnArchName
         if any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH):  # RDNA2 and older don't support bf16
@@ -1497,10 +1410,6 @@ def should_use_bf16(device=None, model_params=0, prioritize_performance=True, ma
             return False
 
     props = torch.cuda.get_device_properties(device)
-
-    if is_mlu():
-        if props.major > 3:
-            return True
 
     if props.major >= 8:
         return True
@@ -1571,10 +1480,6 @@ def soft_empty_cache(force=False):
         torch.mps.empty_cache()
     elif is_intel_xpu():
         torch.xpu.empty_cache()
-    elif is_ascend_npu():
-        torch.npu.empty_cache()
-    elif is_mlu():
-        torch.mlu.empty_cache()
     elif torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
