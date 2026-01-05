@@ -1,4 +1,5 @@
 # https://github.com/comfyanonymous/ComfyUI/blob/v0.7.0/comfy/model_management.py
+# Cherry-picked some good parts from ComfyUI with some bad parts fixed
 
 """
 This file is part of ComfyUI.
@@ -29,6 +30,8 @@ import platform
 import weakref
 import gc
 import os
+
+logger = logging.getLogger("memory_management")
 
 
 class VRAMState(Enum):
@@ -92,12 +95,12 @@ except:
 
 lowvram_available = True
 if args.deterministic:
-    logging.info("Using deterministic algorithms for pytorch")
+    logger.info("Using deterministic algorithms for pytorch")
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 directml_enabled = False
 if args.directml is not None:
-    logging.warning("WARNING: torch-directml barely works, is very slow, has not been updated in over 1 year and might be removed soon, please don't use it, there are better options.")
+    logger.warning("WARNING: torch-directml barely works, is very slow, has not been updated in over 1 year and might be removed soon, please don't use it, there are better options.")
     import torch_directml
 
     directml_enabled = True
@@ -106,7 +109,7 @@ if args.directml is not None:
         directml_device = torch_directml.device()
     else:
         directml_device = torch_directml.device(device_index)
-    logging.info("Using directml with device: {}".format(torch_directml.device_name(device_index)))
+    logger.info("Using directml with device: {}".format(torch_directml.device_name(device_index)))
     # torch_directml.disable_tiled_resources(True)
     lowvram_available = False  # TODO: need to find a way to get free memory in directml before this can be enabled by default.
 
@@ -256,13 +259,13 @@ def mac_version():
 
 total_vram = get_total_memory(get_torch_device()) / (1024 * 1024)
 total_ram = psutil.virtual_memory().total / (1024 * 1024)
-logging.info("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
+logger.info("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
 
 try:
-    logging.info("pytorch version: {}".format(torch_version))
+    logger.info("pytorch version: {}".format(torch_version))
     mac_ver = mac_version()
     if mac_ver is not None:
-        logging.info("Mac Version {}".format(mac_ver))
+        logger.info("Mac Version {}".format(mac_ver))
 except:
     pass
 
@@ -287,10 +290,10 @@ else:
             pass
         try:
             XFORMERS_VERSION = xformers.version.__version__
-            logging.info("xformers version: {}".format(XFORMERS_VERSION))
+            logger.info("xformers version: {}".format(XFORMERS_VERSION))
             if XFORMERS_VERSION.startswith("0.0.18"):
-                logging.warning("\nWARNING: This version of xformers has a major bug where you will get black images when generating high resolution images.")
-                logging.warning("Please downgrade or upgrade xformers to a different version.\n")
+                logger.warning("\nWARNING: This version of xformers has a major bug where you will get black images when generating high resolution images.")
+                logger.warning("Please downgrade or upgrade xformers to a different version.\n")
                 XFORMERS_ENABLED_VAE = False
         except:
             pass
@@ -365,15 +368,15 @@ try:
         if not (any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH)):
             if os.getenv(AMD_ENABLE_MIOPEN_ENV) != "1":
                 torch.backends.cudnn.enabled = False  # Seems to improve things a lot on AMD
-                logging.info("Set: torch.backends.cudnn.enabled = False for better AMD performance.")
+                logger.info("Set: torch.backends.cudnn.enabled = False for better AMD performance.")
 
         try:
             rocm_version = tuple(map(int, str(torch.version.hip).split(".")[:2]))
         except:
             rocm_version = (6, -1)
 
-        logging.info("AMD arch: {}".format(arch))
-        logging.info("ROCm version: {}".format(rocm_version))
+        logger.info("AMD arch: {}".format(arch))
+        logger.info("ROCm version: {}".format(rocm_version))
         if args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
             if importlib.util.find_spec("triton") is not None:  # AMD efficient attention implementation depends on triton. TODO: better way of detecting if it's compiled in or not.
                 if torch_version_numeric >= (2, 7):  # works on 2.6 but doesn't actually seem to improve much
@@ -401,7 +404,7 @@ try:
     if (is_nvidia() or is_amd()) and PerformanceFeature.Fp16Accumulation in args.fast:
         torch.backends.cuda.matmul.allow_fp16_accumulation = True
         PRIORITIZE_FP16 = True  # TODO: limit to cards where it actually boosts performance
-        logging.info("Enabled fp16 accumulation.")
+        logger.info("Enabled fp16 accumulation.")
 except:
     pass
 
@@ -412,7 +415,7 @@ try:
     if torch_version_numeric >= (2, 5):
         torch.backends.cuda.allow_fp16_bf16_reduction_math_sdp(True)
 except:
-    logging.warning("Warning, could not set allow_fp16_bf16_reduction_math_sdp")
+    logger.warning("Warning, could not set allow_fp16_bf16_reduction_math_sdp")
 
 if args.lowvram:
     set_vram_to = VRAMState.LOW_VRAM
@@ -424,7 +427,7 @@ elif args.highvram or args.gpu_only:
 
 FORCE_FP32 = False
 if args.force_fp32:
-    logging.info("Forcing FP32, if this improves things please report it.")
+    logger.info("Forcing FP32, if this improves things please report it.")
     FORCE_FP32 = True
 
 if lowvram_available:
@@ -438,12 +441,12 @@ if cpu_state != CPUState.GPU:
 if cpu_state == CPUState.MPS:
     vram_state = VRAMState.SHARED
 
-logging.info(f"Set vram state to: {vram_state.name}")
+logger.info(f"Set vram state to: {vram_state.name}")
 
 DISABLE_SMART_MEMORY = args.disable_smart_memory
 
 if DISABLE_SMART_MEMORY:
-    logging.info("Disabling smart memory management")
+    logger.info("Disabling smart memory management")
 
 
 def get_torch_device_name(device):
@@ -469,9 +472,9 @@ def get_torch_device_name(device):
 
 
 try:
-    logging.info("Device: {}".format(get_torch_device_name(get_torch_device())))
+    logger.info("Device: {}".format(get_torch_device_name(get_torch_device())))
 except:
-    logging.warning("Could not pick default device.")
+    logger.warning("Could not pick default device.")
 
 
 current_loaded_models = []
@@ -602,7 +605,7 @@ if WINDOWS:
 
 if args.reserve_vram is not None:
     EXTRA_RESERVED_VRAM = args.reserve_vram * 1024 * 1024 * 1024
-    logging.debug("Reserving {}MB vram for other applications.".format(EXTRA_RESERVED_VRAM / (1024 * 1024)))
+    logger.debug("Reserving {}MB vram for other applications.".format(EXTRA_RESERVED_VRAM / (1024 * 1024)))
 
 
 def extra_reserved_memory():
@@ -634,7 +637,7 @@ def free_memory(memory_required, device, keep_loaded=[]):
             if free_mem > memory_required:
                 break
             memory_to_free = memory_required - free_mem
-        logging.debug(f"Unloading {current_loaded_models[i].model.model.__class__.__name__}")
+        logger.debug(f"Unloading {current_loaded_models[i].model.model.__class__.__name__}")
         if current_loaded_models[i].model_unload(memory_to_free):
             unloaded_model.append(i)
 
@@ -685,7 +688,7 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
             models_to_load.append(loaded)
         else:
             if hasattr(x, "model"):
-                logging.info(f"Requested to load {x.model.__class__.__name__}")
+                logger.info(f"Requested to load {x.model.__class__.__name__}")
             models_to_load.append(loaded_model)
 
     for loaded_model in models_to_load:
@@ -711,7 +714,7 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
             free_mem = get_free_memory(device)
             if free_mem < minimum_memory_required:
                 models_l = free_memory(minimum_memory_required, device)
-                logging.info("{} models unloaded.".format(len(models_l)))
+                logger.info("{} models unloaded.".format(len(models_l)))
 
     for loaded_model in models_to_load:
         model = loaded_model.model
@@ -759,7 +762,7 @@ def cleanup_models_gc():
     for i in range(len(current_loaded_models)):
         cur = current_loaded_models[i]
         if cur.is_dead():
-            logging.info("Potential memory leak detected with model {}, doing a full garbage collect, for maximum performance avoid circular references in the model code.".format(cur.real_model().__class__.__name__))
+            logger.info("Potential memory leak detected with model {}, doing a full garbage collect, for maximum performance avoid circular references in the model code.".format(cur.real_model().__class__.__name__))
             do_gc = True
             break
 
@@ -770,7 +773,7 @@ def cleanup_models_gc():
         for i in range(len(current_loaded_models)):
             cur = current_loaded_models[i]
             if cur.is_dead():
-                logging.warning("WARNING, memory leak with model {}. Please make sure it is not being referenced from somewhere.".format(cur.real_model().__class__.__name__))
+                logger.warning("WARNING, memory leak with model {}. Please make sure it is not being referenced from somewhere.".format(cur.real_model().__class__.__name__))
 
 
 def cleanup_models():
@@ -1080,7 +1083,7 @@ if args.disable_async_offload:
     NUM_STREAMS = 0
 
 if NUM_STREAMS > 0:
-    logging.info("Using async weight offloading with {} streams".format(NUM_STREAMS))
+    logger.info("Using async weight offloading with {} streams".format(NUM_STREAMS))
 
 
 def current_stream(device):
@@ -1181,7 +1184,7 @@ if not args.disable_pinned_memory:
             MAX_PINNED_MEMORY = get_total_memory(torch.device("cpu")) * 0.45  # Windows limit is apparently 50%
         else:
             MAX_PINNED_MEMORY = get_total_memory(torch.device("cpu")) * 0.95
-        logging.info("Enabled pinned memory {}".format(MAX_PINNED_MEMORY // (1024 * 1024)))
+        logger.info("Enabled pinned memory {}".format(MAX_PINNED_MEMORY // (1024 * 1024)))
 
 PINNING_ALLOWED_TYPES = set(["Parameter", "QuantizedTensor"])
 
@@ -1230,7 +1233,7 @@ def pin_memory(tensor):
         TOTAL_PINNED_MEMORY += size
         return True
     else:
-        logging.warning("Pin error.")
+        logger.warning("Pin error.")
         discard_cuda_async_error()
 
     return False
@@ -1249,11 +1252,11 @@ def unpin_memory(tensor):
 
     size_stored = PINNED_MEMORY.get(ptr, None)
     if size_stored is None:
-        logging.warning("Tried to unpin tensor not pinned by ComfyUI")
+        logger.warning("Tried to unpin tensor not pinned by ComfyUI")
         return False
 
     if size != size_stored:
-        logging.warning("Size of pinned tensor changed")
+        logger.warning("Size of pinned tensor changed")
         return False
 
     if torch.cuda.cudart().cudaHostUnregister(ptr) == 0:
@@ -1262,7 +1265,7 @@ def unpin_memory(tensor):
             TOTAL_PINNED_MEMORY = 0
         return True
     else:
-        logging.warning("Unpin error.")
+        logger.warning("Unpin error.")
         discard_cuda_async_error()
 
     return False
