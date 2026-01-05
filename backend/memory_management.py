@@ -880,13 +880,11 @@ def vae_dtype(device: torch.device = None, allowed_dtypes: list[torch.dtype] = [
     return torch.float32
 
 
-def get_autocast_device(dev):
-    if hasattr(dev, "type"):
-        return dev.type
-    return "cuda"
+def get_autocast_device(dev: torch.device) -> str:
+    return getattr(dev, "type", "cuda")
 
 
-def supports_dtype(device, dtype):  # TODO
+def supports_dtype(device: torch.device, dtype: torch.dtype) -> bool:
     if dtype == torch.float32:
         return True
     if is_device_cpu(device):
