@@ -355,7 +355,7 @@ if DISABLE_SMART_MEMORY:
     logger.info("Disabled Smart Memory Management")
 
 
-def get_torch_device_name(device):
+def get_torch_device_name(device: torch.device) -> str:
     if hasattr(device, "type"):
         if device.type == "cuda":
             try:
@@ -376,7 +376,7 @@ def get_torch_device_name(device):
 try:
     logger.info("Device: {}".format(get_torch_device_name(get_torch_device())))
 except Exception:
-    logger.warning("Could not pick default device.")
+    logger.warning("Could not determine default device...")
 
 
 current_loaded_models = []
