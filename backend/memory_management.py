@@ -1014,11 +1014,11 @@ def pytorch_attention_enabled_vae() -> bool:
     return ENABLE_PYTORCH_ATTENTION and not is_amd()
 
 
-def force_upcast_attention_dtype():
-    upcast = args.force_upcast_attention
+def force_upcast_attention_dtype() -> dict[torch.dtype, torch.dtype] | None:
+    upcast: bool = args.force_upcast_attention
 
     macos_version = mac_version()
-    if macos_version is not None and ((14, 5) <= macos_version):  # black image bug on recent versions of macOS, I don't think it's ever getting fixed
+    if macos_version is not None and macos_version >= (14, 5):
         upcast = True
 
     if upcast:
