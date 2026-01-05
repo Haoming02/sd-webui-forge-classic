@@ -304,23 +304,25 @@ if ENABLE_PYTORCH_ATTENTION:
     torch.backends.cuda.enable_mem_efficient_sdp(True)
 
 
-PRIORITIZE_FP16 = False  # TODO: remove and replace with something that shows exactly which dtype is faster than the other
+PRIORITIZE_FP16 = False
+
 try:
-    if (is_nvidia() or is_amd()) and PerformanceFeature.Fp16Accumulation in args.fast:
+    if args.fast_fp16 and (is_nvidia() or is_amd()):
         torch.backends.cuda.matmul.allow_fp16_accumulation = True
-        PRIORITIZE_FP16 = True  # TODO: limit to cards where it actually boosts performance
-        logger.info("Enabled fp16 accumulation.")
+        logger.info("allow_fp16_accumulation: {}".format(torch.backends.cuda.matmul.allow_fp16_accumulation))
+        PRIORITIZE_FP16 = True
 except Exception:
     pass
 
-if torch.cuda.is_available() and torch.backends.cudnn.is_available() and PerformanceFeature.AutoTune in args.fast:
+if args.autotune and torch.cuda.is_available() and torch.backends.cudnn.is_available():
     torch.backends.cudnn.benchmark = True
+    logger.info("benchmark: {}".format(torch.backends.cudnn.benchmark))
 
 try:
     if torch_version_numeric >= (2, 5):
         torch.backends.cuda.allow_fp16_bf16_reduction_math_sdp(True)
 except Exception:
-    logger.warning("Warning, could not set allow_fp16_bf16_reduction_math_sdp")
+    pass
 
 if args.lowvram:
     set_vram_to = VRAMState.LOW_VRAM
