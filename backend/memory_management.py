@@ -976,7 +976,7 @@ def cast_to_device(tensor: torch.Tensor, device: torch.device, dtype: torch.dtyp
     return cast_to(tensor, dtype=dtype, device=device, non_blocking=non_blocking, copy=copy)
 
 
-def xformers_enabled():
+def xformers_enabled() -> bool:
     if cpu_state is not CPUState.GPU:
         return False
     if is_intel_xpu():
@@ -986,11 +986,11 @@ def xformers_enabled():
     return XFORMERS_IS_AVAILABLE
 
 
-def xformers_enabled_vae():
+def xformers_enabled_vae() -> bool:
     return XFORMERS_ENABLED_VAE
 
 
-def sage_enabled():
+def sage_enabled() -> bool:
     if cpu_state is not CPUState.GPU:
         return False
     if not is_nvidia():
@@ -998,7 +998,7 @@ def sage_enabled():
     return SAGE_IS_AVAILABLE
 
 
-def flash_enabled():
+def flash_enabled() -> bool:
     if cpu_state is not CPUState.GPU:
         return False
     if not is_nvidia():
@@ -1006,28 +1006,12 @@ def flash_enabled():
     return FLASH_IS_AVAILABLE
 
 
-def pytorch_attention_enabled():
-    global ENABLE_PYTORCH_ATTENTION
+def pytorch_attention_enabled() -> bool:
     return ENABLE_PYTORCH_ATTENTION
 
 
-def pytorch_attention_enabled_vae():
-    if is_amd():
-        return False  # enabling pytorch attention on AMD currently causes crash when doing high res
-    return pytorch_attention_enabled()
-
-
-def pytorch_attention_flash_attention():
-    global ENABLE_PYTORCH_ATTENTION
-    if ENABLE_PYTORCH_ATTENTION:
-        # TODO: more reliable way of checking for flash attention?
-        if is_nvidia():
-            return True
-        if is_intel_xpu():
-            return True
-        if is_amd():
-            return True  # if you have pytorch attention enabled on AMD it probably supports at least mem efficient attention
-    return False
+def pytorch_attention_enabled_vae() -> bool:
+    return ENABLE_PYTORCH_ATTENTION and not is_amd()
 
 
 def force_upcast_attention_dtype():
