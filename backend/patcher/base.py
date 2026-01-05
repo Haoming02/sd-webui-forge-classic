@@ -18,15 +18,13 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from __future__ import annotations
 
 import collections
 import copy
 import inspect
 import logging
-import math
 import uuid
-from typing import Callable, Optional
+from typing import Callable
 
 import torch
 
@@ -84,17 +82,17 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     return model_options
 
 
-def create_model_options_clone(orig_model_options: dict):
-    return comfy.patcher_extension.copy_nested_dicts(orig_model_options)
+# def create_model_options_clone(orig_model_options: dict):
+#     return comfy.patcher_extension.copy_nested_dicts(orig_model_options)
 
 
-def create_hook_patches_clone(orig_hook_patches):
-    new_hook_patches = {}
-    for hook_ref in orig_hook_patches:
-        new_hook_patches[hook_ref] = {}
-        for k in orig_hook_patches[hook_ref]:
-            new_hook_patches[hook_ref][k] = orig_hook_patches[hook_ref][k][:]
-    return new_hook_patches
+# def create_hook_patches_clone(orig_hook_patches):
+#     new_hook_patches = {}
+#     for hook_ref in orig_hook_patches:
+#         new_hook_patches[hook_ref] = {}
+#         for k in orig_hook_patches[hook_ref]:
+#             new_hook_patches[hook_ref][k] = orig_hook_patches[hook_ref][k][:]
+#     return new_hook_patches
 
 
 def wipe_lowvram_weight(m):
@@ -222,14 +220,10 @@ class MemoryCounter:
 
 
 class ModelPatcher:
-    def __init__(self, model, load_device, offload_device, size=0, weight_inplace_update=False):
+    def __init__(self, model, load_device, offload_device, size=0, current_device=None, weight_inplace_update=False):
         self.size = size
         self.model = model
-        if not hasattr(self.model, "device"):
-            logging.debug("Model doesn't have a device attribute.")
-            self.model.device = offload_device
-        elif self.model.device is None:
-            self.model.device = offload_device
+        self.model.device = current_device or offload_device
 
         self.patches = {}
         self.backup = {}
@@ -245,23 +239,25 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.attachments: dict[str] = {}
-        self.additional_models: dict[str, list[ModelPatcher]] = {}
-        self.callbacks: dict[str, dict[str, list[Callable]]] = CallbacksMP.init_callbacks()
-        self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
+        self.lora_patches = {}
+
+        # self.attachments: dict[str] = {}
+        # self.additional_models: dict[str, list[ModelPatcher]] = {}
+        # self.callbacks: dict[str, dict[str, list[Callable]]] = CallbacksMP.init_callbacks()
+        # self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
 
         self.is_injected = False
         self.skip_injection = False
-        self.injections: dict[str, list[PatcherInjection]] = {}
+        # self.injections: dict[str, list[PatcherInjection]] = {}
 
-        self.hook_patches: dict[comfy.hooks._HookRef] = {}
-        self.hook_patches_backup: dict[comfy.hooks._HookRef] = None
-        self.hook_backup: dict[str, tuple[torch.Tensor, torch.device]] = {}
-        self.cached_hook_patches: dict[comfy.hooks.HookGroup, dict[str, torch.Tensor]] = {}
-        self.current_hooks: Optional[comfy.hooks.HookGroup] = None
-        self.forced_hooks: Optional[comfy.hooks.HookGroup] = None  # NOTE: only used for CLIP at this time
+        # self.hook_patches: dict[comfy.hooks._HookRef] = {}
+        # self.hook_patches_backup: dict[comfy.hooks._HookRef] = None
+        # self.hook_backup: dict[str, tuple[torch.Tensor, torch.device]] = {}
+        # self.cached_hook_patches: dict[comfy.hooks.HookGroup, dict[str, torch.Tensor]] = {}
+        # self.current_hooks: Optional[comfy.hooks.HookGroup] = None
+        # self.forced_hooks: Optional[comfy.hooks.HookGroup] = None  # NOTE: only used for CLIP at this time
         self.is_clip = False
-        self.hook_mode = comfy.hooks.EnumHookMode.MaxSpeed
+        # self.hook_mode = comfy.hooks.EnumHookMode.MaxSpeed
 
         if not hasattr(self.model, "model_loaded_weight_memory"):
             self.model.model_loaded_weight_memory = 0
@@ -277,6 +273,13 @@ class ModelPatcher:
 
         if not hasattr(self.model, "model_offload_buffer_memory"):
             self.model.model_offload_buffer_memory = 0
+
+    @property
+    def current_device(self):
+        return self.model.device
+
+    def has_online_lora(self):
+        return False
 
     def model_size(self):
         if self.size > 0:
@@ -310,46 +313,46 @@ class ModelPatcher:
 
         n.force_cast_weights = self.force_cast_weights
 
-        # attachments
-        n.attachments = {}
-        for k in self.attachments:
-            if hasattr(self.attachments[k], "on_model_patcher_clone"):
-                n.attachments[k] = self.attachments[k].on_model_patcher_clone()
-            else:
-                n.attachments[k] = self.attachments[k]
-        # additional models
-        for k, c in self.additional_models.items():
-            n.additional_models[k] = [x.clone() for x in c]
-        # callbacks
-        for k, c in self.callbacks.items():
-            n.callbacks[k] = {}
-            for k1, c1 in c.items():
-                n.callbacks[k][k1] = c1.copy()
-        # sample wrappers
-        for k, w in self.wrappers.items():
-            n.wrappers[k] = {}
-            for k1, w1 in w.items():
-                n.wrappers[k][k1] = w1.copy()
+        # # attachments
+        # n.attachments = {}
+        # for k in self.attachments:
+        #     if hasattr(self.attachments[k], "on_model_patcher_clone"):
+        #         n.attachments[k] = self.attachments[k].on_model_patcher_clone()
+        #     else:
+        #         n.attachments[k] = self.attachments[k]
+        # # additional models
+        # for k, c in self.additional_models.items():
+        #     n.additional_models[k] = [x.clone() for x in c]
+        # # callbacks
+        # for k, c in self.callbacks.items():
+        #     n.callbacks[k] = {}
+        #     for k1, c1 in c.items():
+        #         n.callbacks[k][k1] = c1.copy()
+        # # sample wrappers
+        # for k, w in self.wrappers.items():
+        #     n.wrappers[k] = {}
+        #     for k1, w1 in w.items():
+        #         n.wrappers[k][k1] = w1.copy()
         # injection
         n.is_injected = self.is_injected
         n.skip_injection = self.skip_injection
-        for k, i in self.injections.items():
-            n.injections[k] = i.copy()
-        # hooks
-        n.hook_patches = create_hook_patches_clone(self.hook_patches)
-        n.hook_patches_backup = create_hook_patches_clone(self.hook_patches_backup) if self.hook_patches_backup else self.hook_patches_backup
-        for group in self.cached_hook_patches:
-            n.cached_hook_patches[group] = {}
-            for k in self.cached_hook_patches[group]:
-                n.cached_hook_patches[group][k] = self.cached_hook_patches[group][k]
-        n.hook_backup = self.hook_backup
-        n.current_hooks = self.current_hooks.clone() if self.current_hooks else self.current_hooks
-        n.forced_hooks = self.forced_hooks.clone() if self.forced_hooks else self.forced_hooks
+        # for k, i in self.injections.items():
+        #     n.injections[k] = i.copy()
+        # # hooks
+        # n.hook_patches = create_hook_patches_clone(self.hook_patches)
+        # n.hook_patches_backup = create_hook_patches_clone(self.hook_patches_backup) if self.hook_patches_backup else self.hook_patches_backup
+        # for group in self.cached_hook_patches:
+        #     n.cached_hook_patches[group] = {}
+        #     for k in self.cached_hook_patches[group]:
+        #         n.cached_hook_patches[group][k] = self.cached_hook_patches[group][k]
+        # n.hook_backup = self.hook_backup
+        # n.current_hooks = self.current_hooks.clone() if self.current_hooks else self.current_hooks
+        # n.forced_hooks = self.forced_hooks.clone() if self.forced_hooks else self.forced_hooks
         n.is_clip = self.is_clip
-        n.hook_mode = self.hook_mode
+        # n.hook_mode = self.hook_mode
 
-        for callback in self.get_all_callbacks(CallbacksMP.ON_CLONE):
-            callback(self, n)
+        # for callback in self.get_all_callbacks(CallbacksMP.ON_CLONE):
+        #     callback(self, n)
         return n
 
     def is_clone(self, other):
@@ -409,7 +412,7 @@ class ModelPatcher:
     def set_model_sampler_calc_cond_batch_function(self, sampler_calc_cond_batch_function):
         self.model_options["sampler_calc_cond_batch_function"] = sampler_calc_cond_batch_function
 
-    def set_model_unet_function_wrapper(self, unet_wrapper_function: UnetWrapperFunction):
+    def set_model_unet_function_wrapper(self, unet_wrapper_function):
         self.model_options["model_function_wrapper"] = unet_wrapper_function
 
     def set_model_denoise_mask_function(self, denoise_mask_function):
@@ -639,7 +642,7 @@ class ModelPatcher:
 
         out_weight = merge_lora_to_weight(self.patches[key], temp_weight, key)
         if set_func is None:
-            out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
+            out_weight = out_weight.to(weight.dtype)
             if inplace_update:
                 utils.copy_to_param(self.model, key, out_weight)
             else:
@@ -685,7 +688,7 @@ class ModelPatcher:
                         weight, _, _ = get_key_weight(self.model, key)
                         if model_dtype is None or weight is None:
                             return 0
-                        if weight.dtype != model_dtype or isinstance(weight, QuantizedTensor):
+                        if weight.dtype != model_dtype:
                             return weight.numel() * model_dtype.itemsize
                         return 0
 
@@ -696,7 +699,7 @@ class ModelPatcher:
 
     def load(self, device_to=None, lowvram_model_memory=0, force_patch_weights=False, full_load=False):
         with self.use_ejected():
-            self.unpatch_hooks()
+            # self.unpatch_hooks()
             mem_counter = 0
             patch_counter = 0
             lowvram_counter = 0
@@ -816,10 +819,10 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = offload_buffer
             self.model.current_weight_patches_uuid = self.patches_uuid
 
-            for callback in self.get_all_callbacks(CallbacksMP.ON_LOAD):
-                callback(self, device_to, lowvram_model_memory, force_patch_weights, full_load)
+            # for callback in self.get_all_callbacks(CallbacksMP.ON_LOAD):
+            #     callback(self, device_to, lowvram_model_memory, force_patch_weights, full_load)
 
-            self.apply_hooks(self.forced_hooks, force_apply=True)
+            # self.apply_hooks(self.forced_hooks, force_apply=True)
 
     def patch_model(self, device_to=None, lowvram_model_memory=0, load_weights=True, force_patch_weights=False):
         with self.use_ejected():
@@ -841,7 +844,7 @@ class ModelPatcher:
     def unpatch_model(self, device_to=None, unpatch_weights=True):
         self.eject_model()
         if unpatch_weights:
-            self.unpatch_hooks()
+            # self.unpatch_hooks()
             self.unpin_all_weights()
             if self.model.model_lowvram:
                 for m in self.model.modules():
@@ -978,7 +981,7 @@ class ModelPatcher:
                 return 0
             full_load = False
             if self.model.model_lowvram == False and self.model.model_loaded_weight_memory > 0:
-                self.apply_hooks(self.forced_hooks, force_apply=True)
+                # self.apply_hooks(self.forced_hooks, force_apply=True)
                 return 0
             if self.model.model_loaded_weight_memory + extra_memory > self.model_size():
                 full_load = True
@@ -996,8 +999,8 @@ class ModelPatcher:
         self.model_patches_to(self.offload_device)
         if unpatch_all:
             self.unpatch_model(self.offload_device, unpatch_weights=unpatch_all)
-        for callback in self.get_all_callbacks(CallbacksMP.ON_DETACH):
-            callback(self, unpatch_all)
+        # for callback in self.get_all_callbacks(CallbacksMP.ON_DETACH):
+        #     callback(self, unpatch_all)
         return self.model
 
     def current_loaded_device(self):
@@ -1007,8 +1010,8 @@ class ModelPatcher:
         self.clean_hooks()
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-        for callback in self.get_all_callbacks(CallbacksMP.ON_CLEANUP):
-            callback(self)
+        # for callback in self.get_all_callbacks(CallbacksMP.ON_CLEANUP):
+        #     callback(self)
 
     def add_callback(self, call_type: str, callback: Callable):
         self.add_callback_with_key(call_type, None, callback)
@@ -1052,25 +1055,25 @@ class ModelPatcher:
             w_list.extend(w)
         return w_list
 
-    def set_attachments(self, key: str, attachment):
-        self.attachments[key] = attachment
+    # def set_attachments(self, key: str, attachment):
+    #     self.attachments[key] = attachment
 
-    def remove_attachments(self, key: str):
-        if key in self.attachments:
-            self.attachments.pop(key)
+    # def remove_attachments(self, key: str):
+    #     if key in self.attachments:
+    #         self.attachments.pop(key)
 
-    def get_attachment(self, key: str):
-        return self.attachments.get(key, None)
+    # def get_attachment(self, key: str):
+    #     return self.attachments.get(key, None)
 
-    def set_injections(self, key: str, injections: list[PatcherInjection]):
-        self.injections[key] = injections
+    # def set_injections(self, key: str, injections: list[PatcherInjection]):
+    #     self.injections[key] = injections
 
-    def remove_injections(self, key: str):
-        if key in self.injections:
-            self.injections.pop(key)
+    # def remove_injections(self, key: str):
+    #     if key in self.injections:
+    #         self.injections.pop(key)
 
-    def get_injections(self, key: str):
-        return self.injections.get(key, None)
+    # def get_injections(self, key: str):
+    #     return self.injections.get(key, None)
 
     def set_additional_models(self, key: str, models: list["ModelPatcher"]):
         self.additional_models[key] = models
@@ -1113,245 +1116,245 @@ class ModelPatcher:
     def inject_model(self):
         if self.is_injected or self.skip_injection:
             return
-        for injections in self.injections.values():
-            for inj in injections:
-                inj.inject(self)
-                self.is_injected = True
-        if self.is_injected:
-            for callback in self.get_all_callbacks(CallbacksMP.ON_INJECT_MODEL):
-                callback(self)
+        # for injections in self.injections.values():
+        #     for inj in injections:
+        #         inj.inject(self)
+        #         self.is_injected = True
+        # if self.is_injected:
+        #     for callback in self.get_all_callbacks(CallbacksMP.ON_INJECT_MODEL):
+        #         callback(self)
 
     def eject_model(self):
         if not self.is_injected:
             return
-        for injections in self.injections.values():
-            for inj in injections:
-                inj.eject(self)
-        self.is_injected = False
-        for callback in self.get_all_callbacks(CallbacksMP.ON_EJECT_MODEL):
-            callback(self)
+        # for injections in self.injections.values():
+        #     for inj in injections:
+        #         inj.eject(self)
+        # self.is_injected = False
+        # for callback in self.get_all_callbacks(CallbacksMP.ON_EJECT_MODEL):
+        #     callback(self)
 
-    def pre_run(self):
-        if hasattr(self.model, "current_patcher"):
-            self.model.current_patcher = self
-        for callback in self.get_all_callbacks(CallbacksMP.ON_PRE_RUN):
-            callback(self)
+    # def pre_run(self):
+    #     if hasattr(self.model, "current_patcher"):
+    #         self.model.current_patcher = self
+    #     for callback in self.get_all_callbacks(CallbacksMP.ON_PRE_RUN):
+    #         callback(self)
 
-    def prepare_state(self, timestep):
-        for callback in self.get_all_callbacks(CallbacksMP.ON_PREPARE_STATE):
-            callback(self, timestep)
+    # def prepare_state(self, timestep):
+    #     for callback in self.get_all_callbacks(CallbacksMP.ON_PREPARE_STATE):
+    #         callback(self, timestep)
 
-    def restore_hook_patches(self):
-        if self.hook_patches_backup is not None:
-            self.hook_patches = self.hook_patches_backup
-            self.hook_patches_backup = None
+    # def restore_hook_patches(self):
+    #     if self.hook_patches_backup is not None:
+    #         self.hook_patches = self.hook_patches_backup
+    #         self.hook_patches_backup = None
 
-    def set_hook_mode(self, hook_mode: comfy.hooks.EnumHookMode):
-        self.hook_mode = hook_mode
+    # def set_hook_mode(self, hook_mode: comfy.hooks.EnumHookMode):
+    #     self.hook_mode = hook_mode
 
-    def prepare_hook_patches_current_keyframe(self, t: torch.Tensor, hook_group: comfy.hooks.HookGroup, model_options: dict[str]):
-        curr_t = t[0]
-        reset_current_hooks = False
-        transformer_options = model_options.get("transformer_options", {})
-        for hook in hook_group.hooks:
-            changed = hook.hook_keyframe.prepare_current_keyframe(curr_t=curr_t, transformer_options=transformer_options)
-            # if keyframe changed, remove any cached HookGroups that contain hook with the same hook_ref;
-            # this will cause the weights to be recalculated when sampling
-            if changed:
-                # reset current_hooks if contains hook that changed
-                if self.current_hooks is not None:
-                    for current_hook in self.current_hooks.hooks:
-                        if current_hook == hook:
-                            reset_current_hooks = True
-                            break
-                for cached_group in list(self.cached_hook_patches.keys()):
-                    if cached_group.contains(hook):
-                        self.cached_hook_patches.pop(cached_group)
-        if reset_current_hooks:
-            self.patch_hooks(None)
+    # def prepare_hook_patches_current_keyframe(self, t: torch.Tensor, hook_group: comfy.hooks.HookGroup, model_options: dict[str]):
+    #     curr_t = t[0]
+    #     reset_current_hooks = False
+    #     transformer_options = model_options.get("transformer_options", {})
+    #     for hook in hook_group.hooks:
+    #         changed = hook.hook_keyframe.prepare_current_keyframe(curr_t=curr_t, transformer_options=transformer_options)
+    #         # if keyframe changed, remove any cached HookGroups that contain hook with the same hook_ref;
+    #         # this will cause the weights to be recalculated when sampling
+    #         if changed:
+    #             # reset current_hooks if contains hook that changed
+    #             if self.current_hooks is not None:
+    #                 for current_hook in self.current_hooks.hooks:
+    #                     if current_hook == hook:
+    #                         reset_current_hooks = True
+    #                         break
+    #             for cached_group in list(self.cached_hook_patches.keys()):
+    #                 if cached_group.contains(hook):
+    #                     self.cached_hook_patches.pop(cached_group)
+    #     if reset_current_hooks:
+    #         self.patch_hooks(None)
 
-    def register_all_hook_patches(self, hooks: comfy.hooks.HookGroup, target_dict: dict[str], model_options: dict = None, registered: comfy.hooks.HookGroup = None):
-        self.restore_hook_patches()
-        if registered is None:
-            registered = comfy.hooks.HookGroup()
-        # handle WeightHooks
-        weight_hooks_to_register: list[comfy.hooks.WeightHook] = []
-        for hook in hooks.get_type(comfy.hooks.EnumHookType.Weight):
-            if hook.hook_ref not in self.hook_patches:
-                weight_hooks_to_register.append(hook)
-            else:
-                registered.add(hook)
-        if len(weight_hooks_to_register) > 0:
-            # clone hook_patches to become backup so that any non-dynamic hooks will return to their original state
-            self.hook_patches_backup = create_hook_patches_clone(self.hook_patches)
-            for hook in weight_hooks_to_register:
-                hook.add_hook_patches(self, model_options, target_dict, registered)
-        for callback in self.get_all_callbacks(CallbacksMP.ON_REGISTER_ALL_HOOK_PATCHES):
-            callback(self, hooks, target_dict, model_options, registered)
-        return registered
+    # def register_all_hook_patches(self, hooks: comfy.hooks.HookGroup, target_dict: dict[str], model_options: dict = None, registered: comfy.hooks.HookGroup = None):
+    #     self.restore_hook_patches()
+    #     if registered is None:
+    #         registered = comfy.hooks.HookGroup()
+    #     # handle WeightHooks
+    #     weight_hooks_to_register: list[comfy.hooks.WeightHook] = []
+    #     for hook in hooks.get_type(comfy.hooks.EnumHookType.Weight):
+    #         if hook.hook_ref not in self.hook_patches:
+    #             weight_hooks_to_register.append(hook)
+    #         else:
+    #             registered.add(hook)
+    #     if len(weight_hooks_to_register) > 0:
+    #         # clone hook_patches to become backup so that any non-dynamic hooks will return to their original state
+    #         self.hook_patches_backup = create_hook_patches_clone(self.hook_patches)
+    #         for hook in weight_hooks_to_register:
+    #             hook.add_hook_patches(self, model_options, target_dict, registered)
+    #     for callback in self.get_all_callbacks(CallbacksMP.ON_REGISTER_ALL_HOOK_PATCHES):
+    #         callback(self, hooks, target_dict, model_options, registered)
+    #     return registered
 
-    def add_hook_patches(self, hook: comfy.hooks.WeightHook, patches, strength_patch=1.0, strength_model=1.0):
-        with self.use_ejected():
-            # NOTE: this mirrors behavior of add_patches func
-            current_hook_patches: dict[str, list] = self.hook_patches.get(hook.hook_ref, {})
-            p = set()
-            model_sd = self.model.state_dict()
-            for k in patches:
-                offset = None
-                function = None
-                if isinstance(k, str):
-                    key = k
-                else:
-                    offset = k[1]
-                    key = k[0]
-                    if len(k) > 2:
-                        function = k[2]
+    # def add_hook_patches(self, hook: comfy.hooks.WeightHook, patches, strength_patch=1.0, strength_model=1.0):
+    #     with self.use_ejected():
+    #         # NOTE: this mirrors behavior of add_patches func
+    #         current_hook_patches: dict[str, list] = self.hook_patches.get(hook.hook_ref, {})
+    #         p = set()
+    #         model_sd = self.model.state_dict()
+    #         for k in patches:
+    #             offset = None
+    #             function = None
+    #             if isinstance(k, str):
+    #                 key = k
+    #             else:
+    #                 offset = k[1]
+    #                 key = k[0]
+    #                 if len(k) > 2:
+    #                     function = k[2]
 
-                if key in model_sd:
-                    p.add(k)
-                    current_patches: list[tuple] = current_hook_patches.get(key, [])
-                    current_patches.append((strength_patch, patches[k], strength_model, offset, function))
-                    current_hook_patches[key] = current_patches
-            self.hook_patches[hook.hook_ref] = current_hook_patches
-            # since should care about these patches too to determine if same model, reroll patches_uuid
-            self.patches_uuid = uuid.uuid4()
-            return list(p)
+    #             if key in model_sd:
+    #                 p.add(k)
+    #                 current_patches: list[tuple] = current_hook_patches.get(key, [])
+    #                 current_patches.append((strength_patch, patches[k], strength_model, offset, function))
+    #                 current_hook_patches[key] = current_patches
+    #         self.hook_patches[hook.hook_ref] = current_hook_patches
+    #         # since should care about these patches too to determine if same model, reroll patches_uuid
+    #         self.patches_uuid = uuid.uuid4()
+    #         return list(p)
 
-    def get_combined_hook_patches(self, hooks: comfy.hooks.HookGroup):
-        # combined_patches will contain  weights of all relevant hooks, per key
-        combined_patches = {}
-        if hooks is not None:
-            for hook in hooks.hooks:
-                hook_patches: dict = self.hook_patches.get(hook.hook_ref, {})
-                for key in hook_patches.keys():
-                    current_patches: list[tuple] = combined_patches.get(key, [])
-                    if math.isclose(hook.strength, 1.0):
-                        current_patches.extend(hook_patches[key])
-                    else:
-                        # patches are stored as tuples: (strength_patch, (tuple_with_weights,), strength_model)
-                        for patch in hook_patches[key]:
-                            new_patch = list(patch)
-                            new_patch[0] *= hook.strength
-                            current_patches.append(tuple(new_patch))
-                    combined_patches[key] = current_patches
-        return combined_patches
+    # def get_combined_hook_patches(self, hooks: comfy.hooks.HookGroup):
+    #     # combined_patches will contain  weights of all relevant hooks, per key
+    #     combined_patches = {}
+    #     if hooks is not None:
+    #         for hook in hooks.hooks:
+    #             hook_patches: dict = self.hook_patches.get(hook.hook_ref, {})
+    #             for key in hook_patches.keys():
+    #                 current_patches: list[tuple] = combined_patches.get(key, [])
+    #                 if math.isclose(hook.strength, 1.0):
+    #                     current_patches.extend(hook_patches[key])
+    #                 else:
+    #                     # patches are stored as tuples: (strength_patch, (tuple_with_weights,), strength_model)
+    #                     for patch in hook_patches[key]:
+    #                         new_patch = list(patch)
+    #                         new_patch[0] *= hook.strength
+    #                         current_patches.append(tuple(new_patch))
+    #                 combined_patches[key] = current_patches
+    #     return combined_patches
 
-    def apply_hooks(self, hooks: comfy.hooks.HookGroup, transformer_options: dict = None, force_apply=False):
-        # TODO: return transformer_options dict with any additions from hooks
-        if self.current_hooks == hooks and (not force_apply or (not self.is_clip and hooks is None)):
-            return comfy.hooks.create_transformer_options_from_hooks(self, hooks, transformer_options)
-        self.patch_hooks(hooks=hooks)
-        for callback in self.get_all_callbacks(CallbacksMP.ON_APPLY_HOOKS):
-            callback(self, hooks)
-        return comfy.hooks.create_transformer_options_from_hooks(self, hooks, transformer_options)
+    # def apply_hooks(self, hooks: comfy.hooks.HookGroup, transformer_options: dict = None, force_apply=False):
+    #     # TODO: return transformer_options dict with any additions from hooks
+    #     if self.current_hooks == hooks and (not force_apply or (not self.is_clip and hooks is None)):
+    #         return comfy.hooks.create_transformer_options_from_hooks(self, hooks, transformer_options)
+    #     self.patch_hooks(hooks=hooks)
+    #     for callback in self.get_all_callbacks(CallbacksMP.ON_APPLY_HOOKS):
+    #         callback(self, hooks)
+    #     return comfy.hooks.create_transformer_options_from_hooks(self, hooks, transformer_options)
 
-    def patch_hooks(self, hooks: comfy.hooks.HookGroup):
-        with self.use_ejected():
-            if hooks is not None:
-                model_sd_keys = list(self.model_state_dict().keys())
-                memory_counter = None
-                if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
-                    # TODO: minimum_counter should have a minimum that conforms to loaded model requirements
-                    memory_counter = MemoryCounter(initial=memory_management.get_free_memory(self.load_device), minimum=memory_management.minimum_inference_memory() * 2)
-                # if have cached weights for hooks, use it
-                cached_weights = self.cached_hook_patches.get(hooks, None)
-                if cached_weights is not None:
-                    model_sd_keys_set = set(model_sd_keys)
-                    for key in cached_weights:
-                        if key not in model_sd_keys:
-                            logging.warning(f"Cached hook could not patch. Key does not exist in model: {key}")
-                            continue
-                        self.patch_cached_hook_weights(cached_weights=cached_weights, key=key, memory_counter=memory_counter)
-                        model_sd_keys_set.remove(key)
-                    self.unpatch_hooks(model_sd_keys_set)
-                else:
-                    self.unpatch_hooks()
-                    relevant_patches = self.get_combined_hook_patches(hooks=hooks)
-                    original_weights = None
-                    if len(relevant_patches) > 0:
-                        original_weights = self.get_key_patches()
-                    for key in relevant_patches:
-                        if key not in model_sd_keys:
-                            logging.warning(f"Cached hook would not patch. Key does not exist in model: {key}")
-                            continue
-                        self.patch_hook_weight_to_device(hooks=hooks, combined_patches=relevant_patches, key=key, original_weights=original_weights, memory_counter=memory_counter)
-            else:
-                self.unpatch_hooks()
-            self.current_hooks = hooks
+    # def patch_hooks(self, hooks: comfy.hooks.HookGroup):
+    #     with self.use_ejected():
+    #         if hooks is not None:
+    #             model_sd_keys = list(self.model_state_dict().keys())
+    #             memory_counter = None
+    #             if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
+    #                 # TODO: minimum_counter should have a minimum that conforms to loaded model requirements
+    #                 memory_counter = MemoryCounter(initial=memory_management.get_free_memory(self.load_device), minimum=memory_management.minimum_inference_memory() * 2)
+    #             # if have cached weights for hooks, use it
+    #             cached_weights = self.cached_hook_patches.get(hooks, None)
+    #             if cached_weights is not None:
+    #                 model_sd_keys_set = set(model_sd_keys)
+    #                 for key in cached_weights:
+    #                     if key not in model_sd_keys:
+    #                         logging.warning(f"Cached hook could not patch. Key does not exist in model: {key}")
+    #                         continue
+    #                     self.patch_cached_hook_weights(cached_weights=cached_weights, key=key, memory_counter=memory_counter)
+    #                     model_sd_keys_set.remove(key)
+    #                 self.unpatch_hooks(model_sd_keys_set)
+    #             else:
+    #                 self.unpatch_hooks()
+    #                 relevant_patches = self.get_combined_hook_patches(hooks=hooks)
+    #                 original_weights = None
+    #                 if len(relevant_patches) > 0:
+    #                     original_weights = self.get_key_patches()
+    #                 for key in relevant_patches:
+    #                     if key not in model_sd_keys:
+    #                         logging.warning(f"Cached hook would not patch. Key does not exist in model: {key}")
+    #                         continue
+    #                     self.patch_hook_weight_to_device(hooks=hooks, combined_patches=relevant_patches, key=key, original_weights=original_weights, memory_counter=memory_counter)
+    #         else:
+    #             self.unpatch_hooks()
+    #         self.current_hooks = hooks
 
-    def patch_cached_hook_weights(self, cached_weights: dict, key: str, memory_counter: MemoryCounter):
-        if key not in self.hook_backup:
-            weight: torch.Tensor = utils.get_attr(self.model, key)
-            target_device = self.offload_device
-            if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
-                used = memory_counter.use(weight)
-                if used:
-                    target_device = weight.device
-            self.hook_backup[key] = (weight.to(device=target_device, copy=True), weight.device)
-        utils.copy_to_param(self.model, key, cached_weights[key][0].to(device=cached_weights[key][1]))
+    # def patch_cached_hook_weights(self, cached_weights: dict, key: str, memory_counter: MemoryCounter):
+    #     if key not in self.hook_backup:
+    #         weight: torch.Tensor = utils.get_attr(self.model, key)
+    #         target_device = self.offload_device
+    #         if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
+    #             used = memory_counter.use(weight)
+    #             if used:
+    #                 target_device = weight.device
+    #         self.hook_backup[key] = (weight.to(device=target_device, copy=True), weight.device)
+    #     utils.copy_to_param(self.model, key, cached_weights[key][0].to(device=cached_weights[key][1]))
 
-    def clear_cached_hook_weights(self):
-        self.cached_hook_patches.clear()
-        self.patch_hooks(None)
+    # def clear_cached_hook_weights(self):
+    #     self.cached_hook_patches.clear()
+    #     self.patch_hooks(None)
 
-    def patch_hook_weight_to_device(self, hooks: comfy.hooks.HookGroup, combined_patches: dict, key: str, original_weights: dict, memory_counter: MemoryCounter):
-        if key not in combined_patches:
-            return
+    # def patch_hook_weight_to_device(self, hooks: comfy.hooks.HookGroup, combined_patches: dict, key: str, original_weights: dict, memory_counter: MemoryCounter):
+    #     if key not in combined_patches:
+    #         return
 
-        weight, set_func, convert_func = get_key_weight(self.model, key)
-        weight: torch.Tensor
-        if key not in self.hook_backup:
-            target_device = self.offload_device
-            if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
-                used = memory_counter.use(weight)
-                if used:
-                    target_device = weight.device
-            self.hook_backup[key] = (weight.to(device=target_device, copy=True), weight.device)
-        # TODO: properly handle LowVramPatch, if it ends up an issue
-        temp_weight = memory_management.cast_to_device(weight, weight.device, torch.float32, copy=True)
-        if convert_func is not None:
-            temp_weight = convert_func(temp_weight, inplace=True)
+    #     weight, set_func, convert_func = get_key_weight(self.model, key)
+    #     weight: torch.Tensor
+    #     if key not in self.hook_backup:
+    #         target_device = self.offload_device
+    #         if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
+    #             used = memory_counter.use(weight)
+    #             if used:
+    #                 target_device = weight.device
+    #         self.hook_backup[key] = (weight.to(device=target_device, copy=True), weight.device)
+    #     # TODO: properly handle LowVramPatch, if it ends up an issue
+    #     temp_weight = memory_management.cast_to_device(weight, weight.device, torch.float32, copy=True)
+    #     if convert_func is not None:
+    #         temp_weight = convert_func(temp_weight, inplace=True)
 
-        out_weight = merge_lora_to_weight(combined_patches[key], temp_weight, key)
-        del original_weights[key]
-        if set_func is None:
-            out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
-            utils.copy_to_param(self.model, key, out_weight)
-        else:
-            set_func(out_weight, inplace_update=True, seed=string_to_seed(key))
-        if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
-            # TODO: disable caching if not enough system RAM to do so
-            target_device = self.offload_device
-            used = memory_counter.use(weight)
-            if used:
-                target_device = weight.device
-            self.cached_hook_patches.setdefault(hooks, {})
-            self.cached_hook_patches[hooks][key] = (out_weight.to(device=target_device, copy=False), weight.device)
-        del temp_weight
-        del out_weight
-        del weight
+    #     out_weight = merge_lora_to_weight(combined_patches[key], temp_weight, key)
+    #     del original_weights[key]
+    #     if set_func is None:
+    #         out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
+    #         utils.copy_to_param(self.model, key, out_weight)
+    #     else:
+    #         set_func(out_weight, inplace_update=True, seed=string_to_seed(key))
+    #     if self.hook_mode == comfy.hooks.EnumHookMode.MaxSpeed:
+    #         # TODO: disable caching if not enough system RAM to do so
+    #         target_device = self.offload_device
+    #         used = memory_counter.use(weight)
+    #         if used:
+    #             target_device = weight.device
+    #         self.cached_hook_patches.setdefault(hooks, {})
+    #         self.cached_hook_patches[hooks][key] = (out_weight.to(device=target_device, copy=False), weight.device)
+    #     del temp_weight
+    #     del out_weight
+    #     del weight
 
-    def unpatch_hooks(self, whitelist_keys_set: set[str] = None) -> None:
-        with self.use_ejected():
-            if len(self.hook_backup) == 0:
-                self.current_hooks = None
-                return
-            keys = list(self.hook_backup.keys())
-            if whitelist_keys_set:
-                for k in keys:
-                    if k in whitelist_keys_set:
-                        utils.copy_to_param(self.model, k, self.hook_backup[k][0].to(device=self.hook_backup[k][1]))
-                        self.hook_backup.pop(k)
-            else:
-                for k in keys:
-                    utils.copy_to_param(self.model, k, self.hook_backup[k][0].to(device=self.hook_backup[k][1]))
+    # def unpatch_hooks(self, whitelist_keys_set: set[str] = None) -> None:
+    #     with self.use_ejected():
+    #         if len(self.hook_backup) == 0:
+    #             self.current_hooks = None
+    #             return
+    #         keys = list(self.hook_backup.keys())
+    #         if whitelist_keys_set:
+    #             for k in keys:
+    #                 if k in whitelist_keys_set:
+    #                     utils.copy_to_param(self.model, k, self.hook_backup[k][0].to(device=self.hook_backup[k][1]))
+    #                     self.hook_backup.pop(k)
+    #         else:
+    #             for k in keys:
+    #                 utils.copy_to_param(self.model, k, self.hook_backup[k][0].to(device=self.hook_backup[k][1]))
 
-                self.hook_backup.clear()
-                self.current_hooks = None
+    #             self.hook_backup.clear()
+    #             self.current_hooks = None
 
-    def clean_hooks(self):
-        self.unpatch_hooks()
-        self.clear_cached_hook_weights()
+    # def clean_hooks(self):
+    #     self.unpatch_hooks()
+    #     self.clear_cached_hook_weights()
 
     def __del__(self):
         self.unpin_all_weights()
