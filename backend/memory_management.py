@@ -417,7 +417,7 @@ class LoadedModel:
             self._set_model(model)
 
     @property
-    def model(self):
+    def model(self) -> ModelPatcher:
         return self._model()
 
     def model_memory(self):
@@ -1245,6 +1245,9 @@ def lora_compute_dtype(device: torch.device) -> torch.dtype:
     return dtype
 
 
+signal_empty_cache = False
+
+
 def soft_empty_cache(force=False):
     if cpu_state is CPUState.MPS:
         torch.mps.empty_cache()
@@ -1254,10 +1257,14 @@ def soft_empty_cache(force=False):
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
 
+    global signal_empty_cache
+    signal_empty_cache = False
+
 
 def unload_all_models():
     free_memory(1e30, get_torch_device())
-    # free_memory(1e30, cpu)
+    # if not (args.gpu_only or vram_state is VRAMState.HIGH_VRAM):
+    #     free_memory(1e30, cpu)
 
 
 # region: Streams
