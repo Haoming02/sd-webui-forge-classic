@@ -1149,10 +1149,9 @@ def should_use_fp16(device: torch.device = None, model_params: int = 0, prioriti
     return True
 
 
-def should_use_bf16(device=None, model_params=0, prioritize_performance=True, manual_cast=False):
-    if device is not None:
-        if is_device_cpu(device):  # TODO ? bf16 works on CPU but is extremely slow
-            return False
+def should_use_bf16(device: torch.device = None, model_params: int = 0, prioritize_performance: bool = True, manual_cast: bool = False) -> bool:
+    if device is not None and is_device_cpu(device):
+        return False
 
     if FORCE_FP32:
         return False
@@ -1176,7 +1175,7 @@ def should_use_bf16(device=None, model_params=0, prioritize_performance=True, ma
 
     if is_amd():
         arch = torch.cuda.get_device_properties(device).gcnArchName
-        if any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH):  # RDNA2 and older don't support bf16
+        if any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH):
             if manual_cast:
                 return True
             return False
