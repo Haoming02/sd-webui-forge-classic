@@ -264,41 +264,38 @@ try:
 except Exception:
     pass
 
+SUPPORT_FP8_OPS: bool = None
 
-SUPPORT_FP8_OPS = args.supports_fp8_compute
+if is_amd():
+    AMD_RDNA2_AND_OLDER_ARCH = ("gfx1030", "gfx1031", "gfx1010", "gfx1011", "gfx1012", "gfx906", "gfx900", "gfx803")
 
-AMD_RDNA2_AND_OLDER_ARCH = ["gfx1030", "gfx1031", "gfx1010", "gfx1011", "gfx1012", "gfx906", "gfx900", "gfx803"]
-AMD_ENABLE_MIOPEN_ENV = "COMFYUI_ENABLE_MIOPEN"
-
-try:
-    if is_amd():
+    try:
         arch = torch.cuda.get_device_properties(get_torch_device()).gcnArchName
         if not (any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH)):
-            if os.getenv(AMD_ENABLE_MIOPEN_ENV) != "1":
-                torch.backends.cudnn.enabled = False  # Seems to improve things a lot on AMD
-                logger.info("Set: torch.backends.cudnn.enabled = False for better AMD performance.")
+            if os.getenv("ENABLE_MIOPEN") != "1":
+                torch.backends.cudnn.enabled = False
 
         try:
             rocm_version = tuple(map(int, str(torch.version.hip).split(".")[:2]))
         except Exception:
             rocm_version = (6, -1)
 
-        logger.info("AMD arch: {}".format(arch))
-        logger.info("ROCm version: {}".format(rocm_version))
+        logger.info("AMD Arch: {}".format(arch))
+        logger.info("ROCm Version: {}".format(rocm_version))
         if args.use_split_cross_attention is False:
-            if importlib.util.find_spec("triton") is not None:  # AMD efficient attention implementation depends on triton. TODO: better way of detecting if it's compiled in or not.
-                if torch_version_numeric >= (2, 7):  # works on 2.6 but doesn't actually seem to improve much
-                    if any((a in arch) for a in ["gfx90a", "gfx942", "gfx1100", "gfx1101", "gfx1151"]):  # TODO: more arches, TODO: gfx950
+            if importlib.util.find_spec("triton") is not None:
+                if torch_version_numeric >= (2, 7):
+                    if any((a in arch) for a in ["gfx90a", "gfx942", "gfx1100", "gfx1101", "gfx1151"]):
                         ENABLE_PYTORCH_ATTENTION = True
                 if rocm_version >= (7, 0):
                     if any((a in arch) for a in ["gfx1201"]):
                         ENABLE_PYTORCH_ATTENTION = True
         if torch_version_numeric >= (2, 7) and rocm_version >= (6, 4):
-            if any((a in arch) for a in ["gfx1200", "gfx1201", "gfx950"]):  # TODO: more arches, "gfx942" gives error on pytorch nightly 2.10 1013 rocm7.0
+            if any((a in arch) for a in ["gfx1200", "gfx1201", "gfx950"]):
                 SUPPORT_FP8_OPS = True
 
-except Exception:
-    pass
+    except Exception:
+        pass
 
 
 if ENABLE_PYTORCH_ATTENTION:
