@@ -89,10 +89,7 @@ if args.directml is not None:
 
 try:
     import intel_extension_for_pytorch as ipex  # noqa: F401
-except Exception:
-    pass
 
-try:
     _ = torch.xpu.device_count()
     xpu_available = torch.xpu.is_available()
 except Exception:
