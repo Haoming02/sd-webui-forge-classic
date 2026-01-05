@@ -175,31 +175,24 @@ except Exception:
 
 OOM_EXCEPTION = getattr(torch, "OutOfMemoryError", Exception)
 
-XFORMERS_VERSION = ""
-XFORMERS_ENABLED_VAE = True
 if args.disable_xformers:
     XFORMERS_IS_AVAILABLE = False
 else:
     try:
         import xformers
-        import xformers.ops
+        import xformers.ops  # noqa: F401
 
-        XFORMERS_IS_AVAILABLE = True
         try:
             XFORMERS_IS_AVAILABLE = xformers._has_cpp_library
         except Exception:
-            pass
-        try:
-            XFORMERS_VERSION = xformers.version.__version__
-            logger.info("xformers version: {}".format(XFORMERS_VERSION))
-            if XFORMERS_VERSION.startswith("0.0.18"):
-                logger.warning("\nWARNING: This version of xformers has a major bug where you will get black images when generating high resolution images.")
-                logger.warning("Please downgrade or upgrade xformers to a different version.\n")
-                XFORMERS_ENABLED_VAE = False
-        except Exception:
-            pass
+            XFORMERS_IS_AVAILABLE = False
+        else:
+            XFORMERS_VERSION = xformers.__version__
+            logger.info("xformers Version: {}".format(XFORMERS_VERSION))
     except Exception:
         XFORMERS_IS_AVAILABLE = False
+
+XFORMERS_ENABLED_VAE = XFORMERS_IS_AVAILABLE or args.force_xformers_vae
 
 
 def is_nvidia():
@@ -1177,9 +1170,7 @@ def flash_attention_enabled():
 
 
 def xformers_enabled():
-    global directml_enabled
-    global cpu_state
-    if cpu_state != CPUState.GPU:
+    if cpu_state is not CPUState.GPU:
         return False
     if is_intel_xpu():
         return False
@@ -1189,10 +1180,6 @@ def xformers_enabled():
 
 
 def xformers_enabled_vae():
-    enabled = xformers_enabled()
-    if not enabled:
-        return False
-
     return XFORMERS_ENABLED_VAE
 
 
