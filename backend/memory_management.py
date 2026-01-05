@@ -944,80 +944,6 @@ def force_channels_last() -> bool:
     return args.force_channels_last
 
 
-STREAMS = {}
-NUM_STREAMS = 0
-if args.async_offload is not None:
-    NUM_STREAMS = args.async_offload
-else:
-    #  Enable by default on Nvidia and AMD
-    if is_nvidia() or is_amd():
-        NUM_STREAMS = 2
-
-if args.disable_async_offload:
-    NUM_STREAMS = 0
-
-if NUM_STREAMS > 0:
-    logger.info("Using async weight offloading with {} streams".format(NUM_STREAMS))
-
-
-def current_stream(device):
-    if device is None:
-        return None
-    if is_device_cuda(device):
-        return torch.cuda.current_stream()
-    elif is_device_xpu(device):
-        return torch.xpu.current_stream()
-    else:
-        return None
-
-
-stream_counters = {}
-
-
-def get_offload_stream(device):
-    stream_counter = stream_counters.get(device, 0)
-    if NUM_STREAMS == 0:
-        return None
-
-    if torch.compiler.is_compiling():
-        return None
-
-    if device in STREAMS:
-        ss = STREAMS[device]
-        # Sync the oldest stream in the queue with the current
-        ss[stream_counter].wait_stream(current_stream(device))
-        stream_counter = (stream_counter + 1) % len(ss)
-        stream_counters[device] = stream_counter
-        return ss[stream_counter]
-    elif is_device_cuda(device):
-        ss = []
-        for k in range(NUM_STREAMS):
-            s1 = torch.cuda.Stream(device=device, priority=0)
-            s1.as_context = torch.cuda.stream
-            ss.append(s1)
-        STREAMS[device] = ss
-        s = ss[stream_counter]
-        stream_counters[device] = stream_counter
-        return s
-    elif is_device_xpu(device):
-        ss = []
-        for k in range(NUM_STREAMS):
-            s1 = torch.xpu.Stream(device=device, priority=0)
-            s1.as_context = torch.xpu.stream
-            ss.append(s1)
-        STREAMS[device] = ss
-        s = ss[stream_counter]
-        stream_counters[device] = stream_counter
-        return s
-    return None
-
-
-def sync_stream(device, stream):
-    if stream is None or current_stream(device) is None:
-        return
-    current_stream(device).wait_stream(stream)
-
-
 def cast_to(weight, dtype=None, device=None, non_blocking=False, copy=False, stream=None):
     if device is None or weight.device == device:
         if not copy:
@@ -1047,102 +973,6 @@ def cast_to(weight, dtype=None, device=None, non_blocking=False, copy=False, str
 def cast_to_device(tensor, device, dtype, copy=False):
     non_blocking = device_supports_non_blocking(device)
     return cast_to(tensor, dtype=dtype, device=device, non_blocking=non_blocking, copy=copy)
-
-
-PINNED_MEMORY = {}
-TOTAL_PINNED_MEMORY = 0
-MAX_PINNED_MEMORY = -1
-if not args.disable_pinned_memory:
-    if is_nvidia() or is_amd():
-        if WINDOWS:
-            MAX_PINNED_MEMORY = get_total_memory(torch.device("cpu")) * 0.45  # Windows limit is apparently 50%
-        else:
-            MAX_PINNED_MEMORY = get_total_memory(torch.device("cpu")) * 0.95
-        logger.info("Enabled pinned memory {}".format(MAX_PINNED_MEMORY // (1024 * 1024)))
-
-PINNING_ALLOWED_TYPES = set(["Parameter", "QuantizedTensor"])
-
-
-def discard_cuda_async_error():
-    try:
-        a = torch.tensor([1], dtype=torch.uint8, device=get_torch_device())
-        b = torch.tensor([1], dtype=torch.uint8, device=get_torch_device())
-        _ = a + b
-        torch.cuda.synchronize()
-    except torch.AcceleratorError:
-        # Dump it! We already know about it from the synchronous return
-        pass
-
-
-def pin_memory(tensor):
-    global TOTAL_PINNED_MEMORY
-    if MAX_PINNED_MEMORY <= 0:
-        return False
-
-    if type(tensor).__name__ not in PINNING_ALLOWED_TYPES:
-        return False
-
-    if not is_device_cpu(tensor.device):
-        return False
-
-    if tensor.is_pinned():
-        # NOTE: Cuda does detect when a tensor is already pinned and would
-        # error below, but there are proven cases where this also queues an error
-        # on the GPU async. So dont trust the CUDA API and guard here
-        return False
-
-    if not tensor.is_contiguous():
-        return False
-
-    size = tensor.numel() * tensor.element_size()
-    if (TOTAL_PINNED_MEMORY + size) > MAX_PINNED_MEMORY:
-        return False
-
-    ptr = tensor.data_ptr()
-    if ptr == 0:
-        return False
-
-    if torch.cuda.cudart().cudaHostRegister(ptr, size, 1) == 0:
-        PINNED_MEMORY[ptr] = size
-        TOTAL_PINNED_MEMORY += size
-        return True
-    else:
-        logger.warning("Pin error.")
-        discard_cuda_async_error()
-
-    return False
-
-
-def unpin_memory(tensor):
-    global TOTAL_PINNED_MEMORY
-    if MAX_PINNED_MEMORY <= 0:
-        return False
-
-    if not is_device_cpu(tensor.device):
-        return False
-
-    ptr = tensor.data_ptr()
-    size = tensor.numel() * tensor.element_size()
-
-    size_stored = PINNED_MEMORY.get(ptr, None)
-    if size_stored is None:
-        logger.warning("Tried to unpin tensor not pinned by ComfyUI")
-        return False
-
-    if size != size_stored:
-        logger.warning("Size of pinned tensor changed")
-        return False
-
-    if torch.cuda.cudart().cudaHostUnregister(ptr) == 0:
-        TOTAL_PINNED_MEMORY -= PINNED_MEMORY.pop(ptr)
-        if len(PINNED_MEMORY) == 0:
-            TOTAL_PINNED_MEMORY = 0
-        return True
-    else:
-        logger.warning("Unpin error.")
-        discard_cuda_async_error()
-
-    return False
 
 
 def xformers_enabled():
@@ -1460,37 +1290,177 @@ def unload_all_models():
     free_memory(1e30, get_torch_device())
 
 
-# TODO: might be cleaner to put this somewhere else
-import threading
+# region: Streams
 
 
-class InterruptProcessingException(Exception):
-    pass
+STREAMS = {}
+NUM_STREAMS = 0
+if args.async_offload is not None:
+    NUM_STREAMS = args.async_offload
+else:
+    #  Enable by default on Nvidia and AMD
+    if is_nvidia() or is_amd():
+        NUM_STREAMS = 2
+
+if args.disable_async_offload:
+    NUM_STREAMS = 0
+
+if NUM_STREAMS > 0:
+    logger.info("Using async weight offloading with {} streams".format(NUM_STREAMS))
 
 
-interrupt_processing_mutex = threading.RLock()
-
-interrupt_processing = False
-
-
-def interrupt_current_processing(value=True):
-    global interrupt_processing
-    global interrupt_processing_mutex
-    with interrupt_processing_mutex:
-        interrupt_processing = value
-
-
-def processing_interrupted():
-    global interrupt_processing
-    global interrupt_processing_mutex
-    with interrupt_processing_mutex:
-        return interrupt_processing
+def current_stream(device):
+    if device is None:
+        return None
+    if is_device_cuda(device):
+        return torch.cuda.current_stream()
+    elif is_device_xpu(device):
+        return torch.xpu.current_stream()
+    else:
+        return None
 
 
-def throw_exception_if_processing_interrupted():
-    global interrupt_processing
-    global interrupt_processing_mutex
-    with interrupt_processing_mutex:
-        if interrupt_processing:
-            interrupt_processing = False
-            raise InterruptProcessingException()
+stream_counters = {}
+
+
+def get_offload_stream(device):
+    stream_counter = stream_counters.get(device, 0)
+    if NUM_STREAMS == 0:
+        return None
+
+    if torch.compiler.is_compiling():
+        return None
+
+    if device in STREAMS:
+        ss = STREAMS[device]
+        # Sync the oldest stream in the queue with the current
+        ss[stream_counter].wait_stream(current_stream(device))
+        stream_counter = (stream_counter + 1) % len(ss)
+        stream_counters[device] = stream_counter
+        return ss[stream_counter]
+    elif is_device_cuda(device):
+        ss = []
+        for k in range(NUM_STREAMS):
+            s1 = torch.cuda.Stream(device=device, priority=0)
+            s1.as_context = torch.cuda.stream
+            ss.append(s1)
+        STREAMS[device] = ss
+        s = ss[stream_counter]
+        stream_counters[device] = stream_counter
+        return s
+    elif is_device_xpu(device):
+        ss = []
+        for k in range(NUM_STREAMS):
+            s1 = torch.xpu.Stream(device=device, priority=0)
+            s1.as_context = torch.xpu.stream
+            ss.append(s1)
+        STREAMS[device] = ss
+        s = ss[stream_counter]
+        stream_counters[device] = stream_counter
+        return s
+    return None
+
+
+def sync_stream(device, stream):
+    if stream is None or current_stream(device) is None:
+        return
+    current_stream(device).wait_stream(stream)
+
+
+# region: Pin
+
+
+PINNED_MEMORY = {}
+TOTAL_PINNED_MEMORY = 0
+MAX_PINNED_MEMORY = -1
+if not args.disable_pinned_memory:
+    if is_nvidia() or is_amd():
+        if WINDOWS:
+            MAX_PINNED_MEMORY = get_total_memory(torch.device("cpu")) * 0.45  # Windows limit is apparently 50%
+        else:
+            MAX_PINNED_MEMORY = get_total_memory(torch.device("cpu")) * 0.95
+        logger.info("Enabled pinned memory {}".format(MAX_PINNED_MEMORY // (1024 * 1024)))
+
+PINNING_ALLOWED_TYPES = set(["Parameter", "QuantizedTensor"])
+
+
+def discard_cuda_async_error():
+    try:
+        a = torch.tensor([1], dtype=torch.uint8, device=get_torch_device())
+        b = torch.tensor([1], dtype=torch.uint8, device=get_torch_device())
+        _ = a + b
+        torch.cuda.synchronize()
+    except torch.AcceleratorError:
+        # Dump it! We already know about it from the synchronous return
+        pass
+
+
+def pin_memory(tensor):
+    global TOTAL_PINNED_MEMORY
+    if MAX_PINNED_MEMORY <= 0:
+        return False
+
+    if type(tensor).__name__ not in PINNING_ALLOWED_TYPES:
+        return False
+
+    if not is_device_cpu(tensor.device):
+        return False
+
+    if tensor.is_pinned():
+        # NOTE: Cuda does detect when a tensor is already pinned and would
+        # error below, but there are proven cases where this also queues an error
+        # on the GPU async. So dont trust the CUDA API and guard here
+        return False
+
+    if not tensor.is_contiguous():
+        return False
+
+    size = tensor.numel() * tensor.element_size()
+    if (TOTAL_PINNED_MEMORY + size) > MAX_PINNED_MEMORY:
+        return False
+
+    ptr = tensor.data_ptr()
+    if ptr == 0:
+        return False
+
+    if torch.cuda.cudart().cudaHostRegister(ptr, size, 1) == 0:
+        PINNED_MEMORY[ptr] = size
+        TOTAL_PINNED_MEMORY += size
+        return True
+    else:
+        logger.warning("Pin error.")
+        discard_cuda_async_error()
+
+    return False
+
+
+def unpin_memory(tensor):
+    global TOTAL_PINNED_MEMORY
+    if MAX_PINNED_MEMORY <= 0:
+        return False
+
+    if not is_device_cpu(tensor.device):
+        return False
+
+    ptr = tensor.data_ptr()
+    size = tensor.numel() * tensor.element_size()
+
+    size_stored = PINNED_MEMORY.get(ptr, None)
+    if size_stored is None:
+        logger.warning("Tried to unpin tensor not pinned by ComfyUI")
+        return False
+
+    if size != size_stored:
+        logger.warning("Size of pinned tensor changed")
+        return False
+
+    if torch.cuda.cudart().cudaHostUnregister(ptr) == 0:
+        TOTAL_PINNED_MEMORY -= PINNED_MEMORY.pop(ptr)
+        if len(PINNED_MEMORY) == 0:
+            TOTAL_PINNED_MEMORY = 0
+        return True
+    else:
+        logger.warning("Unpin error.")
+        discard_cuda_async_error()
+
+    return False
