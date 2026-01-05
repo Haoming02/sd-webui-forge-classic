@@ -814,6 +814,8 @@ def text_encoder_offload_device() -> torch.device:
 def text_encoder_device() -> torch.device:
     if args.gpu_only:
         return get_torch_device()
+    if args.cpu_text_enc:
+        return cpu
     elif vram_state in (VRAMState.HIGH_VRAM, VRAMState.NORMAL_VRAM):
         if should_use_fp16(prioritize_performance=False):
             return get_torch_device()
