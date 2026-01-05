@@ -332,28 +332,27 @@ elif args.novram:
 elif args.highvram or args.gpu_only:
     vram_state = VRAMState.HIGH_VRAM
 
-FORCE_FP32 = False
 if args.force_fp32:
-    logger.info("Forcing FP32, if this improves things please report it.")
+    logger.info("Forcing fp32")
     FORCE_FP32 = True
+else:
+    FORCE_FP32 = False
 
 if lowvram_available:
     if set_vram_to in (VRAMState.LOW_VRAM, VRAMState.NO_VRAM):
         vram_state = set_vram_to
 
-
-if cpu_state != CPUState.GPU:
+if cpu_state is not CPUState.GPU:
     vram_state = VRAMState.DISABLED
 
-if cpu_state == CPUState.MPS:
+if cpu_state is CPUState.MPS:
     vram_state = VRAMState.SHARED
 
-logger.info(f"Set vram state to: {vram_state.name}")
+logger.info(f"VRAM State: {vram_state.name}")
 
 DISABLE_SMART_MEMORY = args.disable_smart_memory
-
 if DISABLE_SMART_MEMORY:
-    logger.info("Disabling smart memory management")
+    logger.info("Disabled Smart Memory Management")
 
 
 def get_torch_device_name(device):
