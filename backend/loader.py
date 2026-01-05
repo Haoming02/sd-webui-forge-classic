@@ -8,7 +8,7 @@ from diffusers import DiffusionPipeline
 from transformers import modeling_utils
 
 import backend.args
-from backend import memory_management
+from backend import memory_management, utils
 from backend.diffusion_engine.chroma import Chroma
 from backend.diffusion_engine.flux import Flux
 from backend.diffusion_engine.lumina import Lumina2
@@ -275,8 +275,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 model_loader = lambda c: NextDiT(**c)
 
             unet_config = guess.unet_config.copy()
-            state_dict_parameters = memory_management.state_dict_parameters(state_dict)
-            state_dict_dtype = memory_management.state_dict_dtype(state_dict)
+            state_dict_parameters = utils.calculate_parameters(state_dict)
+            state_dict_dtype = utils.weight_dtype(state_dict)
 
             storage_dtype = memory_management.unet_dtype(model_params=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes)
 
@@ -293,7 +293,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         beautiful_print_gguf_state_dict_statics(state_dict)
 
             load_device = memory_management.get_torch_device()
-            computation_dtype = memory_management.get_computation_dtype(load_device, parameters=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes)
+            computation_dtype = memory_management.unet_manual_cast(None, inference_device=load_device, supported_dtypes=guess.supported_inference_dtypes)
             offload_device = memory_management.unet_offload_device()
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:

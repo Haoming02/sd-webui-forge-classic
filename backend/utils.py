@@ -120,12 +120,38 @@ def get_attr_with_parent(obj, attr):
     return parent, name, obj
 
 
-def calculate_parameters(sd, prefix=""):
+def calculate_parameters(sd: dict[str, torch.Tensor], prefix: str = "") -> int:
     params = 0
     for k in sd.keys():
         if k.startswith(prefix):
             params += sd[k].nelement()
     return params
+
+
+def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype:
+    if sd.pop("scaled_fp8", None) is not None:
+        return torch.float8_e4m3fn
+    if sd.pop("transformer.scaled_fp8", None) is not None:
+        return torch.float8_e4m3fn
+
+    for k, v in sd.items():
+        if hasattr(v, "gguf_cls"):
+            return "gguf"
+        if "bitsandbytes__nf4" in k:
+            return "nf4"
+        if "bitsandbytes__fp4" in k:
+            return "fp4"
+
+    dtypes = {}
+    for k in sd.keys():
+        if k.startswith(prefix):
+            w = sd[k]
+            dtypes[w.dtype] = dtypes.get(w.dtype, 0) + w.numel()
+
+    if len(dtypes) == 0:
+        return None
+
+    return max(dtypes, key=dtypes.get)
 
 
 def tensor2parameter(x):
