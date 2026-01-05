@@ -216,22 +216,14 @@ else:
 
 
 def is_nvidia():
-    global cpu_state
-    if cpu_state == CPUState.GPU:
-        if torch.version.cuda:
-            return True
-    return False
+    return cpu_state is CPUState.GPU and torch.version.cuda
 
 
 def is_amd():
-    global cpu_state
-    if cpu_state == CPUState.GPU:
-        if torch.version.hip:
-            return True
-    return False
+    return cpu_state is CPUState.GPU and torch.version.hip
 
 
-def amd_min_version(device=None, min_rdna_version=0):
+def amd_min_version(device: torch.device = None, min_rdna_version: int = 0) -> bool:
     if not is_amd():
         return False
 
