@@ -1090,10 +1090,9 @@ def is_directml_enabled() -> bool:
     return directml_enabled
 
 
-def should_use_fp16(device=None, model_params=0, prioritize_performance=True, manual_cast=False):
-    if device is not None:
-        if is_device_cpu(device):
-            return False
+def should_use_fp16(device: torch.device = None, model_params: int = 0, prioritize_performance: bool = True, manual_cast: bool = False) -> bool:
+    if device is not None and is_device_cpu(device):
+        return False
 
     if args.force_fp16:
         return True
@@ -1126,14 +1125,13 @@ def should_use_fp16(device=None, model_params=0, prioritize_performance=True, ma
     if props.major < 6:
         return False
 
-    # FP16 is confirmed working on a 1080 (GP104) and on latest pytorch actually seems faster than fp32
-    nvidia_10_series = ["1080", "1070", "titan x", "p3000", "p3200", "p4000", "p4200", "p5000", "p5200", "p6000", "1060", "1050", "p40", "p100", "p6", "p4"]
+    nvidia_10_series = ("1080", "1070", "titan x", "p3000", "p3200", "p4000", "p4200", "p5000", "p5200", "p6000", "1060", "1050", "p40", "p100", "p6", "p4")
     for x in nvidia_10_series:
         if x in props.name.lower():
             if WINDOWS or manual_cast:
                 return True
             else:
-                return False  # weird linux behavior where fp32 is faster
+                return False
 
     if manual_cast:
         free_model_memory = maximum_vram_for_weights(device)
@@ -1143,8 +1141,7 @@ def should_use_fp16(device=None, model_params=0, prioritize_performance=True, ma
     if props.major < 7:
         return False
 
-    # FP16 is just broken on these cards
-    nvidia_16_series = ["1660", "1650", "1630", "T500", "T550", "T600", "MX550", "MX450", "CMP 30HX", "T2000", "T1000", "T1200"]
+    nvidia_16_series = ("1660", "1650", "1630", "T500", "T550", "T600", "MX550", "MX450", "CMP 30HX", "T2000", "T1000", "T1200")
     for x in nvidia_16_series:
         if x in props.name:
             return False
