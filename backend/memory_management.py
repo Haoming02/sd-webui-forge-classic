@@ -250,14 +250,16 @@ ENABLE_PYTORCH_ATTENTION = False
 if args.use_pytorch_cross_attention:
     ENABLE_PYTORCH_ATTENTION = True
     XFORMERS_IS_AVAILABLE = False
+    SAGE_IS_AVAILABLE = False
+    FLASH_IS_AVAILABLE = False
 
 try:
     if is_nvidia():
         if torch_version_numeric[0] >= 2:
-            if ENABLE_PYTORCH_ATTENTION == False and args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
+            if ENABLE_PYTORCH_ATTENTION is False and args.use_split_cross_attention is False:
                 ENABLE_PYTORCH_ATTENTION = True
     if is_intel_xpu():
-        if args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
+        if args.use_split_cross_attention is False:
             ENABLE_PYTORCH_ATTENTION = True
 except Exception:
     pass
@@ -283,7 +285,7 @@ try:
 
         logger.info("AMD arch: {}".format(arch))
         logger.info("ROCm version: {}".format(rocm_version))
-        if args.use_split_cross_attention == False and args.use_quad_cross_attention == False:
+        if args.use_split_cross_attention is False:
             if importlib.util.find_spec("triton") is not None:  # AMD efficient attention implementation depends on triton. TODO: better way of detecting if it's compiled in or not.
                 if torch_version_numeric >= (2, 7):  # works on 2.6 but doesn't actually seem to improve much
                     if any((a in arch) for a in ["gfx90a", "gfx942", "gfx1100", "gfx1101", "gfx1151"]):  # TODO: more arches, TODO: gfx950
