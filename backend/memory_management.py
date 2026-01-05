@@ -198,7 +198,7 @@ if args.disable_sage:
     SAGE_IS_AVAILABLE = False
 else:
     try:
-        from sageattention import sageattn  # noqa
+        from sageattention import sageattn  # noqa: F401
     except Exception:
         SAGE_IS_AVAILABLE = False
     else:
@@ -208,7 +208,7 @@ if args.disable_flash:
     FLASH_IS_AVAILABLE = False
 else:
     try:
-        from flash_attn import flash_attn_func  # noqa
+        from flash_attn import flash_attn_func  # noqa: F401
     except Exception:
         FLASH_IS_AVAILABLE = False
     else:
