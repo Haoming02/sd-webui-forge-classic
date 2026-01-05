@@ -56,33 +56,13 @@ cpu_state = CPUState.GPU
 
 total_vram = 0
 
+FLOAT8_TYPES: list[torch.dtype] = []
 
-def get_supported_float8_types():
-    float8_types = []
+for dtype in ("e4m3fn", "e4m3fnuz", "e5m2", "e5m2fnuz", "e8m0fnu"):
     try:
-        float8_types.append(torch.float8_e4m3fn)
+        FLOAT8_TYPES.append(getattr(torch, f"float8_{dtype}"))
     except Exception:
         pass
-    try:
-        float8_types.append(torch.float8_e4m3fnuz)
-    except Exception:
-        pass
-    try:
-        float8_types.append(torch.float8_e5m2)
-    except Exception:
-        pass
-    try:
-        float8_types.append(torch.float8_e5m2fnuz)
-    except Exception:
-        pass
-    try:
-        float8_types.append(torch.float8_e8m0fnu)
-    except Exception:
-        pass
-    return float8_types
-
-
-FLOAT8_TYPES = get_supported_float8_types()
 
 xpu_available = False
 torch_version = ""
