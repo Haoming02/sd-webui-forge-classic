@@ -125,10 +125,8 @@ def get_torch_device():
             return torch.device(torch.cuda.current_device())
 
 
-def get_total_memory(dev=None, torch_total_too=False):
-    global directml_enabled
-    if dev is None:
-        dev = get_torch_device()
+def get_total_memory(dev: torch.device = None, torch_total_too: bool = False):
+    dev = dev or get_torch_device()
 
     if hasattr(dev, "type") and (dev.type == "cpu" or dev.type == "mps"):
         mem_total = psutil.virtual_memory().total
