@@ -26,6 +26,7 @@ class EnumAction(argparse.Action):
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--gpu-device-id", type=int, default=None, metavar="DEVICE_ID")
+parser.add_argument("--disable-gpu-warning", action="store_true", help="Disable the low VRAM warnings")
 
 fp_group = parser.add_mutually_exclusive_group()
 fp_group.add_argument("--force-fp32", action="store_true", help="Force fp32")
@@ -75,7 +76,7 @@ parser.add_argument("--disable-flash", action="store_true", help="disable flash_
 parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention")
 
 parser.add_argument("--directml", type=int, nargs="?", metavar="DIRECTML_DEVICE", const=-1, help="Use torch-directml")
-parser.add_argument("--disable-ipex-optimize", action="store_true", help="Disables ipex.optimize default when loading models with Intel's Extension for PyTorch")
+parser.add_argument("--disable-ipex-optimize", action="store_true", help="Disable ipex.optimize default when loading models with Intel's Extension for PyTorch")
 
 vram_group = parser.add_mutually_exclusive_group()
 vram_group.add_argument("--gpu-only", action="store_true", help="Store and run everything on the GPU.")
@@ -100,8 +101,8 @@ parser.add_argument("--async-offload", nargs="?", const=2, type=int, default=Non
 parser.add_argument("--disable-async-offload", action="store_true", help="Disable async weight offloading")
 parser.add_argument("--force-channels-last", action="store_true", help="Force channels_last format when inferencing the models")
 
-parser.add_argument("--fast-fp16", action="store_true")
-parser.add_argument("--autotune", action="store_true")
+parser.add_argument("--fast-fp16", action="store_true", help="torch.backends.cuda.matmul.allow_fp16_accumulation")
+parser.add_argument("--autotune", action="store_true", help="torch.backends.cudnn.benchmark")
 
 parser.add_argument("--mmap-torch-files", action="store_true", help="Use mmap when loading ckpt/pt files")
 parser.add_argument("--disable-mmap", action="store_true", help="Don't use mmap when loading safetensors")
