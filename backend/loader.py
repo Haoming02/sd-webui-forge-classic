@@ -97,7 +97,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             config = read_arbitrary_config(config_path)
 
             storage_dtype = memory_management.text_encoder_dtype()
-            state_dict_dtype = memory_management.state_dict_dtype(state_dict)
+            state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
                 print(f"Using Detected Qwen2.5 Data Type: {state_dict_dtype}")
@@ -129,7 +129,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             config = read_arbitrary_config(config_path)
 
             storage_dtype = memory_management.text_encoder_dtype()
-            state_dict_dtype = memory_management.state_dict_dtype(state_dict)
+            state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
                 print(f"Using Detected Gemma2 Data Type: {state_dict_dtype}")
@@ -161,7 +161,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             config = read_arbitrary_config(config_path)
 
             storage_dtype = memory_management.text_encoder_dtype()
-            state_dict_dtype = memory_management.state_dict_dtype(state_dict)
+            state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
                 print(f"Using Detected Qwen3 Data Type: {state_dict_dtype}")
@@ -203,7 +203,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             config = read_arbitrary_config(config_path)
 
             storage_dtype = memory_management.text_encoder_dtype()
-            state_dict_dtype = memory_management.state_dict_dtype(state_dict)
+            state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
                 print(f"Using Detected T5 Data Type: {state_dict_dtype}")
