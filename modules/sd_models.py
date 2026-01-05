@@ -320,11 +320,6 @@ def forge_model_reload():
     timer = Timer()
 
     if model_data.sd_model is not None:
-        if not isinstance(model_data.sd_model, FakeInitialModel):
-            model_data.sd_model.forge_objects.unet.model.cleanup()
-            del model_data.sd_model.forge_objects.clip.tokenizer
-            del model_data.sd_model.forge_objects.clip.cond_stage_model
-            del model_data.sd_model.forge_objects.vae.first_stage_model
 
         memory_management.unload_all_models()
 
