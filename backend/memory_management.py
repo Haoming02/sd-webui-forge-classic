@@ -896,12 +896,12 @@ def supports_dtype(device: torch.device, dtype: torch.dtype) -> bool:
     return False
 
 
-def supports_cast(device, dtype):  # TODO
+def supports_cast(device: torch.device, dtype: torch.dtype) -> bool:
     if dtype == torch.float32:
         return True
     if dtype == torch.float16:
         return True
-    if directml_enabled:  # TODO: test this
+    if directml_enabled:
         return False
     if dtype == torch.bfloat16:
         return True
@@ -914,7 +914,7 @@ def supports_cast(device, dtype):  # TODO
     return False
 
 
-def pick_weight_dtype(dtype, fallback_dtype, device=None):
+def pick_weight_dtype(dtype: torch.dtype, fallback_dtype: torch.dtype, device: torch.device = None) -> torch.dtype:
     if dtype is None:
         dtype = fallback_dtype
     elif dtype_size(dtype) > dtype_size(fallback_dtype):
@@ -926,26 +926,22 @@ def pick_weight_dtype(dtype, fallback_dtype, device=None):
     return dtype
 
 
-def device_supports_non_blocking(device):
+def device_supports_non_blocking(device: torch.device) -> bool:
     if args.force_non_blocking:
         return True
     if is_device_mps(device):
-        return False  # pytorch bug? mps doesn't support non blocking
-    if is_intel_xpu():  # xpu does support non blocking but it is slower on iGPUs for some reason so disable by default until situation changes
         return False
-    if args.deterministic:  # TODO: figure out why deterministic breaks non blocking from gpu to cpu (previews)
+    if is_intel_xpu():
+        return False
+    if args.deterministic:
         return False
     if directml_enabled:
         return False
     return True
 
 
-def force_channels_last():
-    if args.force_channels_last:
-        return True
-
-    # TODO
-    return False
+def force_channels_last() -> bool:
+    return args.force_channels_last
 
 
 STREAMS = {}
