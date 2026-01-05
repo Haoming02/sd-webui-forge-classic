@@ -112,14 +112,11 @@ def is_intel_xpu():
 
 
 def get_torch_device():
-    global directml_enabled
-    global cpu_state
     if directml_enabled:
-        global directml_device
         return directml_device
-    if cpu_state == CPUState.MPS:
+    if cpu_state is CPUState.MPS:
         return torch.device("mps")
-    if cpu_state == CPUState.CPU:
+    if cpu_state is CPUState.CPU:
         return torch.device("cpu")
     else:
         if is_intel_xpu():
