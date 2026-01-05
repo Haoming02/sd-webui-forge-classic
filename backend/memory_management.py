@@ -1027,10 +1027,8 @@ def force_upcast_attention_dtype() -> dict[torch.dtype, torch.dtype] | None:
         return None
 
 
-def get_free_memory(dev=None, torch_free_too=False):
-    global directml_enabled
-    if dev is None:
-        dev = get_torch_device()
+def get_free_memory(dev: torch.device = None, torch_free_too: bool = False) -> int | tuple[int, int]:
+    dev = dev or get_torch_device()
 
     if hasattr(dev, "type") and (dev.type == "cpu" or dev.type == "mps"):
         mem_free_total = psutil.virtual_memory().available
