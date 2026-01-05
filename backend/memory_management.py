@@ -72,8 +72,16 @@ except Exception:
     torch_version = ""
     torch_version_numeric = None
 
+
+def mac_version():
+    try:
+        return tuple(int(n) for n in platform.mac_ver()[0].split("."))
+    except Exception:
+        return None
+
+
 if args.deterministic:
-    logger.info("Using deterministic algorithms for pytorch")
+    logger.info("Using deterministic algorithms for PyTorch")
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 directml_enabled = False
@@ -154,21 +162,13 @@ def get_total_memory(dev: torch.device = None, torch_total_too: bool = False):
         return mem_total
 
 
-def mac_version():
-    try:
-        return tuple(int(n) for n in platform.mac_ver()[0].split("."))
-    except Exception:
-        return None
-
-
 total_vram = get_total_memory(get_torch_device()) / (1024 * 1024)
 total_ram = psutil.virtual_memory().total / (1024 * 1024)
 logger.info("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
 
 try:
-    logger.info("pytorch version: {}".format(torch_version))
-    mac_ver = mac_version()
-    if mac_ver is not None:
+    logger.info("PyTorch Version: {}".format(torch_version))
+    if (mac_ver := mac_version()) is not None:
         logger.info("Mac Version {}".format(mac_ver))
 except Exception:
     pass
