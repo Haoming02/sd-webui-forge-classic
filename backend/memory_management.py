@@ -723,13 +723,16 @@ def maximum_vram_for_weights(device: torch.device = None) -> float:
     return get_total_memory(device) * 0.88 - minimum_inference_memory()
 
 
-def unet_dtype(device=None, model_params=0, supported_dtypes=[torch.float16, torch.bfloat16, torch.float32], weight_dtype=None):
+def unet_dtype(
+    device: torch.device = None,
+    model_params: int = 0,
+    supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32],
+    weight_dtype: torch.dtype = None,
+) -> torch.dtype:
     if model_params < 0:
-        model_params = 1000000000000000000000
+        model_params = pow(2, 64)
     if args.fp32_unet:
         return torch.float32
-    if args.fp64_unet:
-        return torch.float64
     if args.bf16_unet:
         return torch.bfloat16
     if args.fp16_unet:
@@ -741,12 +744,10 @@ def unet_dtype(device=None, model_params=0, supported_dtypes=[torch.float16, tor
     if args.fp8_e8m0fnu_unet:
         return torch.float8_e8m0fnu
 
-    fp8_dtype = None
     if weight_dtype in FLOAT8_TYPES:
         fp8_dtype = weight_dtype
 
-    if fp8_dtype is not None:
-        if supports_fp8_compute(device):  # if fp8 compute is supported the casting is most likely not expensive
+        if supports_fp8_compute(device):
             return fp8_dtype
 
         free_model_memory = maximum_vram_for_weights(device)
@@ -776,9 +777,9 @@ def unet_dtype(device=None, model_params=0, supported_dtypes=[torch.float16, tor
     return torch.float32
 
 
-# None means no manual cast
-def unet_manual_cast(weight_dtype, inference_device, supported_dtypes=[torch.float16, torch.bfloat16, torch.float32]):
-    if weight_dtype == torch.float32 or weight_dtype == torch.float64:
+def unet_manual_cast(weight_dtype: torch.dtype, inference_device: torch.device, supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32]):
+    """`None` means no manual cast"""
+    if weight_dtype == torch.float32:
         return None
 
     fp16_supported = should_use_fp16(inference_device, prioritize_performance=False)
