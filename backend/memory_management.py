@@ -33,6 +33,8 @@ import os
 
 logger = logging.getLogger("memory_management")
 
+cpu = torch.device("cpu")
+
 
 class VRAMState(Enum):
     DISABLED = 0  # No vram present: no need to move models to vram
@@ -697,7 +699,7 @@ def unet_offload_device():
     if vram_state is VRAMState.HIGH_VRAM:
         return get_torch_device()
     else:
-        return torch.device("cpu")
+        return cpu
 
 
 def unet_initial_load_device(parameters: int, dtype: torch.dtype) -> torch.device:
@@ -803,26 +805,23 @@ def unet_manual_cast(weight_dtype: torch.dtype, inference_device: torch.device, 
     return torch.float32
 
 
-def text_encoder_offload_device():
-    if args.gpu_only:
-        return get_torch_device()
-    else:
-        return torch.device("cpu")
+def text_encoder_offload_device() -> torch.device:
+    return get_torch_device() if args.gpu_only else cpu
 
 
-def text_encoder_device():
+def text_encoder_device() -> torch.device:
     if args.gpu_only:
         return get_torch_device()
-    elif vram_state == VRAMState.HIGH_VRAM or vram_state == VRAMState.NORMAL_VRAM:
+    elif vram_state in (VRAMState.HIGH_VRAM, VRAMState.NORMAL_VRAM):
         if should_use_fp16(prioritize_performance=False):
             return get_torch_device()
         else:
-            return torch.device("cpu")
+            return cpu
     else:
-        return torch.device("cpu")
+        return cpu
 
 
-def text_encoder_initial_device(load_device, offload_device, model_size=0):
+def text_encoder_initial_device(load_device: torch.device, offload_device: torch.device, model_size: int = 0) -> torch.device:
     if load_device == offload_device or model_size <= 1024 * 1024 * 1024:
         return offload_device
 
@@ -837,20 +836,17 @@ def text_encoder_initial_device(load_device, offload_device, model_size=0):
         return offload_device
 
 
-def text_encoder_dtype(device=None):
+def text_encoder_dtype(device=None) -> torch.dtype:
     if args.fp8_e4m3fn_text_enc:
         return torch.float8_e4m3fn
-    elif args.fp8_e5m2_text_enc:
+    if args.fp8_e5m2_text_enc:
         return torch.float8_e5m2
-    elif args.fp16_text_enc:
+    if args.fp16_text_enc:
         return torch.float16
-    elif args.bf16_text_enc:
+    if args.bf16_text_enc:
         return torch.bfloat16
-    elif args.fp32_text_enc:
+    if args.fp32_text_enc:
         return torch.float32
-
-    if is_device_cpu(device):
-        return torch.float16
 
     return torch.float16
 
