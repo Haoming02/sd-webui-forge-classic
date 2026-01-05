@@ -1195,8 +1195,8 @@ def should_use_bf16(device: torch.device = None, model_params: int = 0, prioriti
     return False
 
 
-def supports_fp8_compute(device=None):
-    if SUPPORT_FP8_OPS:
+def supports_fp8_compute(device: torch.device = None) -> bool:
+    if SUPPORT_FP8_OPS is True:
         return True
 
     if not is_nvidia():
@@ -1210,11 +1210,11 @@ def supports_fp8_compute(device=None):
     if props.minor < 9:
         return False
 
-    if torch_version_numeric < (2, 3):
-        return False
-
     if WINDOWS:
         if torch_version_numeric < (2, 4):
+            return False
+    else:
+        if torch_version_numeric < (2, 3):
             return False
 
     return True
