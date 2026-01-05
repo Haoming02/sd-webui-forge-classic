@@ -32,6 +32,7 @@ import psutil
 import torch
 
 from backend.args import args
+from backend.patcher.base import ModelPatcher
 
 logger = logging.getLogger("memory_management")
 
@@ -396,7 +397,7 @@ def module_size(module: torch.nn.Module) -> int:
 
 
 class LoadedModel:
-    def __init__(self, model):
+    def __init__(self, model: ModelPatcher):
         self._set_model(model)
         self.device = model.load_device
         self.real_model = None
@@ -1226,6 +1227,22 @@ def supports_fp8_compute(device: torch.device = None) -> bool:
 
 def extended_fp16_support() -> bool:
     return torch_version_numeric >= (2, 7)
+
+
+LORA_COMPUTE_DTYPES: dict[torch.device, torch.dtype] = {}
+
+
+def lora_compute_dtype(device: torch.device) -> torch.dtype:
+    if device in LORA_COMPUTE_DTYPES:
+        return LORA_COMPUTE_DTYPES[device]
+
+    if should_use_fp16(device):
+        dtype = torch.float16
+    else:
+        dtype = torch.float32
+
+    LORA_COMPUTE_DTYPES[device] = dtype
+    return dtype
 
 
 def soft_empty_cache(force=False):
