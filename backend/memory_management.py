@@ -194,6 +194,26 @@ else:
 
 XFORMERS_ENABLED_VAE = XFORMERS_IS_AVAILABLE or args.force_xformers_vae
 
+if args.disable_sage:
+    SAGE_IS_AVAILABLE = False
+else:
+    try:
+        from sageattention import sageattn  # noqa
+    except Exception:
+        SAGE_IS_AVAILABLE = False
+    else:
+        SAGE_IS_AVAILABLE = True
+
+if args.disable_flash:
+    FLASH_IS_AVAILABLE = False
+else:
+    try:
+        from flash_attn import flash_attn_func  # noqa
+    except Exception:
+        FLASH_IS_AVAILABLE = False
+    else:
+        FLASH_IS_AVAILABLE = True
+
 
 def is_nvidia():
     global cpu_state
@@ -1161,14 +1181,6 @@ def unpin_memory(tensor):
     return False
 
 
-def sage_attention_enabled():
-    return args.use_sage_attention
-
-
-def flash_attention_enabled():
-    return args.use_flash_attention
-
-
 def xformers_enabled():
     if cpu_state is not CPUState.GPU:
         return False
@@ -1181,6 +1193,22 @@ def xformers_enabled():
 
 def xformers_enabled_vae():
     return XFORMERS_ENABLED_VAE
+
+
+def sage_enabled():
+    if cpu_state is not CPUState.GPU:
+        return False
+    if not is_nvidia():
+        return False
+    return SAGE_IS_AVAILABLE
+
+
+def flash_enabled():
+    if cpu_state is not CPUState.GPU:
+        return False
+    if not is_nvidia():
+        return False
+    return FLASH_IS_AVAILABLE
 
 
 def pytorch_attention_enabled():
