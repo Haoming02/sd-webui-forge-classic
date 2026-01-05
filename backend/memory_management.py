@@ -102,26 +102,6 @@ try:
 except Exception:
     pass
 
-try:
-    import torch_npu  # noqa: F401
-
-    _ = torch.npu.device_count()
-    npu_available = torch.npu.is_available()
-except Exception:
-    npu_available = False
-
-try:
-    import torch_mlu  # noqa: F401
-
-    _ = torch.mlu.device_count()
-    mlu_available = torch.mlu.is_available()
-except Exception:
-    mlu_available = False
-
-try:
-    ixuca_available = hasattr(torch, "corex")
-except Exception:
-    ixuca_available = False
 
 if args.cpu:
     cpu_state = CPUState.CPU
