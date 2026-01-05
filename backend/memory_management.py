@@ -173,10 +173,7 @@ try:
 except Exception:
     pass
 
-try:
-    OOM_EXCEPTION = torch.cuda.OutOfMemoryError
-except Exception:
-    OOM_EXCEPTION = Exception
+OOM_EXCEPTION = getattr(torch, "OutOfMemoryError", Exception)
 
 XFORMERS_VERSION = ""
 XFORMERS_ENABLED_VAE = True
