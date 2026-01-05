@@ -379,10 +379,10 @@ except Exception:
     logger.warning("Could not determine default device...")
 
 
-current_loaded_models = []
+current_loaded_models: list["LoadedModel"] = []
 
 
-def module_size(module):
+def module_size(module: torch.nn.Module) -> int:
     module_mem = 0
     sd = module.state_dict()
     for k in sd:
