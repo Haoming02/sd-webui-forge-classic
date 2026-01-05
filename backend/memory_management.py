@@ -852,37 +852,28 @@ def text_encoder_dtype(device=None) -> torch.dtype:
 
 
 def intermediate_device():
-    if args.gpu_only:
-        return get_torch_device()
-    else:
-        return torch.device("cpu")
+    return get_torch_device() if args.gpu_only else cpu
 
 
 def vae_device():
-    if args.cpu_vae:
-        return torch.device("cpu")
-    return get_torch_device()
+    return cpu if args.cpu_vae else get_torch_device()
 
 
 def vae_offload_device():
-    if args.gpu_only:
-        return get_torch_device()
-    else:
-        return torch.device("cpu")
+    return get_torch_device() if args.gpu_only else cpu
 
 
-def vae_dtype(device=None, allowed_dtypes=[]):
+def vae_dtype(device: torch.device = None, allowed_dtypes: list[torch.dtype] = []) -> torch.dtype:
     if args.fp16_vae:
         return torch.float16
-    elif args.bf16_vae:
+    if args.bf16_vae:
         return torch.bfloat16
-    elif args.fp32_vae:
+    if args.fp32_vae:
         return torch.float32
 
     for d in allowed_dtypes:
         if d == torch.float16 and should_use_fp16(device):
             return d
-
         if d == torch.bfloat16 and should_use_bf16(device):
             return d
 
