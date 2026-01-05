@@ -851,15 +851,15 @@ def text_encoder_dtype(device=None) -> torch.dtype:
     return torch.float16
 
 
-def intermediate_device():
+def intermediate_device() -> torch.device:
     return get_torch_device() if args.gpu_only else cpu
 
 
-def vae_device():
+def vae_device() -> torch.device:
     return cpu if args.cpu_vae else get_torch_device()
 
 
-def vae_offload_device():
+def vae_offload_device() -> torch.device:
     return get_torch_device() if args.gpu_only else cpu
 
 
