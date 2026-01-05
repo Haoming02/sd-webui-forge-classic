@@ -1224,26 +1224,8 @@ def extended_fp16_support() -> bool:
     return torch_version_numeric >= (2, 7)
 
 
-LORA_COMPUTE_DTYPES = {}
-
-
-def lora_compute_dtype(device):
-    dtype = LORA_COMPUTE_DTYPES.get(device, None)
-    if dtype is not None:
-        return dtype
-
-    if should_use_fp16(device):
-        dtype = torch.float16
-    else:
-        dtype = torch.float32
-
-    LORA_COMPUTE_DTYPES[device] = dtype
-    return dtype
-
-
 def soft_empty_cache(force=False):
-    global cpu_state
-    if cpu_state == CPUState.MPS:
+    if cpu_state is CPUState.MPS:
         torch.mps.empty_cache()
     elif is_intel_xpu():
         torch.xpu.empty_cache()
@@ -1254,6 +1236,7 @@ def soft_empty_cache(force=False):
 
 def unload_all_models():
     free_memory(1e30, get_torch_device())
+    # free_memory(1e30, cpu)
 
 
 # region: Streams
