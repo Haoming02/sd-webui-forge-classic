@@ -25,6 +25,7 @@ import logging
 import os
 import platform
 import sys
+import time
 import weakref
 from enum import Enum
 
@@ -536,7 +537,7 @@ else:
             EXTRA_RESERVED_VRAM += 100 * 1024 * 1024
 
 
-def extra_reserved_memory() -> int:
+def extra_reserved_memory() -> float:
     return EXTRA_RESERVED_VRAM
 
 
@@ -544,7 +545,7 @@ def minimum_inference_memory() -> float:
     return (1024 * 1024 * 1024) * 0.8 + extra_reserved_memory()
 
 
-def free_memory(memory_required, device, keep_loaded=[]):
+def free_memory(memory_required: float, device: torch.device, keep_loaded: list["LoadedModel"] = []):
     cleanup_models_gc()
     unloaded_model = []
     can_unload = []
@@ -575,16 +576,16 @@ def free_memory(memory_required, device, keep_loaded=[]):
     if len(unloaded_model) > 0:
         soft_empty_cache()
     else:
-        if vram_state != VRAMState.HIGH_VRAM:
+        if vram_state is not VRAMState.HIGH_VRAM:
             mem_free_total, mem_free_torch = get_free_memory(device, torch_free_too=True)
             if mem_free_torch > mem_free_total * 0.25:
                 soft_empty_cache()
     return unloaded_models
 
 
-def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimum_memory_required=None, force_full_load=False):
+def load_models_gpu(models: list[ModelPatcher], memory_required: float = 0, force_patch_weights: bool = False, minimum_memory_required: float = None, force_full_load: bool = False):
+    execution_start_time = time.perf_counter()
     cleanup_models_gc()
-    global vram_state
 
     inference_memory = minimum_inference_memory()
     extra_mem = max(inference_memory, memory_required + extra_reserved_memory())
@@ -601,7 +602,7 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
 
     models = models_temp
 
-    models_to_load = []
+    models_to_load: list["LoadedModel"] = []
 
     for x in models:
         loaded_model = LoadedModel(x)
@@ -642,7 +643,7 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
             free_mem = get_free_memory(device)
             if free_mem < minimum_memory_required:
                 models_l = free_memory(minimum_memory_required, device)
-                logger.info("{} models unloaded.".format(len(models_l)))
+                logger.debug("{} models unloaded.".format(len(models_l)))
 
     for loaded_model in models_to_load:
         model = loaded_model.model
@@ -652,35 +653,47 @@ def load_models_gpu(models, memory_required=0, force_patch_weights=False, minimu
         else:
             vram_set_state = vram_state
         lowvram_model_memory = 0
-        if lowvram_available and (vram_set_state == VRAMState.LOW_VRAM or vram_set_state == VRAMState.NORMAL_VRAM) and not force_full_load:
+        if lowvram_available and vram_set_state in (VRAMState.LOW_VRAM, VRAMState.NORMAL_VRAM) and not force_full_load:
             loaded_memory = loaded_model.model_loaded_memory()
             current_free_mem = get_free_memory(torch_dev) + loaded_memory
 
             lowvram_model_memory = max(0, (current_free_mem - minimum_memory_required), min(current_free_mem * MIN_WEIGHT_MEMORY_RATIO, current_free_mem - minimum_inference_memory()))
             lowvram_model_memory = lowvram_model_memory - loaded_memory
 
+            logger.debug(
+                ", ".join(
+                    [
+                        f"Target: {loaded_model.model.model.__class__.__name__}",
+                        f"Free GPU: {current_free_mem / (1024 * 1024):.2f} MB",
+                        f"Model Require: {total_memory_required[loaded_model.device] / (1024 * 1024):.2f} MB",
+                        f"Previously Loaded: {loaded_memory / (1024 * 1024):.2f} MB",
+                        f"Inference Require: {minimum_memory_required / (1024 * 1024):.2f} MB",
+                    ]
+                )
+            )
+
             if lowvram_model_memory == 0:
                 lowvram_model_memory = 0.1
 
-        if vram_set_state == VRAMState.NO_VRAM:
+        if vram_set_state is VRAMState.NO_VRAM:
             lowvram_model_memory = 0.1
 
         loaded_model.model_load(lowvram_model_memory, force_patch_weights=force_patch_weights)
         current_loaded_models.insert(0, loaded_model)
-    return
+
+    moving_time = time.perf_counter() - execution_start_time
+    logger.info(f"Moving model(s) has taken {moving_time:.2f} seconds")
 
 
-def load_model_gpu(model):
+def load_model_gpu(model: ModelPatcher):
     return load_models_gpu([model])
 
 
-def loaded_models(only_currently_used=False):
+def loaded_models(only_currently_used: bool = False) -> list["LoadedModel"]:
     output = []
     for m in current_loaded_models:
-        if only_currently_used:
-            if not m.currently_used:
-                continue
-
+        if only_currently_used and not m.currently_used:
+            continue
         output.append(m.model)
     return output
 
