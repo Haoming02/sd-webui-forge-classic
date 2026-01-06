@@ -13,7 +13,7 @@ class EnumAction(argparse.Action):
 
         choices = tuple(e.value for e in enum_type)
         kwargs.setdefault("choices", choices)
-        kwargs.setdefault("metavar", f"[{','.join(list(choices))}]")
+        kwargs.setdefault("metavar", f"[{','.join(choices)}]")
 
         super(EnumAction, self).__init__(**kwargs)
         self._enum = enum_type
@@ -25,7 +25,7 @@ class EnumAction(argparse.Action):
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--gpu-device-id", type=int, default=None, metavar="DEVICE_ID")
+parser.add_argument("--gpu-device-id", type=int, default=None, metavar="DEVICE_ID", help="Set the id of device to use (all other devices will not be visible)")
 parser.add_argument("--disable-gpu-warning", action="store_true", help="Disable the low VRAM warnings")
 
 fp_group = parser.add_mutually_exclusive_group()
@@ -60,6 +60,7 @@ attn_group = parser.add_mutually_exclusive_group()
 attn_group.add_argument("--use-split-cross-attention", action="store_true", help="Use the split cross attention")
 attn_group.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override xformers/sageattention/flash_attn)")
 
+parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention")
 parser.add_argument("--force-upcast-attention", action="store_true", help="Always upcast during attention")
 
 parser.add_argument("--xformers", action="store_true", help="install xformers")
@@ -73,10 +74,9 @@ parser.add_argument("--disable-xformers", action="store_true", help="disable xfo
 parser.add_argument("--disable-sage", action="store_true", help="disable sageattention")
 parser.add_argument("--disable-flash", action="store_true", help="disable flash_attn")
 
-parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention")
-
 parser.add_argument("--directml", type=int, nargs="?", metavar="DIRECTML_DEVICE", const=-1, help="Use torch-directml")
 parser.add_argument("--disable-ipex-optimize", action="store_true", help="Disable ipex.optimize default when loading models with Intel's Extension for PyTorch")
+parser.add_argument("--deterministic", action="store_true", help="Use slower deterministic algorithms when possible")
 
 vram_group = parser.add_mutually_exclusive_group()
 vram_group.add_argument("--gpu-only", action="store_true", help="Store and run everything on the GPU.")
@@ -86,10 +86,8 @@ vram_group.add_argument("--lowvram", action="store_true", help="Split the diffus
 vram_group.add_argument("--novram", action="store_true", help="When LOW_VRAM still isn't enough.")
 vram_group.add_argument("--cpu", action="store_true", help="To use the CPU for everything (slow).")
 
-parser.add_argument("--reserve-vram", type=float, default=None, help="Set the amount of VRAM (in GB) you want to reserve for other software. By default some amount is reserved depending on your OS.")
-
+parser.add_argument("--reserve-vram", type=float, default=None, metavar="GB", help="Set the amount of VRAM you want to reserve for other software (by default some amount is reserved)")
 parser.add_argument("--disable-smart-memory", action="store_true", help="Aggressively offload to RAM instead of keeping models in VRAM when possible")
-parser.add_argument("--deterministic", action="store_true", help="Make PyTorch use slower deterministic algorithms when possible")
 
 parser.add_argument("--cuda-malloc", action="store_true")
 parser.add_argument("--cuda-stream", action="store_true")
