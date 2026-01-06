@@ -14,7 +14,6 @@ ui_forge_preset: gr.Radio = None
 
 ui_checkpoint: gr.Dropdown = None
 ui_vae: gr.Dropdown = None
-ui_clip_skip: gr.Slider = None
 
 ui_forge_unet_storage_dtype_options: gr.Radio = None
 ui_forge_async_loading: gr.Radio = None
@@ -54,7 +53,7 @@ def bind_to_opts(comp, k, save=False, callback=None):
 
 
 def make_checkpoint_manager_ui():
-    global ui_checkpoint, ui_vae, ui_clip_skip, ui_forge_unet_storage_dtype_options, ui_forge_async_loading, ui_forge_pin_shared_memory, ui_forge_inference_memory, ui_forge_preset
+    global ui_checkpoint, ui_vae, ui_forge_unet_storage_dtype_options, ui_forge_async_loading, ui_forge_pin_shared_memory, ui_forge_inference_memory, ui_forge_preset
 
     if shared.opts.sd_model_checkpoint in [None, "None", "none", ""]:
         if len(sd_models.checkpoints_list) == 0:
@@ -94,9 +93,6 @@ def make_checkpoint_manager_ui():
     ui_forge_inference_memory.change(ui_refresh_memory_management_settings, inputs=mem_comps, queue=False, show_progress=False)
     ui_forge_async_loading.change(ui_refresh_memory_management_settings, inputs=mem_comps, queue=False, show_progress=False)
     ui_forge_pin_shared_memory.change(ui_refresh_memory_management_settings, inputs=mem_comps, queue=False, show_progress=False)
-
-    ui_clip_skip = gr.Slider(label="Clip Skip", value=lambda: shared.opts.CLIP_stop_at_last_layers, minimum=1, maximum=12, step=1)
-    bind_to_opts(ui_clip_skip, "CLIP_stop_at_last_layers", save=True)
 
     ui_checkpoint.change(checkpoint_change, inputs=[ui_checkpoint, ui_forge_preset], show_progress=False)
     ui_vae.change(modules_change, inputs=[ui_vae, ui_forge_preset], queue=False, show_progress=False)
@@ -269,7 +265,6 @@ def forge_main_entry():
     output_targets = [
         ui_checkpoint,
         ui_vae,
-        ui_clip_skip,
         ui_forge_unet_storage_dtype_options,
         ui_forge_async_loading,
         ui_forge_pin_shared_memory,
@@ -307,7 +302,6 @@ def on_preset_change(preset: str):
     if model_mem < 0 or model_mem > total_vram:
         model_mem = total_vram - 1024
 
-    show_clip_skip = preset not in ("qwen", "lumina", "wan")
     show_basic_mem = preset != "sd"
     show_adv_mem = preset in ("flux", "qwen", "wan")
     distilled = preset in ("flux", "lumina", "wan")
@@ -319,7 +313,6 @@ def on_preset_change(preset: str):
     return [
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),  # ui_checkpoint
         gr.update(value=additional_modules),  # ui_vae
-        gr.update(visible=show_clip_skip, value=getattr(shared.opts, "CLIP_stop_at_last_layers", 2)),  # ui_clip_skip
         gr.update(visible=show_basic_mem, value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),  # ui_forge_unet_storage_dtype_options
         gr.update(visible=show_adv_mem, value=getattr(shared.opts, "forge_async_loading", "Queue")),  # ui_forge_async_loading
         gr.update(visible=show_adv_mem, value=getattr(shared.opts, "forge_pin_shared_memory", "CPU")),  # ui_forge_pin_shared_memory

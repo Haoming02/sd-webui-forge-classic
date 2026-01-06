@@ -85,8 +85,8 @@ class UiSettings:
             if comp == self.dummy_component:
                 continue
 
-            # don't set (Managed by Forge) options, they revert to defaults
-            if key in ["sd_model_checkpoint", "CLIP_stop_at_last_layers", "sd_vae"]:
+            # managed by Forge, do not set
+            if key in ("sd_model_checkpoint", "sd_vae"):
                 continue
 
             if opts.set(key, value):
