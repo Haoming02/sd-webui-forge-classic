@@ -976,10 +976,6 @@ def device_supports_non_blocking(device: torch.device) -> bool:
     return True
 
 
-def force_channels_last() -> bool:
-    return args.force_channels_last
-
-
 def cast_to(weight: torch.Tensor, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, stream: torch.Stream = None):
     if device is None or weight.device == device:
         if not copy:
