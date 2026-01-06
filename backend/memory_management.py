@@ -121,6 +121,18 @@ if args.cpu:
     cpu_state = CPUState.CPU
 
 
+def is_intel_xpu() -> bool:
+    return cpu_state is CPUState.GPU and xpu_available
+
+
+def is_nvidia() -> bool:
+    return cpu_state is CPUState.GPU and torch.version.cuda
+
+
+def is_amd() -> bool:
+    return cpu_state is CPUState.GPU and torch.version.hip
+
+
 def get_torch_device() -> torch.device:
     if directml_enabled:
         return directml_device
@@ -215,18 +227,6 @@ else:
         FLASH_IS_AVAILABLE = False
     else:
         FLASH_IS_AVAILABLE = True
-
-
-def is_intel_xpu() -> bool:
-    return cpu_state is CPUState.GPU and xpu_available
-
-
-def is_nvidia() -> bool:
-    return cpu_state is CPUState.GPU and torch.version.cuda
-
-
-def is_amd() -> bool:
-    return cpu_state is CPUState.GPU and torch.version.hip
 
 
 def amd_min_version(device: torch.device = None, min_rdna_version: int = 0) -> bool:
