@@ -16,7 +16,6 @@ parser.add_argument("--log-startup", action="store_true", help="launch.py argume
 parser.add_argument("--skip-prepare-environment", action="store_true", help="launch.py argument: skip all environment preparation")
 parser.add_argument("--skip-install", action="store_true", help="launch.py argument: skip installation of packages")
 parser.add_argument("--dump-sysinfo", action="store_true", help="launch.py argument: dump limited sysinfo file (without information about extensions, options) to disk and quit")
-parser.add_argument("--loglevel", type=str, help="log level; one of: CRITICAL, ERROR, WARNING, INFO, DEBUG", default=None)
 parser.add_argument("--share", action="store_true", help="use share=True for gradio and make the UI accessible through their site")
 parser.add_argument("--ngrok", type=str, help="ngrok authtoken, alternative to gradio --share", default=None)
 parser.add_argument("--ngrok-region", type=str, help="does not do anything.", default="")

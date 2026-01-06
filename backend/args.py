@@ -25,6 +25,7 @@ class EnumAction(argparse.Action):
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument("--loglevel", type=str, default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Set the logging level")
 parser.add_argument("--gpu-device-id", type=int, default=None, metavar="DEVICE_ID", help="Set the id of device to use (all other devices will not be visible)")
 parser.add_argument("--disable-gpu-warning", action="store_true", help="Disable the low VRAM warnings")
 

@@ -33,9 +33,11 @@ import psutil
 import torch
 
 from backend.args import args
+from backend.logging import setup_logger
 from backend.patcher.base import ModelPatcher
 
 logger = logging.getLogger("memory_management")
+setup_logger(logger)
 
 cpu = torch.device("cpu")
 
