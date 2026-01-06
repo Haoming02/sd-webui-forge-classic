@@ -662,18 +662,6 @@ def load_models_gpu(models: list[ModelPatcher], memory_required: float = 0, forc
             lowvram_model_memory = max(0, (current_free_mem - minimum_memory_required), min(current_free_mem * MIN_WEIGHT_MEMORY_RATIO, current_free_mem - minimum_inference_memory()))
             lowvram_model_memory = lowvram_model_memory - loaded_memory
 
-            logger.debug(
-                ", ".join(
-                    [
-                        f"Target: {loaded_model.model.model.__class__.__name__}",
-                        f"Free GPU: {current_free_mem / (1024 * 1024):.2f} MB",
-                        f"Model Require: {total_memory_required[loaded_model.device] / (1024 * 1024):.2f} MB",
-                        f"Previously Loaded: {loaded_memory / (1024 * 1024):.2f} MB",
-                        f"Inference Require: {minimum_memory_required / (1024 * 1024):.2f} MB",
-                    ]
-                )
-            )
-
             if lowvram_model_memory == 0:
                 lowvram_model_memory = 0.1
 

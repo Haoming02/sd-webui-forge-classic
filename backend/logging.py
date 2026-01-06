@@ -32,7 +32,7 @@ class ForgeFormatter(logging.Formatter):
     def format(self, record):
         new_record = copy.copy(record)
         color = ForgeFormatter.COLORS[record.levelname]
-        new_record.msg = ForgeFormatter._message(color, record.msg, record.filename)
+        new_record.msg = ForgeFormatter._message(color, record.msg, record.name)
         return super().format(new_record)
 
 

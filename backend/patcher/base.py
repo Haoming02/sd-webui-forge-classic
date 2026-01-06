@@ -29,7 +29,11 @@ from typing import Callable
 import torch
 
 from backend import memory_management, utils
+from backend.logging import setup_logger
 from backend.patcher.lora import merge_lora_to_weight
+
+logger = logging.getLogger("model_patcher")
+setup_logger(logger)
 
 
 def string_to_seed(data):
@@ -388,7 +392,7 @@ class ModelPatcher:
 
         if self.patches_uuid == clone.patches_uuid:
             if len(self.patches) != len(clone.patches):
-                logging.warning("WARNING: something went wrong, same patch uuid but different length of patches.")
+                logger.warning("WARNING: something went wrong, same patch uuid but different length of patches.")
             else:
                 return True
 
@@ -791,7 +795,7 @@ class ModelPatcher:
                 if memory_management.is_device_cuda(device_to):
                     torch.cuda.synchronize()
 
-                logging.debug("lowvram: loaded module regularly {} {}".format(n, m))
+                logger.debug("lowvram: loaded module regularly {} {}".format(n, m))
                 m.comfy_patched_weights = True
 
             for x in load_completely:
@@ -804,10 +808,10 @@ class ModelPatcher:
                     self.pin_weight_to_device("{}.{}".format(n, param))
 
             if lowvram_counter > 0:
-                logging.info("loaded partially; {:.2f} MB usable, {:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(lowvram_model_memory / (1024 * 1024), mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
+                logger.info("loaded partially; {:.2f} MB usable, {:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(lowvram_model_memory / (1024 * 1024), mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
                 self.model.model_lowvram = True
             else:
-                logging.info("loaded completely; {:.2f} MB usable, {:.2f} MB loaded, full load: {}".format(lowvram_model_memory / (1024 * 1024), mem_counter / (1024 * 1024), full_load))
+                logger.info("loaded completely; {:.2f} MB usable, {:.2f} MB loaded, full load: {}".format(lowvram_model_memory / (1024 * 1024), mem_counter / (1024 * 1024), full_load))
                 self.model.model_lowvram = False
                 if full_load:
                     self.model.to(device_to)
@@ -954,7 +958,7 @@ class ModelPatcher:
                         offload_buffer = max(offload_buffer, potential_offload)
                         offload_weight_factor.append(module_mem)
                         offload_weight_factor.pop(0)
-                        logging.debug("freed {}".format(n))
+                        logger.debug("freed {}".format(n))
 
                         for param in params:
                             self.pin_weight_to_device("{}.{}".format(n, param))
@@ -963,7 +967,7 @@ class ModelPatcher:
             self.model.lowvram_patch_counter += patch_counter
             self.model.model_loaded_weight_memory -= memory_freed
             self.model.model_offload_buffer_memory = offload_buffer
-            logging.info("Unloaded partially: {:.2f} MB freed, {:.2f} MB remains loaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(memory_freed / (1024 * 1024), self.model.model_loaded_weight_memory / (1024 * 1024), offload_buffer / (1024 * 1024), self.model.lowvram_patch_counter))
+            logger.info("Unloaded partially: {:.2f} MB freed, {:.2f} MB remains loaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(memory_freed / (1024 * 1024), self.model.model_loaded_weight_memory / (1024 * 1024), offload_buffer / (1024 * 1024), self.model.lowvram_patch_counter))
             return memory_freed
 
     def partially_load(self, device_to, extra_memory=0, force_patch_weights=False):
@@ -1262,7 +1266,7 @@ class ModelPatcher:
     #                 model_sd_keys_set = set(model_sd_keys)
     #                 for key in cached_weights:
     #                     if key not in model_sd_keys:
-    #                         logging.warning(f"Cached hook could not patch. Key does not exist in model: {key}")
+    #                         logger.warning(f"Cached hook could not patch. Key does not exist in model: {key}")
     #                         continue
     #                     self.patch_cached_hook_weights(cached_weights=cached_weights, key=key, memory_counter=memory_counter)
     #                     model_sd_keys_set.remove(key)
@@ -1275,7 +1279,7 @@ class ModelPatcher:
     #                     original_weights = self.get_key_patches()
     #                 for key in relevant_patches:
     #                     if key not in model_sd_keys:
-    #                         logging.warning(f"Cached hook would not patch. Key does not exist in model: {key}")
+    #                         logger.warning(f"Cached hook would not patch. Key does not exist in model: {key}")
     #                         continue
     #                     self.patch_hook_weight_to_device(hooks=hooks, combined_patches=relevant_patches, key=key, original_weights=original_weights, memory_counter=memory_counter)
     #         else:
