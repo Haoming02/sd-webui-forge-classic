@@ -30,13 +30,7 @@ class T5TextProcessingEngine:
     def encode_with_transformers(self, tokens):
         device = memory_management.text_encoder_device()
         tokens = tokens.to(device)
-        self.text_encoder.shared.to(device=device, dtype=torch.float32)
-
-        z = self.text_encoder(
-            input_ids=tokens,
-        )
-
-        return z
+        return self.text_encoder(input_ids=tokens)
 
     def tokenize_line(self, line):
         parsed = parsing.parse_prompt_attention(line, self.emphasis.name)

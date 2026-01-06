@@ -100,9 +100,9 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
 
 
 def wipe_lowvram_weight(m):
-    if hasattr(m, "prev_comfy_cast_weights"):
-        m.comfy_cast_weights = m.prev_comfy_cast_weights
-        del m.prev_comfy_cast_weights
+    if hasattr(m, "prev_parameters_manual_cast"):
+        m.parameters_manual_cast = m.prev_parameters_manual_cast
+        del m.prev_parameters_manual_cast
 
     if hasattr(m, "weight_function"):
         m.weight_function = []
@@ -680,10 +680,10 @@ class ModelPatcher:
                 if name not in params:
                     skip = True  # skip random weights in non leaf modules
                     break
-            if not skip and (hasattr(m, "comfy_cast_weights") or len(params) > 0):
+            if not skip and (hasattr(m, "parameters_manual_cast") or len(params) > 0):
                 module_mem = memory_management.module_size(m)
                 module_offload_mem = module_mem
-                if hasattr(m, "comfy_cast_weights"):
+                if hasattr(m, "parameters_manual_cast"):
 
                     def check_module_offload_mem(key):
                         if key in self.patches:
@@ -725,18 +725,18 @@ class ModelPatcher:
                 weight_key = "{}.weight".format(n)
                 bias_key = "{}.bias".format(n)
 
-                if not full_load and hasattr(m, "comfy_cast_weights"):
+                if not full_load and hasattr(m, "parameters_manual_cast"):
                     if not lowvram_fits:
                         offload_buffer = potential_offload
                         lowvram_weight = True
                         lowvram_counter += 1
                         lowvram_mem_counter += module_mem
-                        if hasattr(m, "prev_comfy_cast_weights"):  # Already lowvramed
+                        if hasattr(m, "prev_parameters_manual_cast"):  # Already lowvramed
                             continue
 
                 cast_weight = self.force_cast_weights
                 if lowvram_weight:
-                    if hasattr(m, "comfy_cast_weights"):
+                    if hasattr(m, "parameters_manual_cast"):
                         m.weight_function = []
                         m.bias_function = []
 
@@ -758,7 +758,7 @@ class ModelPatcher:
                     cast_weight = True
                     offloaded.append((module_mem, n, m, params))
                 else:
-                    if hasattr(m, "comfy_cast_weights"):
+                    if hasattr(m, "parameters_manual_cast"):
                         wipe_lowvram_weight(m)
 
                     if full_load or lowvram_fits:
@@ -767,9 +767,9 @@ class ModelPatcher:
                     else:
                         offload_buffer = potential_offload
 
-                if cast_weight and hasattr(m, "comfy_cast_weights"):
-                    m.prev_comfy_cast_weights = m.comfy_cast_weights
-                    m.comfy_cast_weights = True
+                if cast_weight and hasattr(m, "parameters_manual_cast"):
+                    m.prev_parameters_manual_cast = m.parameters_manual_cast
+                    m.parameters_manual_cast = True
 
                 if weight_key in self.weight_wrapper_patches:
                     m.weight_function.extend(self.weight_wrapper_patches[weight_key])
@@ -906,7 +906,7 @@ class ModelPatcher:
 
                 potential_offload = module_offload_mem + sum(offload_weight_factor)
 
-                lowvram_possible = hasattr(m, "comfy_cast_weights")
+                lowvram_possible = hasattr(m, "parameters_manual_cast")
                 if hasattr(m, "comfy_patched_weights") and m.comfy_patched_weights == True:
                     move_weight = True
                     for param in params:
@@ -950,9 +950,9 @@ class ModelPatcher:
                                     patch_counter += 1
                             cast_weight = True
 
-                        if cast_weight and hasattr(m, "comfy_cast_weights"):
-                            m.prev_comfy_cast_weights = m.comfy_cast_weights
-                            m.comfy_cast_weights = True
+                        if cast_weight and hasattr(m, "parameters_manual_cast"):
+                            m.prev_parameters_manual_cast = m.parameters_manual_cast
+                            m.parameters_manual_cast = True
                         m.comfy_patched_weights = False
                         memory_freed += module_mem
                         offload_buffer = max(offload_buffer, potential_offload)
