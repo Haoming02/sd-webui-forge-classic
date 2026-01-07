@@ -89,13 +89,11 @@ vram_group.add_argument("--cpu", action="store_true", help="To use the CPU for e
 
 parser.add_argument("--reserve-vram", type=float, default=None, metavar="GB", help="Set the amount of VRAM you want to reserve for other software (by default some amount is reserved)")
 parser.add_argument("--disable-smart-memory", action="store_true", help="Aggressively offload to RAM instead of keeping models in VRAM when possible")
+parser.add_argument("--force-non-blocking", action="store_true", help="Use non-blocking operations for all applicable tensors")
 
 parser.add_argument("--cuda-malloc", action="store_true")
 parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=2, default=None)
 parser.add_argument("--pin-shared-memory", action="store_true")
-
-parser.add_argument("--disable-pinned-memory", action="store_true")
-parser.add_argument("--force-non-blocking", action="store_true", help="Use non-blocking operations for all applicable tensors")
 
 parser.add_argument("--fast-fp16", action="store_true", help="torch.backends.cuda.matmul.allow_fp16_accumulation")
 parser.add_argument("--autotune", action="store_true", help="torch.backends.cudnn.benchmark")
