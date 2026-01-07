@@ -1,12 +1,18 @@
+import logging
 import os.path
 
 import gradio as gr
 import torch
 from gradio.context import Context
+from rich import print_json
 
 from backend import memory_management, operations
 from backend.args import dynamic_args
+from backend.logging import setup_logger
 from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
+
+logger = logging.getLogger("ui_models")
+setup_logger(logger)
 
 total_vram = int(memory_management.total_vram)
 
@@ -123,17 +129,20 @@ def refresh_model_loading_parameters():
 
     unet_storage_dtype, lora_fp16 = forge_unet_storage_dtype_options.get(shared.opts.forge_unet_storage_dtype, (None, False))
 
-    ckpt: str = checkpoint_info["filename"]
+    ckpt: str = checkpoint_info.filename
     if ckpt.endswith(("gguf", "GGUF")) and not lora_fp16:
-        print("GGUF requires fp16 LoRA ; overriding option")
+        logger.warning("GGUF requires fp16 LoRA ; overriding option")
         lora_fp16 = True
 
     dynamic_args["online_lora"] = lora_fp16
 
     model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=unet_storage_dtype)
 
-    print(f"Model selected: {model_data.forge_loading_parameters}")
-    print(f"Patch LoRAs on-the-fly: {lora_fp16}")
+    modules: list[str] = [os.path.basename(x) for x in shared.opts.forge_additional_modules]
+
+    logger.info("Model Selected:")
+    print_json(data=dict(checkpoint=os.path.basename(ckpt), modules=modules))
+    logger.info(f"Patch LoRAs on-the-fly: {lora_fp16}")
     processing.need_global_unload = True
 
 
