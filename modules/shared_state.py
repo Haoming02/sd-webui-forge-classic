@@ -2,13 +2,14 @@ import datetime
 import logging
 import threading
 import time
-import traceback
-import torch
 from contextlib import nullcontext
-
-from modules import errors, shared, devices
-from backend.args import args
 from typing import Optional
+
+import torch
+from PIL import Image
+
+from backend import stream
+from modules import devices, errors, shared
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class State:
     job_no = 0
     job_count = 0
     processing_has_refined_job_count = False
-    job_timestamp = '0'
+    job_timestamp = "0"
     sampling_step = 0
     sampling_steps = 0
     current_latent = None
@@ -36,10 +37,9 @@ class State:
 
     def __init__(self):
         self.server_start = time.time()
-        if args.cuda_stream:
-            self.vae_stream = torch.cuda.Stream()
-        else:
-            self.vae_stream = None
+        self.vae_stream = None
+        if stream.should_use_stream():
+            self.vae_stream = stream.get_new_stream()
 
     @property
     def need_restart(self) -> bool:
@@ -159,13 +159,11 @@ class State:
         import modules.sd_samplers
 
         try:
+            vae_context = nullcontext()
             if self.vae_stream is not None:
-                # not waiting on default stream will result in corrupt results
-                # will not block main stream under any circumstances
-                self.vae_stream.wait_stream(torch.cuda.default_stream())
-                vae_context = torch.cuda.stream(self.vae_stream)
-            else:
-                vae_context = nullcontext()
+                self.vae_stream.wait_stream(stream.current_stream)
+                vae_context = stream.stream_context()(self.vae_stream)
+
             with vae_context:
                 if shared.opts.show_progress_grid:
                     self.assign_current_image(modules.sd_samplers.samples_to_image_grid(self.current_latent))
@@ -174,16 +172,12 @@ class State:
 
             self.current_image_sampling_step = self.sampling_step
 
-        except Exception as e:
-            # traceback.print_exc()
-            # print(e)
-            # when switching models during genration, VAE would be on CPU, so creating an image will fail.
-            # we silently ignore this error
+        except Exception:
             errors.record_exception()
 
     @torch.inference_mode()
-    def assign_current_image(self, image):
-        if shared.opts.live_previews_image_format == 'jpeg' and image.mode in ('RGBA', 'P'):
-            image = image.convert('RGB')
+    def assign_current_image(self, image: Image.Image):
+        if shared.opts.live_previews_image_format == "jpeg" and image.mode != "RGB":
+            image = image.convert("RGB")
         self.current_image = image
         self.id_live_preview += 1
