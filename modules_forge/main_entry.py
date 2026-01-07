@@ -11,6 +11,10 @@ from backend.args import dynamic_args
 from backend.logging import setup_logger
 from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
 
+# prevent duplicate logs when switching Presets
+_prev: str = None
+_pending: bool = False
+
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
 
@@ -122,27 +126,36 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
     return sorted(ckpt_list), sorted(module_list.keys())
 
 
-def refresh_model_loading_parameters():
+def refresh_model_loading_parameters(*, refresh: bool = True):
+    global _pending
+    if _pending:
+        _pending = False
+        return
+    if not refresh:
+        return
+
     from modules.sd_models import model_data, select_checkpoint
 
     checkpoint_info = select_checkpoint()
 
     unet_storage_dtype, lora_fp16 = forge_unet_storage_dtype_options.get(shared.opts.forge_unet_storage_dtype, (None, False))
 
+    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=unet_storage_dtype)
+
     ckpt: str = checkpoint_info.filename
+    modules: list[str] = [os.path.basename(x) for x in shared.opts.forge_additional_modules]
+    dtype = str(unet_storage_dtype or [torch.float16, torch.bfloat16])
+
+    logger.info("Model Selected:")
+    print_json(data=dict(checkpoint=os.path.basename(ckpt), modules=modules, dtype=dtype))
+
     if ckpt.endswith(("gguf", "GGUF")) and not lora_fp16:
         logger.warning("GGUF requires fp16 LoRA ; overriding option")
         lora_fp16 = True
 
     dynamic_args["online_lora"] = lora_fp16
-
-    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=unet_storage_dtype)
-
-    modules: list[str] = [os.path.basename(x) for x in shared.opts.forge_additional_modules]
-
-    logger.info("Model Selected:")
-    print_json(data=dict(checkpoint=os.path.basename(ckpt), modules=modules))
     logger.info(f"Patch LoRAs on-the-fly: {lora_fp16}")
+
     processing.need_global_unload = True
 
 
@@ -159,8 +172,7 @@ def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> b
 
     if save:
         shared.opts.save(shared.config_filename)
-    if refresh:
-        refresh_model_loading_parameters()
+    refresh_model_loading_parameters(refresh=refresh)
     return True
 
 
@@ -183,8 +195,7 @@ def modules_change(module_values: list, preset: str, save=True, refresh=True) ->
 
     if save:
         shared.opts.save(shared.config_filename)
-    if refresh:
-        refresh_model_loading_parameters()
+    refresh_model_loading_parameters(refresh=refresh)
     return True
 
 
@@ -254,6 +265,10 @@ def on_preset_change(preset: str):
     extra_slider = preset in ("flux", "lumina", "wan")
     distill_label = "Distilled CFG Scale" if preset == "flux" else "Shift"
     batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch size", "value": 1}
+
+    global _prev, _pending
+    _pending = str(additional_modules) != _prev
+    _prev = str(additional_modules)
 
     return [
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),  # ui_checkpoint
