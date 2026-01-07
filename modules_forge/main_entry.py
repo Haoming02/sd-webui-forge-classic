@@ -10,16 +10,10 @@ from modules import infotext_utils, paths, processing, sd_models, shared, shared
 
 total_vram = int(memory_management.total_vram)
 
-ui_forge_preset: gr.Radio = None
-
-ui_checkpoint: gr.Dropdown = None
-ui_vae: gr.Dropdown = None
-
-ui_forge_unet_storage_dtype_options: gr.Radio = None
-ui_forge_async_loading: gr.Radio = None
-ui_forge_pin_shared_memory: gr.Radio = None
-ui_forge_inference_memory: gr.Slider = None
-
+ui_forge_preset: gr.Radio
+ui_checkpoint: gr.Dropdown
+ui_vae: gr.Dropdown
+ui_forge_unet_storage_dtype_options: gr.Radio
 
 forge_unet_storage_dtype_options = {
     "Automatic": (None, False),
@@ -53,7 +47,7 @@ def bind_to_opts(comp, k, save=False, callback=None):
 
 
 def make_checkpoint_manager_ui():
-    global ui_checkpoint, ui_vae, ui_forge_unet_storage_dtype_options, ui_forge_async_loading, ui_forge_pin_shared_memory, ui_forge_inference_memory, ui_forge_preset
+    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_storage_dtype_options
 
     if shared.opts.sd_model_checkpoint in [None, "None", "none", ""]:
         if len(sd_models.checkpoints_list) == 0:
@@ -76,23 +70,12 @@ def make_checkpoint_manager_ui():
 
     def gr_refresh_on_load():
         ckpt_list, vae_list = refresh_models()
-        refresh_memory_management_settings()
         return [gr.update(value=shared.opts.sd_model_checkpoint, choices=ckpt_list), gr.update(value=[os.path.basename(x) for x in shared.opts.forge_additional_modules], choices=vae_list)]
 
     Context.root_block.load(fn=gr_refresh_on_load, outputs=[ui_checkpoint, ui_vae], show_progress=False, queue=False)
 
     ui_forge_unet_storage_dtype_options = gr.Dropdown(label="Diffusion in Low Bits", value=lambda: shared.opts.forge_unet_storage_dtype, choices=list(forge_unet_storage_dtype_options.keys()))
     bind_to_opts(ui_forge_unet_storage_dtype_options, "forge_unet_storage_dtype", save=True, callback=refresh_model_loading_parameters)
-
-    ui_forge_async_loading = gr.Radio(label="Swap Method", value=lambda: shared.opts.forge_async_loading, choices=["Queue", "Async"])
-    ui_forge_pin_shared_memory = gr.Radio(label="Swap Location", value=lambda: shared.opts.forge_pin_shared_memory, choices=["CPU", "Shared"])
-    ui_forge_inference_memory = gr.Slider(label="GPU Weights (MB)", value=lambda: total_vram - shared.opts.forge_inference_memory, minimum=0, maximum=int(memory_management.total_vram), step=1)
-
-    mem_comps = [ui_forge_inference_memory, ui_forge_async_loading, ui_forge_pin_shared_memory]
-
-    ui_forge_inference_memory.change(ui_refresh_memory_management_settings, inputs=mem_comps, queue=False, show_progress=False)
-    ui_forge_async_loading.change(ui_refresh_memory_management_settings, inputs=mem_comps, queue=False, show_progress=False)
-    ui_forge_pin_shared_memory.change(ui_refresh_memory_management_settings, inputs=mem_comps, queue=False, show_progress=False)
 
     ui_checkpoint.change(checkpoint_change, inputs=[ui_checkpoint, ui_forge_preset], show_progress=False)
     ui_vae.change(modules_change, inputs=[ui_vae, ui_forge_preset], queue=False, show_progress=False)
@@ -130,51 +113,6 @@ def refresh_models():
         module_list.update(vae_files)
 
     return sorted(ckpt_list), sorted(module_list.keys())
-
-
-def ui_refresh_memory_management_settings(model_memory, async_loading, pin_shared_memory):
-    """Pass calculated `model_memory` from "GPU Weights" UI slider"""
-    refresh_memory_management_settings(async_loading=async_loading, pin_shared_memory=pin_shared_memory, model_memory=model_memory)  # Use model_memory directly from UI slider value
-
-
-def refresh_memory_management_settings(async_loading=None, inference_memory=None, pin_shared_memory=None, model_memory=None):
-    # Fallback to defaults if values are not passed
-    async_loading = async_loading if async_loading is not None else shared.opts.forge_async_loading
-    inference_memory = inference_memory if inference_memory is not None else shared.opts.forge_inference_memory
-    pin_shared_memory = pin_shared_memory if pin_shared_memory is not None else shared.opts.forge_pin_shared_memory
-
-    # If model_memory is provided, calculate inference memory accordingly, otherwise use inference_memory directly
-    if model_memory is None:
-        model_memory = total_vram - inference_memory
-    else:
-        inference_memory = total_vram - model_memory
-
-    shared.opts.set("forge_async_loading", async_loading)
-    shared.opts.set("forge_inference_memory", inference_memory)
-    shared.opts.set("forge_pin_shared_memory", pin_shared_memory)
-
-    stream.stream_activated = async_loading == "Async"
-    memory_management.current_inference_memory = inference_memory * 1024 * 1024  # Convert MB to bytes
-    memory_management.PIN_SHARED_MEMORY = pin_shared_memory == "Shared"
-
-    log_dict = dict(stream=stream.should_use_stream(), inference_memory=memory_management.minimum_inference_memory() / (1024 * 1024), pin_shared_memory=memory_management.PIN_SHARED_MEMORY)
-
-    print(f"Environment vars changed: {log_dict}")
-
-    if inference_memory < min(512, total_vram * 0.05):
-        print("------------------")
-        print(f"[Low VRAM Warning] You just set Forge to use 100% GPU memory ({model_memory:.2f} MB) to load model weights.")
-        print("[Low VRAM Warning] This means you will have 0% GPU memory (0.00 MB) to do matrix computation. Computations may fallback to CPU or go Out of Memory.")
-        print("[Low VRAM Warning] In many cases, image generation will be 10x slower.")
-        print("[Low VRAM Warning] To solve the problem, you can set the 'GPU Weights' (on the top of page) to a lower value.")
-        print("[Low VRAM Warning] If you cannot find 'GPU Weights', you can click the 'all' option in the 'UI' area on the left-top corner of the webpage.")
-        print("[Low VRAM Warning] Make sure that you know what you are testing.")
-        print("------------------")
-    else:
-        compute_percentage = (inference_memory / total_vram) * 100.0
-        print(f"[GPU Setting] You will use {(100 - compute_percentage):.2f}% GPU memory ({model_memory:.2f} MB) to load weights, and use {compute_percentage:.2f}% GPU memory ({inference_memory:.2f} MB) to do matrix computation.")
-
-    processing.need_global_unload = True
 
 
 def refresh_model_loading_parameters():
@@ -266,9 +204,6 @@ def forge_main_entry():
         ui_checkpoint,
         ui_vae,
         ui_forge_unet_storage_dtype_options,
-        ui_forge_async_loading,
-        ui_forge_pin_shared_memory,
-        ui_forge_inference_memory,
         ui_txt2img_width,
         ui_img2img_width,
         ui_txt2img_height,
@@ -302,8 +237,6 @@ def on_preset_change(preset: str):
     if model_mem < 0 or model_mem > total_vram:
         model_mem = total_vram - 1024
 
-    show_basic_mem = preset != "sd"
-    show_adv_mem = preset in ("flux", "qwen", "wan")
     distilled = preset in ("flux", "lumina", "wan")
     d_label = "Distilled CFG Scale" if preset == "flux" else "Shift"
     batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch size", "value": 1}
@@ -313,10 +246,7 @@ def on_preset_change(preset: str):
     return [
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),  # ui_checkpoint
         gr.update(value=additional_modules),  # ui_vae
-        gr.update(visible=show_basic_mem, value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),  # ui_forge_unet_storage_dtype_options
-        gr.update(visible=show_adv_mem, value=getattr(shared.opts, "forge_async_loading", "Queue")),  # ui_forge_async_loading
-        gr.update(visible=show_adv_mem, value=getattr(shared.opts, "forge_pin_shared_memory", "CPU")),  # ui_forge_pin_shared_memory
-        gr.update(visible=show_basic_mem, value=model_mem),  # ui_forge_inference_memory
+        gr.update(value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),  # ui_forge_unet_storage_dtype_options
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_width", 768)),  # ui_txt2img_width
         gr.update(value=getattr(shared.opts, f"{preset}_i2i_width", 768)),  # ui_img2img_width
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_height", 768)),  # ui_txt2img_height
