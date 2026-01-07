@@ -367,24 +367,29 @@ def get_torch_device_name(device: torch.device) -> str:
     if hasattr(device, "type"):
         if device.type == "cuda":
             try:
-                allocator_backend = torch.cuda.get_allocator_backend()
+                allocator_backend = f"- {torch.cuda.get_allocator_backend()}"
             except Exception:
                 allocator_backend = ""
-            return "{} {} : {}".format(device, torch.cuda.get_device_name(device), allocator_backend)
+            return "{} ({}) {}".format(torch.cuda.get_device_name(device), device, allocator_backend)
         elif device.type == "xpu":
-            return "{} {}".format(device, torch.xpu.get_device_name(device))
+            return "{} ({})".format(torch.xpu.get_device_name(device), device)
         else:
             return "{}".format(device.type)
     elif is_intel_xpu():
-        return "{} {}".format(device, torch.xpu.get_device_name(device))
+        return "{} ({})".format(torch.xpu.get_device_name(device), device)
     else:
-        return "CUDA {}: {}".format(device, torch.cuda.get_device_name(device))
+        return "{} (CUDA {})".format(torch.cuda.get_device_name(device), device)
 
 
 try:
-    logger.info("Device: {}".format(get_torch_device_name(get_torch_device())))
+    torch_device_name: str = get_torch_device_name(get_torch_device())
+    logger.info("Device: {}".format(torch_device_name))
 except Exception:
+    torch_device_name = ""
     logger.warning("Could not determine default device...")
+
+if "rtx" in torch_device_name.lower() and not args.cuda_malloc:
+    logger.warning("Hint: your device supports --cuda-malloc for potential speed improvements")
 
 
 def bake_gguf_model(model):
