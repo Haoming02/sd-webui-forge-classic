@@ -13,29 +13,32 @@ total_vram = int(memory_management.total_vram)
 ui_forge_preset: gr.Radio
 ui_checkpoint: gr.Dropdown
 ui_vae: gr.Dropdown
-ui_forge_unet_storage_dtype_options: gr.Radio
+ui_forge_unet_dtype: gr.Radio
 
-forge_unet_storage_dtype_options = {
+forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
     "Automatic": (None, False),
     "Automatic (fp16 LoRA)": (None, True),
     "float8-e4m3fn": (torch.float8_e4m3fn, False),
     "float8-e4m3fn (fp16 LoRA)": (torch.float8_e4m3fn, True),
-}
-
-bnb_storage_dtype_options = {
-    "bnb-nf4": ("nf4", False),
-    "bnb-nf4 (fp16 LoRA)": ("nf4", True),
-    "bnb-fp4": ("fp4", False),
-    "bnb-fp4 (fp16 LoRA)": ("fp4", True),
+    "float8-e5m2": (torch.float8_e5m2, False),
+    "float8-e5m2 (fp16 LoRA)": (torch.float8_e5m2, True),
 }
 
 if operations.bnb_available:
-    forge_unet_storage_dtype_options.update(bnb_storage_dtype_options)
+    forge_unet_storage_dtype_options.update(
+        {
+            "bnb-nf4": ("nf4", False),
+            "bnb-nf4 (fp16 LoRA)": ("nf4", True),
+            "bnb-fp4": ("fp4", False),
+            "bnb-fp4 (fp16 LoRA)": ("fp4", True),
+        }
+    )
 
 module_list = {}
 
 
-def bind_to_opts(comp, k, save=False, callback=None):
+
+def bind_to_opts(comp: gr.components.Component, k: str, save: bool = False, callback=None):
     def on_change(v):
         shared.opts.set(k, v)
         if save:
@@ -47,7 +50,7 @@ def bind_to_opts(comp, k, save=False, callback=None):
 
 
 def make_checkpoint_manager_ui():
-    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_storage_dtype_options
+    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype
 
     if shared.opts.sd_model_checkpoint in [None, "None", "none", ""]:
         if len(sd_models.checkpoints_list) == 0:
@@ -74,8 +77,8 @@ def make_checkpoint_manager_ui():
 
     Context.root_block.load(fn=gr_refresh_on_load, outputs=[ui_checkpoint, ui_vae], show_progress=False, queue=False)
 
-    ui_forge_unet_storage_dtype_options = gr.Dropdown(label="Diffusion in Low Bits", value=lambda: shared.opts.forge_unet_storage_dtype, choices=list(forge_unet_storage_dtype_options.keys()))
-    bind_to_opts(ui_forge_unet_storage_dtype_options, "forge_unet_storage_dtype", save=True, callback=refresh_model_loading_parameters)
+    ui_forge_unet_dtype = gr.Dropdown(label="Diffusion in Low Bits", value=lambda: shared.opts.forge_unet_storage_dtype, choices=list(forge_unet_storage_dtype_options.keys()))
+    bind_to_opts(ui_forge_unet_dtype, "forge_unet_storage_dtype", save=True, callback=refresh_model_loading_parameters)
 
     ui_checkpoint.change(checkpoint_change, inputs=[ui_checkpoint, ui_forge_preset], show_progress=False)
     ui_vae.change(modules_change, inputs=[ui_vae, ui_forge_preset], queue=False, show_progress=False)
@@ -122,12 +125,17 @@ def refresh_model_loading_parameters():
 
     unet_storage_dtype, lora_fp16 = forge_unet_storage_dtype_options.get(shared.opts.forge_unet_storage_dtype, (None, False))
 
+    ckpt: str = checkpoint_info["filename"]
+    if ckpt.endswith(("gguf", "GGUF")) and not lora_fp16:
+        print("GGUF requires fp16 LoRA ; overriding option")
+        lora_fp16 = True
+
     dynamic_args["online_lora"] = lora_fp16
 
     model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=unet_storage_dtype)
 
     print(f"Model selected: {model_data.forge_loading_parameters}")
-    print(f"Using online LoRAs in FP16: {lora_fp16}")
+    print(f"Patch LoRAs on-the-fly: {lora_fp16}")
     processing.need_global_unload = True
 
 
@@ -203,7 +211,7 @@ def forge_main_entry():
     output_targets = [
         ui_checkpoint,
         ui_vae,
-        ui_forge_unet_storage_dtype_options,
+        ui_forge_unet_dtype,
         ui_txt2img_width,
         ui_img2img_width,
         ui_txt2img_height,
@@ -246,7 +254,7 @@ def on_preset_change(preset: str):
     return [
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),  # ui_checkpoint
         gr.update(value=additional_modules),  # ui_vae
-        gr.update(value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),  # ui_forge_unet_storage_dtype_options
+        gr.update(value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),  # ui_forge_unet_dtype
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_width", 768)),  # ui_txt2img_width
         gr.update(value=getattr(shared.opts, f"{preset}_i2i_width", 768)),  # ui_img2img_width
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_height", 768)),  # ui_txt2img_height

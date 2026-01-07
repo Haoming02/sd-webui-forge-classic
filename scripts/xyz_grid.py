@@ -98,7 +98,6 @@ def refresh_loading_params_for_xyz_grid():
     model_data.forge_loading_parameters = dict(
         checkpoint_info=checkpoint_info,
         additional_modules=shared.opts.forge_additional_modules,
-        #unet_storage_dtype=shared.opts.forge_unet_storage_dtype
         unet_storage_dtype=model_data.forge_loading_parameters.get('unet_storage_dtype', None)
     )
 

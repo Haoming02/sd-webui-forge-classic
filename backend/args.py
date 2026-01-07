@@ -142,6 +142,7 @@ args, _ = parser.parse_known_args()
 dynamic_args = dict(
     embedding_dir=None,
     forge_unet_storage_dtype=None,
+    online_lora=False,
     kontext=False,
     edit=False,
     nunchaku=False,
@@ -152,6 +153,7 @@ dynamic_args = dict(
 Some parameters that are used throughout the Webui
 - embedding_dir: `str` - set in modules/sd_models/forge_model_reload
 - forge_unet_storage_dtype: `torch.dtype` - set in modules/sd_models/forge_model_reload
+- online_lora: `bool` - patch LoRAs on-the-fly
 - kontext: `bool` - Flux Kontext
 - edit: `bool` - Qwen-Image-Edit
 - nunchaku: `bool` - Nunchaku (SVDQ) Models
