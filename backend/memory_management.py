@@ -28,13 +28,16 @@ import sys
 import time
 import weakref
 from enum import Enum
+from typing import TYPE_CHECKING
 
 import psutil
 import torch
 
 from backend.args import args
 from backend.logging import setup_logger
-from backend.patcher.base import ModelPatcher
+
+if TYPE_CHECKING:
+    from backend.patcher.base import ModelPatcher
 
 logger = logging.getLogger("memory_management")
 setup_logger(logger)
@@ -421,7 +424,7 @@ def module_size(module: torch.nn.Module) -> int:
 
 
 class LoadedModel:
-    def __init__(self, model: ModelPatcher):
+    def __init__(self, model: "ModelPatcher"):
         self._set_model(model)
         self.device = model.load_device
         self.real_model = None
@@ -441,7 +444,7 @@ class LoadedModel:
             self._set_model(model)
 
     @property
-    def model(self) -> ModelPatcher:
+    def model(self) -> "ModelPatcher":
         return self._model()
 
     def model_memory(self):
@@ -590,7 +593,7 @@ def free_memory(memory_required: float, device: torch.device, keep_loaded: list[
     return unloaded_models
 
 
-def load_models_gpu(models: list[ModelPatcher], memory_required: float = 0, force_patch_weights: bool = False, minimum_memory_required: float = None, force_full_load: bool = False):
+def load_models_gpu(models: list["ModelPatcher"], memory_required: float = 0, force_patch_weights: bool = False, minimum_memory_required: float = None, force_full_load: bool = False):
     execution_start_time = time.perf_counter()
     cleanup_models_gc()
 
@@ -680,7 +683,7 @@ def load_models_gpu(models: list[ModelPatcher], memory_required: float = 0, forc
     logger.info(f"Moving model(s) has taken {moving_time:.2f} seconds")
 
 
-def load_model_gpu(model: ModelPatcher):
+def load_model_gpu(model: "ModelPatcher"):
     return load_models_gpu([model])
 
 
@@ -1285,30 +1288,23 @@ def soft_empty_cache(force=False):
 
 def unload_all_models():
     free_memory(1e30, get_torch_device())
-    # if not (args.gpu_only or vram_state is VRAMState.HIGH_VRAM):
-    #     free_memory(1e30, cpu)
 
 
 # region: Streams
 
 
 STREAMS = {}
-NUM_STREAMS = 0
-if args.async_offload is not None:
-    NUM_STREAMS = args.async_offload
-else:
-    #  Enable by default on Nvidia and AMD
-    if is_nvidia() or is_amd():
-        NUM_STREAMS = 2
 
-if args.disable_async_offload:
-    NUM_STREAMS = 0
+if args.cuda_stream is not None:
+    NUM_STREAMS = int(args.cuda_stream)
+elif is_nvidia() or is_amd():
+    NUM_STREAMS = 2
 
 if NUM_STREAMS > 0:
     logger.info("Using async weight offloading with {} streams".format(NUM_STREAMS))
 
 
-def current_stream(device):
+def current_stream(device: torch.device):
     if device is None:
         return None
     if is_device_cuda(device):
@@ -1319,29 +1315,27 @@ def current_stream(device):
         return None
 
 
-stream_counters = {}
+stream_counters: dict[torch.device, int] = {}
 
 
-def get_offload_stream(device):
-    stream_counter = stream_counters.get(device, 0)
+def get_offload_stream(device: torch.device):
     if NUM_STREAMS == 0:
         return None
-
     if torch.compiler.is_compiling():
         return None
 
+    stream_counter = stream_counters.get(device, 0)
+
     if device in STREAMS:
         ss = STREAMS[device]
-        # Sync the oldest stream in the queue with the current
         ss[stream_counter].wait_stream(current_stream(device))
         stream_counter = (stream_counter + 1) % len(ss)
         stream_counters[device] = stream_counter
         return ss[stream_counter]
     elif is_device_cuda(device):
         ss = []
-        for k in range(NUM_STREAMS):
+        for _ in range(NUM_STREAMS):
             s1 = torch.cuda.Stream(device=device, priority=0)
-            s1.as_context = torch.cuda.stream
             ss.append(s1)
         STREAMS[device] = ss
         s = ss[stream_counter]
@@ -1349,18 +1343,18 @@ def get_offload_stream(device):
         return s
     elif is_device_xpu(device):
         ss = []
-        for k in range(NUM_STREAMS):
+        for _ in range(NUM_STREAMS):
             s1 = torch.xpu.Stream(device=device, priority=0)
-            s1.as_context = torch.xpu.stream
             ss.append(s1)
         STREAMS[device] = ss
         s = ss[stream_counter]
         stream_counters[device] = stream_counter
         return s
+
     return None
 
 
-def sync_stream(device, stream):
+def sync_stream(device: torch.device, stream):
     if stream is None or current_stream(device) is None:
         return
     current_stream(device).wait_stream(stream)

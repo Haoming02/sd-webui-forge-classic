@@ -91,13 +91,11 @@ parser.add_argument("--reserve-vram", type=float, default=None, metavar="GB", he
 parser.add_argument("--disable-smart-memory", action="store_true", help="Aggressively offload to RAM instead of keeping models in VRAM when possible")
 
 parser.add_argument("--cuda-malloc", action="store_true")
-parser.add_argument("--cuda-stream", action="store_true")
+parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=2, default=None)
 parser.add_argument("--pin-shared-memory", action="store_true")
 
 parser.add_argument("--disable-pinned-memory", action="store_true")
 parser.add_argument("--force-non-blocking", action="store_true", help="Use non-blocking operations for all applicable tensors")
-parser.add_argument("--async-offload", nargs="?", const=2, type=int, default=None, metavar="NUM_STREAMS", help="Use async weight offloading")
-parser.add_argument("--disable-async-offload", action="store_true", help="Disable async weight offloading")
 
 parser.add_argument("--fast-fp16", action="store_true", help="torch.backends.cuda.matmul.allow_fp16_accumulation")
 parser.add_argument("--autotune", action="store_true", help="torch.backends.cudnn.benchmark")
