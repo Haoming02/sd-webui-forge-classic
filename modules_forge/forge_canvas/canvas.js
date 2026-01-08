@@ -543,6 +543,13 @@ class ForgeCanvas {
         }
 
         if (this.scribbleSoftness <= 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = "destination-out";
+            ctx.globalAlpha = 1.0;
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.globalCompositeOperation = "source-over";
             ctx.globalAlpha = drawingAlpha / 100.0;
             ctx.stroke();
             return;
