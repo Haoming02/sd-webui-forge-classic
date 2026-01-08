@@ -13,8 +13,7 @@ if TYPE_CHECKING:
 import torch
 
 from backend import memory_management, utils
-from backend.args import args, dynamic_args
-from backend.operations import cleanup_cache
+from backend.args import args
 from backend.sampling.condition import (
     Condition,
     compile_conditions,
@@ -403,5 +402,3 @@ def sampling_cleanup(unet):
         utils.nested_move_to_device(unet.lora_patches, device=unet.offload_device)
     for cnet in unet.list_controlnets():
         cnet.cleanup()
-    cleanup_cache()
-    return

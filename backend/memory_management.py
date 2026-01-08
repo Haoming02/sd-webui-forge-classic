@@ -1289,10 +1289,10 @@ def unload_all_models():
 
 STREAMS = {}
 
-if args.cuda_stream is not None:
+if args.cuda_stream is None:
+    NUM_STREAMS = 0
+else:
     NUM_STREAMS = int(args.cuda_stream)
-elif is_nvidia() or is_amd():
-    NUM_STREAMS = 2
 
 if NUM_STREAMS > 0:
     logger.info("Using async weight offloading with {} streams".format(NUM_STREAMS))

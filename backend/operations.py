@@ -9,8 +9,6 @@ import torch
 from backend import memory_management, stream, utils
 from backend.patcher.lora import merge_lora_to_weight
 
-stash = {}
-
 
 def get_weight_and_bias(layer: torch.nn.Module, weight_args: dict = None, bias_args: dict = None, weight_fn: Callable = None, bias_fn: Callable = None):
     scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
@@ -115,10 +113,6 @@ def main_stream_worker(weight, bias, offload_stream: tuple[torch.Stream, torch.T
     else:
         return
     os.wait_stream(memory_management.current_stream(device))
-
-
-def cleanup_cache():
-    return
 
 
 current_device: torch.device = None
