@@ -57,64 +57,67 @@ def get_weight_and_bias(layer: torch.nn.Module, weight_args: dict = None, bias_a
 
 
 def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dtype: bool = False, skip_bias_dtype: bool = False, weight_fn: Callable = None, bias_fn: Callable = None):
-    weight, bias, signal = None, None, None
-    non_blocking = True
+    target_dtype, target_device = x.dtype, x.device
+    weight_has_function: bool = weight_fn is not None
+    bias_has_function: bool = bias_fn is not None
 
-    if getattr(x.device, "type", None) == "mps":
-        non_blocking = False
+    non_blocking = memory_management.device_supports_non_blocking(target_device)
 
-    target_dtype = x.dtype
-    target_device = x.device
+    weight_args = dict(device=target_device, dtype=target_dtype, non_blocking=non_blocking)
+    if skip_weight_dtype or weight_has_function:
+        weight_args.pop("dtype")
 
-    if skip_weight_dtype:
-        weight_args = dict(device=target_device, non_blocking=non_blocking)
-    else:
-        weight_args = dict(device=target_device, dtype=target_dtype, non_blocking=non_blocking)
-
+    bias_args = dict(device=target_device, dtype=target_dtype, non_blocking=non_blocking)
     if skip_bias_dtype:
-        bias_args = dict(device=target_device, non_blocking=non_blocking)
-    else:
-        bias_args = dict(device=target_device, dtype=target_dtype, non_blocking=non_blocking)
+        bias_args.pop("dtype")
 
-    if stream.should_use_stream():
-        with stream.stream_context()(stream.mover_stream):
-            weight, bias = get_weight_and_bias(layer, weight_args, bias_args, weight_fn=weight_fn, bias_fn=bias_fn)
-            signal = stream.mover_stream.record_event()
+    if target_device != layer.weight.device or (layer.bias is not None and target_device != layer.bias.device):
+        offload_stream = memory_management.get_offload_stream(target_device)
+        _stream = stream.stream_context()(offload_stream)
     else:
-        weight, bias = get_weight_and_bias(layer, weight_args, bias_args, weight_fn=weight_fn, bias_fn=bias_fn)
+        offload_stream = None
+        _stream = None
 
-    return weight, bias, signal
+    weight = memory_management.cast_to(layer.weight, **weight_args, copy=weight_has_function, stream=_stream)
+
+    if layer.bias is not None:
+        bias = memory_management.cast_to(layer.bias, **bias_args, copy=bias_has_function, stream=_stream)
+    else:
+        bias = None
+
+    memory_management.sync_stream(target_device, offload_stream)
+
+    weight_a = weight
+    bias_a = bias
+
+    if weight_has_function:
+        weight = weight_fn(weight)
+        if not skip_weight_dtype:
+            weight = weight.to(dtype=target_dtype)
+    if bias_has_function:
+        bias = bias_fn(bias)
+
+    return weight, bias, (offload_stream, weight_a, bias_a)
 
 
 @contextlib.contextmanager
-def main_stream_worker(weight, bias, signal):
-    if signal is None or not stream.should_use_stream():
-        yield
+def main_stream_worker(weight, bias, offload_stream: tuple[torch.Stream, torch.Tensor, torch.Tensor]):
+    yield
+    if offload_stream is None:
         return
-
-    with stream.stream_context()(stream.current_stream):
-        stream.current_stream.wait_event(signal)
-        yield
-        finished_signal = stream.current_stream.record_event()
-        stash[id(finished_signal)] = (weight, bias, finished_signal)
-
-    garbage = []
-    for k, (w, b, s) in stash.items():
-        if s.query():
-            garbage.append(k)
-
-    for k in garbage:
-        del stash[k]
-    return
+    os, weight_a, bias_a = offload_stream
+    if os is None:
+        return
+    if weight_a is not None:
+        device = weight_a.device
+    elif bias_a is not None:
+        device = bias_a.device
+    else:
+        return
+    os.wait_stream(memory_management.current_stream(device))
 
 
 def cleanup_cache():
-    if not stream.should_use_stream():
-        return
-
-    stream.current_stream.synchronize()
-    stream.mover_stream.synchronize()
-    stash.clear()
     return
 
 

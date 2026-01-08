@@ -974,24 +974,18 @@ def device_supports_non_blocking(device: torch.device) -> bool:
     return True
 
 
-def cast_to(weight: torch.Tensor, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, stream: torch.Stream = None):
+def cast_to(weight: torch.Tensor, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, stream=None):
     if device is None or weight.device == device:
         if not copy:
             if dtype is None or weight.dtype == dtype:
                 return weight
         if stream is not None:
-            wf_context = stream
-            if hasattr(wf_context, "as_context"):
-                wf_context = wf_context.as_context(stream)
-            with wf_context:
+            with stream:
                 return weight.to(dtype=dtype, copy=copy)
         return weight.to(dtype=dtype, copy=copy)
 
     if stream is not None:
-        wf_context = stream
-        if hasattr(wf_context, "as_context"):
-            wf_context = wf_context.as_context(stream)
-        with wf_context:
+        with stream:
             r = torch.empty_like(weight, dtype=dtype, device=device)
             r.copy_(weight, non_blocking=non_blocking)
     else:
