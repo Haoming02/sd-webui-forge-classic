@@ -95,6 +95,10 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
     if bias_has_function:
         bias = bias_fn(bias)
 
+    scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
+    if scale_weight is not None:
+        weight = weight * scale_weight.to(weight)
+
     return weight, bias, (offload_stream, weight_a, bias_a)
 
 
