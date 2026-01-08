@@ -517,14 +517,6 @@ class ForgeCanvas {
         ctx.lineJoin = "round";
         ctx.lineWidth = this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0) * 4;
 
-        if (this.contrast_scribbles) {
-            ctx.strokeStyle = this.contrast_pattern;
-            ctx.stroke();
-            return;
-        }
-
-        ctx.strokeStyle = this.scribbleColor;
-
         if (this.scribbleAlpha <= 0) {
             ctx.globalCompositeOperation = "destination-out";
             ctx.globalAlpha = 1.0;
@@ -533,6 +525,14 @@ class ForgeCanvas {
         }
 
         ctx.globalCompositeOperation = "source-over";
+
+        if (this.contrast_scribbles) {
+            ctx.strokeStyle = this.contrast_pattern;
+            ctx.stroke();
+            return;
+        }
+
+        ctx.strokeStyle = this.scribbleColor;
 
         canvas.style.opacity = 1.0;
         let drawingAlpha = this.scribbleAlpha;
