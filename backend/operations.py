@@ -55,6 +55,7 @@ def get_weight_and_bias(layer: torch.nn.Module, weight_args: dict = None, bias_a
 
 
 def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dtype: bool = False, skip_bias_dtype: bool = False, weight_fn: Callable = None, bias_fn: Callable = None):
+    weight, bias = None, None
     target_dtype, target_device = x.dtype, x.device
     weight_has_function: bool = weight_fn is not None
     bias_has_function: bool = bias_fn is not None
@@ -69,19 +70,18 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
     if skip_bias_dtype:
         bias_args.pop("dtype")
 
-    if target_device != layer.weight.device or (layer.bias is not None and target_device != layer.bias.device):
+    if (layer.weight is not None and target_device != layer.weight.device) or (layer.bias is not None and target_device != layer.bias.device):
         offload_stream = memory_management.get_offload_stream(target_device)
         _stream = stream.stream_context()(offload_stream)
     else:
         offload_stream = None
         _stream = None
 
-    weight = memory_management.cast_to(layer.weight, **weight_args, copy=weight_has_function, stream=_stream)
+    if layer.weight is not None:
+        weight = memory_management.cast_to(layer.weight, **weight_args, copy=weight_has_function, stream=_stream)
 
     if layer.bias is not None:
         bias = memory_management.cast_to(layer.bias, **bias_args, copy=bias_has_function, stream=_stream)
-    else:
-        bias = None
 
     memory_management.sync_stream(target_device, offload_stream)
 
