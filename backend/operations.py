@@ -2,6 +2,7 @@
 
 import contextlib
 import time
+from typing import Callable
 
 import torch
 
@@ -11,9 +12,9 @@ from backend.patcher.lora import merge_lora_to_weight
 stash = {}
 
 
-def get_weight_and_bias(layer, weight_args=None, bias_args=None, weight_fn=None, bias_fn=None):
-    scale_weight = getattr(layer, "scale_weight", None)
-    patches = getattr(layer, "forge_online_loras", None)
+def get_weight_and_bias(layer: torch.nn.Module, weight_args: dict = None, bias_args: dict = None, weight_fn: Callable = None, bias_fn: Callable = None):
+    scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
+    patches: dict[str, list[torch.Tensor]] = getattr(layer, "forge_online_loras", None)
     weight_patches, bias_patches = None, None
 
     if patches is not None:
@@ -22,7 +23,7 @@ def get_weight_and_bias(layer, weight_args=None, bias_args=None, weight_fn=None,
     if patches is not None:
         bias_patches = patches.get("bias", None)
 
-    weight = None
+    weight: torch.Tensor = None
     if layer.weight is not None:
         weight = layer.weight
         if weight_fn is not None:
@@ -38,7 +39,7 @@ def get_weight_and_bias(layer, weight_args=None, bias_args=None, weight_fn=None,
         if weight_patches is not None:
             weight = merge_lora_to_weight(patches=weight_patches, weight=weight, key="online weight lora", computation_dtype=weight.dtype)
 
-    bias = None
+    bias: torch.Tensor = None
     if layer.bias is not None:
         bias = layer.bias
         if bias_fn is not None:
@@ -51,10 +52,11 @@ def get_weight_and_bias(layer, weight_args=None, bias_args=None, weight_fn=None,
             bias = bias.to(**bias_args)
         if bias_patches is not None:
             bias = merge_lora_to_weight(patches=bias_patches, weight=bias, key="online bias lora", computation_dtype=bias.dtype)
+
     return weight, bias
 
 
-def weights_manual_cast(layer, x, skip_weight_dtype=False, skip_bias_dtype=False, weight_fn=None, bias_fn=None):
+def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dtype: bool = False, skip_bias_dtype: bool = False, weight_fn: Callable = None, bias_fn: Callable = None):
     weight, bias, signal = None, None, None
     non_blocking = True
 
@@ -116,10 +118,13 @@ def cleanup_cache():
     return
 
 
-current_device = None
-current_dtype = None
-current_manual_cast_enabled = False
-current_bnb_dtype = None
+current_device: torch.device = None
+current_dtype: torch.dtype = None
+current_manual_cast_enabled: bool = False
+current_bnb_dtype: str = None
+
+
+# region: ForgeOperations
 
 
 class ForgeOperations:
@@ -376,6 +381,9 @@ class ForgeOperations:
                 return super().forward(x)
 
 
+# region: BnB
+
+
 try:
     from backend.operations_bnb import (
         ForgeLoader4Bit,
@@ -418,6 +426,9 @@ else:
                     weight, bias, signal = weights_manual_cast(self, x, skip_weight_dtype=True, skip_bias_dtype=True)
                     with main_stream_worker(weight, bias, signal):
                         return functional_linear_4bits(x, weight, bias)
+
+
+# region: GGUF
 
 
 from backend.operations_gguf import dequantize_tensor
@@ -557,19 +568,24 @@ def shift_manual_cast(model, enabled):
     return
 
 
+from functools import wraps
+
+
 @contextlib.contextmanager
 def automatic_memory_management():
     memory_management.free_memory(memory_required=3 * 1024 * 1024 * 1024, device=memory_management.get_torch_device())
 
-    module_list = []
+    module_list: list[torch.nn.Module] = []
 
     original_init = torch.nn.Module.__init__
     original_to = torch.nn.Module.to
 
+    @wraps(original_init)
     def patched_init(self, *args, **kwargs):
         module_list.append(self)
         return original_init(self, *args, **kwargs)
 
+    @wraps(original_to)
     def patched_to(self, *args, **kwargs):
         module_list.append(self)
         return original_to(self, *args, **kwargs)
@@ -591,5 +607,4 @@ def automatic_memory_management():
     memory_management.soft_empty_cache()
     end = time.perf_counter()
 
-    print(f"Automatic Memory Management: {len(module_list)} Modules in {(end - start):.2f} seconds.")
-    return
+    memory_management.logger.debug(f"Automatic Memory Management: {len(module_list)} Modules in {(end - start):.2f} seconds")
