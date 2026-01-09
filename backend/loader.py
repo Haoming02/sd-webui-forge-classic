@@ -1,6 +1,8 @@
 import importlib
 import logging
 import os
+from functools import partial
+from typing import Callable
 
 import huggingface_guess
 import torch
@@ -230,8 +232,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
         if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
 
+            pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
-            _nz = False  # Nunchaku Z-Image
+            # post_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
 
             if cls_name == "UNet2DConditionModel":
                 model_loader = lambda c: IntegratedUNet2DConditionModel.from_config(c)
@@ -263,12 +266,13 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     model_loader = lambda c: QwenImageTransformer2DModel(**c)
             elif cls_name in ("Lumina2Transformer2DModel", "ZImageTransformer2DModel"):
                 if guess.nunchaku:
-                    from backend.nn.svdq import patch_nunchaku_zimage
-
                     guess.unet_config.pop("filename")
                     precision = guess.unet_config.pop("precision")
                     rank = guess.unet_config.pop("rank")
-                    _nz = True
+
+                    from backend.nn.svdq import patch_nunchaku_zimage
+
+                    pre_func = partial(patch_nunchaku_zimage, precision=precision, rank=rank)
 
                 from backend.nn.lumina import NextDiT
 
@@ -304,13 +308,14 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=storage_dtype)
                 need_manual_cast = storage_dtype != computation_dtype
                 to_args = dict(device=initial_device, dtype=storage_dtype)
+                ops = False if guess.nunchaku else None
 
-                with using_forge_operations(operations=False if _nz else None, **to_args, manual_cast_enabled=need_manual_cast):
+                with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast):
                     model = model_loader(unet_config).to(**to_args)
 
-            if _nz:
-                model = patch_nunchaku_zimage(model, precision, rank)
+            model = pre_func(model)
             load_state_dict(model, state_dict)
+            # model = post_func(model)
 
             if hasattr(model, "_internal_dict"):
                 model._internal_dict = unet_config
