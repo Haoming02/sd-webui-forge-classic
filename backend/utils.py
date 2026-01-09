@@ -1,7 +1,6 @@
 import json
-import os
+import os.path
 
-import gguf
 import safetensors
 import torch
 from einops import rearrange, repeat
@@ -9,30 +8,31 @@ from einops import rearrange, repeat
 from backend.args import args
 from backend.operations_gguf import ParameterGGUF
 from modules import safe
+from modules_forge.packages import gguf
 
 MMAP_TORCH_FILES = args.mmap_torch_files
 DISABLE_MMAP = args.disable_mmap
 
 
-def read_arbitrary_config(directory):
+def read_arbitrary_config(directory: os.PathLike) -> dict:
     config_path = os.path.join(directory, "config.json")
 
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"No config.json file found in the directory: {directory}")
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(f'No config.json file found in "{directory}"')
 
-    with open(config_path, "rt", encoding="utf-8") as file:
+    with open(config_path, "r", encoding="utf-8") as file:
         config_data = json.load(file)
 
     return config_data
 
 
-def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=False):
+def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=False) -> dict[str, torch.Tensor]:
     """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/utils.py#L53"""
     if device is None:
         device = torch.device("cpu")
 
     metadata = None
-    if ckpt.lower().endswith(".safetensors") or ckpt.lower().endswith(".sft"):
+    if ckpt.lower().endswith((".safetensors", ".sft")):
         try:
             with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:
                 sd = {}
@@ -43,11 +43,8 @@ def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=
                     sd[k] = tensor
                 if return_metadata:
                     metadata = f.metadata()
-        except Exception as e:
-            if len(e.args) > 0:
-                if "HeaderTooLarge" in e.args[0] or "MetadataIncompleteBuffer" in e.args[0]:
-                    raise ValueError(f'\nModel: "{ckpt}" is corrupt or invalid...\nPlease download the model again')
-            raise e
+        except Exception:
+            raise ValueError(f'\nModel "{ckpt}" is corrupt or invalid...\nPlease download the model again\n') from None
 
     elif ckpt.lower().endswith(".gguf"):
         reader = gguf.GGUFReader(ckpt)
@@ -128,7 +125,7 @@ def calculate_parameters(sd: dict[str, torch.Tensor], prefix: str = "") -> int:
     return params
 
 
-def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype:
+def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype | str:
     if sd.pop("scaled_fp8", None) is not None:
         return torch.float8_e4m3fn
     if sd.pop("transformer.scaled_fp8", None) is not None:
@@ -142,7 +139,7 @@ def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype:
         if "bitsandbytes__fp4" in k:
             return "fp4"
 
-    dtypes = {}
+    dtypes: dict[torch.dtype, int] = {}
     for k in sd.keys():
         if k.startswith(prefix):
             w = sd[k]
@@ -151,6 +148,7 @@ def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype:
     if len(dtypes) == 0:
         return None
 
+    dtypes = {_d: dtypes[_d] for _d in dtypes if _d.is_floating_point}
     return max(dtypes, key=dtypes.get)
 
 
