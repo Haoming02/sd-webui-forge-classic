@@ -814,32 +814,6 @@ def unet_dtype(
     return torch.float32
 
 
-def unet_manual_cast(weight_dtype: torch.dtype, inference_device: torch.device, supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32]):
-    """`None` means no manual cast"""
-    if weight_dtype == torch.float32:
-        return None
-
-    fp16_supported = should_use_fp16(inference_device, prioritize_performance=False)
-    if fp16_supported and weight_dtype == torch.float16:
-        return None
-
-    bf16_supported = should_use_bf16(inference_device)
-    if bf16_supported and weight_dtype == torch.bfloat16:
-        return None
-
-    fp16_supported = should_use_fp16(inference_device, prioritize_performance=True)
-    if PRIORITIZE_FP16 and fp16_supported and torch.float16 in supported_dtypes:
-        return torch.float16
-
-    for dt in supported_dtypes:
-        if dt == torch.float16 and fp16_supported:
-            return torch.float16
-        if dt == torch.bfloat16 and bf16_supported:
-            return torch.bfloat16
-
-    return torch.float32
-
-
 def text_encoder_offload_device() -> torch.device:
     return get_torch_device() if args.gpu_only else cpu
 

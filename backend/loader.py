@@ -278,27 +278,33 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
                 model_loader = lambda c: NextDiT(**c)
 
+            load_device = memory_management.get_torch_device()
+            offload_device = memory_management.unet_offload_device()
+
             unet_config = guess.unet_config.copy()
             state_dict_parameters = utils.calculate_parameters(state_dict)
             state_dict_dtype = utils.weight_dtype(state_dict)
+            optimal_dtype = memory_management.unet_dtype(device=load_device, model_params=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes, weight_dtype=state_dict_dtype)
 
-            storage_dtype = memory_management.unet_dtype(model_params=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes)
+            _dtype_overwrite = backend.args.dynamic_args["forge_unet_storage_dtype"]
 
-            unet_storage_dtype_overwrite = backend.args.dynamic_args.get("forge_unet_storage_dtype")
-
-            if unet_storage_dtype_overwrite is not None:
-                storage_dtype = unet_storage_dtype_overwrite
-            elif state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
-                print(f"Using Detected UNet Type: {state_dict_dtype}")
+            if guess.nunchaku:
                 storage_dtype = state_dict_dtype
-                if state_dict_dtype in ["nf4", "fp4", "gguf"]:
-                    print("Using pre-quant state dict!")
-                    if state_dict_dtype in ["gguf"]:
-                        beautiful_print_gguf_state_dict_statics(state_dict)
+                print(f"Using Nunchaku Model Type: {storage_dtype}")
+            elif state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
+                storage_dtype = state_dict_dtype
+                print(f"Using Detected Model Type: {storage_dtype}", end="")
+                print(" (pre-quant)" if state_dict_dtype in ["nf4", "fp4", "gguf"] else "")
+                if state_dict_dtype == "gguf":
+                    beautiful_print_gguf_state_dict_statics(state_dict)
+            elif _dtype_overwrite is not None:
+                storage_dtype = _dtype_overwrite
+                print(f"Using Override Model Type: {storage_dtype}")
+            else:
+                storage_dtype = optimal_dtype
+                print(f"Using Optimal Model Type: {storage_dtype}")
 
-            load_device = memory_management.get_torch_device()
-            computation_dtype = memory_management.unet_manual_cast(None, inference_device=load_device, supported_dtypes=guess.supported_inference_dtypes)
-            offload_device = memory_management.unet_offload_device()
+            computation_dtype = storage_dtype if guess.nunchaku else optimal_dtype
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
