@@ -8,6 +8,7 @@ from modules.timer import startup_timer
 
 
 def shush():
+    logging.getLogger("diffusers").setLevel(logging.ERROR)
     logging.getLogger("torch.distributed.nn").setLevel(logging.ERROR)
     logging.getLogger("transformers.dynamic_module_utils").setLevel(logging.ERROR)
     logging.getLogger("xformers").addFilter(lambda record: "triton" not in record.getMessage().lower())
