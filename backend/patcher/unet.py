@@ -197,18 +197,10 @@ class UnetPatcher(ModelPatcher):
 
 class NunchakuPatcher(UnetPatcher):
 
-    def clone(self):
-        n = NunchakuPatcher(self.model, self.load_device, self.offload_device, self.size, self.current_device)
-        return n
+    def load(self, device_to=None, *args, **kwargs):
+        with self.use_ejected():
+            self.model.diffusion_model.to(device_to)
 
-    def forge_patch_model(self, target_device=None):
-        if target_device is not None:
-            self.model.diffusion_model.to(target_device)
-        return self.model
-
-    def forge_unpatch_model(self, target_device=None):
-        if target_device is not None and hasattr(self.model, "diffusion_model"):  # k_model/KModel/cleanup()
-            self.model.diffusion_model.to(target_device)
-
-    def to_load_list(self):
-        return []
+    def detach(self, *args, **kwargs):
+        self.eject_model()
+        self.model.diffusion_model.to(self.offload_device)

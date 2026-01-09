@@ -21,6 +21,7 @@ from nunchaku.ops.fused import fused_gelu_mlp
 from nunchaku.utils import load_state_dict_in_safetensors
 
 from backend.args import dynamic_args
+from backend.memory_management import logger
 from backend.nn._qwen_lora import compose_loras_v2, reset_lora_v2
 from backend.utils import process_img
 from modules import shared
@@ -33,15 +34,27 @@ class NunchakuModelMixin(nn.Module):
         raise NotImplementedError
 
     def to(self, *args, **kwargs):
-        args = (arg for arg in args if not isinstance(arg, torch.dtype))
-        kwargs.pop("dtype", None)
+        has_dtype: bool = any(isinstance(arg, torch.dtype) for arg in args) or kwargs.get("dtype", None) is not None
+        has_device: bool = any(isinstance(arg, torch.device) for arg in args) or kwargs.get("device", None) is not None
 
-        dev: bool = any(isinstance(arg, torch.device) for arg in args) or "device" in kwargs
+        if not has_device:
+            for arg in args:
+                if isinstance(arg, str):
+                    try:
+                        torch.device(arg)
+                        has_device = True
+                    except RuntimeError:
+                        pass
 
-        if self.offload and dev:
+        if has_dtype:
+            logger.debug("[Nunchaku] Block casting dtype...")
+            args = [arg for arg in args if not isinstance(arg, torch.dtype)]
+            kwargs.pop("dtype", None)
+        if self.offload and has_device:
+            logger.debug("[Nunchaku] Block moving model...")
             return self
-        else:
-            return super().to(*args, **kwargs)
+
+        return self.to(*args, **kwargs)
 
 
 # region: Flux
