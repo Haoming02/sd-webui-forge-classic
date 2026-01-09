@@ -1,6 +1,6 @@
 import importlib
 import logging
-import os
+import os.path
 from functools import partial
 from typing import Callable
 
@@ -19,6 +19,7 @@ from backend.diffusion_engine.sd15 import StableDiffusion
 from backend.diffusion_engine.sdxl import StableDiffusionXL, StableDiffusionXLRefiner
 from backend.diffusion_engine.wan import Wan
 from backend.diffusion_engine.zimage import ZImage
+from backend.logging import setup_logger
 from backend.nn.clip import IntegratedCLIP
 from backend.nn.unet import IntegratedUNet2DConditionModel
 from backend.nn.vae import IntegratedAutoencoderKL
@@ -33,9 +34,10 @@ from backend.utils import (
 
 possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Wan, QwenImage, Lumina2, ZImage]
 
+logger = logging.getLogger("model_loader")
+setup_logger(logger)
 
-logging.getLogger("diffusers").setLevel(logging.ERROR)
-dir_path = os.path.dirname(__file__)
+HF = os.path.join(os.path.dirname(__file__), "huggingface")
 
 
 def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_path, state_dict):
@@ -102,14 +104,13 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
-                print(f"Using Detected Qwen2.5 Data Type: {state_dict_dtype}")
                 storage_dtype = state_dict_dtype
-                if state_dict_dtype in ["nf4", "fp4", "gguf"]:
-                    print("Using pre-quant state dict!")
-                    if state_dict_dtype in ["gguf"]:
-                        beautiful_print_gguf_state_dict_statics(state_dict)
+                _log = f"{storage_dtype}" + (" (pre-quant)" if state_dict_dtype in ["nf4", "fp4", "gguf"] else "")
+                logger.info(f"Using Detected Qwen2.5 Data Type: {_log}")
+                if state_dict_dtype == "gguf":
+                    beautiful_print_gguf_state_dict_statics(state_dict)
             else:
-                print(f"Using Default Qwen2.5 Data Type: {storage_dtype}")
+                logger.info(f"Using Default Qwen2.5 Data Type: {storage_dtype}")
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 with modeling_utils.no_init_weights():
@@ -134,14 +135,13 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
-                print(f"Using Detected Gemma2 Data Type: {state_dict_dtype}")
                 storage_dtype = state_dict_dtype
-                if state_dict_dtype in ["nf4", "fp4", "gguf"]:
-                    print("Using pre-quant state dict!")
-                    if state_dict_dtype in ["gguf"]:
-                        beautiful_print_gguf_state_dict_statics(state_dict)
+                _log = f"{storage_dtype}" + (" (pre-quant)" if state_dict_dtype in ["nf4", "fp4", "gguf"] else "")
+                logger.info(f"Using Detected Gemma2 Data Type: {_log}")
+                if state_dict_dtype == "gguf":
+                    beautiful_print_gguf_state_dict_statics(state_dict)
             else:
-                print(f"Using Default Gemma2 Data Type: {storage_dtype}")
+                logger.info(f"Using Default Gemma2 Data Type: {storage_dtype}")
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 with modeling_utils.no_init_weights():
@@ -166,14 +166,13 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
-                print(f"Using Detected Qwen3 Data Type: {state_dict_dtype}")
                 storage_dtype = state_dict_dtype
-                if state_dict_dtype in ["nf4", "fp4", "gguf"]:
-                    print("Using pre-quant state dict!")
-                    if state_dict_dtype in ["gguf"]:
-                        beautiful_print_gguf_state_dict_statics(state_dict)
+                _log = f"{storage_dtype}" + (" (pre-quant)" if state_dict_dtype in ["nf4", "fp4", "gguf"] else "")
+                logger.info(f"Using Detected Qwen3 Data Type: {_log}")
+                if state_dict_dtype == "gguf":
+                    beautiful_print_gguf_state_dict_statics(state_dict)
             else:
-                print(f"Using Default Qwen3 Data Type: {storage_dtype}")
+                logger.info(f"Using Default Qwen3 Data Type: {storage_dtype}")
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 with modeling_utils.no_init_weights():
@@ -192,11 +191,11 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if filename := state_dict.get("transformer.filename", None):
                 if memory_management.is_device_cpu(memory_management.text_encoder_device()):
-                    raise SystemError("nunchaku T5 does not support CPU!")
+                    raise SystemError("Nunchaku T5XXL does not support CPU!")
 
                 from backend.nn.svdq import SVDQT5
 
-                print("Using Nunchaku T5")
+                logger.info("Using Nunchaku T5XXL")
                 model = SVDQT5(filename)
                 return model
 
@@ -208,14 +207,13 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             state_dict_dtype = utils.weight_dtype(state_dict)
 
             if state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
-                print(f"Using Detected T5 Data Type: {state_dict_dtype}")
                 storage_dtype = state_dict_dtype
-                if state_dict_dtype in ["nf4", "fp4", "gguf"]:
-                    print("Using pre-quant state dict!")
-                    if state_dict_dtype in ["gguf"]:
-                        beautiful_print_gguf_state_dict_statics(state_dict)
+                _log = f"{storage_dtype}" + (" (pre-quant)" if state_dict_dtype in ["nf4", "fp4", "gguf"] else "")
+                logger.info(f"Using Detected T5XXL Data Type: {_log}")
+                if state_dict_dtype == "gguf":
+                    beautiful_print_gguf_state_dict_statics(state_dict)
             else:
-                print(f"Using Default T5 Data Type: {storage_dtype}")
+                logger.info(f"Using Default T5XXL Data Type: {storage_dtype}")
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 with modeling_utils.no_init_weights():
@@ -290,19 +288,19 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if guess.nunchaku:
                 storage_dtype = state_dict_dtype
-                print(f"Using Nunchaku Model Type: {storage_dtype}")
+                logger.info(f"Using Nunchaku Model Data Type: {storage_dtype}")
             elif state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
                 storage_dtype = state_dict_dtype
-                print(f"Using Detected Model Type: {storage_dtype}", end="")
-                print(" (pre-quant)" if state_dict_dtype in ["nf4", "fp4", "gguf"] else "")
+                _log = f"{storage_dtype}" + (" (pre-quant)" if state_dict_dtype in ["nf4", "fp4", "gguf"] else "")
+                logger.info(f"Using Detected Model Data Type: {_log}")
                 if state_dict_dtype == "gguf":
                     beautiful_print_gguf_state_dict_statics(state_dict)
             elif _dtype_overwrite is not None:
                 storage_dtype = _dtype_overwrite
-                print(f"Using Override Model Type: {storage_dtype}")
+                logger.info(f"Using Override Model Data Type: {storage_dtype}")
             else:
                 storage_dtype = optimal_dtype
-                print(f"Using Optimal Model Type: {storage_dtype}")
+                logger.info(f"Using Optimal Model Data Type: {storage_dtype}")
 
             computation_dtype = storage_dtype if guess.nunchaku else optimal_dtype
 
@@ -336,7 +334,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             return model
 
-    print(f"Skipped: {component_name} = {lib_name}.{cls_name}")
+    logger.warning(f'Skipping "{component_name}" ({lib_name}.{cls_name})')
     return None
 
 
@@ -656,7 +654,7 @@ def split_state_dict(sd, additional_state_dicts: list = None):
     state_dict["ignore"] = sd
 
     print_dict = {k: len(v) for k, v in state_dict.items()}
-    print(f"StateDict Keys: {print_dict}")
+    logger.debug(f"StateDict Keys: {print_dict}")
 
     del state_dict["ignore"]
 
@@ -681,7 +679,7 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
     if getattr(estimated_config, "nunchaku", False):
         estimated_config.unet_config["filename"] = str(sd)
 
-    local_path = os.path.join(dir_path, "huggingface", repo_name)
+    local_path = os.path.join(HF, repo_name)
     config: dict = DiffusionPipeline.load_config(local_path)
     huggingface_components = {}
     for component_name, v in config.items():
@@ -738,5 +736,5 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
         if any(type(estimated_config) is x for x in M.matched_guesses):
             return M(estimated_config=estimated_config, huggingface_components=huggingface_components)
 
-    print("Failed to recognize model type!")
+    logger.error("Failed to recognize model... (check README for supported models)")
     return None
