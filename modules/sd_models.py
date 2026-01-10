@@ -47,9 +47,13 @@ class CheckpointInfo:
 
         self.is_safetensors = os.path.splitext(filename)[1].lower() == ".safetensors"
 
+        # Initial fallback to prevent UnboundLocalError if no directory matches
+        name = os.path.basename(filename)
         for _dir in abs_ckpt_dirs:
-            if abspath.startswith(str(_dir)):
-                name = abspath.replace(str(_dir), "")
+            # Ensure both paths are absolute for consistent string comparison, fixing issues with relative paths like ../
+            _dir_abs = os.path.abspath(str(_dir))
+            if abspath.startswith(_dir_abs):
+                name = abspath.replace(_dir_abs, "")
                 break
 
         if name.startswith("\\") or name.startswith("/"):
