@@ -1,6 +1,6 @@
 import gc
 import math
-import os
+import os.path
 import re
 import sys
 
@@ -42,22 +42,20 @@ def replace_key(d, key, new_key, value):
 class CheckpointInfo:
     def __init__(self, filename):
         self.filename = filename
-        abspath = os.path.abspath(filename)
-        abs_ckpt_dirs = (*cmd_opts.ckpt_dirs, model_path)
+        abspath: str = os.path.abspath(filename)
+        abs_ckpt_dirs: list[str] = [os.path.abspath(_dir) for _dir in (*cmd_opts.ckpt_dirs, model_path)]
 
         self.is_safetensors = os.path.splitext(filename)[1].lower() == ".safetensors"
 
         # Initial fallback to prevent UnboundLocalError if no directory matches
-        name = os.path.basename(filename)
+        name: str = os.path.basename(filename)
         for _dir in abs_ckpt_dirs:
             # Ensure both paths are absolute for consistent string comparison, fixing issues with relative paths like ../
-            _dir_abs = os.path.abspath(str(_dir))
-            if abspath.startswith(_dir_abs):
-                name = abspath.replace(_dir_abs, "")
+            if abspath.startswith(_dir):
+                name = abspath.replace(_dir, "")
                 break
 
-        if name.startswith("\\") or name.startswith("/"):
-            name = name[1:]
+        name = name.strip("/").strip("\\")
 
         def read_metadata():
             metadata = read_metadata_from_safetensors(filename)
