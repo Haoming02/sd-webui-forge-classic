@@ -86,10 +86,6 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     return model_options
 
 
-# def create_model_options_clone(orig_model_options: dict):
-#     return comfy.patcher_extension.copy_nested_dicts(orig_model_options)
-
-
 def wipe_lowvram_weight(m):
     if hasattr(m, "prev_parameters_manual_cast"):
         m.parameters_manual_cast = m.prev_parameters_manual_cast
@@ -111,7 +107,6 @@ def move_weight_functions(m, device):
         for f in m.weight_function:
             if hasattr(f, "move_to"):
                 memory += f.move_to(device=device)
-
     if hasattr(m, "bias_function"):
         for f in m.bias_function:
             if hasattr(f, "move_to"):
@@ -169,24 +164,7 @@ def get_key_weight(model, key):
     return weight, set_func, convert_func
 
 
-class MemoryCounter:
-    def __init__(self, initial: int, minimum=0):
-        self.value = initial
-        self.minimum = minimum
-        # TODO: add a safe limit besides 0
-
-    def use(self, weight: torch.Tensor):
-        weight_size = weight.nelement() * weight.element_size()
-        if self.is_useable(weight_size):
-            self.decrement(weight_size)
-            return True
-        return False
-
-    def is_useable(self, used: int):
-        return self.value - used > self.minimum
-
-    def decrement(self, used: int):
-        self.value -= used
+# region: ModelPatcher
 
 
 class ModelPatcher:
@@ -368,18 +346,6 @@ class ModelPatcher:
     def set_model_noise_refiner_patch(self, patch):
         self.set_model_patch(patch, "noise_refiner")
 
-    def set_model_rope_options(self, scale_x, shift_x, scale_y, shift_y, scale_t, shift_t, **kwargs):
-        rope_options = self.model_options["transformer_options"].get("rope_options", {})
-        rope_options["scale_x"] = scale_x
-        rope_options["scale_y"] = scale_y
-        rope_options["scale_t"] = scale_t
-
-        rope_options["shift_x"] = shift_x
-        rope_options["shift_y"] = shift_y
-        rope_options["shift_t"] = shift_t
-
-        self.model_options["transformer_options"]["rope_options"] = rope_options
-
     def add_object_patch(self, name, obj):
         self.object_patches[name] = obj
 
@@ -394,19 +360,7 @@ class ModelPatcher:
         self.patches_uuid = uuid.uuid4()
 
     def get_model_object(self, name: str) -> torch.nn.Module:
-        """Retrieves a nested attribute from an object using dot notation considering
-        object patches.
-
-        Args:
-            name (str): The attribute path using dot notation (e.g. "model.layer.weight")
-
-        Returns:
-            The value of the requested attribute
-
-        Example:
-            patcher = ModelPatcher()
-            weight = patcher.get_model_object("layer1.conv.weight")
-        """
+        """Retrieves a nested attribute from an object using dot notation (e.g. "model.layer.weight")"""
         if name in self.object_patches:
             return self.object_patches[name]
         else:
@@ -675,8 +629,8 @@ class ModelPatcher:
                 n = x[1]
                 m = x[2]
                 params = x[3]
-                if hasattr(m, "comfy_patched_weights"):
-                    if m.comfy_patched_weights == True:
+                if hasattr(m, "forge_patched_weights"):
+                    if m.forge_patched_weights == True:
                         continue
 
                 for param in params:
@@ -687,7 +641,7 @@ class ModelPatcher:
                     torch.cuda.synchronize()
 
                 logger.debug("lowvram: loaded module regularly {} {}".format(n, m))
-                m.comfy_patched_weights = True
+                m.forge_patched_weights = True
 
             for x in load_completely:
                 x[2].to(device_to)
@@ -760,8 +714,8 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = 0
 
             for m in self.model.modules():
-                if hasattr(m, "comfy_patched_weights"):
-                    del m.comfy_patched_weights
+                if hasattr(m, "forge_patched_weights"):
+                    del m.forge_patched_weights
 
         keys = list(self.object_patches_backup.keys())
         for k in keys:
@@ -789,7 +743,7 @@ class ModelPatcher:
                 potential_offload = module_offload_mem + sum(offload_weight_factor)
 
                 lowvram_possible = hasattr(m, "parameters_manual_cast")
-                if hasattr(m, "comfy_patched_weights") and m.comfy_patched_weights == True:
+                if hasattr(m, "forge_patched_weights") and m.forge_patched_weights == True:
                     move_weight = True
                     for param in params:
                         key = "{}.{}".format(n, param)
@@ -831,7 +785,7 @@ class ModelPatcher:
                         if cast_weight and hasattr(m, "parameters_manual_cast"):
                             m.prev_parameters_manual_cast = m.parameters_manual_cast
                             m.parameters_manual_cast = True
-                        m.comfy_patched_weights = False
+                        m.forge_patched_weights = False
                         memory_freed += module_mem
                         offload_buffer = max(offload_buffer, potential_offload)
                         offload_weight_factor.append(module_mem)
