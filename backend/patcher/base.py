@@ -494,7 +494,7 @@ class ModelPatcher:
             if inplace_update:
                 utils.copy_to_param(self.model, key, out_weight)
             else:
-                utils.set_attr_param(self.model, key, out_weight)
+                utils.set_attr(self.model, key, out_weight)
         else:
             set_func(out_weight, inplace_update=inplace_update, seed=string_to_seed(key))
 
@@ -698,7 +698,7 @@ class ModelPatcher:
                 if bk.inplace_update:
                     utils.copy_to_param(self.model, k, bk.weight)
                 else:
-                    utils.set_attr_param(self.model, k, bk.weight)
+                    utils.set_attr(self.model, k, bk.weight)
 
             self.model.current_weight_patches_uuid = None
             self.backup.clear()
@@ -751,7 +751,7 @@ class ModelPatcher:
                         if bk.inplace_update:
                             utils.copy_to_param(self.model, key, bk.weight)
                         else:
-                            utils.set_attr_param(self.model, key, bk.weight)
+                            utils.set_attr(self.model, key, bk.weight)
                         self.backup.pop(key)
 
                 weight_key = "{}.weight".format(n)

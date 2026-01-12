@@ -1,4 +1,5 @@
 import json
+import math
 import os.path
 
 import safetensors
@@ -79,10 +80,7 @@ def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=
 
 
 def set_attr(obj, attr, value):
-    attrs = attr.split(".")
-    for name in attrs[:-1]:
-        obj = getattr(obj, name)
-    setattr(obj, attrs[-1], torch.nn.Parameter(value, requires_grad=False))
+    set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
 
 
 def set_attr_raw(obj, attr, value):
@@ -229,6 +227,27 @@ def beautiful_print_gguf_state_dict_statics(state_dict):
                 type_counts[type_name] = 1
     print(f"GGUF state dict: {type_counts}")
     return
+
+
+def resize_to_batch_size(tensor, batch_size):
+    in_batch_size = tensor.shape[0]
+    if in_batch_size == batch_size:
+        return tensor
+
+    if batch_size <= 1:
+        return tensor[:batch_size]
+
+    output = torch.empty([batch_size] + list(tensor.shape)[1:], dtype=tensor.dtype, device=tensor.device)
+    if batch_size < in_batch_size:
+        scale = (in_batch_size - 1) / (batch_size - 1)
+        for i in range(batch_size):
+            output[i] = tensor[min(round(i * scale), in_batch_size - 1)]
+    else:
+        scale = in_batch_size / batch_size
+        for i in range(batch_size):
+            output[i] = tensor[min(math.floor((i + 0.5) * scale), in_batch_size - 1)]
+
+    return output
 
 
 def pad_to_patch_size(img, patch_size=(2, 2), padding_mode="circular"):
