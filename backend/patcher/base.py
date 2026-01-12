@@ -245,8 +245,6 @@ class ModelPatcher:
 
         self.lora_patches = {}
 
-        # self.additional_models: dict[str, list[ModelPatcher]] = {}
-
         self.is_injected = False
         self.skip_injection = False
         # self.injections: dict[str, list[PatcherInjection]] = {}
@@ -314,9 +312,6 @@ class ModelPatcher:
 
         n.force_cast_weights = self.force_cast_weights
 
-        # # additional models
-        # for k, c in self.additional_models.items():
-        #     n.additional_models[k] = [x.clone() for x in c]
         # injection
         n.is_injected = self.is_injected
         n.skip_injection = self.skip_injection
@@ -351,8 +346,6 @@ class ModelPatcher:
         if self.forced_hooks != clone.forced_hooks:
             return False
         if self.hook_patches.keys() != clone.hook_patches.keys():
-            return False
-        if self.additional_models.keys() != clone.additional_models.keys():
             return False
         if self.injections.keys() != clone.injections.keys():
             return False
@@ -989,41 +982,6 @@ class ModelPatcher:
 
     # def get_injections(self, key: str):
     #     return self.injections.get(key, None)
-
-    def set_additional_models(self, key: str, models: list["ModelPatcher"]):
-        self.additional_models[key] = models
-
-    def remove_additional_models(self, key: str):
-        if key in self.additional_models:
-            self.additional_models.pop(key)
-
-    def get_additional_models_with_key(self, key: str):
-        return self.additional_models.get(key, [])
-
-    def get_additional_models(self):
-        all_models = []
-        for models in self.additional_models.values():
-            all_models.extend(models)
-        return all_models
-
-    def get_nested_additional_models(self):
-        def _evaluate_sub_additional_models(prev_models: list[ModelPatcher], cache_set: set[ModelPatcher]):
-            """Make sure circular references do not cause infinite recursion."""
-            next_models = []
-            for model in prev_models:
-                candidates = model.get_additional_models()
-                for c in candidates:
-                    if c not in cache_set:
-                        next_models.append(c)
-                        cache_set.add(c)
-            if len(next_models) == 0:
-                return prev_models
-            return prev_models + _evaluate_sub_additional_models(next_models, cache_set)
-
-        all_models = self.get_additional_models()
-        models_set = set(all_models)
-        real_all_models = _evaluate_sub_additional_models(prev_models=all_models, cache_set=models_set)
-        return real_all_models
 
     def use_ejected(self, skip_and_inject_on_exit_only=False):
         return AutoPatcherEjector(self, skip_and_inject_on_exit_only=skip_and_inject_on_exit_only)
