@@ -602,7 +602,7 @@ def free_memory(memory_required: float, device: torch.device, keep_loaded: list[
 
 def load_models_gpu(models: list["ModelPatcher"], memory_required: float = 0, force_patch_weights: bool = False, minimum_memory_required: float = None, force_full_load: bool = False):
     execution_start_time = time.perf_counter()
-    cleanup_models_gc()
+    cleanup_models_gc(target=models)
 
     inference_memory = minimum_inference_memory()
     extra_mem = max(inference_memory, memory_required + extra_reserved_memory())
@@ -703,23 +703,34 @@ def loaded_models(only_currently_used: bool = False) -> list["LoadedModel"]:
     return output
 
 
-def cleanup_models_gc():
-    do_gc = False
+def cleanup_models_gc(*, target: list["ModelPatcher"] = []):
+    _gc: bool = False
+    _del: list[int] = []
+
     for i in range(len(current_loaded_models)):
         cur = current_loaded_models[i]
-        if cur.is_dead():
-            logger.info("Potential memory leak detected with model {}, doing a full garbage collect, for maximum performance avoid circular references in the model code.".format(cur.real_model().__class__.__name__))
-            do_gc = True
+        if not cur.is_dead():
+            continue
+        if any(mdl.model is cur.real_model() for mdl in target):
+            _del.append(i)
             break
 
-    if do_gc:
-        gc.collect()
-        soft_empty_cache()
+        logger.info("Potential memory leak detected with model {}...".format(cur.real_model().__class__.__name__))
+        _gc = True
 
-        for i in range(len(current_loaded_models)):
-            cur = current_loaded_models[i]
-            if cur.is_dead():
-                logger.warning("WARNING, memory leak with model {}. Please make sure it is not being referenced from somewhere.".format(cur.real_model().__class__.__name__))
+    if not _gc and len(_del) == 0:
+        return
+
+    for i in reversed(_del):
+        m = current_loaded_models.pop(i)
+        del m
+
+    gc.collect()
+    soft_empty_cache()
+
+    for mdl in current_loaded_models:
+        if mdl.is_dead():
+            logger.warning("Memory Leak with model {} !".format(mdl.real_model().__class__.__name__))
 
 
 def cleanup_models():
@@ -774,7 +785,7 @@ def unet_dtype(
     weight_dtype: torch.dtype = None,
 ) -> torch.dtype:
     if model_params < 0:
-        model_params = pow(2, 64)
+        model_params = 1e32
     if args.fp32_unet:
         return torch.float32
     if args.bf16_unet:
