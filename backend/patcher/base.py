@@ -190,52 +190,55 @@ class MemoryCounter:
 
 
 class ModelPatcher:
-    def __init__(self, model, load_device, offload_device, size=0, current_device=None, weight_inplace_update=False):
-        self.size = size
+    def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.model = model
         self.model.device = current_device or offload_device
+        self.parent = None
 
-        self.patches = {}
-        self.backup = {}
-        self.object_patches = {}
-        self.object_patches_backup = {}
-        self.weight_wrapper_patches = {}
-        self.model_options = {"transformer_options": {}}
         self.load_device = load_device
         self.offload_device = offload_device
-        self.weight_inplace_update = weight_inplace_update
-        self.force_cast_weights = False
+
+        self.size = size
+        self.model_size()
+
+        self.patches = {}
+        self.lora_patches = {}
+        self.backup = {}
+
+        self.object_patches = {}
+        self.object_patches_backup = {}
+
         self.patches_uuid = uuid.uuid4()
-        self.parent = None
+
+        self.model_options = {"transformer_options": {}}
+        self.weight_wrapper_patches = {}
         self.pinned = set()
 
-        self.lora_patches = {}
+        self.weight_inplace_update = weight_inplace_update
+        self.force_cast_weights = False
 
-        self.is_clip = False
+        self.setup()
 
+    def setup(self):
         if not hasattr(self.model, "model_loaded_weight_memory"):
             self.model.model_loaded_weight_memory = 0
-
         if not hasattr(self.model, "lowvram_patch_counter"):
             self.model.lowvram_patch_counter = 0
-
         if not hasattr(self.model, "model_lowvram"):
             self.model.model_lowvram = False
-
         if not hasattr(self.model, "current_weight_patches_uuid"):
             self.model.current_weight_patches_uuid = None
-
         if not hasattr(self.model, "model_offload_buffer_memory"):
             self.model.model_offload_buffer_memory = 0
 
     @property
-    def current_device(self):
+    def current_device(self) -> torch.device:
         return self.model.device
 
     def has_online_lora(self):
         return False
 
-    def model_size(self):
+    def model_size(self) -> int:
         if self.size > 0:
             return self.size
         self.size = memory_management.module_size(self.model)
@@ -251,32 +254,31 @@ class ModelPatcher:
         return self.model.lowvram_patch_counter
 
     def clone(self):
-        n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), weight_inplace_update=self.weight_inplace_update)
+        n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), self.current_device, weight_inplace_update=self.weight_inplace_update)
         n.patches = {}
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
+        n.lora_patches = {}
+        for k in self.lora_patches:
+            n.lora_patches[k] = self.lora_patches[k][:]
         n.patches_uuid = self.patches_uuid
+        n.backup = self.backup
 
         n.object_patches = self.object_patches.copy()
+        n.object_patches_backup = self.object_patches_backup
         n.weight_wrapper_patches = self.weight_wrapper_patches.copy()
         n.model_options = copy.deepcopy(self.model_options)
-        n.backup = self.backup
-        n.object_patches_backup = self.object_patches_backup
+
         n.parent = self
         n.pinned = self.pinned
-
         n.force_cast_weights = self.force_cast_weights
-
-        n.is_clip = self.is_clip
 
         return n
 
-    def is_clone(self, other):
-        if hasattr(other, "model") and self.model is other.model:
-            return True
-        return False
+    def is_clone(self, other: "ModelPatcher") -> bool:
+        return self.model is getattr(other, "model", None)
 
-    def clone_has_same_weights(self, clone: "ModelPatcher"):
+    def clone_has_same_weights(self, clone: "ModelPatcher") -> bool:
         if not self.is_clone(clone):
             return False
 
@@ -285,7 +287,7 @@ class ModelPatcher:
 
         if self.patches_uuid == clone.patches_uuid:
             if len(self.patches) != len(clone.patches):
-                logger.warning("WARNING: something went wrong, same patch uuid but different length of patches.")
+                logger.warning("something went wrong, same patch uuid but different length of patches...")
             else:
                 return True
 
@@ -882,16 +884,8 @@ class ModelPatcher:
     def current_loaded_device(self):
         return self.model.device
 
-    def cleanup(self):
-        if hasattr(self.model, "current_patcher"):
-            self.model.current_patcher = None
-
     def use_ejected(self, *args, **kwargs):
         return nullcontext()
-
-    # def pre_run(self):
-    #     if hasattr(self.model, "current_patcher"):
-    #         self.model.current_patcher = self
 
     def __del__(self):
         self.unpin_all_weights()

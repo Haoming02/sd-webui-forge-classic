@@ -18,7 +18,6 @@ class CLIP:
         self.cond_stage_model = JointTextEncoder(model_dict)
         self.tokenizer = ObjectDict(tokenizer_dict)
         self.patcher = ModelPatcher(self.cond_stage_model, load_device=load_device, offload_device=offload_device)
-        self.patcher.is_clip = True
 
     def clone(self):
         n = CLIP(no_init=True)
