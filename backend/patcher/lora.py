@@ -103,7 +103,7 @@ def merge_lora_to_weight(patches, weight, key="online_lora", computation_dtype=t
         elif patch_type == "set":
             weight.copy_(v[0])
         elif patch_type == "model_as_lora":
-            raise NotImplementedError('"patch_type" is not supported...')
+            raise NotImplementedError(f'"{patch_type}" is not supported...')
         else:
             print("patch type not recognized {} {}".format(patch_type, key))
 
@@ -130,9 +130,6 @@ def set_parameter_devices(model, parameter_devices):
             p = utils.tensor2parameter(p.to(device=device))
             utils.set_attr_raw(model, key, p)
     return model
-
-
-from backend import operations
 
 
 class LoraLoader:
@@ -207,10 +204,11 @@ class LoraLoader:
 
             bnb_layer = None
 
-            if hasattr(weight, "bnb_quantized") and operations.bnb_available:
-                bnb_layer = parent_layer
+            if hasattr(weight, "bnb_quantized"):
+                assert memory_management.bnb_enabled()
                 from backend.operations_bnb import functional_dequantize_4bit
 
+                bnb_layer = parent_layer
                 weight = functional_dequantize_4bit(weight)
 
             gguf_cls = getattr(weight, "gguf_cls", None)

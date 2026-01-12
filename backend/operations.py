@@ -385,16 +385,13 @@ class ForgeOperations:
 # region: BnB
 
 
-try:
+if memory_management.bnb_enabled():
+
     from backend.operations_bnb import (
         ForgeLoader4Bit,
         functional_dequantize_4bit,
         functional_linear_4bits,
     )
-except ImportError:
-    bnb_available = False
-else:
-    bnb_available = True
 
     class ForgeOperationsBNB4bits(ForgeOperations):
         class Linear(ForgeLoader4Bit):
@@ -542,7 +539,8 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
     if operations is None:
         if bnb_dtype in ["gguf"]:
             operations = ForgeOperationsGGUF
-        elif bnb_available and bnb_dtype in ["nf4", "fp4"]:
+        elif bnb_dtype in ["nf4", "fp4"]:
+            assert memory_management.bnb_enabled()
             operations = ForgeOperationsBNB4bits
         else:
             operations = ForgeOperations

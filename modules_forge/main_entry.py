@@ -6,7 +6,7 @@ import torch
 from gradio.context import Context
 from rich import print_json
 
-from backend import memory_management, operations
+from backend import memory_management
 from backend.args import dynamic_args
 from backend.logging import setup_logger
 from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
@@ -34,7 +34,7 @@ forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
     "float8-e5m2 (fp16 LoRA)": (torch.float8_e5m2, True),
 }
 
-if operations.bnb_available:
+if memory_management.bnb_enabled():
     forge_unet_storage_dtype_options.update(
         {
             "bnb-nf4": ("nf4", False),

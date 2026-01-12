@@ -233,6 +233,13 @@ else:
     else:
         FLASH_IS_AVAILABLE = True
 
+try:
+    import bitsandbytes  # noqa: F401
+except Exception:
+    BNB_IS_AVAILABLE = False
+else:
+    BNB_IS_AVAILABLE = True
+
 
 def amd_min_version(device: torch.device = None, min_rdna_version: int = 0) -> bool:
     if not is_amd():
@@ -1002,6 +1009,10 @@ def flash_enabled() -> bool:
     if not is_nvidia():
         return False
     return FLASH_IS_AVAILABLE
+
+
+def bnb_enabled() -> bool:
+    return BNB_IS_AVAILABLE
 
 
 def pytorch_attention_enabled() -> bool:
