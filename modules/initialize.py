@@ -8,7 +8,8 @@ from modules.timer import startup_timer
 
 
 def shush():
-    logging.getLogger("diffusers").setLevel(logging.ERROR)
+    logging.basicConfig(level=logging.ERROR, force=True)
+    logging.getLogger("diffusers.configuration_utils").setLevel(logging.ERROR)
     logging.getLogger("torch.distributed.nn").setLevel(logging.ERROR)
     logging.getLogger("transformers.dynamic_module_utils").setLevel(logging.ERROR)
     logging.getLogger("xformers").addFilter(lambda record: "triton" not in record.getMessage().lower())
@@ -16,19 +17,6 @@ def shush():
     warnings.filterwarnings(action="ignore", category=UserWarning, module="torchvision.transforms.functional_tensor")
     warnings.filterwarnings(action="ignore", category=UserWarning, module="torchvision")
     startup_timer.record("filter logging")
-
-
-def shush_nunchaku():
-    _original = logging.basicConfig
-    logging.basicConfig = lambda *args, **kwargs: None
-
-    try:
-        import nunchaku
-    except ImportError:
-        pass
-
-    logging.basicConfig = _original
-    startup_timer.record("bypass basicConfig")
 
 
 def imports():

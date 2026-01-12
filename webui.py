@@ -20,8 +20,6 @@ initialize.shush()
 with startup_timer.subcategory("forge init"):
     initialize_forge()
 
-initialize.shush_nunchaku()
-
 initialize.imports()
 
 initialize.check_versions()
