@@ -246,7 +246,6 @@ class ModelPatcher:
         self.lora_patches = {}
 
         # self.additional_models: dict[str, list[ModelPatcher]] = {}
-        # self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
 
         self.is_injected = False
         self.skip_injection = False
@@ -318,11 +317,6 @@ class ModelPatcher:
         # # additional models
         # for k, c in self.additional_models.items():
         #     n.additional_models[k] = [x.clone() for x in c]
-        # # sample wrappers
-        # for k, w in self.wrappers.items():
-        #     n.wrappers[k] = {}
-        #     for k1, w1 in w.items():
-        #         n.wrappers[k][k1] = w1.copy()
         # injection
         n.is_injected = self.is_injected
         n.skip_injection = self.skip_injection
@@ -360,9 +354,6 @@ class ModelPatcher:
             return False
         if self.additional_models.keys() != clone.additional_models.keys():
             return False
-        for key in self.wrappers:
-            if len(self.wrappers[key]) != len(clone.wrappers[key]):
-                return False
         if self.injections.keys() != clone.injections.keys():
             return False
 
@@ -988,27 +979,6 @@ class ModelPatcher:
         self.clean_hooks()
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-
-    def add_wrapper(self, wrapper_type: str, wrapper: Callable):
-        self.add_wrapper_with_key(wrapper_type, None, wrapper)
-
-    def add_wrapper_with_key(self, wrapper_type: str, key: str, wrapper: Callable):
-        w = self.wrappers.setdefault(wrapper_type, {}).setdefault(key, [])
-        w.append(wrapper)
-
-    def remove_wrappers_with_key(self, wrapper_type: str, key: str):
-        w = self.wrappers.get(wrapper_type, {})
-        if key in w:
-            w.pop(key)
-
-    def get_wrappers(self, wrapper_type: str, key: str):
-        return self.wrappers.get(wrapper_type, {}).get(key, [])
-
-    def get_all_wrappers(self, wrapper_type: str):
-        w_list = []
-        for w in self.wrappers.get(wrapper_type, {}).values():
-            w_list.extend(w)
-        return w_list
 
     # def set_injections(self, key: str, injections: list[PatcherInjection]):
     #     self.injections[key] = injections
