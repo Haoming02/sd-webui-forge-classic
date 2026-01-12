@@ -198,9 +198,7 @@ class UnetPatcher(ModelPatcher):
 class NunchakuPatcher(UnetPatcher):
 
     def load(self, device_to=None, *args, **kwargs):
-        with self.use_ejected():
-            self.model.diffusion_model.to(device_to)
+        self.model.diffusion_model.to(device_to)
 
     def detach(self, *args, **kwargs):
-        self.eject_model()
         self.model.diffusion_model.to(self.offload_device)
