@@ -282,10 +282,9 @@ def list_loaded_weights():
     table.add_column("Device", justify="right")
 
     for mdl in memory_management.current_loaded_models:
-        mdl.compute_inclusive_exclusive_memory()
         table.add_row(
             str(mdl.model.model.__class__.__name__),
-            f"{int(mdl.inclusive_memory / 2 ** 20)} (MB)" if mdl.inclusive_memory > 0 else "n.a.",
+            f"{int(mdl.model_loaded_memory() / 2 ** 20)} (MB)" if mdl.model_loaded_memory() > 0 else "n.a.",
             str(mdl.device),
         )
 
