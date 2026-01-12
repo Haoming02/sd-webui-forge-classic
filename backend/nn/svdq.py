@@ -54,7 +54,7 @@ class NunchakuModelMixin(nn.Module):
             logger.debug("[Nunchaku] Block moving model...")
             return self
 
-        return self.to(*args, **kwargs)
+        return super().to(*args, **kwargs)
 
 
 # region: Flux
