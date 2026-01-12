@@ -245,7 +245,6 @@ class ModelPatcher:
 
         self.lora_patches = {}
 
-        # self.attachments: dict[str] = {}
         # self.additional_models: dict[str, list[ModelPatcher]] = {}
         # self.callbacks: dict[str, dict[str, list[Callable]]] = CallbacksMP.init_callbacks()
         # self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
@@ -317,13 +316,6 @@ class ModelPatcher:
 
         n.force_cast_weights = self.force_cast_weights
 
-        # # attachments
-        # n.attachments = {}
-        # for k in self.attachments:
-        #     if hasattr(self.attachments[k], "on_model_patcher_clone"):
-        #         n.attachments[k] = self.attachments[k].on_model_patcher_clone()
-        #     else:
-        #         n.attachments[k] = self.attachments[k]
         # # additional models
         # for k, c in self.additional_models.items():
         #     n.additional_models[k] = [x.clone() for x in c]
@@ -373,8 +365,6 @@ class ModelPatcher:
         if self.forced_hooks != clone.forced_hooks:
             return False
         if self.hook_patches.keys() != clone.hook_patches.keys():
-            return False
-        if self.attachments.keys() != clone.attachments.keys():
             return False
         if self.additional_models.keys() != clone.additional_models.keys():
             return False
@@ -1058,16 +1048,6 @@ class ModelPatcher:
         for w in self.wrappers.get(wrapper_type, {}).values():
             w_list.extend(w)
         return w_list
-
-    # def set_attachments(self, key: str, attachment):
-    #     self.attachments[key] = attachment
-
-    # def remove_attachments(self, key: str):
-    #     if key in self.attachments:
-    #         self.attachments.pop(key)
-
-    # def get_attachment(self, key: str):
-    #     return self.attachments.get(key, None)
 
     # def set_injections(self, key: str, injections: list[PatcherInjection]):
     #     self.injections[key] = injections
