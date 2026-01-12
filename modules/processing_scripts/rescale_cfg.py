@@ -34,19 +34,20 @@ class ScriptRescaleCFG(scripts.ScriptBuiltinUI):
         return [cfg]
 
     def after_extra_networks_activate(self, p, cfg, *args, **kwargs):
-        if opts.show_rescale_cfg and cfg > 0.0:
+        if cfg > 0.0:
             p.extra_generation_params.update({"Rescale CFG": cfg})
+            p.rescale_cfg = cfg
 
-    def process_before_every_sampling(self, p, cfg, *args, **kwargs):
-        if not opts.show_rescale_cfg or cfg < 0.05:
+    def process_before_every_sampling(self, p, *args, **kwargs):
+        if getattr(p, "rescale_cfg", 0.0) < 0.05:
             return
         if p.is_hr_pass:
             return
 
-        self.apply_rescale_cfg(p, cfg)
+        self.apply_rescale_cfg(p, p.rescale_cfg)
 
     @staticmethod
-    def apply_rescale_cfg(p, cfg):
+    def apply_rescale_cfg(p, cfg: float):
 
         @torch.inference_mode()
         def rescale_cfg(args):

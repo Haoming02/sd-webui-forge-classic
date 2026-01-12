@@ -31,11 +31,12 @@ class ScriptMahiro(scripts.ScriptBuiltinUI):
         return [enable]
 
     def after_extra_networks_activate(self, p, enable, *args, **kwargs):
-        if opts.show_mahiro and enable:
+        if enable:
             p.extra_generation_params.update({"MaHiRo": enable})
+            p.mahiro = True
 
-    def process_before_every_sampling(self, p, enable, *args, **kwargs):
-        if not opts.show_mahiro or not enable:
+    def process_before_every_sampling(self, p, *args, **kwargs):
+        if str(getattr(p, "mahiro", False)) != "True":
             return
 
         @torch.inference_mode()
