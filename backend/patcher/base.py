@@ -246,7 +246,6 @@ class ModelPatcher:
         self.lora_patches = {}
 
         # self.additional_models: dict[str, list[ModelPatcher]] = {}
-        # self.callbacks: dict[str, dict[str, list[Callable]]] = CallbacksMP.init_callbacks()
         # self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
 
         self.is_injected = False
@@ -319,11 +318,6 @@ class ModelPatcher:
         # # additional models
         # for k, c in self.additional_models.items():
         #     n.additional_models[k] = [x.clone() for x in c]
-        # # callbacks
-        # for k, c in self.callbacks.items():
-        #     n.callbacks[k] = {}
-        #     for k1, c1 in c.items():
-        #         n.callbacks[k][k1] = c1.copy()
         # # sample wrappers
         # for k, w in self.wrappers.items():
         #     n.wrappers[k] = {}
@@ -347,8 +341,6 @@ class ModelPatcher:
         n.is_clip = self.is_clip
         # n.hook_mode = self.hook_mode
 
-        # for callback in self.get_all_callbacks(CallbacksMP.ON_CLONE):
-        #     callback(self, n)
         return n
 
     def is_clone(self, other):
@@ -368,9 +360,6 @@ class ModelPatcher:
             return False
         if self.additional_models.keys() != clone.additional_models.keys():
             return False
-        for key in self.callbacks:
-            if len(self.callbacks[key]) != len(clone.callbacks[key]):
-                return False
         for key in self.wrappers:
             if len(self.wrappers[key]) != len(clone.wrappers[key]):
                 return False
@@ -813,9 +802,6 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = offload_buffer
             self.model.current_weight_patches_uuid = self.patches_uuid
 
-            # for callback in self.get_all_callbacks(CallbacksMP.ON_LOAD):
-            #     callback(self, device_to, lowvram_model_memory, force_patch_weights, full_load)
-
             # self.apply_hooks(self.forced_hooks, force_apply=True)
 
     def patch_model(self, device_to=None, lowvram_model_memory=0, load_weights=True, force_patch_weights=False):
@@ -993,8 +979,6 @@ class ModelPatcher:
         self.model_patches_to(self.offload_device)
         if unpatch_all:
             self.unpatch_model(self.offload_device, unpatch_weights=unpatch_all)
-        # for callback in self.get_all_callbacks(CallbacksMP.ON_DETACH):
-        #     callback(self, unpatch_all)
         return self.model
 
     def current_loaded_device(self):
@@ -1004,29 +988,6 @@ class ModelPatcher:
         self.clean_hooks()
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-        # for callback in self.get_all_callbacks(CallbacksMP.ON_CLEANUP):
-        #     callback(self)
-
-    def add_callback(self, call_type: str, callback: Callable):
-        self.add_callback_with_key(call_type, None, callback)
-
-    def add_callback_with_key(self, call_type: str, key: str, callback: Callable):
-        c = self.callbacks.setdefault(call_type, {}).setdefault(key, [])
-        c.append(callback)
-
-    def remove_callbacks_with_key(self, call_type: str, key: str):
-        c = self.callbacks.get(call_type, {})
-        if key in c:
-            c.pop(key)
-
-    def get_callbacks(self, call_type: str, key: str):
-        return self.callbacks.get(call_type, {}).get(key, [])
-
-    def get_all_callbacks(self, call_type: str):
-        c_list = []
-        for c in self.callbacks.get(call_type, {}).values():
-            c_list.extend(c)
-        return c_list
 
     def add_wrapper(self, wrapper_type: str, wrapper: Callable):
         self.add_wrapper_with_key(wrapper_type, None, wrapper)
@@ -1104,9 +1065,6 @@ class ModelPatcher:
         #     for inj in injections:
         #         inj.inject(self)
         #         self.is_injected = True
-        # if self.is_injected:
-        #     for callback in self.get_all_callbacks(CallbacksMP.ON_INJECT_MODEL):
-        #         callback(self)
 
     def eject_model(self):
         if not self.is_injected:
@@ -1115,18 +1073,10 @@ class ModelPatcher:
         #     for inj in injections:
         #         inj.eject(self)
         # self.is_injected = False
-        # for callback in self.get_all_callbacks(CallbacksMP.ON_EJECT_MODEL):
-        #     callback(self)
 
     # def pre_run(self):
     #     if hasattr(self.model, "current_patcher"):
     #         self.model.current_patcher = self
-    #     for callback in self.get_all_callbacks(CallbacksMP.ON_PRE_RUN):
-    #         callback(self)
-
-    # def prepare_state(self, timestep):
-    #     for callback in self.get_all_callbacks(CallbacksMP.ON_PREPARE_STATE):
-    #         callback(self, timestep)
 
     # def restore_hook_patches(self):
     #     if self.hook_patches_backup is not None:
@@ -1173,8 +1123,6 @@ class ModelPatcher:
     #         self.hook_patches_backup = create_hook_patches_clone(self.hook_patches)
     #         for hook in weight_hooks_to_register:
     #             hook.add_hook_patches(self, model_options, target_dict, registered)
-    #     for callback in self.get_all_callbacks(CallbacksMP.ON_REGISTER_ALL_HOOK_PATCHES):
-    #         callback(self, hooks, target_dict, model_options, registered)
     #     return registered
 
     # def add_hook_patches(self, hook: comfy.hooks.WeightHook, patches, strength_patch=1.0, strength_model=1.0):
@@ -1228,8 +1176,6 @@ class ModelPatcher:
     #     if self.current_hooks == hooks and (not force_apply or (not self.is_clip and hooks is None)):
     #         return comfy.hooks.create_transformer_options_from_hooks(self, hooks, transformer_options)
     #     self.patch_hooks(hooks=hooks)
-    #     for callback in self.get_all_callbacks(CallbacksMP.ON_APPLY_HOOKS):
-    #         callback(self, hooks)
     #     return comfy.hooks.create_transformer_options_from_hooks(self, hooks, transformer_options)
 
     # def patch_hooks(self, hooks: comfy.hooks.HookGroup):
