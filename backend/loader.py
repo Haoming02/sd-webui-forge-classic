@@ -24,7 +24,7 @@ from backend.nn.clip import IntegratedCLIP
 from backend.nn.unet import IntegratedUNet2DConditionModel
 from backend.nn.vae import IntegratedAutoencoderKL
 from backend.nn.wan_vae import WanVAE
-from backend.operations import using_forge_operations
+from backend.operations import fp8Operations, using_forge_operations
 from backend.state_dict import load_state_dict, try_filter_state_dict
 from backend.utils import (
     beautiful_print_gguf_state_dict_statics,
@@ -282,7 +282,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             unet_config = guess.unet_config.copy()
             state_dict_parameters = utils.calculate_parameters(state_dict)
             state_dict_dtype = utils.weight_dtype(state_dict)
-            optimal_dtype = memory_management.unet_dtype(device=load_device, model_params=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes, weight_dtype=state_dict_dtype)
 
             _dtype_overwrite = backend.args.dynamic_args["forge_unet_storage_dtype"]
 
@@ -295,14 +294,17 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 logger.info(f"Using Detected Model Data Type: {_log}")
                 if state_dict_dtype == "gguf":
                     beautiful_print_gguf_state_dict_statics(state_dict)
-            elif _dtype_overwrite is not None:
-                storage_dtype = _dtype_overwrite
-                logger.info(f"Using Override Model Data Type: {storage_dtype}")
             else:
-                storage_dtype = optimal_dtype
-                logger.info(f"Using Optimal Model Data Type: {storage_dtype}")
+                storage_dtype = memory_management.unet_dtype(device=load_device, model_params=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes, weight_dtype=_dtype_overwrite or state_dict_dtype)
+                if storage_dtype == state_dict_dtype:
+                    logger.info(f"Using Default Model Data Type: {storage_dtype}")
+                else:
+                    logger.info(f"Using Override Model Data Type: {storage_dtype}")
 
-            computation_dtype = storage_dtype if guess.nunchaku else optimal_dtype
+            if guess.nunchaku:
+                computation_dtype = storage_dtype
+            else:
+                computation_dtype = memory_management.inference_cast(weight_dtype=storage_dtype, inference_device=load_device, supported_dtypes=guess.supported_inference_dtypes)
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
@@ -314,7 +316,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 to_args = dict(device=initial_device, dtype=storage_dtype)
                 ops = False if guess.nunchaku else None
 
-                with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast):
+                with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=storage_dtype):
                     model = model_loader(unet_config).to(**to_args)
 
             model = pre_func(model)

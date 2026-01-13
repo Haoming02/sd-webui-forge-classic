@@ -781,12 +781,7 @@ def maximum_vram_for_weights(device: torch.device = None) -> float:
     return get_total_memory(device) * 0.88 - minimum_inference_memory()
 
 
-def unet_dtype(
-    device: torch.device = None,
-    model_params: int = 0,
-    supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32],
-    weight_dtype: torch.dtype = None,
-) -> torch.dtype:
+def unet_dtype(device: torch.device = None, model_params: int = 0, supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32], weight_dtype: torch.dtype = None) -> torch.dtype:
     if model_params < 0:
         model_params = 1e32
     if args.fp32_unet:
@@ -803,14 +798,12 @@ def unet_dtype(
         return torch.float8_e8m0fnu
 
     if weight_dtype in FLOAT8_TYPES:
-        fp8_dtype = weight_dtype
-
         if supports_fp8_compute(device):
-            return fp8_dtype
+            return weight_dtype
 
         free_model_memory = maximum_vram_for_weights(device)
         if model_params * 2 > free_model_memory:
-            return fp8_dtype
+            return weight_dtype
 
     if PRIORITIZE_FP16 or weight_dtype == torch.float16:
         if torch.float16 in supported_dtypes and should_use_fp16(device=device, model_params=model_params):
@@ -831,6 +824,31 @@ def unet_dtype(
         if dt == torch.bfloat16 and should_use_bf16(device, model_params=model_params, manual_cast=True):
             if torch.bfloat16 in supported_dtypes:
                 return torch.bfloat16
+
+    return torch.float32
+
+
+def inference_cast(weight_dtype: torch.device, inference_device: torch.device, supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32]) -> torch.dtype:
+    if weight_dtype == torch.float32:
+        return weight_dtype
+
+    fp16_supported = should_use_fp16(inference_device, prioritize_performance=False)
+    if fp16_supported and weight_dtype == torch.float16:
+        return weight_dtype
+
+    bf16_supported = should_use_bf16(inference_device)
+    if bf16_supported and weight_dtype == torch.bfloat16:
+        return weight_dtype
+
+    fp16_supported = should_use_fp16(inference_device, prioritize_performance=True)
+    if PRIORITIZE_FP16 and fp16_supported and torch.float16 in supported_dtypes:
+        return torch.float16
+
+    for dt in supported_dtypes:
+        if dt == torch.float16 and fp16_supported:
+            return torch.float16
+        if dt == torch.bfloat16 and bf16_supported:
+            return torch.bfloat16
 
     return torch.float32
 

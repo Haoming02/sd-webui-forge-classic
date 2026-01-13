@@ -95,6 +95,7 @@ parser.add_argument("--cuda-malloc", action="store_true")
 parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=2, default=None)
 parser.add_argument("--pin-shared-memory", action="store_true")
 
+parser.add_argument("--fast-fp8", action="store_true", help="torch._scaled_mm")
 parser.add_argument("--fast-fp16", action="store_true", help="torch.backends.cuda.matmul.allow_fp16_accumulation")
 parser.add_argument("--autotune", action="store_true", help="torch.backends.cudnn.benchmark")
 

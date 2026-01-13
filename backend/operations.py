@@ -7,6 +7,7 @@ from typing import Callable
 import torch
 
 from backend import memory_management, stream, utils
+from backend.args import args
 from backend.patcher.lora import merge_lora_to_weight
 
 
@@ -32,7 +33,7 @@ def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Ten
     return weight, bias
 
 
-def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dtype: bool = False, skip_bias_dtype: bool = False, weight_fn: Callable = None, bias_fn: Callable = None):
+def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dtype: bool = False, skip_bias_dtype: bool = False, weight_fn: Callable = None, bias_fn: Callable = None, *, dtype: torch.dtype = None):
     weight, bias = None, None
     target_dtype, target_device = x.dtype, x.device
     weight_has_function: bool = weight_fn is not None
@@ -40,7 +41,7 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
 
     non_blocking = memory_management.device_supports_non_blocking(target_device)
 
-    weight_args = dict(device=target_device, dtype=target_dtype, non_blocking=non_blocking)
+    weight_args = dict(device=target_device, dtype=dtype or target_dtype, non_blocking=non_blocking)
     if skip_weight_dtype or weight_has_function:
         weight_args.pop("dtype")
 
@@ -505,6 +506,65 @@ class ForgeOperationsGGUF(ForgeOperations):
                 return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
+# region: fp8
+
+
+def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
+    dtype = self.weight.dtype
+    if dtype != torch.float8_e4m3fn:
+        return None
+
+    tensor_2d = False
+    if len(input.shape) == 2:
+        tensor_2d = True
+        input = input.unsqueeze(1)
+
+    input_shape, input_dtype = input.shape, input.dtype
+
+    if len(input.shape) == 3:
+        w, bias, s = weights_manual_cast(self, input, dtype=dtype)
+        w = w.t()
+
+        scale_weight: torch.Tensor = getattr(self, "scale_weight", None)
+
+        if scale_weight is None:
+            scale_weight = torch.ones((), device=input.device, dtype=torch.float32)
+        else:
+            scale_weight = scale_weight.to(input.device)
+
+        scale_input = torch.ones((), device=input.device, dtype=torch.float32)
+        input = torch.clamp(input, min=-448, max=448, out=input)
+        input = input.reshape(-1, input_shape[2]).to(dtype).contiguous()
+
+        o = torch._scaled_mm(input, w, out_dtype=input_dtype, bias=bias, scale_a=scale_input, scale_b=scale_weight)
+
+        if isinstance(o, tuple):
+            o = o[0]
+
+        if tensor_2d:
+            return o.reshape(input_shape[0], -1)
+
+        return o.reshape((-1, input_shape[1], self.weight.shape[0]))
+
+    return None
+
+
+class fp8Operations(ForgeOperations):
+    class Linear(ForgeOperations.Linear):
+        def forward(self, x):
+            try:
+                if (out := fp8_linear(self, x)) is not None:
+                    return out
+            except Exception as e:
+                memory_management.logger.error(f"Error duing fp8_fast: {e}")
+
+            weight, bias = get_weight_and_bias(self)
+            return torch.nn.functional.linear(x, weight, bias)
+
+
+# region: Pick ops
+
+
 @contextlib.contextmanager
 def using_forge_operations(operations=None, device=None, dtype=None, manual_cast_enabled=False, bnb_dtype=None):
     global current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype
@@ -526,7 +586,9 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
         return
 
     if operations is None:
-        if bnb_dtype in ["gguf"]:
+        if bnb_dtype in [torch.float8_e4m3fn] and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):
+            operations = fp8Operations
+        elif bnb_dtype in ["gguf"]:
             operations = ForgeOperationsGGUF
         elif bnb_dtype in ["nf4", "fp4"]:
             assert memory_management.bnb_enabled()
