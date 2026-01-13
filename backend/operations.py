@@ -10,44 +10,22 @@ from backend import memory_management, stream, utils
 from backend.patcher.lora import merge_lora_to_weight
 
 
-def get_weight_and_bias(layer: torch.nn.Module, weight_args: dict = None, bias_args: dict = None, weight_fn: Callable = None, bias_fn: Callable = None):
+def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
     scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
-    patches: dict[str, list[torch.Tensor]] = getattr(layer, "forge_online_loras", None)
-    weight_patches, bias_patches = None, None
+    loras: dict[str, list[torch.Tensor]] = getattr(layer, "forge_online_loras", dict())
 
-    if patches is not None:
-        weight_patches = patches.get("weight", None)
+    weight_patches = loras.get("weight", None)
+    bias_patches = loras.get("bias", None)
 
-    if patches is not None:
-        bias_patches = patches.get("bias", None)
-
-    weight: torch.Tensor = None
-    if layer.weight is not None:
-        weight = layer.weight
-        if weight_fn is not None:
-            if weight_args is not None:
-                fn_device = weight_args.get("device", None)
-                if fn_device is not None:
-                    weight = weight.to(device=fn_device)
-            weight = weight_fn(weight)
-        if weight_args is not None:
-            weight = weight.to(**weight_args)
+    weight: torch.Tensor = getattr(layer, "weight", None)
+    if weight is not None:
         if scale_weight is not None:
             weight = weight * scale_weight.to(device=weight.device, dtype=weight.dtype)
         if weight_patches is not None:
             weight = merge_lora_to_weight(patches=weight_patches, weight=weight, key="online weight lora", computation_dtype=weight.dtype)
 
-    bias: torch.Tensor = None
-    if layer.bias is not None:
-        bias = layer.bias
-        if bias_fn is not None:
-            if bias_args is not None:
-                fn_device = bias_args.get("device", None)
-                if fn_device is not None:
-                    bias = bias.to(device=fn_device)
-            bias = bias_fn(bias)
-        if bias_args is not None:
-            bias = bias.to(**bias_args)
+    bias: torch.Tensor = getattr(layer, "bias", None)
+    if bias is not None:
         if bias_patches is not None:
             bias = merge_lora_to_weight(patches=bias_patches, weight=bias, key="online bias lora", computation_dtype=bias.dtype)
 
@@ -70,18 +48,18 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
     if skip_bias_dtype:
         bias_args.pop("dtype")
 
-    if (layer.weight is not None and target_device != layer.weight.device) or (layer.bias is not None and target_device != layer.bias.device):
-        offload_stream = memory_management.get_offload_stream(target_device)
-        _stream = stream.stream_context()(offload_stream)
-    else:
-        offload_stream = None
-        _stream = None
+    offload_stream, context = None, contextlib.nullcontext()
+
+    if stream.should_use_stream():
+        if (layer.weight is not None and target_device != layer.weight.device) or (layer.bias is not None and target_device != layer.bias.device):
+            offload_stream = memory_management.get_offload_stream(target_device)
+            context = stream.stream_context()(offload_stream)
 
     if layer.weight is not None:
-        weight = memory_management.cast_to(layer.weight, **weight_args, copy=weight_has_function, stream=_stream)
+        weight = memory_management.cast_to(layer.weight, **weight_args, copy=weight_has_function, context=context)
 
     if layer.bias is not None:
-        bias = memory_management.cast_to(layer.bias, **bias_args, copy=bias_has_function, stream=_stream)
+        bias = memory_management.cast_to(layer.bias, **bias_args, copy=bias_has_function, context=context)
 
     memory_management.sync_stream(target_device, offload_stream)
 
@@ -96,8 +74,19 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
         bias = bias_fn(bias)
 
     scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
-    if scale_weight is not None:
+    if weight is not None and scale_weight is not None:
         weight = weight * scale_weight.to(weight)
+
+    loras: dict[str, list[torch.Tensor]] = getattr(layer, "forge_online_loras", dict())
+
+    weight_patches = loras.get("weight", None)
+    bias_patches = loras.get("bias", None)
+
+    if weight is not None and weight_patches is not None:
+        weight = merge_lora_to_weight(patches=weight_patches, weight=weight, key="online weight lora", computation_dtype=weight.dtype)
+
+    if bias is not None and bias_patches is not None:
+        bias = merge_lora_to_weight(patches=bias_patches, weight=bias, key="online bias lora", computation_dtype=bias.dtype)
 
     return weight, bias, (offload_stream, weight_a, bias_a)
 
