@@ -24,13 +24,12 @@ import copy
 import inspect
 import logging
 import uuid
-from contextlib import nullcontext
 
 import torch
 
 from backend import memory_management, utils
 from backend.logging import setup_logger
-from backend.patcher.lora import merge_lora_to_weight
+from backend.patcher.lora import LoraLoader, merge_lora_to_weight
 
 logger = logging.getLogger("model_patcher")
 setup_logger(logger)
@@ -183,6 +182,11 @@ class ModelPatcher:
         self.lora_patches = {}
         self.backup = {}
 
+        if not hasattr(model, "lora_loader"):
+            model.lora_loader = LoraLoader(model)
+
+        self.lora_loader: LoraLoader = model.lora_loader
+
         self.object_patches = {}
         self.object_patches_backup = {}
 
@@ -212,8 +216,11 @@ class ModelPatcher:
     def current_device(self) -> torch.device:
         return self.model.device
 
-    def has_online_lora(self):
-        return False
+    def has_online_lora(self) -> bool:
+        return any(online_mode for (*_, online_mode) in self.lora_patches.keys())
+
+    def refresh_loras(self):
+        self.lora_loader.refresh(lora_patches=self.lora_patches, offload_device=self.offload_device)
 
     def model_size(self) -> int:
         if self.size > 0:
@@ -412,9 +419,16 @@ class ModelPatcher:
         if hasattr(self.model, "get_dtype"):
             return self.model.get_dtype()
 
-    def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
+    def add_patches(self, patches: list[dict], strength_patch: float = 1.0, strength_model: float = 1.0, *, filename: str = None, online_mode: bool = None):
+        lora: bool = filename is not None and online_mode is not None
+
+        if lora:
+            lora_identifier = (filename, strength_patch, strength_model, online_mode)
+            lora_patches = {}
+
         p = set()
         model_sd = self.model.state_dict()
+
         for k in patches:
             offset = None
             function = None
@@ -430,9 +444,16 @@ class ModelPatcher:
                 p.add(k)
                 current_patches = self.patches.get(key, [])
                 current_patches.append((strength_patch, patches[k], strength_model, offset, function))
-                self.patches[key] = current_patches
+                if lora:
+                    lora_patches[key] = current_patches
+                else:
+                    self.patches[key] = current_patches
 
-        self.patches_uuid = uuid.uuid4()
+        if lora:
+            self.lora_patches[lora_identifier] = lora_patches
+        else:
+            self.patches_uuid = uuid.uuid4()
+
         return list(p)
 
     def get_key_patches(self, filter_prefix=None):

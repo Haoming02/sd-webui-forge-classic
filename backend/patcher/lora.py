@@ -1,16 +1,22 @@
 # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/lora.py
 
+import logging
 import weakref
 
 import torch
 
 from backend import memory_management, utils
+from backend.logging import setup_logger
 from modules_forge.packages.comfy.lora import (  # noqa
     load_lora,
     model_lora_keys_clip,
     model_lora_keys_unet,
     weight_adapter,
 )
+
+logger = logging.getLogger("lora")
+setup_logger(logger)
+
 
 extra_weight_calculators = {}
 
@@ -74,7 +80,7 @@ def merge_lora_to_weight(patches, weight, key="online_lora", computation_dtype=t
         if isinstance(v, weight_adapter.WeightAdapterBase):
             output = v.calculate_weight(weight, key, strength, strength_model, offset, function, computation_dtype)
             if output is None:
-                print("Calculate Weight Failed: {} {}".format(v.name, key))
+                logger.error("Calculate Weight Failed: {} {}".format(v.name, key))
             else:
                 weight = output
                 if old_weight is not None:
@@ -92,12 +98,12 @@ def merge_lora_to_weight(patches, weight, key="online_lora", computation_dtype=t
             # An extra flag to pad the weight if the diff's shape is larger than the weight
             do_pad_weight = len(v) > 1 and v[1]["pad_weight"]
             if do_pad_weight and diff.shape != weight.shape:
-                print("Pad weight {} from {} to shape: {}".format(key, weight.shape, diff.shape))
+                logger.debug("Pad weight {} from {} to shape: {}".format(key, weight.shape, diff.shape))
                 weight = weight_adapter.base.pad_tensor_to_shape(weight, diff.shape)
 
             if strength != 0.0:
                 if diff.shape != weight.shape:
-                    print("WARNING SHAPE MISMATCH {} WEIGHT NOT MERGED {} != {}".format(key, diff.shape, weight.shape))
+                    logger.warning("SHAPE MISMATCH {} WEIGHT NOT MERGED {} != {}".format(key, diff.shape, weight.shape))
                 else:
                     weight += function(strength * memory_management.cast_to_device(diff, weight.device, weight.dtype))
         elif patch_type == "set":
@@ -105,7 +111,7 @@ def merge_lora_to_weight(patches, weight, key="online_lora", computation_dtype=t
         elif patch_type == "model_as_lora":
             raise NotImplementedError(f'"{patch_type}" is not supported...')
         else:
-            print("patch type not recognized {} {}".format(patch_type, key))
+            raise ValueError(f'"{key}" of type "{patch_type}" is not recognized...')
 
         if old_weight is not None:
             weight = old_weight
@@ -222,8 +228,12 @@ class LoraLoader:
 
             try:
                 weight = merge_lora_to_weight(current_patches, weight, key, computation_dtype=torch.float32)
-            except:
-                print("Patching LoRA weights out of memory. Retrying by offloading models.")
+                _offload = False
+            except memory_management.OOM_EXCEPTION:
+                logger.warning("Encountered Out of Memory during LoRA Patching; Retrying with Offloading...")
+                _offload = True
+
+            if _offload:
                 set_parameter_devices(self.model, parameter_devices={k: offload_device for k in parameter_devices.keys()})
                 memory_management.soft_empty_cache()
                 weight = merge_lora_to_weight(current_patches, weight, key, computation_dtype=torch.float32)
@@ -236,10 +246,9 @@ class LoraLoader:
                 gguf_cls.quantize_pytorch(weight, gguf_parameter)
                 continue
 
-            utils.set_attr_raw(self.model, key, torch.nn.Parameter(weight, requires_grad=False))
+            utils.set_attr(self.model, key, weight)
 
         # End
 
         set_parameter_devices(self.model, parameter_devices=parameter_devices)
         self.loaded_hash = hashes
-        return

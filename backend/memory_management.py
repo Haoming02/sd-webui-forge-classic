@@ -27,6 +27,7 @@ import platform
 import sys
 import time
 import weakref
+from contextlib import nullcontext
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -489,6 +490,8 @@ class LoadedModel:
             signal_empty_cache = True
 
         bake_gguf_model(real_model)
+
+        self.model.refresh_loras()
 
         self.real_model = weakref.ref(real_model)
         self.model_finalizer = weakref.finalize(real_model, cleanup_models)
@@ -966,7 +969,7 @@ def device_supports_non_blocking(device: torch.device) -> bool:
     return True
 
 
-def cast_to(weight: torch.Tensor, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, context=None):
+def cast_to(weight: torch.Tensor, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, context=nullcontext()):
     if device is None or weight.device == device:
         if not copy and (dtype is None or weight.dtype == dtype):
             return weight
