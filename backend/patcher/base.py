@@ -189,7 +189,6 @@ class ModelPatcher:
         self.patches_uuid = uuid.uuid4()
 
         self.model_options = {"transformer_options": {}}
-        self.weight_wrapper_patches = {}
         self.pinned = set()
 
         self.weight_inplace_update = weight_inplace_update
@@ -244,7 +243,6 @@ class ModelPatcher:
 
         n.object_patches = self.object_patches.copy()
         n.object_patches_backup = self.object_patches_backup
-        n.weight_wrapper_patches = self.weight_wrapper_patches.copy()
         n.model_options = copy.deepcopy(self.model_options)
 
         n.parent = self
@@ -354,10 +352,6 @@ class ModelPatcher:
         if dtype is not None:
             self.force_cast_weights = True
         self.patches_uuid = uuid.uuid4()  # TODO: optimize by preventing a full model reload for this
-
-    def add_weight_wrapper(self, name, function):
-        self.weight_wrapper_patches[name] = self.weight_wrapper_patches.get(name, []) + [function]
-        self.patches_uuid = uuid.uuid4()
 
     def get_model_object(self, name: str) -> torch.nn.Module:
         """Retrieves a nested attribute from an object using dot notation (e.g. "model.layer.weight")"""
@@ -612,12 +606,6 @@ class ModelPatcher:
             if cast_weight and hasattr(m, "parameters_manual_cast"):
                 m.prev_parameters_manual_cast = m.parameters_manual_cast
                 m.parameters_manual_cast = True
-
-            if weight_key in self.weight_wrapper_patches:
-                m.weight_function.extend(self.weight_wrapper_patches[weight_key])
-
-            if bias_key in self.weight_wrapper_patches:
-                m.bias_function.extend(self.weight_wrapper_patches[bias_key])
 
             mem_counter += move_weight_functions(m, device_to)
 
