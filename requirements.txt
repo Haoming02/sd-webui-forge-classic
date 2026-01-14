@@ -30,6 +30,7 @@ psutil==5.9.8
 pydantic-core==2.23.4
 pydantic==2.9.2
 resize-right==0.0.2
+rich==14.2.0
 safetensors==0.7.0
 scikit-image==0.25.2
 setuptools==69.5.1
