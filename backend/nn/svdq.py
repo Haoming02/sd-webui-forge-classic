@@ -47,11 +47,11 @@ class NunchakuModelMixin(nn.Module):
                         pass
 
         if has_dtype:
-            logger.debug("[Nunchaku] Block casting dtype...")
+            logger.debug("[Nunchaku] Prevent casting dtype...")
             args = [arg for arg in args if not isinstance(arg, torch.dtype)]
             kwargs.pop("dtype", None)
         if self.offload and has_device:
-            logger.debug("[Nunchaku] Block moving model...")
+            logger.debug("[Nunchaku] Prevent moving model...")
             return self
 
         return super().to(*args, **kwargs)
@@ -669,9 +669,9 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
             reset_lora_v2(self)
             self.set_offload(False, None, None)
 
-            print("[Qwen] Composing LoRAs...")
+            logger.info(f"[Qwen] Composing {len(self.loras)} LoRA(s)...")
             compose_loras_v2(self, self.loras)
-            print("[Qwen] LoRAs Composed~")
+            logger.info("[Qwen] LoRAs Composed")
 
             self.set_offload(
                 offload=shared.opts.svdq_cpu_offload,
