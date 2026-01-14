@@ -272,16 +272,12 @@ if args.use_pytorch_cross_attention:
     SAGE_IS_AVAILABLE = False
     FLASH_IS_AVAILABLE = False
 
-try:
-    if is_nvidia():
-        if torch_version_numeric[0] >= 2:
-            if ENABLE_PYTORCH_ATTENTION is False and args.use_split_cross_attention is False:
-                ENABLE_PYTORCH_ATTENTION = True
-    if is_intel_xpu():
-        if args.use_split_cross_attention is False:
-            ENABLE_PYTORCH_ATTENTION = True
-except Exception:
-    pass
+
+if is_nvidia() and torch_version_numeric[0] >= 2:
+    ENABLE_PYTORCH_ATTENTION = True
+elif is_intel_xpu():
+    ENABLE_PYTORCH_ATTENTION = True
+
 
 SUPPORT_FP8_OPS: bool = None
 
@@ -301,14 +297,13 @@ if is_amd():
 
         logger.info("AMD Arch: {}".format(arch))
         logger.info("ROCm Version: {}".format(rocm_version))
-        if args.use_split_cross_attention is False:
-            if importlib.util.find_spec("triton") is not None:
-                if torch_version_numeric >= (2, 7):
-                    if any((a in arch) for a in ["gfx90a", "gfx942", "gfx1100", "gfx1101", "gfx1151"]):
-                        ENABLE_PYTORCH_ATTENTION = True
-                if rocm_version >= (7, 0):
-                    if any((a in arch) for a in ["gfx1201"]):
-                        ENABLE_PYTORCH_ATTENTION = True
+        if importlib.util.find_spec("triton") is not None:
+            if torch_version_numeric >= (2, 7):
+                if any((a in arch) for a in ["gfx90a", "gfx942", "gfx1100", "gfx1101", "gfx1151"]):
+                    ENABLE_PYTORCH_ATTENTION = True
+            if rocm_version >= (7, 0):
+                if any((a in arch) for a in ["gfx1201"]):
+                    ENABLE_PYTORCH_ATTENTION = True
         if torch_version_numeric >= (2, 7) and rocm_version >= (6, 4):
             if any((a in arch) for a in ["gfx1200", "gfx1201", "gfx950"]):
                 SUPPORT_FP8_OPS = True
@@ -1016,6 +1011,12 @@ def xformers_enabled() -> bool:
 
 
 def xformers_enabled_vae() -> bool:
+    if cpu_state is not CPUState.GPU:
+        return False
+    if is_intel_xpu():
+        return False
+    if directml_enabled:
+        return False
     return XFORMERS_ENABLED_VAE
 
 
@@ -1047,17 +1048,14 @@ def pytorch_attention_enabled_vae() -> bool:
     return ENABLE_PYTORCH_ATTENTION and not is_amd()
 
 
-def force_upcast_attention_dtype() -> dict[torch.dtype, torch.dtype] | None:
+def force_upcast_attention_dtype() -> dict[torch.dtype, torch.dtype]:
     upcast: bool = args.force_upcast_attention
 
     macos_version = mac_version()
     if macos_version is not None and macos_version >= (14, 5):
         upcast = True
 
-    if upcast:
-        return {torch.float16: torch.float32}
-    else:
-        return None
+    return {torch.float16: torch.float32} if upcast else {}
 
 
 def get_free_memory(dev: torch.device = None, torch_free_too: bool = False) -> int | tuple[int, int]:

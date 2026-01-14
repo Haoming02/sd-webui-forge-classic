@@ -57,10 +57,7 @@ fpte_group.add_argument("--fp8_e5m2-text-enc", action="store_true", help="Store 
 
 parser.add_argument("--cpu-text-enc", action="store_true", help="Run the text encoder on the CPU")
 
-attn_group = parser.add_mutually_exclusive_group()
-attn_group.add_argument("--use-split-cross-attention", action="store_true", help="Use the split cross attention")
-attn_group.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override xformers/sageattention/flash_attn)")
-
+parser.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override xformers/sageattention/flash_attn)")
 parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention")
 parser.add_argument("--force-upcast-attention", action="store_true", help="Always upcast during attention")
 
