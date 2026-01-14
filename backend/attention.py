@@ -7,7 +7,7 @@ import torch
 from einops import rearrange, repeat
 from torch import einsum
 
-from backend import memory_management
+from backend import memory_management, operations
 from backend.args import args
 from backend.logging import setup_logger
 
@@ -188,7 +188,7 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
             mask = mask.unsqueeze(1)
 
     if SDP_BATCH_LIMIT >= b:
-        out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
+        out = operations.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
         if not skip_output_reshape:
             out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
     else:
@@ -199,7 +199,7 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
                 if mask.shape[0] > 1:
                     m = mask[i : i + SDP_BATCH_LIMIT]
 
-            out[i : i + SDP_BATCH_LIMIT] = torch.nn.functional.scaled_dot_product_attention(q[i : i + SDP_BATCH_LIMIT], k[i : i + SDP_BATCH_LIMIT], v[i : i + SDP_BATCH_LIMIT], attn_mask=m, dropout_p=0.0, is_causal=False).transpose(1, 2).reshape(-1, q.shape[2], heads * dim_head)
+            out[i : i + SDP_BATCH_LIMIT] = operations.scaled_dot_product_attention(q[i : i + SDP_BATCH_LIMIT], k[i : i + SDP_BATCH_LIMIT], v[i : i + SDP_BATCH_LIMIT], attn_mask=m, dropout_p=0.0, is_causal=False).transpose(1, 2).reshape(-1, q.shape[2], heads * dim_head)
 
     return out
 
@@ -278,7 +278,7 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
         ).transpose(1, 2)
     except Exception as e:
         logger.error(f"Error running flash_attn: {e}")
-        out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
+        out = operations.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
     if not skip_output_reshape:
         out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
 
@@ -395,7 +395,7 @@ def pytorch_attention_vae(q, k, v):
     )
 
     try:
-        out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False)
+        out = operations.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False)
         out = out.transpose(2, 3).reshape(orig_shape)
         _fallback = False
     except memory_management.OOM_EXCEPTION:

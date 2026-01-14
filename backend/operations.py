@@ -11,6 +11,32 @@ from backend.args import args
 from backend.patcher.lora import merge_lora_to_weight
 
 
+def scaled_dot_product_attention(q, k, v, *args, **kwargs):
+    return torch.nn.functional.scaled_dot_product_attention(q, k, v, *args, **kwargs)
+
+
+try:
+    if torch.cuda.is_available() and memory_management.WINDOWS:
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+        import inspect
+
+        if "set_priority" in inspect.signature(sdpa_kernel).parameters:
+            SDPA_BACKEND_PRIORITY = [
+                SDPBackend.FLASH_ATTENTION,
+                SDPBackend.EFFICIENT_ATTENTION,
+                SDPBackend.MATH,
+            ]
+
+            SDPA_BACKEND_PRIORITY.insert(0, SDPBackend.CUDNN_ATTENTION)
+
+            def scaled_dot_product_attention(q, k, v, *args, **kwargs):
+                with sdpa_kernel(SDPA_BACKEND_PRIORITY, set_priority=True):
+                    return torch.nn.functional.scaled_dot_product_attention(q, k, v, *args, **kwargs)
+
+except Exception:
+    pass
+
+
 def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
     scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
     loras: dict[str, list[torch.Tensor]] = getattr(layer, "forge_online_loras", dict())
