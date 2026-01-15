@@ -397,8 +397,10 @@ def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
     return
 
 
-def sampling_cleanup(unet):
+def sampling_cleanup(unet: "UnetPatcher"):
     if unet.has_online_lora():
         utils.nested_move_to_device(unet.lora_patches, device=unet.offload_device)
     for cnet in unet.list_controlnets():
         cnet.cleanup()
+    torch.cuda.synchronize()
+    memory_management.soft_empty_cache()
