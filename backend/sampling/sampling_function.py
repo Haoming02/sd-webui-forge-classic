@@ -402,5 +402,10 @@ def sampling_cleanup(unet: "UnetPatcher"):
         utils.nested_move_to_device(unet.lora_patches, device=unet.offload_device)
     for cnet in unet.list_controlnets():
         cnet.cleanup()
-    torch.cuda.synchronize()
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.xpu.is_available():
+        torch.xpu.synchronize()
+
     memory_management.soft_empty_cache()

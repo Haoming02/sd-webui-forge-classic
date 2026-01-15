@@ -89,7 +89,7 @@ parser.add_argument("--disable-smart-memory", action="store_true", help="Aggress
 parser.add_argument("--force-non-blocking", action="store_true", help="Use non-blocking operations for all applicable tensors")
 
 parser.add_argument("--cuda-malloc", action="store_true")
-parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=3, default=None)
+parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=2, default=None)
 parser.add_argument("--pin-shared-memory", action="store_true")
 
 parser.add_argument("--fast-fp8", action="store_true", help="torch._scaled_mm")
