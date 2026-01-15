@@ -202,13 +202,7 @@ else:
         import xformers
         import xformers.ops  # noqa: F401
 
-        try:
-            XFORMERS_IS_AVAILABLE = xformers._has_cpp_library
-        except Exception:
-            XFORMERS_IS_AVAILABLE = False
-        else:
-            XFORMERS_VERSION = xformers.__version__
-            logger.info("xformers Version: {}".format(XFORMERS_VERSION))
+        XFORMERS_IS_AVAILABLE = xformers._has_cpp_library
     except Exception:
         XFORMERS_IS_AVAILABLE = False
 

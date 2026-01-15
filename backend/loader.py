@@ -28,7 +28,7 @@ from backend.utils import (
 
 possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Wan, QwenImage, Lumina2, ZImage]
 
-logger = logging.getLogger("model_loader")
+logger = logging.getLogger("loader")
 setup_logger(logger)
 
 HF = os.path.join(os.path.dirname(__file__), "huggingface")
