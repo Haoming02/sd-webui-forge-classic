@@ -71,7 +71,7 @@ else:
     SDP_BATCH_LIMIT = 2**31
 
 
-# region: Functions
+# region Attentions
 
 
 def attention_basic(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
@@ -311,7 +311,7 @@ else:
     attention_function = attention_basic
 
 
-# region: VAE
+# region VAE
 
 
 def slice_attention_vae(q, k, v):

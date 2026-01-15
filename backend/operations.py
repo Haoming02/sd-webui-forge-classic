@@ -37,6 +37,9 @@ except Exception:
     pass
 
 
+# region Cast
+
+
 def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
     scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
     loras: dict[str, list[torch.Tensor]] = getattr(layer, "forge_online_loras", dict())
@@ -141,7 +144,7 @@ current_manual_cast_enabled: bool = False
 current_bnb_dtype: str = None
 
 
-# region: ForgeOperations
+# region Forge OPs
 
 
 class ForgeOperations:
@@ -398,7 +401,7 @@ class ForgeOperations:
                 return super().forward(x)
 
 
-# region: BnB
+# region BnB
 
 
 if memory_management.bnb_enabled():
@@ -442,7 +445,7 @@ if memory_management.bnb_enabled():
                         return functional_linear_4bits(x, weight, bias)
 
 
-# region: GGUF
+# region GGUF
 
 
 from backend.operations_gguf import dequantize_tensor
@@ -532,7 +535,7 @@ class ForgeOperationsGGUF(ForgeOperations):
                 return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
-# region: fp8
+# region fp8
 
 
 def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
@@ -582,13 +585,13 @@ class fp8Operations(ForgeOperations):
                 if (out := fp8_linear(self, x)) is not None:
                     return out
             except Exception as e:
-                memory_management.logger.error(f"Error duing fp8_fast: {e}")
+                memory_management.logger.error(f"Error during fp8_fast: {e}")
 
             weight, bias = get_weight_and_bias(self)
             return torch.nn.functional.linear(x, weight, bias)
 
 
-# region: Pick ops
+# region Pick OPs
 
 
 @contextlib.contextmanager

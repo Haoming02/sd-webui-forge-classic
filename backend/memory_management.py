@@ -1291,7 +1291,7 @@ def unload_all_models():
     free_memory(1e30, get_torch_device())
 
 
-# region: Streams
+# region Streams
 
 
 STREAMS = {}
@@ -1361,7 +1361,7 @@ def sync_stream(device: torch.device, stream):
     current_stream(device).wait_stream(stream)
 
 
-# region: Pin
+# region Pin
 
 
 PINNED_MEMORY = {}
@@ -1453,7 +1453,7 @@ def unpin_memory(tensor):
     return False
 
 
-# region: Conv3d
+# region Conv3d
 
 
 NVIDIA_CONV3D_WORKAROUND = False

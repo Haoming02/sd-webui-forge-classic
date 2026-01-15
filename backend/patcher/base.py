@@ -163,7 +163,7 @@ def get_key_weight(model, key):
     return weight, set_func, convert_func
 
 
-# region: ModelPatcher
+# region ModelPatcher
 
 
 class ModelPatcher:

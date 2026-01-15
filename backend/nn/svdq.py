@@ -57,7 +57,7 @@ class NunchakuModelMixin(nn.Module):
         return super().to(*args, **kwargs)
 
 
-# region: Flux
+# region Flux
 
 
 class SVDQFluxTransformer2DModel(nn.Module):
@@ -240,7 +240,7 @@ class SVDQT5(torch.nn.Module):
         self.logit_scale = torch.nn.Parameter(torch.tensor(4.6055))
 
 
-# region: Qwen
+# region Qwen
 
 
 from backend.memory_management import xformers_enabled
@@ -791,7 +791,7 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         return super().load_state_dict(sd, *args, **kwargs)
 
 
-# region: Z-Image
+# region Z-Image
 
 from functools import wraps
 
