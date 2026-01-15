@@ -76,7 +76,7 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
         weight_args.pop("dtype")
 
     bias_args = dict(device=target_device, dtype=target_dtype, non_blocking=non_blocking)
-    if skip_bias_dtype:
+    if skip_bias_dtype or bias_has_function:
         bias_args.pop("dtype")
 
     offload_stream, context = None, contextlib.nullcontext()
@@ -101,8 +101,11 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
         weight = weight_fn(weight)
         if not skip_weight_dtype:
             weight = weight.to(dtype=target_dtype)
+
     if bias_has_function:
         bias = bias_fn(bias)
+        if not skip_bias_dtype:
+            bias = bias.to(dtype=target_dtype)
 
     scale_weight: torch.Tensor = getattr(layer, "scale_weight", None)
     if weight is not None and scale_weight is not None:
