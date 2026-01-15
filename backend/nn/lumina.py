@@ -8,13 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import repeat
 
-from backend.memory_management import xformers_enabled
-
-if xformers_enabled():
-    from backend.attention import attention_xformers as attention_function
-else:
-    from backend.attention import attention_pytorch as attention_function
-
+from backend.attention import attention_function
 from backend.nn.flux import EmbedND, apply_rope
 from backend.utils import fp16_fix as clamp_fp16
 from backend.utils import pad_to_patch_size

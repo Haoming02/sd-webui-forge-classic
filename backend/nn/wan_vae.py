@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from einops import rearrange
 
-from backend.attention import attention_function_single_head_spatial as vae_attention
+from backend.attention import attention_function_vae
 from backend.operations import ForgeOperations as ops
 
 CACHE_T = 2
@@ -166,7 +166,7 @@ class AttentionBlock(nn.Module):
         self.norm = RMS_norm(dim)
         self.to_qkv = ops.Conv2d(dim, dim * 3, 1)
         self.proj = ops.Conv2d(dim, dim, 1)
-        self.optimized_attention = vae_attention
+        self.optimized_attention = attention_function_vae
 
     def forward(self, x):
         identity = x

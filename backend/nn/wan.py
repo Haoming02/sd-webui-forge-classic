@@ -9,7 +9,7 @@ import torch.nn as nn
 from einops import repeat
 
 from backend import args
-from backend.attention import attention_function as optimized_attention
+from backend.attention import attention_function
 from backend.memory_management import cast_to_device
 from backend.nn.flux import EmbedND, apply_rope1
 from backend.utils import pad_to_patch_size
@@ -66,7 +66,7 @@ class WanSelfAttention(nn.Module):
         q = qkv_fn_q(x)
         k = qkv_fn_k(x)
 
-        x = optimized_attention(
+        x = attention_function(
             q.view(b, s, n * d),
             k.view(b, s, n * d),
             self.v(x).view(b, s, n * d),
@@ -91,7 +91,7 @@ class WanT2VCrossAttention(WanSelfAttention):
         v = self.v(context)
 
         # compute attention
-        x = optimized_attention(q, k, v, heads=self.num_heads)
+        x = attention_function(q, k, v, heads=self.num_heads)
 
         x = self.o(x)
         return x
@@ -122,9 +122,9 @@ class WanI2VCrossAttention(WanSelfAttention):
         v = self.v(context)
         k_img = self.norm_k_img(self.k_img(context_img))
         v_img = self.v_img(context_img)
-        img_x = optimized_attention(q, k_img, v_img, heads=self.num_heads)
+        img_x = attention_function(q, k_img, v_img, heads=self.num_heads)
         # compute attention
-        x = optimized_attention(q, k, v, heads=self.num_heads)
+        x = attention_function(q, k, v, heads=self.num_heads)
 
         # output
         x = x + img_x

@@ -410,10 +410,10 @@ def pytorch_attention_vae(q, k, v):
 
 if memory_management.xformers_enabled_vae():
     logger.info("Using xformers Attention for VAE")
-    attention_function_single_head_spatial = xformers_attention_vae
+    attention_function_vae = xformers_attention_vae
 elif memory_management.pytorch_attention_enabled():
     logger.info("Using PyTorch Attention for VAE")
-    attention_function_single_head_spatial = pytorch_attention_vae
+    attention_function_vae = pytorch_attention_vae
 else:
     logger.info("Using Slice Attention for VAE")
-    attention_function_single_head_spatial = normal_attention_vae
+    attention_function_vae = normal_attention_vae

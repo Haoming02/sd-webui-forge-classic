@@ -17,8 +17,9 @@ def scaled_dot_product_attention(q, k, v, *args, **kwargs):
 
 try:
     if torch.cuda.is_available() and memory_management.WINDOWS:
-        from torch.nn.attention import SDPBackend, sdpa_kernel
         import inspect
+
+        from torch.nn.attention import SDPBackend, sdpa_kernel
 
         if "set_priority" in inspect.signature(sdpa_kernel).parameters:
             SDPA_BACKEND_PRIORITY = [
