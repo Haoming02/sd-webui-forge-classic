@@ -149,7 +149,19 @@ class ControlNetPatcher(ControlModelPatcher):
 
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
         unet = process.sd_model.forge_objects.unet
-        unet = apply_controlnet_advanced(unet=unet, controlnet=self.model_patcher, image_bchw=cond, strength=self.strength, start_percent=self.start_percent, end_percent=self.end_percent, positive_advanced_weighting=self.positive_advanced_weighting, negative_advanced_weighting=self.negative_advanced_weighting, advanced_frame_weighting=self.advanced_frame_weighting, advanced_sigma_weighting=self.advanced_sigma_weighting, advanced_mask_weighting=self.advanced_mask_weighting)
+        unet = apply_controlnet_advanced(
+            unet=unet,
+            controlnet=self.model_patcher,
+            image_bchw=cond,
+            strength=self.strength,
+            start_percent=self.start_percent,
+            end_percent=self.end_percent,
+            positive_advanced_weighting=self.positive_advanced_weighting,
+            negative_advanced_weighting=self.negative_advanced_weighting,
+            advanced_frame_weighting=self.advanced_frame_weighting,
+            advanced_sigma_weighting=self.advanced_sigma_weighting,
+            advanced_mask_weighting=self.advanced_mask_weighting,
+        )
         process.sd_model.forge_objects.unet = unet
 
 
