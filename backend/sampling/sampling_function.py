@@ -205,7 +205,7 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
             if free_memory_mb < safe_memory_mb:
                 logger = memory_management.logger
 
-                logger.warning("The current free memory for GPU is ~{:.2f} MB".format(free_memory_mb))
+                logger.warning("The current free memory for GPU is {:.2f} MB".format(free_memory_mb))
                 logger.warning("This number is lower than the safe threshold ; This may cause extreme slow performance")
                 logger.warning('You can add "--reserve-vram 2" to keep a larger headroom')
                 logger.warning('You can also (not recommended) add "--disable-gpu-warning" to remove this warning')
