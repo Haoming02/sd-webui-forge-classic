@@ -452,17 +452,48 @@ if memory_management.bnb_enabled():
 # region GGUF
 
 
-from backend.operations_gguf import dequantize_tensor
+from backend.operations_gguf import ParameterGGUF, dequantize_tensor
+
+
+class GGMLLayer:
+    """https://github.com/city96/ComfyUI-GGUF/blob/main/ops.py"""
+
+    def get_weight(self, tensor: torch.Tensor):
+        if tensor is None:
+            return
+
+        weight = dequantize_tensor(tensor)
+        if isinstance(weight, ParameterGGUF):
+            weight = torch.Tensor(weight)
+
+        return weight
+
+    def cast_bias_weight(self, input: torch.Tensor = None, dtype: torch.dtype = None, device: torch.device = None):
+        if input is not None:
+            if dtype is None:
+                dtype = getattr(input, "dtype", torch.float32)
+            if device is None:
+                device = input.device
+
+        non_blocking = memory_management.device_supports_non_blocking(device)
+
+        bias = None
+        if self.bias is not None:
+            bias = self.get_weight(self.bias.to(device=device))
+            bias = memory_management.cast_to(bias, dtype=dtype, device=device, non_blocking=non_blocking, copy=False)
+
+        weight = self.get_weight(self.weight.to(device=device))
+        weight = memory_management.cast_to(weight, dtype=dtype, device=device, non_blocking=non_blocking, copy=False)
+        return weight, bias
 
 
 class ForgeOperationsGGUF(ForgeOperations):
-    class Linear(torch.nn.Module):
+    class Linear(GGMLLayer, torch.nn.Module):
         def __init__(self, *args, **kwargs):
             super().__init__()
             self.dummy = torch.nn.Parameter(torch.empty(1, device=current_device, dtype=current_dtype))
             self.weight = None
             self.bias = None
-            self.parameters_manual_cast = current_manual_cast_enabled
 
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
             if hasattr(self, "dummy"):
@@ -490,24 +521,15 @@ class ForgeOperationsGGUF(ForgeOperations):
             return self
 
         def forward(self, x):
-            if self.bias is not None and self.bias.dtype != x.dtype:
-                self.bias = utils.tensor2parameter(dequantize_tensor(self.bias).to(x.dtype))
+            weight, bias = self.cast_bias_weight(input=x)
+            return torch.nn.functional.linear(x, weight, bias)
 
-            if self.weight is not None and self.weight.dtype != x.dtype and getattr(self.weight, "gguf_cls", None) is None:
-                self.weight = utils.tensor2parameter(self.weight.to(x.dtype))
-
-            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, bias_fn=None, skip_bias_dtype=True)
-            with main_stream_worker(weight, bias, signal):
-                return torch.nn.functional.linear(x, weight, bias)
-
-    class Embedding(torch.nn.Embedding):
+    class Embedding(GGMLLayer, torch.nn.Embedding):
         def __init__(self, *args, **kwargs):
             kwargs["device"] = current_device
             kwargs["dtype"] = current_dtype
             super().__init__(*args, **kwargs)
             self.dummy = torch.nn.Parameter(torch.empty(1, device=current_device, dtype=current_dtype))
-            self.bias = None
-            self.parameters_manual_cast = current_manual_cast_enabled
 
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
             if hasattr(self, "dummy"):
@@ -529,14 +551,9 @@ class ForgeOperationsGGUF(ForgeOperations):
                 setattr(self, k, utils.tensor2parameter(fn(p)))
             return self
 
-        def reset_parameters(self):
-            self.bias = None
-            return None
-
         def forward(self, x):
-            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, bias_fn=None, skip_weight_dtype=True, skip_bias_dtype=True)
-            with main_stream_worker(weight, bias, signal):
-                return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+            weight, _ = self.cast_bias_weight(input=x)
+            return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
 # region fp8
