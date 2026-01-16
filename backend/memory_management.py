@@ -537,7 +537,7 @@ WINDOWS: bool = any(platform.win32_ver())
 
 if args.reserve_vram is not None:
     EXTRA_RESERVED_VRAM = args.reserve_vram * 1024 * 1024 * 1024
-    logger.debug("Reserving {:0.0f} MB VRAM".format(EXTRA_RESERVED_VRAM / (1024 * 1024)))
+    logger.info("Reserving ~{:0.0f} MB VRAM".format(EXTRA_RESERVED_VRAM / (1024 * 1024)))
 else:
     EXTRA_RESERVED_VRAM = 400 * 1024 * 1024
     if WINDOWS:
