@@ -23,7 +23,7 @@ class EnumAction(argparse.Action):
         setattr(namespace, self.dest, value)
 
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(add_help=False)
 
 parser.add_argument("--loglevel", type=str, default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Set the logging level")
 parser.add_argument("--gpu-device-id", type=int, default=None, metavar="DEVICE_ID", help="Set the id of device to use (all other devices will not be visible)")
@@ -57,40 +57,40 @@ fpte_group.add_argument("--fp8_e5m2-text-enc", action="store_true", help="Store 
 
 parser.add_argument("--cpu-text-enc", action="store_true", help="Run the text encoder on the CPU")
 
-parser.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override xformers/sageattention/flash_attn)")
-parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention")
-parser.add_argument("--force-upcast-attention", action="store_true", help="Always upcast during attention")
+parser.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override sageattention/flash_attn/xformers)")
+parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention (meant to use with PyTorch cross attention)")
+parser.add_argument("--force-upcast-attention", action="store_true", help="Always upcast to fp32 during attention")
 
-parser.add_argument("--xformers", action="store_true", help="install xformers")
 parser.add_argument("--sage", action="store_true", help="install sageattention")
 parser.add_argument("--flash", action="store_true", help="install flash_attn")
+parser.add_argument("--xformers", action="store_true", help="install xformers")
 parser.add_argument("--nunchaku", action="store_true", help="install nunchaku for SVDQ inference")
 parser.add_argument("--bnb", action="store_true", help="install bitsandbytes for 4-bit inference")
 parser.add_argument("--onnxruntime-gpu", action="store_true", help="install nightly onnxruntime-gpu with cu130 support")
 
-parser.add_argument("--disable-xformers", action="store_true", help="disable xformers")
 parser.add_argument("--disable-sage", action="store_true", help="disable sageattention")
 parser.add_argument("--disable-flash", action="store_true", help="disable flash_attn")
+parser.add_argument("--disable-xformers", action="store_true", help="disable xformers")
 
 parser.add_argument("--directml", type=int, nargs="?", metavar="DIRECTML_DEVICE", const=-1, help="Use torch-directml")
 parser.add_argument("--disable-ipex-optimize", action="store_true", help="Disable ipex.optimize default when loading models with Intel's Extension for PyTorch")
 parser.add_argument("--deterministic", action="store_true", help="Use slower deterministic algorithms when possible")
 
 vram_group = parser.add_mutually_exclusive_group()
-vram_group.add_argument("--gpu-only", action="store_true", help="Store and run everything on the GPU.")
-vram_group.add_argument("--highvram", action="store_true", help="By default models will be unloaded to RAM after being used. This option keeps them in VRAM.")
-vram_group.add_argument("--normalvram", action="store_true", help="Force NORMAL_VRAM if LOW_VRAM gets automatically enabled.")
-vram_group.add_argument("--lowvram", action="store_true", help="Split the diffusion model in parts to use less VRAM.")
-vram_group.add_argument("--novram", action="store_true", help="When LOW_VRAM still isn't enough.")
-vram_group.add_argument("--cpu", action="store_true", help="To use the CPU for everything (slow).")
+vram_group.add_argument("--gpu-only", action="store_true", help="Store and run everything on the GPU")
+vram_group.add_argument("--highvram", action="store_true", help="Keeps models in VRAM after usage")
+vram_group.add_argument("--normalvram", action="store_true", help="Force NORMAL_VRAM in case LOW_VRAM gets automatically enabled")
+vram_group.add_argument("--lowvram", action="store_true", help="Split the diffusion model in parts to use less VRAM")
+vram_group.add_argument("--novram", action="store_true", help="When even LOW_VRAM is still not enough")
+vram_group.add_argument("--cpu", action="store_true", help="Use the CPU for everything (slow)")
 
 parser.add_argument("--reserve-vram", type=float, default=None, metavar="GB", help="Set the amount of VRAM you want to reserve for other software (by default some amount is reserved)")
 parser.add_argument("--disable-smart-memory", action="store_true", help="Aggressively offload to RAM instead of keeping models in VRAM when possible")
 parser.add_argument("--force-non-blocking", action="store_true", help="Use non-blocking operations for all applicable tensors")
 
-parser.add_argument("--cuda-malloc", action="store_true")
-parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=2, default=None)
-parser.add_argument("--pin-shared-memory", action="store_true")
+parser.add_argument("--cuda-malloc", action="store_true", help="improve memory allocation")
+parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=2, help="improve offloading")
+parser.add_argument("--pin-shared-memory", action="store_true", help="improve RAM utilization")
 
 parser.add_argument("--fast-fp8", action="store_true", help="torch._scaled_mm")
 parser.add_argument("--fast-fp16", action="store_true", help="torch.backends.cuda.matmul.allow_fp16_accumulation")
@@ -124,10 +124,11 @@ class Sage_pv_accum_dtype(enum.Enum):
     fp32fp32 = "fp32+fp32"
 
 
-parser.add_argument("--sage2-function", type=SageAttentionFuncs, default=SageAttentionFuncs.auto, action=EnumAction)
-parser.add_argument("--sage-quantization-backend", type=Sage_quantization_backend, default=Sage_quantization_backend.triton, action=EnumAction)
-parser.add_argument("--sage-quant-gran", type=Sage_qk_quant_gran, default=Sage_qk_quant_gran.per_thread, action=EnumAction)
-parser.add_argument("--sage-accum-dtype", type=Sage_pv_accum_dtype, default=Sage_pv_accum_dtype.fp32, action=EnumAction)
+sage2 = parser.add_argument_group(description="SageAttention 2")
+sage2.add_argument("--sage2-function", type=SageAttentionFuncs, default=SageAttentionFuncs.auto, action=EnumAction)
+sage2.add_argument("--sage-quantization-backend", type=Sage_quantization_backend, default=Sage_quantization_backend.triton, action=EnumAction)
+sage2.add_argument("--sage-quant-gran", type=Sage_qk_quant_gran, default=Sage_qk_quant_gran.per_thread, action=EnumAction)
+sage2.add_argument("--sage-accum-dtype", type=Sage_pv_accum_dtype, default=Sage_pv_accum_dtype.fp32, action=EnumAction)
 
 
 args, _ = parser.parse_known_args()
