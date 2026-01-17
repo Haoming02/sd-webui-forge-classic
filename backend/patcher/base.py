@@ -239,16 +239,12 @@ class ModelPatcher:
 
     def clone(self):
         n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), self.current_device, weight_inplace_update=self.weight_inplace_update)
-        n.patches = {}
-        for k in self.patches:
-            n.patches[k] = self.patches[k][:]
-        n.lora_patches = {}
-        for k in self.lora_patches:
-            n.lora_patches[k] = self.lora_patches[k][:]
+        n.patches = copy.copy(self.patches)
+        n.lora_patches = copy.copy(self.lora_patches)
         n.patches_uuid = self.patches_uuid
         n.backup = self.backup
 
-        n.object_patches = self.object_patches.copy()
+        n.object_patches = copy.copy(self.object_patches)
         n.object_patches_backup = self.object_patches_backup
         n.model_options = copy.deepcopy(self.model_options)
 
