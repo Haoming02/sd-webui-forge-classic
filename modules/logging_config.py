@@ -20,7 +20,6 @@ class TqdmLoggingHandler(logging.Handler):
 
 
 def setup_logging(loglevel: str = None):
-    assert not logging.root.handlers
     loglevel: str = loglevel or os.environ.get("SD_WEBUI_LOG_LEVEL") or logging.ERROR
 
     if os.environ.get("SD_WEBUI_RICH_LOG"):
