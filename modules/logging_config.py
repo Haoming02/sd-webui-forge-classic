@@ -56,7 +56,7 @@ def setup_logging(loglevel: str = None):
             return _orig(*args, **kwargs)
 
         try:
-            return logger.info("".join(args))
+            return logger.info("".join(str(arg) for arg in args))
         except Exception:
             return _orig(*args, **kwargs)
 
