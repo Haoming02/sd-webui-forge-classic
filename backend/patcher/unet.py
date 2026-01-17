@@ -26,7 +26,7 @@ class UnetPatcher(ModelPatcher):
         self.extra_concat_condition = None
 
     def clone(self):
-        n = self.__class__(self.model, self.load_device, self.offload_device, self.size, self.current_device)
+        n = super().clone()
         n.controlnet_linked_list = self.controlnet_linked_list
         n.extra_preserved_memory_during_sampling = self.extra_preserved_memory_during_sampling
         n.extra_model_patchers_during_sampling = self.extra_model_patchers_during_sampling.copy()
