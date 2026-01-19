@@ -21,9 +21,9 @@ class ScriptSampler(scripts.ScriptBuiltinUI):
         scheduler_names = [x.label for x in sd_schedulers.schedulers]
 
         with FormRow(elem_id=f"sampler_selection_{self.tabname}"):
-            self.sampler_name = gr.Dropdown(label="Sampling method", elem_id=f"{self.tabname}_sampling", choices=sampler_names, value=sampler_names[0])
-            self.scheduler = gr.Dropdown(label="Schedule type", elem_id=f"{self.tabname}_scheduler", choices=scheduler_names, value=scheduler_names[0])
-            self.steps = gr.Slider(minimum=1, maximum=150, step=1, elem_id=f"{self.tabname}_steps", label="Sampling steps", value=20)
+            self.sampler_name = gr.Dropdown(label="Sampling Method", elem_id=f"{self.tabname}_sampling", choices=sampler_names, value=sampler_names[0])
+            self.scheduler = gr.Dropdown(label="Schedule Type", elem_id=f"{self.tabname}_scheduler", choices=scheduler_names, value=scheduler_names[0])
+            self.steps = gr.Slider(minimum=1, maximum=150, step=1, elem_id=f"{self.tabname}_steps", label="Sampling Steps", value=20)
 
         self.infotext_fields = [
             PasteField(self.steps, "Steps", api="steps"),

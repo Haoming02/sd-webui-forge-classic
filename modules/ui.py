@@ -75,10 +75,8 @@ detect_image_size_symbol = "\U0001f4d0"  # 📐
 plaintext_to_html = ui_common.plaintext_to_html
 
 
-def send_gradio_gallery_to_image(x):
-    if len(x) == 0:
-        return None
-    return image_from_url_text(x[0])
+def _round(v: float) -> int:
+    return round(v / 64.0) * 64
 
 
 def calc_resolution_hires(enable, width, height, hr_scale, hr_resize_x, hr_resize_y):
@@ -88,24 +86,18 @@ def calc_resolution_hires(enable, width, height, hr_scale, hr_resize_x, hr_resiz
     p = processing.StableDiffusionProcessingTxt2Img(width=width, height=height, enable_hr=True, hr_scale=hr_scale, hr_resize_x=hr_resize_x, hr_resize_y=hr_resize_y)
     p.calculate_target_resolution()
 
-    new_width = p.hr_resize_x or p.hr_upscale_to_x
-    new_height = p.hr_resize_y or p.hr_upscale_to_y
-
-    new_width -= new_width % 8  #   note: hardcoded latent size 8
-    new_height -= new_height % 8
+    new_width = _round(p.hr_resize_x or p.hr_upscale_to_x)
+    new_height = _round(p.hr_resize_y or p.hr_upscale_to_y)
 
     return f"from <span class='resolution'>{p.width}x{p.height}</span> to <span class='resolution'>{new_width}x{new_height}</span>"
 
 
 def resize_from_to_html(width, height, scale_by):
-    target_width = int(float(width) * scale_by)
-    target_height = int(float(height) * scale_by)
+    target_width = _round(int(width) * scale_by)
+    target_height = _round(int(height) * scale_by)
 
     if not target_width or not target_height:
         return "no image selected"
-
-    target_width -= target_width % 8  #   note: hardcoded latent size 8
-    target_height -= target_height % 8
 
     return f"resize: from <span class='resolution'>{width}x{height}</span> to <span class='resolution'>{target_width}x{target_height}</span>"
 
@@ -135,8 +127,6 @@ def update_token_counter(text, steps, styles, *, is_positive=True):
         prompt_schedules = prompt_parser.get_learned_conditioning_prompt_schedules(prompt_flat_list, steps)
 
     except Exception:
-        # a parsing error can happen here during typing, and we don't want to bother the user with
-        # messages related to it in console
         prompt_schedules = [[[steps, text]]]
 
     try:
@@ -241,22 +231,22 @@ def create_ui():
                     elif category == "dimensions":
                         with FormRow():
                             with gr.Column(elem_id="txt2img_column_size", scale=4):
-                                width = gr.Slider(minimum=64, maximum=2048, step=8, label="Width", value=512, elem_id="txt2img_width")
-                                height = gr.Slider(minimum=64, maximum=2048, step=8, label="Height", value=512, elem_id="txt2img_height")
+                                width = gr.Slider(minimum=64, maximum=2048, step=64, label="Width", value=512, elem_id="txt2img_width")
+                                height = gr.Slider(minimum=64, maximum=2048, step=64, label="Height", value=512, elem_id="txt2img_height")
 
                             with gr.Column(elem_id="txt2img_dimensions_row", scale=1, elem_classes="dimensions-tools"):
                                 res_switch_btn = ToolButton(value=switch_values_symbol, elem_id="txt2img_res_switch_btn", tooltip="Switch width/height")
 
                             if opts.dimensions_and_batch_together:
                                 with gr.Column(elem_id="txt2img_column_batch"):
-                                    batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="txt2img_batch_count")
-                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="txt2img_batch_size")
+                                    batch_count = gr.Slider(minimum=1, maximum=128, step=1, label="Batch Count", value=1, elem_id="txt2img_batch_count")
+                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch Size", value=1, elem_id="txt2img_batch_size")
 
                     elif category == "cfg":
                         with gr.Row():
-                            distilled_cfg_scale = gr.Slider(minimum=0.0, maximum=30.0, step=0.1, label="Distilled CFG Scale", value=3.5, elem_id="txt2img_distilled_cfg_scale", scale=4)
-                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.1, label="CFG Scale", value=7.0, elem_id="txt2img_cfg_scale", scale=4)
-                            cfg_scale.change(lambda x: gr.update(interactive=(x != 1)), inputs=[cfg_scale], outputs=[toprow.negative_prompt], queue=False, show_progress=False)
+                            distilled_cfg_scale = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="Distilled CFG Scale", value=3.0, elem_id="txt2img_distilled_cfg_scale", scale=4)
+                            cfg_scale = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="CFG Scale", value=6.0, elem_id="txt2img_cfg_scale", scale=4)
+                            cfg_scale.change(lambda v: gr.update(interactive=(v > 1.0)), inputs=[cfg_scale], outputs=[toprow.negative_prompt], queue=False, show_progress=False)
                             scripts.scripts_txt2img.setup_ui_for_section(category)
 
                     elif category == "accordions":
@@ -268,16 +258,16 @@ def create_ui():
                                 with FormRow(elem_id="txt2img_hires_fix_row1", variant="compact"):
                                     hr_upscaler = gr.Dropdown(label="Upscaler", elem_id="txt2img_hr_upscaler", choices=[*shared.latent_upscale_modes, *[x.name for x in shared.sd_upscalers]], value=shared.latent_upscale_default_mode)
                                     hr_second_pass_steps = gr.Slider(minimum=0, maximum=150, step=1, label="Hires steps", value=0, elem_id="txt2img_hires_steps")
-                                    denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.7, elem_id="txt2img_denoising_strength")
+                                    denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.05, label="Denoising strength", value=0.6, elem_id="txt2img_denoising_strength")
 
                                 with FormRow(elem_id="txt2img_hires_fix_row2", variant="compact"):
                                     hr_scale = gr.Slider(minimum=1.0, maximum=4.0, step=0.05, label="Upscale by", value=2.0, elem_id="txt2img_hr_scale")
-                                    hr_resize_x = gr.Slider(minimum=0, maximum=2048, step=8, label="Resize width to", value=0, elem_id="txt2img_hr_resize_x")
-                                    hr_resize_y = gr.Slider(minimum=0, maximum=2048, step=8, label="Resize height to", value=0, elem_id="txt2img_hr_resize_y")
+                                    hr_resize_x = gr.Slider(minimum=0, maximum=4096, step=64, label="Resize width to", value=0, elem_id="txt2img_hr_resize_x")
+                                    hr_resize_y = gr.Slider(minimum=0, maximum=4096, step=64, label="Resize height to", value=0, elem_id="txt2img_hr_resize_y")
 
                                 with FormRow(elem_id="txt2img_hires_fix_row_cfg", variant="compact"):
-                                    hr_distilled_cfg = gr.Slider(minimum=0.0, maximum=30.0, step=0.1, label="Hires Distilled CFG Scale", value=3.5, elem_id="txt2img_hr_distilled_cfg")
-                                    hr_cfg = gr.Slider(minimum=1.0, maximum=30.0, step=0.1, label="Hires CFG Scale", value=7.0, elem_id="txt2img_hr_cfg")
+                                    hr_distilled_cfg = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="Hires Distilled CFG Scale", value=3.0, elem_id="txt2img_hr_distilled_cfg")
+                                    hr_cfg = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="Hires CFG Scale", value=6.0, elem_id="txt2img_hr_cfg")
 
                                 with FormRow(elem_id="txt2img_hires_fix_row3", variant="compact", visible=shared.opts.hires_fix_show_sampler) as hr_checkpoint_container:
                                     hr_checkpoint_name = gr.Dropdown(label="Hires Checkpoint", elem_id="hr_checkpoint", choices=["Use same checkpoint"] + modules.sd_models.checkpoint_tiles(use_short=True), value="Use same checkpoint", scale=2)
@@ -313,15 +303,15 @@ def create_ui():
                                     with gr.Column():
                                         hr_negative_prompt = gr.Textbox(label="Hires negative prompt", elem_id="hires_neg_prompt", show_label=False, lines=3, placeholder="Negative prompt for hires fix pass.\nLeave empty to use the same negative prompt as in first pass.", elem_classes=["prompt"])
 
-                                hr_cfg.change(lambda x: gr.update(interactive=(x != 1)), inputs=[hr_cfg], outputs=[hr_negative_prompt], queue=False, show_progress=False)
+                                hr_cfg.change(lambda v: gr.update(interactive=(v > 1.0)), inputs=[hr_cfg], outputs=[hr_negative_prompt], queue=False, show_progress=False)
 
                             scripts.scripts_txt2img.setup_ui_for_section(category)
 
                     elif category == "batch":
                         if not opts.dimensions_and_batch_together:
                             with FormRow(elem_id="txt2img_column_batch"):
-                                batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="txt2img_batch_count")
-                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="txt2img_batch_size")
+                                batch_count = gr.Slider(minimum=1, maximum=128, step=1, label="Batch Count", value=1, elem_id="txt2img_batch_count")
+                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch Size", value=1, elem_id="txt2img_batch_size")
 
                     elif category == "override_settings":
                         with FormRow(elem_id="txt2img_override_settings_row") as row:
@@ -590,7 +580,7 @@ def create_ui():
                             )
 
                         with FormRow():
-                            resize_mode = gr.Radio(label="Resize mode", elem_id="resize_mode", choices=["Just resize", "Crop and resize", "Resize and fill", "Just resize (latent upscale)"], type="index", value="Just resize")
+                            resize_mode = gr.Radio(label="Resize mode", elem_id="resize_mode", choices=["Just resize", "Crop and resize", "Resize and fill", "Just resize (latent upscale)"], type="index", value="Crop and resize")
 
                     elif category == "dimensions":
                         with FormRow():
@@ -601,14 +591,14 @@ def create_ui():
                                     with gr.Tab(label="Resize to", id="to", elem_id="img2img_tab_resize_to") as tab_scale_to:
                                         with FormRow():
                                             with gr.Column(elem_id="img2img_column_size", scale=4):
-                                                width = gr.Slider(minimum=64, maximum=2048, step=8, label="Width", value=512, elem_id="img2img_width")
-                                                height = gr.Slider(minimum=64, maximum=2048, step=8, label="Height", value=512, elem_id="img2img_height")
+                                                width = gr.Slider(minimum=64, maximum=2048, step=64, label="Width", value=512, elem_id="img2img_width")
+                                                height = gr.Slider(minimum=64, maximum=2048, step=64, label="Height", value=512, elem_id="img2img_height")
                                             with gr.Column(elem_id="img2img_dimensions_row", scale=1, elem_classes="dimensions-tools"):
                                                 res_switch_btn = ToolButton(value=switch_values_symbol, elem_id="img2img_res_switch_btn", tooltip="Switch width/height")
                                                 detect_image_size_btn = ToolButton(value=detect_image_size_symbol, elem_id="img2img_detect_image_size_btn", tooltip="Auto detect size from img2img")
 
                                     with gr.Tab(label="Resize by", id="by", elem_id="img2img_tab_resize_by") as tab_scale_by:
-                                        scale_by = gr.Slider(minimum=0.05, maximum=4.0, step=0.01, label="Scale", value=1.0, elem_id="img2img_scale")
+                                        scale_by = gr.Slider(minimum=0.5, maximum=4.0, step=0.05, label="Scale", value=1.0, elem_id="img2img_scale")
 
                                         with FormRow():
                                             scale_by_html = FormHTML(resize_from_to_html(0, 0, 0.0), elem_id="img2img_scale_resolution_preview")
@@ -642,18 +632,18 @@ def create_ui():
 
                             if opts.dimensions_and_batch_together:
                                 with gr.Column(elem_id="img2img_column_batch"):
-                                    batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="img2img_batch_count")
-                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="img2img_batch_size")
+                                    batch_count = gr.Slider(minimum=1, maximum=128, step=1, label="Batch Count", value=1, elem_id="img2img_batch_count")
+                                    batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch Size", value=1, elem_id="img2img_batch_size")
 
                     elif category == "denoising":
-                        denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising strength", value=0.75, elem_id="img2img_denoising_strength")
+                        denoising_strength = gr.Slider(minimum=0.0, maximum=1.0, step=0.01, label="Denoising Strength", value=0.6, elem_id="img2img_denoising_strength")
 
                     elif category == "cfg":
                         with gr.Row():
-                            distilled_cfg_scale = gr.Slider(minimum=0.0, maximum=30.0, step=0.1, label="Distilled CFG Scale", value=3.5, elem_id="img2img_distilled_cfg_scale", scale=4)
-                            cfg_scale = gr.Slider(minimum=1.0, maximum=30.0, step=0.1, label="CFG Scale", value=7.0, elem_id="img2img_cfg_scale", scale=4)
+                            distilled_cfg_scale = gr.Slider(minimum=0.0, maximum=24.0, step=0.5, label="Distilled CFG Scale", value=3.0, elem_id="img2img_distilled_cfg_scale", scale=4)
+                            cfg_scale = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="CFG Scale", value=6.0, elem_id="img2img_cfg_scale", scale=4)
                             image_cfg_scale = gr.Slider(minimum=0, maximum=3.0, step=0.05, label="Image CFG Scale", value=1.5, elem_id="img2img_image_cfg_scale", visible=False)
-                            cfg_scale.change(lambda x: gr.update(interactive=(x != 1)), inputs=[cfg_scale], outputs=[toprow.negative_prompt], queue=False, show_progress=False)
+                            cfg_scale.change(lambda v: gr.update(interactive=(v > 1.0)), inputs=[cfg_scale], outputs=[toprow.negative_prompt], queue=False, show_progress=False)
                             scripts.scripts_img2img.setup_ui_for_section(category)
 
                     elif category == "accordions":
@@ -663,8 +653,8 @@ def create_ui():
                     elif category == "batch":
                         if not opts.dimensions_and_batch_together:
                             with FormRow(elem_id="img2img_column_batch"):
-                                batch_count = gr.Slider(minimum=1, step=1, label="Batch count", value=1, elem_id="img2img_batch_count")
-                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch size", value=1, elem_id="img2img_batch_size")
+                                batch_count = gr.Slider(minimum=1, maximum=128, step=1, label="Batch Count", value=1, elem_id="img2img_batch_count")
+                                batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch Size", value=1, elem_id="img2img_batch_size")
 
                     elif category == "override_settings":
                         with FormRow(elem_id="img2img_override_settings_row") as row:
@@ -677,7 +667,7 @@ def create_ui():
                     elif category == "inpaint":
                         with FormGroup(elem_id="inpaint_controls", visible=False) as inpaint_controls:
                             with FormRow():
-                                mask_blur = gr.Slider(label="Mask blur", minimum=0, maximum=64, step=1, value=4, elem_id="img2img_mask_blur")
+                                mask_blur = gr.Slider(label="Mask blur", minimum=0, maximum=64, step=4, value=4, elem_id="img2img_mask_blur")
                                 mask_alpha = gr.Slider(label="Mask transparency", visible=False, elem_id="img2img_mask_alpha")
 
                             with FormRow():
@@ -688,10 +678,10 @@ def create_ui():
 
                             with FormRow():
                                 with gr.Column():
-                                    inpaint_full_res = gr.Radio(label="Inpaint area", choices=["Whole picture", "Only masked"], type="index", value="Whole picture", elem_id="img2img_inpaint_full_res")
+                                    inpaint_full_res = gr.Radio(label="Inpaint area", choices=["Whole picture", "Only masked"], type="index", value="Only masked", elem_id="img2img_inpaint_full_res")
 
                                 with gr.Column(scale=4):
-                                    inpaint_full_res_padding = gr.Slider(label="Only masked padding, pixels", minimum=0, maximum=256, step=4, value=32, elem_id="img2img_inpaint_full_res_padding")
+                                    inpaint_full_res_padding = gr.Slider(label="Only masked padding, pixels", minimum=0, maximum=256, step=8, value=32, elem_id="img2img_inpaint_full_res_padding")
 
                     if category not in {"accordions", "cfg"}:
                         scripts.scripts_img2img.setup_ui_for_section(category)

@@ -264,7 +264,7 @@ def on_preset_change(preset: str):
 
     extra_slider = preset in ("flux", "lumina", "wan")
     distill_label = "Distilled CFG Scale" if preset == "flux" else "Shift"
-    batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch size", "value": 1}
+    batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": 1}
 
     global _prev, _pending
     _pending = str(additional_modules) != _prev

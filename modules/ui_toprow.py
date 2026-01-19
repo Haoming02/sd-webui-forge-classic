@@ -84,11 +84,11 @@ class Toprow:
     def create_prompts(self):
         with gr.Column(elem_id=f"{self.id_part}_prompt_container", elem_classes=self._container_class(), scale=6):
             with gr.Row(elem_id=f"{self.id_part}_prompt_row", elem_classes=["prompt-row"]):
-                self.prompt = gr.Textbox(label="Prompt", elem_id=f"{self.id_part}_prompt", show_label=False, lines=3, placeholder="Prompt\n(Press Ctrl+Enter to generate, Alt+Enter to skip, Esc to interrupt)", elem_classes=["prompt"], value="")
-                self.prompt_img = gr.File(label="", elem_id=f"{self.id_part}_prompt_image", file_count="single", type="binary", visible=False)
+                self.prompt = gr.Textbox(label="Prompt", elem_id=f"{self.id_part}_prompt", show_label=False, lines=3, placeholder="Prompt\n(Ctrl+Enter to Generate ; Alt+Enter to Skip ; Esc to Interrupt)", elem_classes=["prompt"])
+                self.prompt_img = gr.File(elem_id=f"{self.id_part}_prompt_image", file_count="single", type="binary", visible=False)
 
             with gr.Row(elem_id=f"{self.id_part}_neg_prompt_row", elem_classes=["prompt-row"]):
-                self.negative_prompt = gr.Textbox(label="Negative prompt", elem_id=f"{self.id_part}_neg_prompt", show_label=False, lines=3, placeholder="Negative prompt\n(Press Ctrl+Enter to generate, Alt+Enter to skip, Esc to interrupt)", elem_classes=["prompt"], value="")
+                self.negative_prompt = gr.Textbox(label="Negative Prompt", elem_id=f"{self.id_part}_neg_prompt", show_label=False, lines=3, placeholder="Negative Prompt\n(Ctrl+Enter to Generate ; Alt+Enter to Skip ; Esc to Interrupt)", elem_classes=["prompt"])
 
         self.prompt_img.change(
             fn=modules.images.image_data,
@@ -119,7 +119,11 @@ class Toprow:
 
     def create_tools_row(self):
         with gr.Row(elem_id=f"{self.id_part}_tools"):
-            from modules.ui import clear_prompt_symbol, paste_symbol, restore_progress_symbol
+            from modules.ui import (
+                clear_prompt_symbol,
+                paste_symbol,
+                restore_progress_symbol,
+            )
 
             self.paste = ToolButton(value=paste_symbol, elem_id="paste", tooltip="Read generation parameters from prompt or last generation if prompt is empty into user interface.")
             self.clear_prompt_button = ToolButton(value=clear_prompt_symbol, elem_id=f"{self.id_part}_clear_prompt", tooltip="Clear prompt")
@@ -137,6 +141,7 @@ class Toprow:
                 _js="confirm_clear_prompt",
                 inputs=[self.prompt, self.negative_prompt],
                 outputs=[self.prompt, self.negative_prompt],
+                show_progress=False,
             )
 
     def create_styles_ui(self):
@@ -153,6 +158,6 @@ class Toprow:
             fn=guard,
             inputs=[self.negative_prompt],
             outputs=[self.paste],
-            show_progress="hidden",
+            show_progress=False,
             queue=False,
         )
