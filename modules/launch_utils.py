@@ -547,6 +547,8 @@ def verify_version():
     if settings.get("VERSION_UID", None) == VERSION_UID:
         return  # key matches
 
+    os.system("")
+
     w: int = os.get_terminal_size().columns
     R: Final[str] = "\033[0m"
     E: Final[str] = "\033[0;31m"
