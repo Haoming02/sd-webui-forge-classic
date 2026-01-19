@@ -112,6 +112,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 #### Optimizations
 
+- [X] **[Comfy]** Rewrite the Backend *(`memory_management.py`, `ModelPatcher`, `attention.py`, etc.)*
 - [X] No longer `git` `clone` any repository on fresh install
 - [X] Fix memory leak when switching checkpoints
 - [X] Speed up launch time
@@ -171,36 +172,20 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 ## Commandline
 > These flags can be added after the `set COMMANDLINE_ARGS=` line in the `webui-user.bat` *(separate each flag with space)*
 
-#### A1111 built-in
+> [!Tip]
+> Use `python launch.py --help` to see all available flags
 
 - `--xformers`: Install the `xformers` package to speed up generation
 - `--port`: Specify a server port to use
     - defaults to `7860`
 - `--api`: Enable [API](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/API) access
 
-<br>
+#### by. Neo
 
-- Once you have successfully launched the WebUI, you can add the following flags to bypass some validation steps in order to improve the Startup time
-    - `--skip-prepare-environment`
-    - `--skip-install`
-    - `--skip-python-version-check`
-    - `--skip-torch-cuda-test`
-    - `--skip-version-check`
-
-> [!Important]
-> Remove them if you are installing an Extension, as those also block Extension from installing requirements
-
-#### by. Forge
-
-- For RTX **30** and above, you can add the following flags to slightly increase the performance; but in rare occurrences, they may cause `OutOfMemory` errors or even crash the WebUI; and in certain configurations, they may even lower the speed instead
+- Add the following flags to slightly improve the model loading; in certain situations, they may cause `OutOfMemory` errors instead...
     - `--cuda-malloc`
     - `--cuda-stream`
     - `--pin-shared-memory`
-
-- `--forge-ref-a1111-home`: Point to an Automatic1111 installation to load its `models` folders
-    - **i.e.** `Stable-diffusion`, `text_encoder`
-
-#### by. Neo
 
 - `--uv`: Replace the `python -m pip` calls with `uv pip` to massively speed up package installation
     - requires **uv** to be installed first *(see [Installation](#installation))*
@@ -210,14 +195,17 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > Using `symlink` means it will directly access the packages from the cache folders; refrain from clearing the cache when setting this option
 
-- `--forge-ref-comfy-home`: Point to a ComfyUI installation to load its `models` folders
-    - **i.e.** `diffusion_models`, `clip`
-
 - `--model-ref`: Points to a central `models` folder that contains all your models
     - said folder should contain subfolders like `Stable-diffusion`, `Lora`, `VAE`, `ESRGAN`, etc.
 
 > [!Important]
 > This simply **replaces** the `models` folder, rather than adding on top of it
+
+- `--forge-ref-a1111-home`: Point to an Automatic1111 installation to load its `models` folders
+    - **i.e.** `Stable-diffusion`, `text_encoder`
+
+- `--forge-ref-comfy-home`: Point to a ComfyUI installation to load its `models` folders
+    - **i.e.** `diffusion_models`, `clip`
 
 - `--sage`: Install the `sageattention` package to speed up generation
     - will also attempt to install `triton` automatically
@@ -225,21 +213,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - `--nunchaku`: Install the `nunchaku` package to inference SVDQ models
 - `--bnb`: Install the `bitsandbytes` package to do low-bits (`nf4`) inference
 - `--onnxruntime-gpu`: Install the `onnxruntime` with the latest GPU support
+- `--fast-fp8`: Use the `torch._scaled_mm` function when the model type is `float8_e4m3fn`
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
-
-<details>
-<summary>with SageAttention 2</summary>
-
-- `--sage2-function`: Select the function used by **SageAttention 2**
-    - **options:**
-        - `auto` (default)
-        - `fp16_triton`
-        - `fp16_cuda`
-        - `fp8_cuda`
-
-> If you are getting `NaN` errors, try play around with them
-
-</details>
+- `--autotune`: Enable the `torch.backends.cudnn.benchmark` option
+    - this is slower in my experience...
 
 <br>
 
@@ -292,6 +269,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > The `--xformers`, `--flash`, and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used *(this also means you can remove them once the packages are successfully installed)*
 
+> [!Caution]
+> Do **not** just blindly install all of them <br>
+> Nowadays the native PyTorch `scaled_dot_product_attention` is usually as fast, and also more stable
+
 **Forge Neo** tries to import the packages and automatically choose the first available attention function in the following order:
 
 1. `SageAttention`
@@ -303,18 +284,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Tip]
 > To skip a specific attention, add the respective disable arg such as `--disable-sage`
 
-> [!Note]
-> The **VAE** only checks for `xformers`, so `--xformers` is still recommended even if you already have `--sage`
-
-In my experience, the speed of each attention function for SDXL is ranked in the following order:
-
-- `SageAttention` ≥ `FlashAttention` > `xformers` > `PyTorch` >> `Basic`
-
-<br>
-
-> [!Tip]
-> Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki)~
-
 <br>
 
 ## Issues & Requests
@@ -325,10 +294,22 @@ In my experience, the speed of each attention function for SDXL is ranked in the
 
 </details>
 
+<br>
+
+> [!Tip]
+> Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki)~
+
 <hr>
 
 <p align="center">
 Special thanks to <b>AUTOMATIC1111</b>, <b>lllyasviel</b>, and <b>comfyanonymous</b>, <b>kijai</b>, <b>city96</b>, <br>
 along with the rest of the contributors, <br>
 for their invaluable efforts in the open-source image generation community
+</p>
+
+<br>
+
+<p align="right">
+<sub><i>Buy me a <a href="https://ko-fi.com/Haoming">Coffee</a>~ ☕
+</i></sub>
 </p>
