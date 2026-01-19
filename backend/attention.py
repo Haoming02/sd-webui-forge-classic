@@ -287,15 +287,18 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
 
 if memory_management.sage_enabled():
     attention_function = attention_sage
-    match args.sage2_function:
-        case SageAttentionFuncs.auto:
-            logger.info(f"Using SageAttention {'2' if IS_SAGE_2 else ''}")
-        case SageAttentionFuncs.fp16_triton:
-            logger.info("Using SageAttention (fp16 Triton)")
-        case SageAttentionFuncs.fp16_cuda:
-            logger.info("Using SageAttention (fp16 CUDA)")
-        case SageAttentionFuncs.fp8_cuda:
-            logger.info("Using SageAttention (fp8 CUDA)")
+    if not IS_SAGE_2:
+        logger.info("Using SageAttention")
+    else:
+        match args.sage2_function:
+            case SageAttentionFuncs.auto:
+                logger.info("Using SageAttention 2")
+            case SageAttentionFuncs.fp16_triton:
+                logger.info("Using SageAttention (fp16 Triton)")
+            case SageAttentionFuncs.fp16_cuda:
+                logger.info("Using SageAttention (fp16 CUDA)")
+            case SageAttentionFuncs.fp8_cuda:
+                logger.info("Using SageAttention (fp8 CUDA)")
 
 elif memory_management.flash_enabled():
     logger.info("Using FlashAttention")
