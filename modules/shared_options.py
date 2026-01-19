@@ -4,7 +4,6 @@ import gradio as gr
 
 from backend.text_processing import emphasis as sd_emphasis
 from modules import localization, shared, shared_gradio_themes, shared_items, ui_components, util
-from modules.launch_utils import VERSION_UID
 from modules.options import OptionDiv, OptionHTML, OptionInfo, categories, options_section
 from modules.paths_internal import data_path, default_output_dir
 from modules.shared_cmd_options import cmd_opts
@@ -165,8 +164,6 @@ options_templates.update(
     options_section(
         ("system", "System", "system"),
         {
-            "VERSION_UID": OptionInfo(VERSION_UID, "", gr.Textbox, {"lines": 1, "max_lines": 1, "interactive": False}).info("internal version for breaking-changes"),
-            "divuid": OptionDiv(),
             "auto_launch_browser": OptionInfo("Local", "Launch the webui in browser on startup", gr.Radio, {"choices": ("Disable", "Local", "Remote")}).info("Remote = always automatically start; Local = only when not sharing the server, such as <b>--share</b>"),
             "enable_console_prompts": OptionInfo(False, "Print the generation prompts to console"),
             "samples_log_stdout": OptionInfo(False, "Print the generation infotxt to console"),
