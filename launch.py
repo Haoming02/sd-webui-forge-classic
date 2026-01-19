@@ -34,6 +34,8 @@ def main():
 
         exit(0)
 
+    launch_utils.verify_version()
+
     launch_utils.startup_timer.record("initial startup")
 
     with launch_utils.startup_timer.subcategory("prepare environment"):

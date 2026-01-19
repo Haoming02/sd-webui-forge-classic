@@ -12,7 +12,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, Final, NamedTuple
 
 from modules import cmd_args, errors
 from modules.paths_internal import extensions_builtin_dir, extensions_dir, script_path
@@ -530,3 +530,40 @@ def dump_sysinfo():
         file.write(text)
 
     return filename
+
+
+VERSION_UID: Final[str] = "POSTMEM"
+
+
+def verify_version():
+    """prompt user to do a clean reinstall"""
+    settings_file: os.PathLike = args.ui_settings_file
+    if not os.path.isfile(settings_file):
+        return  # config.json does not exist on a fresh git clone
+
+    with open(settings_file, "r", encoding="utf8") as file:
+        settings: dict[str, Any] = json.load(file)
+
+    if settings.get("VERSION_UID", None) == VERSION_UID:
+        return  # key matches
+
+    w: int = os.get_terminal_size().columns
+    R: Final[str] = "\033[0m"
+    E: Final[str] = "\033[0;31m"
+    Y: Final[str] = "\033[0;33m"
+    B: Final[str] = "\033[0;36m"
+    G: Final[str] = "\033[0;90m"
+    T: Final[str] = " " * 7
+
+    print("\n\n")
+    print("=" * w)
+
+    print(f"{Y}ALERT:{R} You are updating from an old version...")
+    print(f"{T}The recent WebUI updates include breaking changes!")
+    print(f"{T}Please perform a {E}clean reinstall{R}! Remember to {B}back up{R} the models!")
+    print(f"{T}{G}(alternatively, simply remove the config.json and ui-config.json files){R}")
+
+    print("=" * w)
+    print("\n\n")
+
+    input("Press Enter to Continue...")
