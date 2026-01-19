@@ -29,6 +29,9 @@ parser.add_argument("--loglevel", type=str, default=None, choices=["DEBUG", "INF
 parser.add_argument("--gpu-device-id", type=int, default=None, metavar="DEVICE_ID", help="Set the id of device to use (all other devices will not be visible)")
 parser.add_argument("--disable-gpu-warning", action="store_true", help="Disable the low VRAM warnings")
 
+parser.add_argument("--text-enc-device", type=str, default=None, metavar="DEVICE", help='Set the device to load text encoder (e.g. "cuda:1")')
+parser.add_argument("--vae-device", type=str, default=None, metavar="DEVICE", help='Set the device to load VAE (e.g. "cuda:1")')
+
 fp_group = parser.add_mutually_exclusive_group()
 fp_group.add_argument("--force-fp32", action="store_true", help="Force fp32")
 fp_group.add_argument("--force-fp16", action="store_true", help="Force fp16")

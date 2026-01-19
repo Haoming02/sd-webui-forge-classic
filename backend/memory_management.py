@@ -847,6 +847,8 @@ def text_encoder_offload_device() -> torch.device:
 
 
 def text_encoder_device() -> torch.device:
+    if args.text_enc_device is not None:
+        return torch.device(args.text_enc_device)
     if args.gpu_only:
         return get_torch_device()
     if args.cpu_text_enc:
@@ -895,6 +897,8 @@ def intermediate_device() -> torch.device:
 
 
 def vae_device() -> torch.device:
+    if args.vae_device is not None:
+        return torch.device(args.vae_device)
     return cpu if args.cpu_vae else get_torch_device()
 
 
