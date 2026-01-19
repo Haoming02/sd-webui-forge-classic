@@ -9,7 +9,7 @@ from rich import print_json
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.logging import setup_logger
-from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
+from modules import infotext_utils, launch_utils, paths, processing, sd_models, shared, shared_items, ui_common
 
 # prevent duplicate logs when switching Presets
 _prev: str = None
@@ -207,6 +207,8 @@ def get_a1111_ui_component(tab: str, label: str) -> gr.components.Component:
 
 
 def forge_main_entry():
+    shared.opts.set("VERSION_UID", launch_utils.VERSION_UID)
+
     ui_txt2img_width = get_a1111_ui_component("txt2img", "Size-1")
     ui_txt2img_height = get_a1111_ui_component("txt2img", "Size-2")
     ui_txt2img_cfg = get_a1111_ui_component("txt2img", "CFG scale")
