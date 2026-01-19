@@ -513,8 +513,8 @@ options_templates.update(
             ),
             "live_preview_fast_interrupt": OptionInfo(False, "Return image with the selected preview method on interruption").info("speed up interruption"),
             "js_live_preview_in_modal_lightbox": OptionInfo(False, "Show the live previews in full page image viewer"),
-            "show_progress_every_n_steps": OptionInfo(10, "Generate live preview every N step", gr.Slider, {"minimum": -1, "maximum": 32, "step": 1}).info("-1 = only after completion of a batch"),
-            "live_preview_refresh_period": OptionInfo(1000, "Progress Bar and Preview update interval").info("in ms"),
+            "show_progress_every_n_steps": OptionInfo(1, "Generate live preview every N step", gr.Slider, {"minimum": -1, "maximum": 32, "step": 1}).info("-1 = only after completion of a batch"),
+            "live_preview_refresh_period": OptionInfo(500, "Progress Bar and Preview update interval").info("in ms"),
             "prevent_screen_sleep_during_generation": OptionInfo(True, "Force the screen to stay awake during generation"),
         },
     )
