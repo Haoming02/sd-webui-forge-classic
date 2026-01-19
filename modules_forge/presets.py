@@ -7,7 +7,6 @@ from enum import Enum
 
 import gradio as gr
 
-from backend.memory_management import total_vram
 from modules.shared_items import list_samplers, list_schedulers
 
 
@@ -67,8 +66,6 @@ CFG = {
 
 
 def register(options_templates: dict, options_section: Callable, OptionInfo: "OptionInfo"):
-    inference_vram = int(total_vram - (1024 if total_vram < 8200 else 2048))
-
     for arch in PresetArch:
         name = arch.name
 
@@ -109,7 +106,6 @@ def register(options_templates: dict, options_section: Callable, OptionInfo: "Op
                     f"{name}_i2i_width": OptionInfo(w, "img2img Width", gr.Slider, {"minimum": 64, "maximum": 2048, "step": 8}),
                     f"{name}_i2i_height": OptionInfo(h, "img2img Height", gr.Slider, {"minimum": 64, "maximum": 2048, "step": 8}),
                     f"{name}_i2i_cfg": OptionInfo(cfg, "img2img CFG", gr.Slider, {"minimum": 1, "maximum": 30, "step": 0.1}),
-                    f"{name}_gpu_mb": OptionInfo(inference_vram, "GPU Weights (MB)", gr.Slider, {"visible": (arch is not PresetArch.sd), "minimum": 0, "maximum": total_vram, "step": 1}),
                 },
             )
         )
