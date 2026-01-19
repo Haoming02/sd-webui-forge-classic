@@ -53,7 +53,6 @@ class UMT5TextProcessingEngine:
 
     def encode_with_transformers(self, tokens, attention_mask):
         tokens = tokens.to(self.device)
-        self.text_encoder.shared.to(device=self.device, dtype=torch.float32)
         return self.text_encoder(input_ids=tokens, attention_mask=attention_mask)
 
     def tokenize_line(self, line):

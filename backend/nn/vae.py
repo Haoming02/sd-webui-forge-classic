@@ -1,9 +1,8 @@
-import numpy as np
 import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from torch import nn
 
-from backend.attention import attention_function_single_head_spatial
+from backend.attention import attention_function_vae
 
 
 def nonlinearity(x):
@@ -137,7 +136,7 @@ class AttnBlock(nn.Module):
         q = self.q(h_)
         k = self.k(h_)
         v = self.v(h_)
-        h_ = attention_function_single_head_spatial(q, k, v)
+        h_ = attention_function_vae(q, k, v)
         h_ = self.proj_out(h_)
         return x + h_
 
@@ -221,7 +220,6 @@ class Decoder(nn.Module):
         block_in = ch * ch_mult[self.num_resolutions - 1]
         curr_res = resolution // 2 ** (self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res, curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
 
         self.conv_in = nn.Conv2d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
 

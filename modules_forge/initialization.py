@@ -40,13 +40,7 @@ def initialize_forge():
     torch.zeros((1, 1)).to(device, torch.float32)
     memory_management.soft_empty_cache()
 
-    startup_timer.record("tensor warmup")
-
-    from backend import stream
-
-    print("CUDA Using Stream:", stream.should_use_stream())
-
-    startup_timer.record("stream")
+    startup_timer.record("warmup")
 
     from modules_forge.shared import diffusers_dir
 

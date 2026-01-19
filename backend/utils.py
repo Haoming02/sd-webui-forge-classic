@@ -1,7 +1,7 @@
 import json
-import os
+import math
+import os.path
 
-import gguf
 import safetensors
 import torch
 from einops import rearrange, repeat
@@ -9,30 +9,31 @@ from einops import rearrange, repeat
 from backend.args import args
 from backend.operations_gguf import ParameterGGUF
 from modules import safe
+from modules_forge.packages import gguf
 
 MMAP_TORCH_FILES = args.mmap_torch_files
 DISABLE_MMAP = args.disable_mmap
 
 
-def read_arbitrary_config(directory):
+def read_arbitrary_config(directory: os.PathLike) -> dict:
     config_path = os.path.join(directory, "config.json")
 
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"No config.json file found in the directory: {directory}")
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(f'No config.json file found in "{directory}"')
 
-    with open(config_path, "rt", encoding="utf-8") as file:
+    with open(config_path, "r", encoding="utf-8") as file:
         config_data = json.load(file)
 
     return config_data
 
 
-def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=False):
+def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=False) -> dict[str, torch.Tensor]:
     """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/utils.py#L53"""
     if device is None:
         device = torch.device("cpu")
 
     metadata = None
-    if ckpt.lower().endswith(".safetensors") or ckpt.lower().endswith(".sft"):
+    if ckpt.lower().endswith((".safetensors", ".sft")):
         try:
             with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:
                 sd = {}
@@ -43,11 +44,8 @@ def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=
                     sd[k] = tensor
                 if return_metadata:
                     metadata = f.metadata()
-        except Exception as e:
-            if len(e.args) > 0:
-                if "HeaderTooLarge" in e.args[0] or "MetadataIncompleteBuffer" in e.args[0]:
-                    raise ValueError(f'\nModel: "{ckpt}" is corrupt or invalid...\nPlease download the model again')
-            raise e
+        except Exception:
+            raise ValueError(f'\nModel "{ckpt}" is corrupt or invalid...\nPlease download the model again\n') from None
 
     elif ckpt.lower().endswith(".gguf"):
         reader = gguf.GGUFReader(ckpt)
@@ -82,10 +80,7 @@ def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=
 
 
 def set_attr(obj, attr, value):
-    attrs = attr.split(".")
-    for name in attrs[:-1]:
-        obj = getattr(obj, name)
-    setattr(obj, attrs[-1], torch.nn.Parameter(value, requires_grad=False))
+    set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
 
 
 def set_attr_raw(obj, attr, value):
@@ -120,12 +115,39 @@ def get_attr_with_parent(obj, attr):
     return parent, name, obj
 
 
-def calculate_parameters(sd, prefix=""):
+def calculate_parameters(sd: dict[str, torch.Tensor], prefix: str = "") -> int:
     params = 0
     for k in sd.keys():
         if k.startswith(prefix):
             params += sd[k].nelement()
     return params
+
+
+def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype | str:
+    if sd.pop("scaled_fp8", None) is not None:
+        return torch.float8_e4m3fn
+    if sd.pop("transformer.scaled_fp8", None) is not None:
+        return torch.float8_e4m3fn
+
+    for k, v in sd.items():
+        if hasattr(v, "gguf_cls"):
+            return "gguf"
+        if "bitsandbytes__nf4" in k:
+            return "nf4"
+        if "bitsandbytes__fp4" in k:
+            return "fp4"
+
+    dtypes: dict[torch.dtype, int] = {}
+    for k in sd.keys():
+        if k.startswith(prefix):
+            w = sd[k]
+            dtypes[w.dtype] = dtypes.get(w.dtype, 0) + w.numel()
+
+    if len(dtypes) == 0:
+        return None
+
+    dtypes = {_d: dtypes[_d] for _d in dtypes if _d.is_floating_point}
+    return max(dtypes, key=dtypes.get)
 
 
 def tensor2parameter(x):
@@ -205,6 +227,27 @@ def beautiful_print_gguf_state_dict_statics(state_dict):
                 type_counts[type_name] = 1
     print(f"GGUF state dict: {type_counts}")
     return
+
+
+def resize_to_batch_size(tensor, batch_size):
+    in_batch_size = tensor.shape[0]
+    if in_batch_size == batch_size:
+        return tensor
+
+    if batch_size <= 1:
+        return tensor[:batch_size]
+
+    output = torch.empty([batch_size] + list(tensor.shape)[1:], dtype=tensor.dtype, device=tensor.device)
+    if batch_size < in_batch_size:
+        scale = (in_batch_size - 1) / (batch_size - 1)
+        for i in range(batch_size):
+            output[i] = tensor[min(round(i * scale), in_batch_size - 1)]
+    else:
+        scale = in_batch_size / batch_size
+        for i in range(batch_size):
+            output[i] = tensor[min(math.floor((i + 0.5) * scale), in_batch_size - 1)]
+
+    return output
 
 
 def pad_to_patch_size(img, patch_size=(2, 2), padding_mode="circular"):

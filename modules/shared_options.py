@@ -429,16 +429,6 @@ options_templates.update(
             "ctrl_enter_interrupt": OptionInfo(False, "Revert [Ctrl + Enter] to only interrupt the generation").info('the current "intended" behavior is to interrupt the current generation then immediately start a new one'),
             "quicksettings_accordion": OptionInfo(False, "Place the Quicksettings under an Accordion").needs_reload_ui(),
             "quicksettings_accordion_starts_closed": OptionInfo(False, "Close the Accordion on startup").info("for the above option").needs_reload_ui(),
-            "quicksettings_style": OptionInfo("default", "Quicksettings Style", gr.Radio, {"choices": ("default", "clip-modules", "scrollbar")}).needs_reload_ui(),
-            "qs_style_exp": OptionHTML(
-                """
-<ul>
-<li><b>default:</b> Same as the original Webui - excess elements get pushed into a new row</li>
-<li><b>clip-modules:</b> Display the full name of the modules only when hovering the "VAE / Text Encoder" dropdown</li>
-<li><b>scrollbar:</b> Keep all elements within the same row, showing a scrollbar if necessary</li>
-</ul>
-                """.strip()
-            ),
             "forbidden_knowledge": OptionInfo(False, "Forbidden Knowledge").needs_restart(),
             "div_classic": OptionDiv(),
             "scrollable_prompt_box": OptionInfo(False, "Scrollable Prompt Layout").info("put prompts inside a fixed-height container with a scrollbar").needs_reload_ui(),

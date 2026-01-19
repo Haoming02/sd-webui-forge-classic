@@ -1,6 +1,5 @@
 import torch
 from huggingface_guess import model_list
-from huggingface_guess.utils import resize_to_batch_size
 
 from backend import args, memory_management
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
@@ -9,6 +8,7 @@ from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
 from backend.text_processing.umt5_engine import UMT5TextProcessingEngine
+from backend.utils import resize_to_batch_size
 
 # get_learned_conditioning is not called in the Refiner pass;
 # so we store the desired shift value for the low_noise model

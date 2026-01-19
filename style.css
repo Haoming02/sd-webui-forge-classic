@@ -1715,32 +1715,6 @@ body.resizing .resize-handle {
     width: 200px;
 }
 
-#quicksettings.scrollbar {
-    height: 90px;
-    overflow: auto;
-    flex-wrap: nowrap;
-    scrollbar-color: var(--border-color-primary) var(--body-text-color);
-    scrollbar-width: thin;
-}
-
-#quicksettings.scrollbar>div, #quicksettings>fieldset {
-    flex: 0 0 auto;
-}
-
-#quicksettings.clip-modules div.gradio-dropdown.multiselect div.wrap div.token span {
-    text-overflow: ellipsis;
-    width: 2em;
-    white-space: nowrap;
-    overflow: hidden;
-}
-
-#quicksettings.clip-modules div.gradio-dropdown.multiselect:hover div.wrap div.token span {
-    text-overflow: unset;
-    width: auto;
-    white-space: unset;
-    overflow: unset;
-}
-
 #txt2img_enable_mahiro, #img2img_enable_mahiro {
     min-width: 0 !important;
     margin: auto 2em;

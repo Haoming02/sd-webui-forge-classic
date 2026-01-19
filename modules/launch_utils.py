@@ -14,14 +14,13 @@ import sys
 from pathlib import Path
 from typing import NamedTuple
 
-from modules import cmd_args, errors, logging_config
+from modules import cmd_args, errors
 from modules.paths_internal import extensions_builtin_dir, extensions_dir, script_path
 from modules.timer import startup_timer
 from modules_forge import forge_version
 from modules_forge.config import always_disabled_extensions
 
 args, _ = cmd_args.parser.parse_known_args()
-logging_config.setup_logging(args.loglevel)
 
 python = sys.executable
 git = os.environ.get("GIT", "git")
@@ -502,6 +501,11 @@ def configure_comfy_reference(comfy_home: Path):
 
 def start():
     print(f"Launching {'API server' if '--nowebui' in sys.argv else 'Web UI'} with arguments: {shlex.join(sys.argv[1:])}")
+
+    from modules import logging_config
+
+    logging_config.setup_logging(args.loglevel)
+
     import webui
 
     if "--nowebui" in sys.argv:
@@ -512,7 +516,6 @@ def start():
     from modules_forge import main_thread
 
     main_thread.loop()
-    return
 
 
 def dump_sysinfo():

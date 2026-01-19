@@ -123,7 +123,6 @@ class GemmaTextProcessingEngine:
 
     def process_embeds(self, batch_tokens):
         device = memory_management.text_encoder_device()
-        self.text_encoder.to(device)
 
         embeds_out = []
         attention_masks = []

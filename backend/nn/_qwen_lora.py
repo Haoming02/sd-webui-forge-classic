@@ -1,10 +1,9 @@
 # https://github.com/GavChap/ComfyUI-nunchaku/blob/qwen-lora-suport-standalone/nunchaku_code/lora_qwen.py
 
-import logging
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -15,8 +14,6 @@ from nunchaku.lora.flux.nunchaku_converter import (
 )
 
 from backend.utils import load_torch_file
-
-logger = logging.getLogger(__name__)
 
 # --- Centralized & Optimized Key Mapping ---
 KEY_MAPPING = [
@@ -115,7 +112,7 @@ def _rename_layer_underscore_layer_name(old_name: str) -> str:
     return new_name
 
 
-def _classify_and_map_key(key: str) -> Optional[Tuple[str, str, Optional[str], str]]:
+def _classify_and_map_key(key: str) -> Optional[tuple[str, str, Optional[str], str]]:
     """
     Efficiently classifies a LoRA key using the centralized KEY_MAPPING.
     The implementation is new and optimized, but the name and signature are preserved.
@@ -183,7 +180,6 @@ def _get_module_by_name(model: nn.Module, name: str) -> Optional[nn.Module]:
             try:
                 module = module[int(part)]
             except (IndexError, TypeError):
-                logger.warning(f"Failed to index module {name} with part {part}")
                 return None
         # All attempts failed
         else:
@@ -191,7 +187,7 @@ def _get_module_by_name(model: nn.Module, name: str) -> Optional[nn.Module]:
     return module
 
 
-def _resolve_module_name(model: nn.Module, name: str) -> Tuple[str, Optional[nn.Module]]:
+def _resolve_module_name(model: nn.Module, name: str) -> tuple[str, Optional[nn.Module]]:
     """Resolve a name string path to a module, attempting fallback paths."""
     m = _get_module_by_name(model, name)
     if m is not None:
@@ -221,11 +217,10 @@ def _resolve_module_name(model: nn.Module, name: str) -> Tuple[str, Optional[nn.
             if m is not None:
                 return alt, m
 
-    logger.debug(f"[MISS] Module not found: {name}")
     return name, None
 
 
-def _fuse_qkv_lora(qkv_weights: Dict[str, torch.Tensor]) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+def _fuse_qkv_lora(qkv_weights: dict[str, torch.Tensor]) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
     """Fuse Q/K/V LoRA weights into a single QKV tensor."""
     required_keys = ["Q_A", "Q_B", "K_A", "K_B", "V_A", "V_B"]
     if not all(k in qkv_weights for k in required_keys):
@@ -235,7 +230,6 @@ def _fuse_qkv_lora(qkv_weights: Dict[str, torch.Tensor]) -> Tuple[Optional[torch
     B_q, B_k, B_v = qkv_weights["Q_B"], qkv_weights["K_B"], qkv_weights["V_B"]
 
     if not (A_q.shape == A_k.shape == A_v.shape):
-        logger.warning(f"Q/K/V LoRA A dimensions mismatch: {A_q.shape}, {A_k.shape}, {A_v.shape}")
         return None, None, None
 
     alpha_q, alpha_k, alpha_v = qkv_weights.get("Q_alpha"), qkv_weights.get("K_alpha"), qkv_weights.get("V_alpha")
@@ -255,7 +249,7 @@ def _fuse_qkv_lora(qkv_weights: Dict[str, torch.Tensor]) -> Tuple[Optional[torch
     return A_fused, B_fused, alpha_fused
 
 
-def _handle_proj_out_split(lora_dict: Dict[str, Dict[str, torch.Tensor]], base_key: str, model: nn.Module) -> Tuple[Dict[str, Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]], List[str]]:
+def _handle_proj_out_split(lora_dict: dict[str, dict[str, torch.Tensor]], base_key: str, model: nn.Module) -> tuple[dict[str, tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]], list[str]]:
     """Split single-block proj_out LoRA into two branches."""
     result, consumed = {}, []
     m = re.search(r"single_transformer_blocks\.(\d+)", base_key)
@@ -278,7 +272,6 @@ def _handle_proj_out_split(lora_dict: Dict[str, Dict[str, torch.Tensor]], base_k
 
     attn_in, mlp_in = attn_to_out.in_features, mlp_fc2.in_features
     if A_full.shape[1] != attn_in + mlp_in:
-        logger.warning(f"{base_key}: A_full shape mismatch {A_full.shape} vs expected in_features {attn_in + mlp_in}")
         return result, consumed
 
     A_attn, A_mlp = A_full[:, :attn_in], A_full[:, attn_in:]
@@ -327,22 +320,21 @@ def _apply_lora_to_module(module: nn.Module, A: torch.Tensor, B: torch.Tensor, m
 
 def compose_loras_v2(
     model: torch.nn.Module,
-    lora_configs: List[Tuple[Union[str, Path, Dict[str, torch.Tensor]], float]],
+    lora_configs: list[tuple[Union[str, Path, dict[str, torch.Tensor]], float]],
 ) -> None:
     """
     Resets and composes multiple LoRAs into the model with individual strengths.
     """
-    logger.info(f"Composing {len(lora_configs)} LoRAs...")
     reset_lora_v2(model)
 
-    aggregated_weights: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    aggregated_weights: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     # 1. Aggregate weights from all LoRAs
     for lora_path_or_dict, strength in lora_configs:
         lora_name = lora_path_or_dict if isinstance(lora_path_or_dict, str) else "dict"
         lora_state_dict = load_torch_file(lora_path_or_dict)
 
-        lora_grouped: Dict[str, Dict[str, torch.Tensor]] = defaultdict(dict)
+        lora_grouped: dict[str, dict[str, torch.Tensor]] = defaultdict(dict)
         for key, value in lora_state_dict.items():
             parsed = _classify_and_map_key(key)
             if parsed is None:
@@ -410,8 +402,6 @@ def compose_loras_v2(
         _apply_lora_to_module(module, final_A, final_B, resolved_name, model)
         applied_modules_count += 1
 
-    logger.info(f"Applied LoRA compositions to {applied_modules_count} modules.")
-
 
 def reset_lora_v2(model: nn.Module) -> None:
     """Removes all appended LoRA weights from the model."""
@@ -440,4 +430,3 @@ def reset_lora_v2(model: nn.Module) -> None:
 
     model._lora_slots.clear()
     model._lora_strength = 1.0
-    logger.info("All LoRA weights have been reset from the model.")

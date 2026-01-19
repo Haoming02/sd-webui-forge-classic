@@ -284,10 +284,9 @@ def list_loaded_weights():
     table.add_column("Device", justify="right")
 
     for mdl in memory_management.current_loaded_models:
-        mdl.compute_inclusive_exclusive_memory()
         table.add_row(
             str(mdl.model.model.__class__.__name__),
-            f"{int(mdl.inclusive_memory / 2 ** 20)} (MB)" if mdl.inclusive_memory > 0 else "n.a.",
+            f"{int(mdl.model_loaded_memory() / 2 ** 20)} (MB)" if mdl.model_loaded_memory() > 0 else "n.a.",
             str(mdl.device),
         )
 
@@ -322,32 +321,9 @@ def forge_model_reload():
     timer = Timer()
 
     if model_data.sd_model is not None:
-        if not isinstance(model_data.sd_model, FakeInitialModel):
-            model_data.sd_model.forge_objects.unet.model.cleanup()
-            del model_data.sd_model.forge_objects.clip.tokenizer
-            del model_data.sd_model.forge_objects.clip.cond_stage_model
-            del model_data.sd_model.forge_objects.vae.first_stage_model
-
-        memory_management.unload_all_models()
-
-        for junk in (
-            "model_config",
-            "forge_objects",
-            "forge_objects_original",
-            "forge_objects_after_applying_lora",
-            "text_processing_engine",
-            "text_processing_engine_l",
-            "text_processing_engine_g",
-            "text_processing_engine_t5",
-            "model",
-        ):
-            try:
-                delattr(model_data.sd_model, junk)
-            except AttributeError:
-                pass
-
         model_data.sd_model = None
         model_data.forge_hash = ""
+        memory_management.unload_all_models()
         memory_management.soft_empty_cache()
         gc.collect()
 

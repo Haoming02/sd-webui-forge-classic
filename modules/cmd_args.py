@@ -4,9 +4,12 @@ import os
 from pathlib import Path
 
 from modules.paths_internal import data_path, extensions_builtin_dir, extensions_dir, models_path, normalized_filepath, parser, script_path  # noqa: F401
+from modules.paths_internal import parser as backend_parser
 
-parser.add_argument("-f", action="store_true", help=argparse.SUPPRESS)
+_parser = argparse.ArgumentParser(parents=[backend_parser], add_help=True)
+_parser.add_argument("-f", action="store_true", help=argparse.SUPPRESS)
 
+parser = _parser.add_argument_group(description="configs for launch_utils.py")
 parser.add_argument("--update-all-extensions", action="store_true", help="launch.py argument: download updates for all extensions when starting the program")
 parser.add_argument("--skip-python-version-check", action="store_true", help="launch.py argument: do not check python version")
 parser.add_argument("--skip-torch-cuda-test", action="store_true", help="launch.py argument: do not check if CUDA is able to work properly")
@@ -16,7 +19,8 @@ parser.add_argument("--log-startup", action="store_true", help="launch.py argume
 parser.add_argument("--skip-prepare-environment", action="store_true", help="launch.py argument: skip all environment preparation")
 parser.add_argument("--skip-install", action="store_true", help="launch.py argument: skip installation of packages")
 parser.add_argument("--dump-sysinfo", action="store_true", help="launch.py argument: dump limited sysinfo file (without information about extensions, options) to disk and quit")
-parser.add_argument("--loglevel", type=str, help="log level; one of: CRITICAL, ERROR, WARNING, INFO, DEBUG", default=None)
+
+parser = _parser.add_argument_group(description="connections")
 parser.add_argument("--share", action="store_true", help="use share=True for gradio and make the UI accessible through their site")
 parser.add_argument("--ngrok", type=str, help="ngrok authtoken, alternative to gradio --share", default=None)
 parser.add_argument("--ngrok-region", type=str, help="does not do anything.", default="")
@@ -24,16 +28,22 @@ parser.add_argument("--ngrok-options", type=json.loads, help='The options to pas
 parser.add_argument("--enable-insecure-extension-access", action="store_true", help="enable extensions tab regardless of other options")
 parser.add_argument("--listen", action="store_true", help="launch gradio with 0.0.0.0 as server name, allowing to respond to network requests")
 parser.add_argument("--port", type=int, help="launch gradio with given server port, you need root/admin rights for ports < 1024, defaults to 7860 if available", default=None)
+
+parser = _parser.add_argument_group(description="settings")
 parser.add_argument("--ui-config-file", type=str, help="filename to use for ui configuration", default=os.path.join(data_path, "ui-config.json"))
 parser.add_argument("--hide-ui-dir-config", action="store_true", help="hide directory configuration from webui", default=False)
 parser.add_argument("--freeze-settings", action="store_true", help="disable editing of all settings globally", default=False)
 parser.add_argument("--freeze-settings-in-sections", type=str, help='disable editing settings in specific sections of the settings page by specifying a comma-delimited list such like "saving-images,upscaling". The list of setting names can be found in the modules/shared_options.py file', default=None)
 parser.add_argument("--freeze-specific-settings", type=str, help='disable editing of individual settings by specifying a comma-delimited list like "samples_save,samples_format". The list of setting names can be found in the config.json file', default=None)
 parser.add_argument("--ui-settings-file", type=str, help="filename to use for ui settings", default=os.path.join(data_path, "config.json"))
+
+parser = _parser.add_argument_group(description="gradio")
 parser.add_argument("--gradio-debug", action="store_true", help="launch gradio with --debug option")
 parser.add_argument("--gradio-auth", type=str, help='set gradio authentication like "username:password"; or comma-delimit multiple like "u1:p1,u2:p2,u3:p3"', default=None)
 parser.add_argument("--gradio-auth-path", type=normalized_filepath, help='set gradio authentication file path ex. "/path/to/auth/file" same auth format as --gradio-auth', default=None)
 parser.add_argument("--gradio-allowed-path", action="append", help="add path to gradio's allowed_paths, make it possible to serve files from it", default=[data_path])
+
+parser = _parser.add_argument_group(description="misc")
 parser.add_argument("--styles-file", type=str, action="append", help="path or wildcard path of styles files, allow multiple entries.", default=[])
 parser.add_argument("--autolaunch", action="store_true", help="open the webui URL in the system's default browser upon launch", default=False)
 parser.add_argument("--theme", type=str, help="launches the UI with light or dark theme", default=None)
@@ -68,6 +78,7 @@ parser.add_argument("--filenames-max-length", type=int, default=128, help="maxim
 parser.add_argument("--no-prompt-history", action="store_true", help="disable read prompt from last generation feature; settings this argument will not create '--data_path/params.txt' file")
 
 # Paths
+parser = _parser.add_argument_group(description="Paths")
 parser.add_argument("--ckpt-dirs", type=normalized_filepath, action="append", help="Directories for Checkpoint model(s)", default=[])
 parser.add_argument("--lora-dirs", type=normalized_filepath, action="append", help="Directories for LoRA(s)", default=[])
 parser.add_argument("--vae-dirs", type=normalized_filepath, action="append", help="Directories for VAE model(s)", default=[])
@@ -84,6 +95,8 @@ parser.add_argument("--forge-ref-a1111-home", type=Path, help="Look for models i
 
 # args added by. Neo
 parser.add_argument("--forge-ref-comfy-home", type=Path, help="Look for models in an existing installation of ComfyUI", default=None)
+
+parser = _parser.add_argument_group(description="Forge")
 parser.add_argument("--adv-samplers", action="store_true", help='show the "sampler parameters" advanced settings')
 
 pkm = parser.add_mutually_exclusive_group()
@@ -91,4 +104,7 @@ pkm.add_argument("--uv", action="store_true", help="Use the uv package manager")
 pkm.add_argument("--uv-symlink", action="store_true", help="Use the uv package manager with symlink")
 
 # backward compatibility
+parser = _parser.add_argument_group(description="backward compatibility (these do nothing)")
 parser.add_argument("--use-cpu", nargs="+", help="required by adetailer", default=[], type=str.lower)
+
+parser = _parser
