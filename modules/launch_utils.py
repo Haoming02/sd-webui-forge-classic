@@ -549,7 +549,9 @@ def verify_version():
 
     os.system("")
 
-    w: int = os.get_terminal_size().columns
+    import shutil
+
+    w: int = shutil.get_terminal_size().columns
     R: Final[str] = "\033[0m"
     E: Final[str] = "\033[0;31m"
     Y: Final[str] = "\033[0;33m"
