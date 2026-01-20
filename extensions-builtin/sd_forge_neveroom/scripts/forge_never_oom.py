@@ -8,8 +8,8 @@ class NeverOOMForForge(scripts.Script):
     sorting_priority = 18
 
     def __init__(self):
-        self.previous_unet_enabled = False
-        self.original_vram_state = memory_management.vram_state
+        self.previous_unet_enabled: bool = None
+        self.original_vram_state: memory_management.VRAMState = None
 
     def title(self):
         return "Never OOM Integrated"
@@ -19,29 +19,28 @@ class NeverOOMForForge(scripts.Script):
 
     def ui(self, *args, **kwargs):
         with gr.Accordion(open=False, label=self.title()):
-            unet_enabled = gr.Checkbox(label='Enabled for UNet (always maximize offload)', value=False)
-            vae_enabled = gr.Checkbox(label='Enabled for VAE (always tiled)', value=False)
-        return unet_enabled, vae_enabled
+            unet_enabled = gr.Checkbox(False, label="Enabled for UNet (always offload)")
+            vae_enabled = gr.Checkbox(False, label="Enabled for VAE (always tiled)")
 
-    def process(self, p, *script_args, **kwargs):
-        unet_enabled, vae_enabled = script_args
+        return [unet_enabled, vae_enabled]
+
+    def process(self, p, unet_enabled: bool, vae_enabled: bool):
 
         if unet_enabled:
-            print('NeverOOM Enabled for UNet (always maximize offload)')
-
+            memory_management.logger.info("[NeverOOM] Enabled for UNet (always offload)")
         if vae_enabled:
-            print('NeverOOM Enabled for VAE (always tiled)')
+            memory_management.logger.info("[NeverOOM] Enabled for VAE (always tiled)")
 
         memory_management.VAE_ALWAYS_TILED = vae_enabled
 
         if self.previous_unet_enabled != unet_enabled:
             memory_management.unload_all_models()
+
             if unet_enabled:
                 self.original_vram_state = memory_management.vram_state
                 memory_management.vram_state = memory_management.VRAMState.NO_VRAM
             else:
                 memory_management.vram_state = self.original_vram_state
-            print(f'VARM State Changed To {memory_management.vram_state.name}')
-            self.previous_unet_enabled = unet_enabled
 
-        return
+            memory_management.logger.info(f"Changed VRAM State to {memory_management.vram_state.name}")
+            self.previous_unet_enabled = unet_enabled
