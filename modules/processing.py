@@ -1181,7 +1181,7 @@ def process_extra_images(processed: Processed):
     for img in processed.extra_images:
         if isinstance(img, np.ndarray):
             img = Image.fromarray(img)
-        if not Image.isImageType(img):
+        if not isinstance(img, Image.Image):
             continue
         extra_images.append(img)
     processed.extra_images = extra_images
