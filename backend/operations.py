@@ -478,7 +478,7 @@ class GGMLLayer:
         non_blocking = memory_management.device_supports_non_blocking(device)
 
         bias = None
-        if self.bias is not None:
+        if getattr(self, "bias", None) is not None:
             bias = self.get_weight(self.bias.to(device=device))
             bias = memory_management.cast_to(bias, dtype=dtype, device=device, non_blocking=non_blocking, copy=False)
 
