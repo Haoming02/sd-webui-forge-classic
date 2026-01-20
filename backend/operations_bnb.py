@@ -68,12 +68,13 @@ class ForgeParams4bit(Params4bit):
         return super()._quantize(device)
 
     def to(self, *args, **kwargs):
-        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
+        copy = kwargs.pop("copy", False)
+        device, dtype, non_blocking, _ = torch._C._nn._parse_to(*args, **kwargs)
         if device is not None and device.type == "cuda" and not self.bnb_quantized:
             return self._quantize(device)
         else:
             return ForgeParams4bit(
-                torch.nn.Parameter.to(self, device=device, dtype=dtype, non_blocking=non_blocking),
+                torch.nn.Parameter.to(self, device=device, dtype=dtype, non_blocking=non_blocking, copy=copy),
                 requires_grad=self.requires_grad,
                 quant_state=copy_quant_state(self.quant_state, device),
                 blocksize=self.blocksize,
