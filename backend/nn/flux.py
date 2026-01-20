@@ -98,30 +98,20 @@ class MLPEmbedder(nn.Module):
         return self.out_layer(x)
 
 
-if hasattr(torch, "rms_norm"):
-    functional_rms_norm = torch.rms_norm
-else:
-
-    def functional_rms_norm(x, normalized_shape, weight, eps):
-        if x.dtype in [torch.bfloat16, torch.float32]:
-            n = torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + eps) * weight
-        else:
-            n = torch.rsqrt(torch.mean(x.float() ** 2, dim=-1, keepdim=True) + eps).to(x.dtype) * weight
-        return x * n
-
-
 class RMSNorm(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim: int):
         super().__init__()
-        self.weight = None  # to trigger module_profile
-        self.scale = nn.Parameter(torch.ones(dim))
-        self.eps = 1e-6
-        self.normalized_shape = [dim]
+        self.scale = nn.Parameter(torch.empty(dim))
 
-    def forward(self, x):
-        if self.scale.dtype != x.dtype:
-            self.scale = tensor2parameter(self.scale.to(dtype=x.dtype))
-        return functional_rms_norm(x, self.normalized_shape, self.scale, self.eps)
+    def forward(self, x: torch.Tensor):
+        return RMSNorm.rms_norm(x, self.scale, 1e-6)
+
+    @staticmethod
+    def rms_norm(x: torch.Tensor, weight: torch.nn.Parameter, eps=1e-6):
+        if weight is None:
+            return torch.nn.functional.rms_norm(x, (x.shape[-1],), eps=eps)
+        else:
+            return torch.nn.functional.rms_norm(x, weight.shape, weight=memory_management.cast_to(weight, dtype=x.dtype, device=x.device), eps=eps)
 
 
 class QKNorm(nn.Module):
@@ -130,11 +120,10 @@ class QKNorm(nn.Module):
         self.query_norm = RMSNorm(dim)
         self.key_norm = RMSNorm(dim)
 
-    def forward(self, q, k, v):
-        del v
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> tuple:
         q = self.query_norm(q)
         k = self.key_norm(k)
-        return q.to(k), k.to(q)
+        return q.to(v), k.to(v)
 
 
 class SelfAttention(nn.Module):
