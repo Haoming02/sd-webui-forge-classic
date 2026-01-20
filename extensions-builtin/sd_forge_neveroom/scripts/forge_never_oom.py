@@ -8,8 +8,8 @@ class NeverOOMForForge(scripts.Script):
     sorting_priority = 18
 
     def __init__(self):
-        self.previous_unet_enabled: bool = None
-        self.original_vram_state: memory_management.VRAMState = None
+        self.previous_unet_enabled: bool = False
+        self.original_vram_state: memory_management.VRAMState = memory_management.vram_state
 
     def title(self):
         return "Never OOM Integrated"
