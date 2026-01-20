@@ -460,7 +460,7 @@ class GGMLLayer:
 
     def get_weight(self, tensor: torch.Tensor):
         if tensor is None:
-            return
+            return None
 
         weight = dequantize_tensor(tensor)
         if isinstance(weight, ParameterGGUF):
@@ -468,12 +468,13 @@ class GGMLLayer:
 
         return weight
 
-    def cast_bias_weight(self, input: torch.Tensor = None, dtype: torch.dtype = None, device: torch.device = None):
-        if input is not None:
-            if dtype is None:
-                dtype = getattr(input, "dtype", torch.float32)
-            if device is None:
-                device = input.device
+    def cast_bias_weight(self, input: torch.Tensor = None, skip_dtype: bool = False):
+        assert input is not None
+        dtype = getattr(input, "dtype", torch.float32)
+        device = input.device
+
+        if skip_dtype:
+            dtype = None
 
         non_blocking = memory_management.device_supports_non_blocking(device)
 
@@ -552,7 +553,7 @@ class ForgeOperationsGGUF(ForgeOperations):
             return self
 
         def forward(self, x):
-            weight, _ = self.cast_bias_weight(input=x)
+            weight, _ = self.cast_bias_weight(input=x, skip_dtype=True)
             return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
