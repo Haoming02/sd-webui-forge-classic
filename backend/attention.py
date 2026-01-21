@@ -160,7 +160,23 @@ def attention_xformers(q, k, v, heads, mask=None, attn_precision=None, skip_resh
         mask = mask_out[..., : mask.shape[-1]]
         mask = mask.expand(b, heads, -1, -1)
 
-    out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=mask)
+    try:
+        out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=mask)
+        _fallback = False
+    except Exception as e:
+        if "(too new)" in str(e):
+            logger.warning("xformers does not work on RTX 50s")
+        else:
+            logger.error(f"Error running xformers: {e}")
+        _fallback = True
+
+    if _fallback:
+        if not skip_reshape:
+            q, k, v = map(
+                lambda t: t.transpose(1, 2),
+                (q, k, v),
+            )
+        return attention_pytorch(q, k, v, heads, mask=mask, skip_reshape=True, **kwargs)
 
     if skip_output_reshape:
         out = out.permute(0, 2, 1, 3)
@@ -276,9 +292,14 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
             dropout_p=0.0,
             causal=False,
         ).transpose(1, 2)
+        _fallback = False
     except Exception as e:
         logger.error(f"Error running flash_attn: {e}")
+        _fallback = True
+
+    if _fallback:
         out = operations.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
+
     if not skip_output_reshape:
         out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
 
@@ -382,7 +403,11 @@ def xformers_attention_vae(q, k, v):
     try:
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None)
         out = out.transpose(1, 2).reshape(orig_shape)
-    except NotImplementedError:
+        _fallback = False
+    except Exception:
+        _fallback = True
+
+    if _fallback:
         out = slice_attention_vae(q.view(B, -1, C), k.view(B, -1, C).transpose(1, 2), v.view(B, -1, C).transpose(1, 2)).reshape(orig_shape)
 
     return out
