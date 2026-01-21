@@ -54,7 +54,7 @@ class KModel(torch.nn.Module):
         input_shapes = [input_shape]
         area = sum(map(lambda input_shape: input_shape[0] * math.prod(input_shape[2:]), input_shapes))
 
-        if memory_management.xformers_enabled():
+        if memory_management.xformers_enabled() or memory_management.pytorch_attention_flash_attention():
             return (area * memory_management.dtype_size(self.computation_dtype) * 0.01 * self.config.memory_usage_factor) * (1024 * 1024)
         else:
             return (area * 0.15 * self.config.memory_usage_factor) * (1024 * 1024)

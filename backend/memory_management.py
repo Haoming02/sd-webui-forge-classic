@@ -1048,6 +1048,17 @@ def pytorch_attention_enabled_vae() -> bool:
     return ENABLE_PYTORCH_ATTENTION and not is_amd()
 
 
+def pytorch_attention_flash_attention() -> bool:
+    if ENABLE_PYTORCH_ATTENTION:
+        if is_nvidia():
+            return True
+        if is_intel_xpu():
+            return True
+        if is_amd():
+            return True
+    return False
+
+
 def force_upcast_attention_dtype() -> dict[torch.dtype, torch.dtype]:
     upcast: bool = args.force_upcast_attention
 
