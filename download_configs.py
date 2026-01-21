@@ -6,9 +6,9 @@ import shutil
 from huggingface_hub import snapshot_download
 
 PIPELINE_PATHS = (
-    # "Qwen/Qwen-Image",
-    # "neta-art/Neta-Lumina-Diffusers",
-    "Tongyi-MAI/Z-Image-Turbo",
+    # "Tongyi-MAI/Z-Image-Turbo",
+    "black-forest-labs/FLUX.2-klein-4B",
+    "black-forest-labs/FLUX.2-klein-9B",
 )
 
 for pretrained in PIPELINE_PATHS:
