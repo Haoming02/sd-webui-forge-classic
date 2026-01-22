@@ -406,6 +406,14 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         patch_size: int,
         qkv_bias: bool,
         guidance_embed: bool,
+        txt_ids_dims: list[int],
+        global_modulation: bool = False,
+        mlp_silu_act: bool = False,
+        ops_bias: bool = True,
+        default_ref_method: str = "offset",
+        ref_index_scale: float = 1.0,
+        yak_mlp: bool = False,
+        txt_norm: bool = False,
     ):
         super().__init__()
 
@@ -420,16 +428,21 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         pe_dim = hidden_size // num_heads
         if sum(axes_dim) != pe_dim:
             raise ValueError(f"Got {axes_dim} but expected positional dim {pe_dim}")
+        self.axes_dim = axes_dim
 
         self.hidden_size = hidden_size
         self.num_heads = num_heads
 
         self.pe_embedder = EmbedND(dim=pe_dim, theta=theta, axes_dim=axes_dim)
-        self.img_in = nn.Linear(self.in_channels, self.hidden_size, bias=True)
-        self.time_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size)
-        self.vector_in = MLPEmbedder(vec_in_dim, self.hidden_size)
-        self.guidance_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size) if guidance_embed else nn.Identity()
-        self.txt_in = nn.Linear(context_in_dim, self.hidden_size)
+        self.img_in = nn.Linear(self.in_channels, self.hidden_size, bias=ops_bias)
+        self.time_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size, bias=ops_bias)
+        if vec_in_dim is not None:
+            self.vec_in_dim = vec_in_dim
+            self.vector_in = MLPEmbedder(vec_in_dim, self.hidden_size)
+        self.guidance_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size, bias=ops_bias) if guidance_embed else nn.Identity()
+        self.txt_in = nn.Linear(context_in_dim, self.hidden_size, bias=ops_bias)
+
+        self.txt_norm = RMSNorm(context_in_dim) if txt_norm else None
 
         self.double_blocks = nn.ModuleList(
             [
@@ -438,6 +451,10 @@ class IntegratedFluxTransformer2DModel(nn.Module):
                     self.num_heads,
                     mlp_ratio=mlp_ratio,
                     qkv_bias=qkv_bias,
+                    modulation=global_modulation is False,
+                    mlp_silu_act=mlp_silu_act,
+                    proj_bias=ops_bias,
+                    yak_mlp=yak_mlp,
                 )
                 for _ in range(depth)
             ]
@@ -449,74 +466,187 @@ class IntegratedFluxTransformer2DModel(nn.Module):
                     self.hidden_size,
                     self.num_heads,
                     mlp_ratio=mlp_ratio,
+                    modulation=global_modulation is False,
+                    mlp_silu_act=mlp_silu_act,
+                    bias=ops_bias,
+                    yak_mlp=yak_mlp,
                 )
                 for _ in range(depth_single_blocks)
             ]
         )
 
-        self.final_layer = LastLayer(self.hidden_size, 1, self.out_channels)
+        self.final_layer = LastLayer(self.hidden_size, 1, self.out_channels, bias=ops_bias)
 
-    def inner_forward(self, img, img_ids, txt, txt_ids, timesteps, y, guidance=None):
+        if global_modulation:
+            self.double_stream_modulation_img = Modulation(self.hidden_size, double=True, bias=False)
+            self.double_stream_modulation_txt = Modulation(self.hidden_size, double=True, bias=False)
+            self.single_stream_modulation = Modulation(self.hidden_size, double=False, bias=False)
+
+        self.txt_ids_dims = txt_ids_dims
+        self.global_modulation = global_modulation
+        self.default_ref_method = default_ref_method
+        self.ref_index_scale = ref_index_scale
+
+    def forward_orig(
+        self,
+        img: torch.Tensor,
+        img_ids: torch.Tensor,
+        txt: torch.Tensor,
+        txt_ids: torch.Tensor,
+        timesteps: torch.Tensor,
+        y: torch.Tensor,
+        guidance: torch.Tensor = None,
+        control=None,
+        transformer_options: dict[str, list] = {},
+        attn_mask: torch.Tensor = None,
+    ) -> torch.Tensor:
+
+        patches = transformer_options.get("patches", {})
+        patches_replace = transformer_options.get("patches_replace", {})
         if img.ndim != 3 or txt.ndim != 3:
             raise ValueError("Input img and txt tensors must have 3 dimensions.")
+
+        # running on sequences img
         img = self.img_in(img)
         vec = self.time_in(timestep_embedding(timesteps, 256).to(img.dtype))
         if self.guidance_embed:
-            if guidance is None:
-                raise ValueError("Didn't get guidance strength for guidance distilled model.")
-            vec = vec + self.guidance_in(timestep_embedding(guidance, 256).to(img.dtype))
-        vec = vec + self.vector_in(y)
+            if guidance is not None:
+                vec = vec + self.guidance_in(timestep_embedding(guidance, 256).to(img.dtype))
+
+        if hasattr(self, "vec_in_dim"):
+            if y is None:
+                y = torch.zeros((img.shape[0], self.vec_in_dim), device=img.device, dtype=img.dtype)
+            vec = vec + self.vector_in(y[:, : self.vec_in_dim])
+
+        if self.txt_norm is not None:
+            txt = self.txt_norm(txt)
         txt = self.txt_in(txt)
-        del y, guidance
-        ids = torch.cat((txt_ids, img_ids), dim=1)
-        del txt_ids, img_ids
-        pe = self.pe_embedder(ids)
-        del ids
-        for block in self.double_blocks:
-            img, txt = block(img=img, txt=txt, vec=vec, pe=pe)
+
+        vec_orig = vec
+        if self.global_modulation:
+            vec = (self.double_stream_modulation_img(vec_orig), self.double_stream_modulation_txt(vec_orig))
+
+        if "post_input" in patches:
+            for p in patches["post_input"]:
+                out = p({"img": img, "txt": txt, "img_ids": img_ids, "txt_ids": txt_ids})
+                img = out["img"]
+                txt = out["txt"]
+                img_ids = out["img_ids"]
+                txt_ids = out["txt_ids"]
+
+        if img_ids is not None:
+            ids = torch.cat((txt_ids, img_ids), dim=1)
+            pe = self.pe_embedder(ids)
+        else:
+            pe = None
+
+        blocks_replace = patches_replace.get("dit", {})
+        transformer_options["total_blocks"] = len(self.double_blocks)
+        transformer_options["block_type"] = "double"
+        for i, block in enumerate(self.double_blocks):
+            transformer_options["block_index"] = i
+            if ("double_block", i) in blocks_replace:
+
+                def block_wrap(args):
+                    out = {}
+                    out["img"], out["txt"] = block(img=args["img"], txt=args["txt"], vec=args["vec"], pe=args["pe"], attn_mask=args.get("attn_mask"), transformer_options=args.get("transformer_options"))
+                    return out
+
+                out = blocks_replace[("double_block", i)]({"img": img, "txt": txt, "vec": vec, "pe": pe, "attn_mask": attn_mask, "transformer_options": transformer_options}, {"original_block": block_wrap})
+                txt = out["txt"]
+                img = out["img"]
+            else:
+                img, txt = block(img=img, txt=txt, vec=vec, pe=pe, attn_mask=attn_mask, transformer_options=transformer_options)
+
+            if control is not None:  # Controlnet
+                control_i = control.get("input")
+                if i < len(control_i):
+                    add = control_i[i]
+                    if add is not None:
+                        img[:, : add.shape[1]] += add
+
+        img = fp16_fix(img)
         img = torch.cat((txt, img), 1)
-        for block in self.single_blocks:
-            img = block(img, vec=vec, pe=pe)
-        del pe
+
+        if self.global_modulation:
+            vec, _ = self.single_stream_modulation(vec_orig)
+
+        transformer_options["total_blocks"] = len(self.single_blocks)
+        transformer_options["block_type"] = "single"
+        for i, block in enumerate(self.single_blocks):
+            transformer_options["block_index"] = i
+            if ("single_block", i) in blocks_replace:
+
+                def block_wrap(args):
+                    out = {}
+                    out["img"] = block(args["img"], vec=args["vec"], pe=args["pe"], attn_mask=args.get("attn_mask"), transformer_options=args.get("transformer_options"))
+                    return out
+
+                out = blocks_replace[("single_block", i)]({"img": img, "vec": vec, "pe": pe, "attn_mask": attn_mask, "transformer_options": transformer_options}, {"original_block": block_wrap})
+                img = out["img"]
+            else:
+                img = block(img, vec=vec, pe=pe, attn_mask=attn_mask, transformer_options=transformer_options)
+
+            if control is not None:  # Controlnet
+                control_o = control.get("output")
+                if i < len(control_o):
+                    add = control_o[i]
+                    if add is not None:
+                        img[:, txt.shape[1] : txt.shape[1] + add.shape[1], ...] += add
+
         img = img[:, txt.shape[1] :, ...]
-        del txt
-        img = self.final_layer(img, vec)
-        del vec
-        return img
 
-    def forward(self, x, timestep, context, y, guidance=None, control=None, transformer_options={}, **kwargs):
+        return self.final_layer(img, vec_orig)  # (N, T, patch_size ** 2 * out_channels)
+
+    def forward(self, x, timestep, context, y=None, guidance=None, ref_latents=None, control=None, transformer_options={}, **kwargs):
         bs, c, h_orig, w_orig = x.shape
-        h_len = (h_orig + (self.patch_size // 2)) // self.patch_size
-        w_len = (w_orig + (self.patch_size // 2)) // self.patch_size
+        patch_size = self.patch_size
 
-        img, img_ids = process_img(x)
+        h_len = (h_orig + (patch_size // 2)) // patch_size
+        w_len = (w_orig + (patch_size // 2)) // patch_size
+        img, img_ids = process_img(x, patch_size=self.patch_size)
         img_tokens = img.shape[1]
 
-        ref_latents = dynamic_args.get("ref_latents", None)
+        ref_latents: list[torch.Tensor] = dynamic_args.get("ref_latents", None)
 
         if ref_latents is not None:
             h = 0
             w = 0
+            index = 0
+            ref_latents_method = kwargs.get("ref_latents_method", self.default_ref_method)
             for ref in ref_latents:
-                h_offset = 0
-                w_offset = 0
-                if ref.shape[-2] + h > ref.shape[-1] + w:
-                    w_offset = w
+                if ref_latents_method == "index":
+                    index += self.ref_index_scale
+                    h_offset = 0
+                    w_offset = 0
+                elif ref_latents_method == "uxo":
+                    index = 0
+                    h_offset = h_len * patch_size + h
+                    w_offset = w_len * patch_size + w
+                    h += ref.shape[-2]
+                    w += ref.shape[-1]
                 else:
-                    h_offset = h
+                    index = 1
+                    h_offset = 0
+                    w_offset = 0
+                    if ref.shape[-2] + h > ref.shape[-1] + w:
+                        w_offset = w
+                    else:
+                        h_offset = h
+                    h = max(h, ref.shape[-2] + h_offset)
+                    w = max(w, ref.shape[-1] + w_offset)
 
-                kontext, kontext_ids = process_img(ref.to(x), index=1, h_offset=h_offset, w_offset=w_offset)
+                kontext, kontext_ids = process_img(ref, index=index, h_offset=h_offset, w_offset=w_offset, patch_size=self.patch_size)
                 img = torch.cat([img, kontext], dim=1)
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
-                h = max(h, ref.shape[-2] + h_offset)
-                w = max(w, ref.shape[-1] + w_offset)
 
-        txt_ids = torch.zeros((bs, context.shape[1], 3), device=x.device, dtype=x.dtype)
+        txt_ids = torch.zeros((bs, context.shape[1], len(self.axes_dim)), device=x.device, dtype=torch.float32)
 
-        out = self.inner_forward(img, img_ids, context, txt_ids, timestep, y, guidance)
-        del img, img_ids, txt_ids, timestep, context
+        if len(self.txt_ids_dims) > 0:
+            for i in self.txt_ids_dims:
+                txt_ids[:, :, i] = torch.linspace(0, context.shape[1] - 1, steps=context.shape[1], device=x.device, dtype=torch.float32)
+
+        out = self.forward_orig(img, img_ids, context, txt_ids, timestep, y, guidance, control, transformer_options, attn_mask=kwargs.get("attention_mask", None))
         out = out[:, :img_tokens]
-        out = rearrange(out, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h_len, w=w_len, ph=self.patch_size, pw=self.patch_size)
-        out = out[:, :, :h_orig, :w_orig]
-        del h_len, w_len, bs
-        return out
+
+        return rearrange(out, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h_len, w=w_len, ph=self.patch_size, pw=self.patch_size)[:, :, :h_orig, :w_orig]

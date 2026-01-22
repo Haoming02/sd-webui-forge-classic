@@ -262,10 +262,9 @@ def pad_to_patch_size(img, patch_size=(2, 2), padding_mode="circular"):
     return torch.nn.functional.pad(img, pad, mode=padding_mode)
 
 
-def process_img(x, index=0, h_offset=0, w_offset=0):
+def process_img(x: torch.Tensor, index: int = 0, h_offset: int = 0, w_offset: int = 0, *, patch_size: int = 2):
     """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/ldm/flux/model.py#L213"""
     bs, c, h, w = x.shape
-    patch_size = 2
     x = pad_to_patch_size(x, (patch_size, patch_size))
 
     img = rearrange(x, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=patch_size, pw=patch_size)
