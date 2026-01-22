@@ -4,6 +4,7 @@
 
 
 import math
+from dataclasses import dataclass
 
 import torch
 from einops import rearrange
@@ -90,6 +91,38 @@ class MLPEmbedder(nn.Module):
         return self.out_layer(self.silu(self.in_layer(x)))
 
 
+class YakMLP(nn.Module):
+    def __init__(self, hidden_size: int, intermediate_size: int):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
+        self.act_fn = nn.SiLU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+def build_mlp(hidden_size: int, mlp_hidden_dim: int, mlp_silu_act: bool = False, yak_mlp: bool = False) -> nn.Module:
+    if yak_mlp:
+        return YakMLP(hidden_size, mlp_hidden_dim)
+    if mlp_silu_act:
+        return nn.Sequential(
+            nn.Linear(hidden_size, mlp_hidden_dim * 2, bias=False),
+            SiLUActivation(),
+            nn.Linear(mlp_hidden_dim, hidden_size, bias=False),
+        )
+    else:
+        return nn.Sequential(
+            nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
+        )
+
+
 class RMSNorm(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
@@ -128,116 +161,146 @@ class SelfAttention(nn.Module):
         self.norm = QKNorm(head_dim)
         self.proj = nn.Linear(dim, dim, bias=proj_bias)
 
-    def forward(self, x, pe):
-        qkv = self.qkv(x)
 
-        # q, k, v = rearrange(qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads)
-        B, L, _ = qkv.shape
-        qkv = qkv.view(B, L, 3, self.num_heads, -1)
-        q, k, v = qkv.permute(2, 0, 3, 1, 4)
-        del qkv
-
-        q, k = self.norm(q, k, v)
-
-        x = attention(q, k, v, pe=pe)
-        del q, k, v
-
-        x = self.proj(x)
-        return x
+@dataclass
+class ModulationOut:
+    shift: torch.Tensor
+    scale: torch.Tensor
+    gate: torch.Tensor
 
 
 class Modulation(nn.Module):
-    def __init__(self, dim, double):
+    def __init__(self, dim: int, double: bool, bias=True):
         super().__init__()
         self.is_double = double
         self.multiplier = 6 if double else 3
-        self.lin = nn.Linear(dim, self.multiplier * dim, bias=True)
+        self.lin = nn.Linear(dim, self.multiplier * dim, bias=bias)
 
-    def forward(self, vec):
-        out = self.lin(nn.functional.silu(vec))[:, None, :].chunk(self.multiplier, dim=-1)
-        return out
+    def forward(self, vec: torch.Tensor) -> tuple["ModulationOut"]:
+        if vec.ndim == 2:
+            vec = vec[:, None, :]
+        out = self.lin(nn.functional.silu(vec)).chunk(self.multiplier, dim=-1)
+
+        return (
+            ModulationOut(*out[:3]),
+            ModulationOut(*out[3:]) if self.is_double else None,
+        )
+
+
+def apply_mod(tensor: torch.Tensor, m_mult: float, m_add: bool = None, modulation_dims: torch.Tensor = None) -> torch.Tensor:
+    if modulation_dims is None:
+        if m_add is not None:
+            return torch.addcmul(m_add, tensor, m_mult)
+        else:
+            return tensor * m_mult
+    else:
+        for d in modulation_dims:
+            tensor[:, d[0] : d[1]] *= m_mult[:, d[2]]
+            if m_add is not None:
+                tensor[:, d[0] : d[1]] += m_add[:, d[2]]
+        return tensor
+
+
+class SiLUActivation(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.gate_fn = nn.SiLU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x1, x2 = x.chunk(2, dim=-1)
+        return self.gate_fn(x1) * x2
 
 
 class DoubleStreamBlock(nn.Module):
-    def __init__(self, hidden_size, num_heads, mlp_ratio, qkv_bias=False):
+    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float, qkv_bias: bool = False, flipped_img_txt=False, modulation=True, mlp_silu_act=False, proj_bias=True, yak_mlp=False):
         super().__init__()
+
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         self.num_heads = num_heads
         self.hidden_size = hidden_size
-        self.img_mod = Modulation(hidden_size, double=True)
+        self.modulation = modulation
+
+        if self.modulation:
+            self.img_mod = Modulation(hidden_size, double=True)
+
         self.img_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.img_attn = SelfAttention(dim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias)
+        self.img_attn = SelfAttention(dim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias, proj_bias=proj_bias)
+
         self.img_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.img_mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
-            nn.GELU(approximate="tanh"),
-            nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
-        )
-        self.txt_mod = Modulation(hidden_size, double=True)
+
+        self.img_mlp = build_mlp(hidden_size, mlp_hidden_dim, mlp_silu_act=mlp_silu_act, yak_mlp=yak_mlp)
+
+        if self.modulation:
+            self.txt_mod = Modulation(hidden_size, double=True)
+
         self.txt_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.txt_attn = SelfAttention(dim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias)
+        self.txt_attn = SelfAttention(dim=hidden_size, num_heads=num_heads, qkv_bias=qkv_bias, proj_bias=proj_bias)
+
         self.txt_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.txt_mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden_dim, bias=True),
-            nn.GELU(approximate="tanh"),
-            nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
-        )
 
-    def forward(self, img, txt, vec, pe):
-        img_mod1_shift, img_mod1_scale, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate = self.img_mod(vec)
+        self.txt_mlp = build_mlp(hidden_size, mlp_hidden_dim, mlp_silu_act=mlp_silu_act, yak_mlp=yak_mlp)
 
+        self.flipped_img_txt = flipped_img_txt
+
+    def forward(self, img: torch.Tensor, txt: torch.Tensor, vec: torch.Tensor, pe: torch.Tensor, attn_mask=None, modulation_dims_img=None, modulation_dims_txt=None, transformer_options={}):
+        if self.modulation:
+            img_mod1, img_mod2 = self.img_mod(vec)
+            txt_mod1, txt_mod2 = self.txt_mod(vec)
+        else:
+            (img_mod1, img_mod2), (txt_mod1, txt_mod2) = vec
+
+        # prepare image for attention
         img_modulated = self.img_norm1(img)
-        img_modulated = (1 + img_mod1_scale) * img_modulated + img_mod1_shift
-        del img_mod1_shift, img_mod1_scale
+        img_modulated = apply_mod(img_modulated, (1 + img_mod1.scale), img_mod1.shift, modulation_dims_img)
         img_qkv = self.img_attn.qkv(img_modulated)
         del img_modulated
-
-        # img_q, img_k, img_v = rearrange(img_qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads)
-        B, L, _ = img_qkv.shape
-        H = self.num_heads
-        D = img_qkv.shape[-1] // (3 * H)
-        img_q, img_k, img_v = img_qkv.view(B, L, 3, H, D).permute(2, 0, 3, 1, 4)
+        img_q, img_k, img_v = img_qkv.view(img_qkv.shape[0], img_qkv.shape[1], 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         del img_qkv
-
         img_q, img_k = self.img_attn.norm(img_q, img_k, img_v)
 
-        txt_mod1_shift, txt_mod1_scale, txt_mod1_gate, txt_mod2_shift, txt_mod2_scale, txt_mod2_gate = self.txt_mod(vec)
-        del vec
-
+        # prepare txt for attention
         txt_modulated = self.txt_norm1(txt)
-        txt_modulated = (1 + txt_mod1_scale) * txt_modulated + txt_mod1_shift
-        del txt_mod1_shift, txt_mod1_scale
+        txt_modulated = apply_mod(txt_modulated, (1 + txt_mod1.scale), txt_mod1.shift, modulation_dims_txt)
         txt_qkv = self.txt_attn.qkv(txt_modulated)
         del txt_modulated
-
-        # txt_q, txt_k, txt_v = rearrange(txt_qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads)
-        B, L, _ = txt_qkv.shape
-        txt_q, txt_k, txt_v = txt_qkv.view(B, L, 3, H, D).permute(2, 0, 3, 1, 4)
+        txt_q, txt_k, txt_v = txt_qkv.view(txt_qkv.shape[0], txt_qkv.shape[1], 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         del txt_qkv
-
         txt_q, txt_k = self.txt_attn.norm(txt_q, txt_k, txt_v)
 
-        q = torch.cat((txt_q, img_q), dim=2)
-        del txt_q, img_q
-        k = torch.cat((txt_k, img_k), dim=2)
-        del txt_k, img_k
-        v = torch.cat((txt_v, img_v), dim=2)
-        del txt_v, img_v
+        if self.flipped_img_txt:
+            q = torch.cat((img_q, txt_q), dim=2)
+            del img_q, txt_q
+            k = torch.cat((img_k, txt_k), dim=2)
+            del img_k, txt_k
+            v = torch.cat((img_v, txt_v), dim=2)
+            del img_v, txt_v
+            # run actual attention
+            attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
+            del q, k, v
 
-        attn = attention(q, k, v, pe=pe)
-        del pe, q, k, v
-        txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
-        del attn
+            img_attn, txt_attn = attn[:, : img.shape[1]], attn[:, img.shape[1] :]
+        else:
+            q = torch.cat((txt_q, img_q), dim=2)
+            del txt_q, img_q
+            k = torch.cat((txt_k, img_k), dim=2)
+            del txt_k, img_k
+            v = torch.cat((txt_v, img_v), dim=2)
+            del txt_v, img_v
+            # run actual attention
+            attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
+            del q, k, v
 
-        img = img + img_mod1_gate * self.img_attn.proj(img_attn)
-        del img_attn, img_mod1_gate
-        img = img + img_mod2_gate * self.img_mlp((1 + img_mod2_scale) * self.img_norm2(img) + img_mod2_shift)
-        del img_mod2_gate, img_mod2_scale, img_mod2_shift
+            txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
-        txt = txt + txt_mod1_gate * self.txt_attn.proj(txt_attn)
-        del txt_attn, txt_mod1_gate
-        txt = txt + txt_mod2_gate * self.txt_mlp((1 + txt_mod2_scale) * self.txt_norm2(txt) + txt_mod2_shift)
-        del txt_mod2_gate, txt_mod2_scale, txt_mod2_shift
+        # calculate the img blocks
+        img += apply_mod(self.img_attn.proj(img_attn), img_mod1.gate, None, modulation_dims_img)
+        del img_attn
+        img += apply_mod(self.img_mlp(apply_mod(self.img_norm2(img), (1 + img_mod2.scale), img_mod2.shift, modulation_dims_img)), img_mod2.gate, None, modulation_dims_img)
+
+        # calculate the txt blocks
+        txt += apply_mod(self.txt_attn.proj(txt_attn), txt_mod1.gate, None, modulation_dims_txt)
+        del txt_attn
+        txt += apply_mod(self.txt_mlp(apply_mod(self.txt_norm2(txt), (1 + txt_mod2.scale), txt_mod2.shift, modulation_dims_txt)), txt_mod2.gate, None, modulation_dims_txt)
 
         txt = fp16_fix(txt)
 
@@ -245,42 +308,64 @@ class DoubleStreamBlock(nn.Module):
 
 
 class SingleStreamBlock(nn.Module):
-    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, qk_scale=None):
+    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float = 4.0, qk_scale: float = None, modulation=True, mlp_silu_act=False, bias=True, yak_mlp=False):
         super().__init__()
         self.hidden_dim = hidden_size
         self.num_heads = num_heads
         head_dim = hidden_size // num_heads
         self.scale = qk_scale or head_dim**-0.5
+
         self.mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + self.mlp_hidden_dim)
-        self.linear2 = nn.Linear(hidden_size + self.mlp_hidden_dim, hidden_size)
+
+        self.mlp_hidden_dim_first = self.mlp_hidden_dim
+        self.yak_mlp = yak_mlp
+        if mlp_silu_act:
+            self.mlp_hidden_dim_first = int(hidden_size * mlp_ratio * 2)
+            self.mlp_act = SiLUActivation()
+        else:
+            self.mlp_act = nn.GELU(approximate="tanh")
+
+        if self.yak_mlp:
+            self.mlp_hidden_dim_first *= 2
+            self.mlp_act = nn.SiLU()
+
+        # qkv and mlp_in
+        self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + self.mlp_hidden_dim_first, bias=bias)
+        # proj and mlp_out
+        self.linear2 = nn.Linear(hidden_size + self.mlp_hidden_dim, hidden_size, bias=bias)
+
         self.norm = QKNorm(head_dim)
+
         self.hidden_size = hidden_size
         self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.mlp_act = nn.GELU(approximate="tanh")
-        self.modulation = Modulation(hidden_size, double=False)
 
-    def forward(self, x, vec, pe):
-        mod_shift, mod_scale, mod_gate = self.modulation(vec)
-        del vec
-        x_mod = (1 + mod_scale) * self.pre_norm(x) + mod_shift
-        del mod_shift, mod_scale
-        qkv, mlp = torch.split(self.linear1(x_mod), [3 * self.hidden_size, self.mlp_hidden_dim], dim=-1)
-        del x_mod
+        if modulation:
+            self.modulation = Modulation(hidden_size, double=False)
+        else:
+            self.modulation = None
 
-        # q, k, v = rearrange(qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads)
-        qkv = qkv.view(qkv.size(0), qkv.size(1), 3, self.num_heads, self.hidden_size // self.num_heads)
-        q, k, v = qkv.permute(2, 0, 3, 1, 4)
+    def forward(self, x: torch.Tensor, vec: torch.Tensor, pe: torch.Tensor, attn_mask=None, modulation_dims=None, transformer_options={}) -> torch.Tensor:
+        if self.modulation:
+            mod, _ = self.modulation(vec)
+        else:
+            mod = vec
+
+        qkv, mlp = torch.split(self.linear1(apply_mod(self.pre_norm(x), (1 + mod.scale), mod.shift, modulation_dims)), [3 * self.hidden_size, self.mlp_hidden_dim_first], dim=-1)
+
+        q, k, v = qkv.view(qkv.shape[0], qkv.shape[1], 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         del qkv
-
         q, k = self.norm(q, k, v)
-        attn = attention(q, k, v, pe=pe)
-        del q, k, v, pe
-        output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), dim=2))
-        del attn, mlp
 
-        x = x + mod_gate * output
-        del mod_gate, output
+        # compute attention
+        attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
+        del q, k, v
+        # compute activation in mlp stream, cat again and run second linear layer
+        if self.yak_mlp:
+            mlp = self.mlp_act(mlp[..., self.mlp_hidden_dim_first // 2 :]) * mlp[..., : self.mlp_hidden_dim_first // 2]
+        else:
+            mlp = self.mlp_act(mlp)
+        output = self.linear2(torch.cat((attn, mlp), 2))
+        x += apply_mod(output, mod.gate, None, modulation_dims)
 
         x = fp16_fix(x)
 
@@ -288,17 +373,18 @@ class SingleStreamBlock(nn.Module):
 
 
 class LastLayer(nn.Module):
-    def __init__(self, hidden_size, patch_size, out_channels):
+    def __init__(self, hidden_size: int, patch_size: int, out_channels: int, bias=True):
         super().__init__()
         self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=True)
-        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=True))
+        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels, bias=bias)
+        self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(hidden_size, 2 * hidden_size, bias=bias))
 
-    def forward(self, x, vec):
-        shift, scale = self.adaLN_modulation(vec).chunk(2, dim=1)
-        del vec
-        x = (1 + scale[:, None, :]) * self.norm_final(x) + shift[:, None, :]
-        del scale, shift
+    def forward(self, x: torch.Tensor, vec: torch.Tensor, modulation_dims=None) -> torch.Tensor:
+        if vec.ndim == 2:
+            vec = vec[:, None, :]
+
+        shift, scale = self.adaLN_modulation(vec).chunk(2, dim=-1)
+        x = apply_mod(self.norm_final(x), (1 + scale), shift, modulation_dims)
         x = self.linear(x)
         return x
 
