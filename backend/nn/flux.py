@@ -1,7 +1,5 @@
-# implementation of Flux for Forge
-# Copyright Forge 2024
+# https://github.com/Comfy-Org/ComfyUI/tree/v0.9.0/comfy/ldm/flux
 # Reference: https://github.com/black-forest-labs/flux
-
 
 import math
 from dataclasses import dataclass
