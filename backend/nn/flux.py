@@ -12,26 +12,20 @@ from torch import nn
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.attention import attention_function
-from backend.utils import fp16_fix, process_img, tensor2parameter
+from backend.utils import fp16_fix, process_img
 
 
 def attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, pe: torch.Tensor, mask=None, transformer_options={}) -> torch.Tensor:
-    q_shape = q.shape
-    k_shape = k.shape
-
     if pe is not None:
-        q = q.to(dtype=pe.dtype).reshape(*q.shape[:-1], -1, 1, 2)
-        k = k.to(dtype=pe.dtype).reshape(*k.shape[:-1], -1, 1, 2)
-        q = (pe[..., 0] * q[..., 0] + pe[..., 1] * q[..., 1]).reshape(*q_shape).type_as(v)
-        k = (pe[..., 0] * k[..., 0] + pe[..., 1] * k[..., 1]).reshape(*k_shape).type_as(v)
-
+        q, k = apply_rope(q, k, pe)
     heads = q.shape[1]
-    return attention_function(q, k, v, heads, skip_reshape=True, mask=mask, transformer_options=transformer_options)
+    x = attention_function(q, k, v, heads, skip_reshape=True, mask=mask, transformer_options=transformer_options)
+    return x
 
 
 def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     assert dim % 2 == 0
-    if memory_management.is_device_mps(pos.device) or memory_management.is_intel_xpu() or memory_management.directml_enabled:
+    if memory_management.is_device_mps(pos.device) or memory_management.is_intel_xpu() or memory_management.is_directml_enabled():
         device = torch.device("cpu")
     else:
         device = pos.device
@@ -51,7 +45,7 @@ def apply_rope1(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
     return x_out.reshape(*x.shape).type_as(x)
 
 
-def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor):
+def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     return apply_rope1(xq, freqs_cis), apply_rope1(xk, freqs_cis)
 
 
@@ -70,32 +64,30 @@ def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000, time_
 
 
 class EmbedND(nn.Module):
-    def __init__(self, dim, theta, axes_dim):
+    def __init__(self, dim: int, theta: int, axes_dim: list):
         super().__init__()
         self.dim = dim
         self.theta = theta
         self.axes_dim = axes_dim
 
-    def forward(self, ids):
+    def forward(self, ids: torch.Tensor) -> torch.Tensor:
         n_axes = ids.shape[-1]
         emb = torch.cat(
             [rope(ids[..., i], self.axes_dim[i], self.theta) for i in range(n_axes)],
             dim=-3,
         )
-        del ids, n_axes
         return emb.unsqueeze(1)
 
 
 class MLPEmbedder(nn.Module):
-    def __init__(self, in_dim, hidden_dim):
+    def __init__(self, in_dim: int, hidden_dim: int, bias=True):
         super().__init__()
-        self.in_layer = nn.Linear(in_dim, hidden_dim, bias=True)
+        self.in_layer = nn.Linear(in_dim, hidden_dim, bias=bias)
         self.silu = nn.SiLU()
-        self.out_layer = nn.Linear(hidden_dim, hidden_dim, bias=True)
+        self.out_layer = nn.Linear(hidden_dim, hidden_dim, bias=bias)
 
-    def forward(self, x):
-        x = self.silu(self.in_layer(x))
-        return self.out_layer(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.out_layer(self.silu(self.in_layer(x)))
 
 
 class RMSNorm(nn.Module):
@@ -107,15 +99,15 @@ class RMSNorm(nn.Module):
         return RMSNorm.rms_norm(x, self.scale, 1e-6)
 
     @staticmethod
-    def rms_norm(x: torch.Tensor, weight: torch.nn.Parameter, eps=1e-6):
+    def rms_norm(x: torch.Tensor, weight: nn.Parameter, eps=1e-6):
         if weight is None:
-            return torch.nn.functional.rms_norm(x, (x.shape[-1],), eps=eps)
+            return nn.functional.rms_norm(x, (x.shape[-1],), eps=eps)
         else:
-            return torch.nn.functional.rms_norm(x, weight.shape, weight=memory_management.cast_to(weight, dtype=x.dtype, device=x.device), eps=eps)
+            return nn.functional.rms_norm(x, weight.shape, weight=memory_management.cast_to(weight, dtype=x.dtype, device=x.device), eps=eps)
 
 
 class QKNorm(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim: int):
         super().__init__()
         self.query_norm = RMSNorm(dim)
         self.key_norm = RMSNorm(dim)
@@ -127,13 +119,14 @@ class QKNorm(nn.Module):
 
 
 class SelfAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False):
+    def __init__(self, dim: int, num_heads: int = 8, qkv_bias: bool = False, proj_bias: bool = True):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
+
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.norm = QKNorm(head_dim)
-        self.proj = nn.Linear(dim, dim)
+        self.proj = nn.Linear(dim, dim, bias=proj_bias)
 
     def forward(self, x, pe):
         qkv = self.qkv(x)
@@ -311,7 +304,23 @@ class LastLayer(nn.Module):
 
 
 class IntegratedFluxTransformer2DModel(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, vec_in_dim: int, context_in_dim: int, hidden_size: int, mlp_ratio: float, num_heads: int, depth: int, depth_single_blocks: int, axes_dim: list[int], theta: int, patch_size: int, qkv_bias: bool, guidance_embed: bool):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        vec_in_dim: int,
+        context_in_dim: int,
+        hidden_size: int,
+        mlp_ratio: float,
+        num_heads: int,
+        depth: int,
+        depth_single_blocks: int,
+        axes_dim: list[int],
+        theta: int,
+        patch_size: int,
+        qkv_bias: bool,
+        guidance_embed: bool,
+    ):
         super().__init__()
 
         self.guidance_embed = guidance_embed
