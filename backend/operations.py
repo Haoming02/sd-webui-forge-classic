@@ -159,8 +159,9 @@ class ForgeOperations:
             self.out_features = out_features
             self.dummy = torch.nn.Parameter(torch.empty(1, device=current_device, dtype=current_dtype))
             self.weight = torch.empty([0], device=current_device, dtype=current_dtype)  # SVDQW4A4Linear.from_linear
-            self.scale_weight = None
             self.bias = None
+            self.scale_weight = None
+            self.scale_input = None
             self.parameters_manual_cast = current_manual_cast_enabled
 
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
@@ -168,15 +169,23 @@ class ForgeOperations:
                 if prefix + "weight" in state_dict:
                     del self.weight
                     self.weight = torch.nn.Parameter(state_dict[prefix + "weight"].to(self.dummy))
-                if prefix + "scale_weight" in state_dict:
-                    self.scale_weight = torch.nn.Parameter(state_dict[prefix + "scale_weight"])
                 if prefix + "bias" in state_dict:
                     self.bias = torch.nn.Parameter(state_dict[prefix + "bias"].to(self.dummy))
+                if prefix + "scale_weight" in state_dict:
+                    self.scale_weight = torch.nn.Parameter(state_dict[prefix + "scale_weight"])
+                elif prefix + "weight_scale" in state_dict:
+                    self.scale_weight = torch.nn.Parameter(state_dict[prefix + "weight_scale"])
+                if prefix + "scale_input" in state_dict:
+                    self.scale_input = torch.nn.Parameter(state_dict[prefix + "scale_input"])
+                elif prefix + "input_scale" in state_dict:
+                    self.scale_input = torch.nn.Parameter(state_dict[prefix + "input_scale"])
                 del self.dummy
             else:
                 super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
         def forward(self, x):
+            if self.scale_input is not None:
+                x = (x * self.scale_input.to(x)).contiguous()
             if self.parameters_manual_cast:
                 weight, bias, signal = weights_manual_cast(self, x)
                 with main_stream_worker(weight, bias, signal):
