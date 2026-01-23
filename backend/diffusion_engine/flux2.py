@@ -19,7 +19,7 @@ class Flux2(ForgeDiffusionEngine):
 
         clip = CLIP(model_dict={"qwen3": huggingface_components["text_encoder"]}, tokenizer_dict={"qwen3": huggingface_components["tokenizer"]})
 
-        vae = VAE(model=huggingface_components["vae"])
+        vae = VAE(model=huggingface_components["vae"], is_flux2=True)
 
         k_predictor = PredictionDiscreteFlow(estimated_config)
 
