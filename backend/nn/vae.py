@@ -1,7 +1,11 @@
+import math
+
 import torch
 from diffusers.configuration_utils import ConfigMixin, register_to_config
+from einops import rearrange
 from torch import nn
 
+from backend import memory_management
 from backend.attention import attention_function_vae
 
 
@@ -318,3 +322,68 @@ class IntegratedAutoencoderKL(nn.Module, ConfigMixin):
 
     def process_out(self, latent):
         return (latent / self.scaling_factor) + self.shift_factor
+
+
+class AutoencoderKLFlux2(IntegratedAutoencoderKL):
+    config_name = "config.json"
+
+    @register_to_config
+    def __init__(self, in_channels=3, out_channels=3, down_block_types=("DownEncoderBlock2D",), up_block_types=("UpDecoderBlock2D",), block_out_channels=(64,), layers_per_block=1, act_fn="silu", latent_channels=4, norm_num_groups=32, sample_size=32, scaling_factor=0.18215, shift_factor=0.0, latents_mean=None, latents_std=None, force_upcast=True, use_quant_conv=True, use_post_quant_conv=True):
+        super().__init__()
+        ch = block_out_channels[0]
+        ch_mult = [x // ch for x in block_out_channels]
+        self.encoder = Encoder(double_z=True, z_channels=latent_channels, resolution=256, in_channels=in_channels, out_ch=out_channels, ch=ch, ch_mult=ch_mult, num_res_blocks=layers_per_block, attn_resolutions=[], dropout=0.0)
+        self.decoder = Decoder(double_z=True, z_channels=latent_channels, resolution=256, in_channels=in_channels, out_ch=out_channels, ch=ch, ch_mult=ch_mult, num_res_blocks=layers_per_block, attn_resolutions=[], dropout=0.0)
+        self.quant_conv = nn.Conv2d(2 * latent_channels, 2 * latent_channels, 1) if use_quant_conv else None
+        self.post_quant_conv = nn.Conv2d(latent_channels, latent_channels, 1) if use_post_quant_conv else None
+        self.embed_dim = latent_channels
+        self.scaling_factor = scaling_factor
+        self.shift_factor = shift_factor
+
+        if not isinstance(self.shift_factor, float):
+            self.shift_factor = 0.0
+
+        self.bn_eps = 1e-4
+        self.bn_momentum = 0.1
+        self.ps = [2, 2]
+        self.bn = torch.nn.BatchNorm2d(
+            math.prod(self.ps) * latent_channels,
+            eps=self.bn_eps,
+            momentum=self.bn_momentum,
+            affine=False,
+            track_running_stats=True,
+        )
+        self.bn.eval()
+
+    def encode(self, x):
+        z = super().encode(x)
+
+        z = rearrange(
+            z,
+            "... c (i pi) (j pj)  -> ... (c pi pj) i j",
+            pi=self.ps[0],
+            pj=self.ps[1],
+        )
+
+        z = torch.nn.functional.batch_norm(
+            z,
+            memory_management.cast_to(self.bn.running_mean, dtype=z.dtype, device=z.device),
+            memory_management.cast_to(self.bn.running_var, dtype=z.dtype, device=z.device),
+            momentum=self.bn_momentum,
+            eps=self.bn_eps,
+        )
+
+        return z
+
+    def decode(self, z):
+        s = torch.sqrt(memory_management.cast_to(self.bn.running_var.view(1, -1, 1, 1), dtype=z.dtype, device=z.device) + self.bn_eps)
+        m = memory_management.cast_to(self.bn.running_mean.view(1, -1, 1, 1), dtype=z.dtype, device=z.device)
+        z = z * s + m
+        z = rearrange(
+            z,
+            "... (c pi pj) i j -> ... c (i pi) (j pj)",
+            pi=self.ps[0],
+            pj=self.ps[1],
+        )
+
+        return super().decode(z)
