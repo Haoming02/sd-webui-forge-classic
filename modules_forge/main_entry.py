@@ -137,6 +137,9 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
     from modules.sd_models import model_data, select_checkpoint
 
     checkpoint_info = select_checkpoint()
+    if checkpoint_info is None:
+        logger.critical('You do not have any model... Please download models to "models/Stable-diffusion"')
+        return
 
     unet_storage_dtype, lora_fp16 = forge_unet_storage_dtype_options.get(shared.opts.forge_unet_storage_dtype, (None, False))
 

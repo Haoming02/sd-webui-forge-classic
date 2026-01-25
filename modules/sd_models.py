@@ -200,7 +200,6 @@ def select_checkpoint():
         return checkpoint_info
 
     if len(checkpoints_list) == 0:
-        print("You do not have any model!")
         return None
 
     checkpoint_info = next(iter(checkpoints_list.values()))
@@ -329,10 +328,11 @@ def forge_model_reload():
 
     timer.record("unload existing model")
 
-    checkpoint_info = model_data.forge_loading_parameters["checkpoint_info"]
-
-    if checkpoint_info is None:
-        raise ValueError("You do not have any model! Please download at least one model in [models/Stable-diffusion].")
+    try:
+        checkpoint_info = model_data.forge_loading_parameters["checkpoint_info"]
+        assert checkpoint_info is not None
+    except Exception:
+        raise ValueError("Failed to find available model...") from None
 
     state_dict = checkpoint_info.filename
     additional_state_dicts = model_data.forge_loading_parameters.get("additional_modules", [])
