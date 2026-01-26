@@ -7,7 +7,7 @@ from backend.modules.k_prediction import PredictionDiscreteFlow
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.qwen3_engine import Qwen3TextProcessingEngine
+from backend.text_processing.klein_engine import KleinTextProcessingEngine
 
 
 class Flux2(ForgeDiffusionEngine):
@@ -25,7 +25,7 @@ class Flux2(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_gemma = Qwen3TextProcessingEngine(
+        self.text_processing_engine_gemma = KleinTextProcessingEngine(
             text_encoder=clip.cond_stage_model.qwen3,
             tokenizer=clip.tokenizer.qwen3,
         )
