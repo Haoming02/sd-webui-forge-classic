@@ -166,9 +166,12 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
         if cls_name in ["Qwen3Model", "Qwen3ForCausalLM"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen3 state dict!"
 
-            from backend.nn.llm.llama import Qwen3_4B
-
             config = read_arbitrary_config(config_path)
+
+            if config["hidden_size"] == 4096:
+                from backend.nn.llm.llama import Qwen3_8B as QTE
+            else:
+                from backend.nn.llm.llama import Qwen3_4B as QTE
 
             storage_dtype = memory_management.text_encoder_dtype()
             state_dict_dtype = utils.weight_dtype(state_dict)
@@ -185,11 +188,11 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 with no_init_weights():
                     with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=False, bnb_dtype=storage_dtype):
-                        model = Qwen3_4B(config)
+                        model = QTE(config)
             else:
                 with no_init_weights():
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
-                        model = Qwen3_4B(config)
+                        model = QTE(config)
 
             load_state_dict(model, state_dict, log_name=cls_name)
             return model
@@ -413,7 +416,9 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
 
     #   diffusers format
     if "decoder.up_blocks.0.resnets.0.norm1.weight" in asd:
-        from modules_forge.packages.huggingface_guess.diffusers_convert import convert_vae_state_dict
+        from modules_forge.packages.huggingface_guess.diffusers_convert import (
+            convert_vae_state_dict,
+        )
 
         asd = convert_vae_state_dict(asd)
 
