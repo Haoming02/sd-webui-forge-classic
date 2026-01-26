@@ -184,8 +184,8 @@ class ForgeOperations:
                 super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
         def forward(self, x):
-            if self.scale_input is not None:
-                x = (x * self.scale_input.to(x)).contiguous()
+            # if self.scale_input is not None:  # TODO ?
+            #     x = (x * self.scale_input.to(x)).contiguous()
             if self.parameters_manual_cast:
                 weight, bias, signal = weights_manual_cast(self, x)
                 with main_stream_worker(weight, bias, signal):

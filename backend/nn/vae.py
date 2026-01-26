@@ -387,3 +387,9 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
         )
 
         return super().decode(z)
+
+    def process_in(self, latent):
+        return latent
+
+    def process_out(self, latent):
+        return latent
