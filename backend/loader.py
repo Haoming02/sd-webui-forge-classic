@@ -63,11 +63,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
                 model = IntegratedAutoencoderKL.from_config(config)
 
-            if "decoder.up_blocks.0.resnets.0.norm1.weight" in state_dict.keys():  # diffusers format
-                from modules_forge.packages.huggingface_guess.diffusers_convert import convert_vae_state_dict
-
-                state_dict = convert_vae_state_dict(state_dict)
-
             load_state_dict(model, state_dict, ignore_start="loss.")
             return model
         if cls_name == "AutoencoderKLFlux2":
@@ -415,6 +410,12 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
     #   flux 2
     if "decoder.post_quant_conv.weight" in asd:
         asd = state_dict_prefix_replace(asd, {"decoder.post_quant_conv.": "post_quant_conv.", "encoder.quant_conv.": "quant_conv."})
+
+    #   diffusers format
+    if "decoder.up_blocks.0.resnets.0.norm1.weight" in asd:
+        from modules_forge.packages.huggingface_guess.diffusers_convert import convert_vae_state_dict
+
+        asd = convert_vae_state_dict(asd)
 
     #   sd / sdxl / wan                  # wan
     if "decoder.conv_in.weight" in asd or "decoder.middle.0.residual.0.gamma" in asd:
