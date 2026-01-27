@@ -1,7 +1,13 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules.prompt_parser import SdConditioning
+
 import torch
 from huggingface_guess import model_list
 
 from backend import memory_management
+from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.modules.k_prediction import PredictionDiscreteFlow
 from backend.patcher.clip import CLIP
@@ -34,9 +40,20 @@ class Flux2(ForgeDiffusionEngine):
         self.forge_objects_original = self.forge_objects.shallow_copy()
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
 
+        self.ref_latents = []
+
     @torch.inference_mode()
-    def get_learned_conditioning(self, prompt: list[str]):
+    def get_learned_conditioning(self, prompt: "SdConditioning"):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
+
+        if not prompt.is_negative_prompt:
+            if self.ref_latents:
+                dynamic_args["ref_latents"] = self.ref_latents.copy()
+                self.ref_latents.clear()
+            else:
+                dynamic_args["ref_latents"].clear()
+                self.ref_latents.clear()
+
         return self.text_processing_engine_gemma(prompt)
 
     @torch.inference_mode()
@@ -48,6 +65,7 @@ class Flux2(ForgeDiffusionEngine):
     def encode_first_stage(self, x):
         sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+        self.ref_latents.append(sample.cpu())
         return sample.to(x)
 
     @torch.inference_mode()
