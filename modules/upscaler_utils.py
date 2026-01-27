@@ -69,10 +69,10 @@ try_patch_spandrel()
 
 
 def _model(model: Callable, x: torch.Tensor) -> torch.Tensor:
-    if x.dtype == torch.float32 or model.architecture.name not in ("ATD", "DAT"):
+    if x.dtype == torch.float32 or model.architecture.name not in ("ATD", "DAT", "DRCT"):
         return model(x)
 
-    # Spandrel does not correctly handle non-FP32 for ATD and DAT models
+    # Spandrel does not correctly handle non-FP32 for certain models
     try:
         # Force the upscaler to use the dtype it should for new tensors
         torch.set_default_dtype(x.dtype)

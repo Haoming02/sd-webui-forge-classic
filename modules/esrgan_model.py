@@ -14,6 +14,8 @@ PREFER_HALF = opts.prefer_fp16_upscalers
 if PREFER_HALF:
     print("[Upscalers] Prefer Half-Precision:", PREFER_HALF)
 
+MEM_RATIO = {"DRCT": 0.8, "DAT": 0.4}
+
 
 class UpscalerESRGAN(Upscaler):
     def __init__(self, dirname: str):
@@ -46,12 +48,21 @@ class UpscalerESRGAN(Upscaler):
             self.scalers.append(scaler_data)
 
     def do_upscale(self, img: Image.Image, selected_model: str):
+        from backend.memory_management import free_memory
+
         prepare_free_memory()
         try:
             model = self.load_model(selected_model)
         except Exception:
             errors.report(f"Unable to load {selected_model}", exc_info=True)
             return img
+
+        free_memory(
+            #       (W * H)       * C *          dtype            *    scale    *                 ratio                       *  MB  *                      GPU
+            (opts.ESRGAN_tile**2) * 3 * (2 if PREFER_HALF else 4) * model.scale * MEM_RATIO.get(model.architecture.name, 0.2) * 1024 * (1.1 if opts.composite_tiles_on_gpu else 1.0),
+            device=devices.device_esrgan,
+        )
+
         return upscale_with_model(
             model=model,
             img=img,
