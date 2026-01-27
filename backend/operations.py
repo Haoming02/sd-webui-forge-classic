@@ -185,6 +185,26 @@ class ForgeOperations:
                 weight, bias = get_weight_and_bias(self)
                 return torch.nn.functional.linear(x, weight, bias)
 
+    class Conv1d(torch.nn.Conv1d):
+
+        def __init__(self, *args, **kwargs):
+            kwargs["device"] = current_device
+            kwargs["dtype"] = current_dtype
+            super().__init__(*args, **kwargs)
+            self.parameters_manual_cast = current_manual_cast_enabled
+
+        def reset_parameters(self):
+            return None
+
+        def forward(self, x):
+            if self.parameters_manual_cast:
+                weight, bias, signal = weights_manual_cast(self, x)
+                with main_stream_worker(weight, bias, signal):
+                    return self._conv_forward(x, weight, bias)
+            else:
+                weight, bias = get_weight_and_bias(self)
+                return super()._conv_forward(x, weight, bias)
+
     class Conv2d(torch.nn.Conv2d):
 
         def __init__(self, *args, **kwargs):
@@ -224,101 +244,6 @@ class ForgeOperations:
             else:
                 weight, bias = get_weight_and_bias(self)
                 return super()._conv_forward(x, weight, bias)
-
-    class Conv1d(torch.nn.Conv1d):
-
-        def __init__(self, *args, **kwargs):
-            kwargs["device"] = current_device
-            kwargs["dtype"] = current_dtype
-            super().__init__(*args, **kwargs)
-            self.parameters_manual_cast = current_manual_cast_enabled
-
-        def reset_parameters(self):
-            return None
-
-        def forward(self, x):
-            if self.parameters_manual_cast:
-                weight, bias, signal = weights_manual_cast(self, x)
-                with main_stream_worker(weight, bias, signal):
-                    return self._conv_forward(x, weight, bias)
-            else:
-                weight, bias = get_weight_and_bias(self)
-                return super()._conv_forward(x, weight, bias)
-
-    class ConvTranspose2d(torch.nn.ConvTranspose2d):
-
-        def __init__(self, *args, **kwargs):
-            kwargs["device"] = current_device
-            kwargs["dtype"] = current_dtype
-            super().__init__(*args, **kwargs)
-            self.parameters_manual_cast = current_manual_cast_enabled
-
-        def reset_parameters(self):
-            return None
-
-        def forward(self, x, output_size=None):
-            if self.parameters_manual_cast:
-                num_spatial_dims = 2
-                output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size, num_spatial_dims, self.dilation)
-
-                weight, bias, signal = weights_manual_cast(self, x)
-                with main_stream_worker(weight, bias, signal):
-                    return torch.nn.functional.conv_transpose2d(x, weight, bias, self.stride, self.padding, output_padding, self.groups, self.dilation)
-            else:
-                weight, bias = get_weight_and_bias(self)
-                num_spatial_dims = 2
-                output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size, num_spatial_dims, self.dilation)
-                return torch.nn.functional.conv_transpose2d(x, weight, bias, self.stride, self.padding, output_padding, self.groups, self.dilation)
-
-    class ConvTranspose1d(torch.nn.ConvTranspose1d):
-
-        def __init__(self, *args, **kwargs):
-            kwargs["device"] = current_device
-            kwargs["dtype"] = current_dtype
-            super().__init__(*args, **kwargs)
-            self.parameters_manual_cast = current_manual_cast_enabled
-
-        def reset_parameters(self):
-            return None
-
-        def forward(self, x, output_size=None):
-            if self.parameters_manual_cast:
-                num_spatial_dims = 1
-                output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size, num_spatial_dims, self.dilation)
-
-                weight, bias, signal = weights_manual_cast(self, x)
-                with main_stream_worker(weight, bias, signal):
-                    return torch.nn.functional.conv_transpose1d(x, weight, bias, self.stride, self.padding, output_padding, self.groups, self.dilation)
-            else:
-                weight, bias = get_weight_and_bias(self)
-                num_spatial_dims = 1
-                output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size, num_spatial_dims, self.dilation)
-                return torch.nn.functional.conv_transpose2d(x, weight, bias, self.stride, self.padding, output_padding, self.groups, self.dilation)
-
-    class ConvTranspose3d(torch.nn.ConvTranspose3d):
-
-        def __init__(self, *args, **kwargs):
-            kwargs["device"] = current_device
-            kwargs["dtype"] = current_dtype
-            super().__init__(*args, **kwargs)
-            self.parameters_manual_cast = current_manual_cast_enabled
-
-        def reset_parameters(self):
-            return None
-
-        def forward(self, x, output_size=None):
-            if self.parameters_manual_cast:
-                num_spatial_dims = 3
-                output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size, num_spatial_dims, self.dilation)
-
-                weight, bias, signal = weights_manual_cast(self, x)
-                with main_stream_worker(weight, bias, signal):
-                    return torch.nn.functional.conv_transpose3d(x, weight, bias, self.stride, self.padding, output_padding, self.groups, self.dilation)
-            else:
-                weight, bias = get_weight_and_bias(self)
-                num_spatial_dims = 3
-                output_padding = self._output_padding(x, output_size, self.stride, self.padding, self.kernel_size, num_spatial_dims, self.dilation)
-                return torch.nn.functional.conv_transpose2d(x, weight, bias, self.stride, self.padding, output_padding, self.groups, self.dilation)
 
     class GroupNorm(torch.nn.GroupNorm):
 
@@ -432,13 +357,16 @@ class NoCastLayer:
 
         non_blocking = memory_management.device_supports_non_blocking(device)
 
+        weight = None
+        if getattr(self, "weight", None) is not None:
+            weight = self.get_weight(self.weight.to(device=device))
+            weight = memory_management.cast_to(weight, dtype=dtype, device=device, non_blocking=non_blocking, copy=False)
+
         bias = None
         if getattr(self, "bias", None) is not None:
             bias = self.get_weight(self.bias.to(device=device))
             bias = memory_management.cast_to(bias, dtype=dtype, device=device, non_blocking=non_blocking, copy=False)
 
-        weight = self.get_weight(self.weight.to(device=device))
-        weight = memory_management.cast_to(weight, dtype=dtype, device=device, non_blocking=non_blocking, copy=False)
         return weight, bias
 
 
@@ -560,6 +488,51 @@ class ForgeOperationsGGUF(ForgeOperations):
             return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
+# region Nunchaku
+
+
+class ForgeOperationsNunchaku:
+    class Linear(NoCastLayer, torch.nn.Linear):
+        def forward(self, x):
+            weight, bias = self.cast_bias_weight(input=x)
+            return torch.nn.functional.linear(x, weight, bias)
+
+    class Conv1d(NoCastLayer, torch.nn.Conv1d):
+        def forward(self, x):
+            weight, bias = self.cast_bias_weight(input=x)
+            return super()._conv_forward(x, weight, bias)
+
+    class Conv2d(NoCastLayer, torch.nn.Conv2d):
+        def forward(self, x):
+            weight, bias = self.cast_bias_weight(input=x)
+            return super()._conv_forward(x, weight, bias)
+
+    class Conv3d(NoCastLayer, torch.nn.Conv3d):
+        def forward(self, x):
+            weight, bias = self.cast_bias_weight(input=x)
+            return super()._conv_forward(x, weight, bias)
+
+    class GroupNorm(NoCastLayer, torch.nn.GroupNorm):
+        def forward(self, x):
+            weight, bias = self.cast_bias_weight(input=x)
+            return torch.nn.functional.group_norm(x, self.num_groups, weight, bias, self.eps)
+
+    class LayerNorm(NoCastLayer, torch.nn.LayerNorm):
+        def forward(self, x):
+            weight, bias = self.cast_bias_weight(input=x)
+            return torch.nn.functional.layer_norm(x, self.normalized_shape, weight, bias, self.eps)
+
+    class RMSNorm(NoCastLayer, torch.nn.RMSNorm):
+        def forward(self, x):
+            weight, _ = self.cast_bias_weight(input=x, skip_dtype=True)
+            return torch.nn.functional.rms_norm(x, self.normalized_shape, weight, self.eps)
+
+    class Embedding(NoCastLayer, torch.nn.Embedding):
+        def forward(self, x):
+            weight, _ = self.cast_bias_weight(input=x, skip_dtype=True)
+            return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+
+
 # region fp8
 
 
@@ -626,18 +599,7 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
     current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype = device, dtype, manual_cast_enabled, bnb_dtype
 
     if operations is False:
-        _dev = torch.get_default_device()
-        _dtype = torch.get_default_dtype()
-
-        torch.set_default_device(current_device)
-        torch.set_default_dtype(current_dtype)
-
-        yield
-
-        torch.set_default_device(_dev)
-        torch.set_default_dtype(_dtype)
-
-        return
+        operations = ForgeOperationsNunchaku
 
     if operations is None:
         if bnb_dtype in [torch.float8_e4m3fn] and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):
@@ -650,7 +612,7 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
         else:
             operations = ForgeOperations
 
-    op_names = ["Linear", "Conv1d", "Conv2d", "Conv3d", "ConvTranspose1d", "ConvTranspose2d", "ConvTranspose3d", "GroupNorm", "LayerNorm", "RMSNorm", "Embedding"]
+    op_names = ["Linear", "Conv1d", "Conv2d", "Conv3d", "GroupNorm", "LayerNorm", "RMSNorm", "Embedding"]
     backups = {op_name: getattr(torch.nn, op_name) for op_name in op_names}
 
     try:
