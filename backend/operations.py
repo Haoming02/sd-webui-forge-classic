@@ -405,58 +405,12 @@ class ForgeOperations:
                 return super().forward(x)
 
 
-# region BnB
+# region Layer
 
 
-if memory_management.bnb_enabled():
-
-    from backend.operations_bnb import (
-        ForgeLoader4Bit,
-        functional_dequantize_4bit,
-        functional_linear_4bits,
-    )
-
-    class ForgeOperationsBNB4bits(ForgeOperations):
-        class Linear(ForgeLoader4Bit):
-            def __init__(self, *args, **kwargs):
-                super().__init__(device=current_device, dtype=current_dtype, quant_type=current_bnb_dtype)
-                self.parameters_manual_cast = current_manual_cast_enabled
-
-            def forward(self, x):
-                if self.bias is not None and self.bias.dtype != x.dtype:
-                    # Maybe this can also be set to all non-bnb ops since the cost is very low.
-                    # And it only invokes one time, and most linear does not have bias
-                    self.bias = utils.tensor2parameter(self.bias.to(x.dtype))
-
-                if hasattr(self, "forge_online_loras"):
-                    weight, bias, signal = weights_manual_cast(self, x, weight_fn=functional_dequantize_4bit, bias_fn=None, skip_bias_dtype=True)
-                    with main_stream_worker(weight, bias, signal):
-                        return torch.nn.functional.linear(x, weight, bias)
-
-                if not self.parameters_manual_cast:
-                    return functional_linear_4bits(x, self.weight, self.bias)
-                elif not self.weight.bnb_quantized:
-                    assert x.device.type == "cuda", "BNB Must Use CUDA as Computation Device!"
-                    layer_original_device = self.weight.device
-                    self.weight = self.weight._quantize(x.device)
-                    bias = self.bias.to(x.device) if self.bias is not None else None
-                    out = functional_linear_4bits(x, self.weight, bias)
-                    self.weight = self.weight.to(layer_original_device)
-                    return out
-                else:
-                    weight, bias, signal = weights_manual_cast(self, x, skip_weight_dtype=True, skip_bias_dtype=True)
-                    with main_stream_worker(weight, bias, signal):
-                        return functional_linear_4bits(x, weight, bias)
-
-
-# region GGUF
-
-
-from backend.operations_gguf import ParameterGGUF, dequantize_tensor
-
-
-class GGMLLayer:
-    """https://github.com/city96/ComfyUI-GGUF/blob/main/ops.py"""
+# reference: https://github.com/city96/ComfyUI-GGUF/blob/main/ops.py
+# `cast_to` function breaks weight attributes
+class NoCastLayer:
 
     def get_weight(self, tensor: torch.Tensor):
         if tensor is None:
@@ -488,8 +442,57 @@ class GGMLLayer:
         return weight, bias
 
 
+# region BnB
+
+
+if memory_management.bnb_enabled():
+
+    from backend.operations_bnb import (
+        ForgeLoader4Bit,
+        functional_dequantize_4bit,
+        functional_linear_4bits,
+    )
+
+    class ForgeOperationsBNB4bits(ForgeOperations):
+        class Linear(NoCastLayer, ForgeLoader4Bit):
+            def __init__(self, *args, **kwargs):
+                super().__init__(device=current_device, dtype=current_dtype, quant_type=current_bnb_dtype)
+                self.parameters_manual_cast = current_manual_cast_enabled
+
+            def forward(self, x):
+                if self.bias is not None and self.bias.dtype != x.dtype:
+                    # Maybe this can also be set to all non-bnb ops since the cost is very low.
+                    # And it only invokes one time, and most linear does not have bias
+                    self.bias = utils.tensor2parameter(self.bias.to(x.dtype))
+
+                if hasattr(self, "forge_online_loras"):
+                    weight, bias, signal = weights_manual_cast(self, x, weight_fn=functional_dequantize_4bit, bias_fn=None, skip_bias_dtype=True)
+                    with main_stream_worker(weight, bias, signal):
+                        return torch.nn.functional.linear(x, weight, bias)
+
+                if not self.parameters_manual_cast:
+                    return functional_linear_4bits(x, self.weight, self.bias)
+                elif not self.weight.bnb_quantized:
+                    assert x.device.type == "cuda", "BNB Must Use CUDA as Computation Device!"
+                    layer_original_device = self.weight.device
+                    self.weight = self.weight._quantize(x.device)
+                    bias = self.bias.to(x.device) if self.bias is not None else None
+                    out = functional_linear_4bits(x, self.weight, bias)
+                    self.weight = self.weight.to(layer_original_device)
+                    return out
+                else:
+                    weight, bias = self.cast_bias_weight(input=x, skip_dtype=True)
+                    return functional_linear_4bits(x, weight, bias)
+
+
+# region GGUF
+
+
+from backend.operations_gguf import ParameterGGUF, dequantize_tensor
+
+
 class ForgeOperationsGGUF(ForgeOperations):
-    class Linear(GGMLLayer, torch.nn.Module):
+    class Linear(NoCastLayer, torch.nn.Module):
         def __init__(self, *args, **kwargs):
             super().__init__()
             self.dummy = torch.nn.Parameter(torch.empty(1, device=current_device, dtype=current_dtype))
@@ -525,7 +528,7 @@ class ForgeOperationsGGUF(ForgeOperations):
             weight, bias = self.cast_bias_weight(input=x)
             return torch.nn.functional.linear(x, weight, bias)
 
-    class Embedding(GGMLLayer, torch.nn.Embedding):
+    class Embedding(NoCastLayer, torch.nn.Embedding):
         def __init__(self, *args, **kwargs):
             kwargs["device"] = current_device
             kwargs["dtype"] = current_dtype
