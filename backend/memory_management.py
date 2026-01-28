@@ -547,9 +547,19 @@ else:
         if total_vram > (15 * 1024):
             EXTRA_RESERVED_VRAM += 100 * 1024 * 1024
 
+SETTING_RESERVED_VRAM = -1
+
+
+def set_reserved_memory(val: float):
+    global SETTING_RESERVED_VRAM
+    SETTING_RESERVED_VRAM = (1.0 - val) * total_vram * 1024 * 1024
+    if SETTING_RESERVED_VRAM == 0.0:
+        return
+    logger.info("Manually Reserving {:0.0f} MB VRAM".format(SETTING_RESERVED_VRAM / (1024 * 1024)))
+
 
 def extra_reserved_memory() -> float:
-    return EXTRA_RESERVED_VRAM
+    return max(SETTING_RESERVED_VRAM, EXTRA_RESERVED_VRAM)
 
 
 def minimum_inference_memory() -> float:

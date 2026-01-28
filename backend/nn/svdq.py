@@ -927,6 +927,10 @@ def patch_nunchaku_zimage(model: NextDiT, precision: str, rank: int):
         patch_scale_key(model, sd)
         return _load_state_dict(sd, *args, **kwargs)
 
+    class NunchakuZImage2DModel(NunchakuModelMixin, NextDiT):
+        pass
+
     model.load_state_dict = load_state_dict
+    model.__class__ = NunchakuZImage2DModel
 
     return model

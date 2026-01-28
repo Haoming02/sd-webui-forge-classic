@@ -73,7 +73,6 @@ class StableDiffusionXL(ForgeDiffusionEngine):
 
         width = getattr(prompt, "width", 1024) or 1024
         height = getattr(prompt, "height", 1024) or 1024
-        is_negative_prompt = getattr(prompt, "is_negative_prompt", False)
 
         crop_w = opts.sdxl_crop_left
         crop_h = opts.sdxl_crop_top
@@ -84,14 +83,7 @@ class StableDiffusionXL(ForgeDiffusionEngine):
 
         flat = torch.flatten(torch.cat(out)).unsqueeze(dim=0).repeat(clip_pooled.shape[0], 1).to(clip_pooled)
 
-        force_zero_negative_prompt = is_negative_prompt and all(x == "" for x in prompt)
-
-        if force_zero_negative_prompt:
-            clip_pooled = torch.zeros_like(clip_pooled)
-            cond_l = torch.zeros_like(cond_l)
-            cond_g = torch.zeros_like(cond_g)
-
-        # Ensure cond_l and cond_g have the same size
+        # ensure cond_l and cond_g have the same length
         max_len = max(cond_l.shape[1], cond_g.shape[1])
         cond_l = torch.cat([cond_l, cond_l.new_zeros(cond_l.size(0), max_len - cond_l.shape[1], cond_l.size(2))], dim=1)
         cond_g = torch.cat([cond_g, cond_g.new_zeros(cond_g.size(0), max_len - cond_g.shape[1], cond_g.size(2))], dim=1)
@@ -188,12 +180,6 @@ class StableDiffusionXLRefiner(ForgeDiffusionEngine):
         out = [self.embedder(torch.Tensor([height])), self.embedder(torch.Tensor([width])), self.embedder(torch.Tensor([crop_h])), self.embedder(torch.Tensor([crop_w])), self.embedder(torch.Tensor([aesthetic]))]
 
         flat = torch.flatten(torch.cat(out)).unsqueeze(dim=0).repeat(clip_pooled.shape[0], 1).to(clip_pooled)
-
-        force_zero_negative_prompt = is_negative_prompt and all(x == "" for x in prompt)
-
-        if force_zero_negative_prompt:
-            clip_pooled = torch.zeros_like(clip_pooled)
-            cond_g = torch.zeros_like(cond_g)
 
         cond = dict(
             crossattn=cond_g,

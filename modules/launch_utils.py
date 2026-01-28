@@ -278,6 +278,9 @@ def requirements_met(requirements_file):
             except Exception:
                 return False
 
+            if version_installed is None:
+                return False
+
             if packaging.version.parse(version_installed) < packaging.version.parse(version_required):
                 return False
 

@@ -168,11 +168,19 @@ def configure_sigint_handler():
         signal.signal(signal.SIGINT, sigint_handler)
 
 
+def reserve_memory():
+    from backend.memory_management import set_reserved_memory
+    from modules.shared import opts
+
+    set_reserved_memory(opts.setting_allocated_vram)
+
+
 def configure_opts_onchange():
     from modules import shared, ui_tempdir
 
     shared.opts.onchange("temp_dir", ui_tempdir.on_tmpdir_changed)
     shared.opts.onchange("gradio_theme", shared.reload_gradio_theme)
+    shared.opts.onchange("setting_allocated_vram", reserve_memory)
     startup_timer.record("opts onchange")
 
 

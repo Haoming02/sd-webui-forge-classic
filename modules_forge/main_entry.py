@@ -11,10 +11,6 @@ from backend.args import dynamic_args
 from backend.logging import setup_logger
 from modules import infotext_utils, launch_utils, paths, processing, sd_models, shared, shared_items, ui_common
 
-# prevent duplicate logs when switching Presets
-_prev: str = None
-_pending: bool = False
-
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
 
@@ -90,8 +86,8 @@ def make_checkpoint_manager_ui():
     ui_forge_unet_dtype = gr.Dropdown(label="Diffusion in Low Bits", value=lambda: shared.opts.forge_unet_storage_dtype, choices=list(forge_unet_storage_dtype_options.keys()))
     bind_to_opts(ui_forge_unet_dtype, "forge_unet_storage_dtype", save=True, callback=refresh_model_loading_parameters)
 
-    ui_checkpoint.change(checkpoint_change, inputs=[ui_checkpoint, ui_forge_preset], show_progress=False)
-    ui_vae.change(modules_change, inputs=[ui_vae, ui_forge_preset], queue=False, show_progress=False)
+    ui_checkpoint.input(checkpoint_change, inputs=[ui_checkpoint, ui_forge_preset], queue=False, show_progress=False)
+    ui_vae.input(modules_change, inputs=[ui_vae, ui_forge_preset], queue=False, show_progress=False)
 
 
 def find_files_with_extensions(base_path: os.PathLike, extensions: list[str]) -> dict[str, os.PathLike]:
@@ -127,16 +123,15 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
 
 
 def refresh_model_loading_parameters(*, refresh: bool = True):
-    global _pending
-    if _pending:
-        _pending = False
-        return
     if not refresh:
         return
 
     from modules.sd_models import model_data, select_checkpoint
 
     checkpoint_info = select_checkpoint()
+    if checkpoint_info is None:
+        logger.critical('You do not have any model... Please download models to "models/Stable-diffusion"')
+        return
 
     unet_storage_dtype, lora_fp16 = forge_unet_storage_dtype_options.get(shared.opts.forge_unet_storage_dtype, (None, False))
 
@@ -251,10 +246,20 @@ def forge_main_entry():
         ui_img2img_batch_size,
     ]
 
-    ui_forge_preset.change(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False).then(js="clickLoraRefresh", fn=None, queue=False, show_progress=False)
+    ui_forge_preset.change(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False).success(
+        fn=_load_presets,
+        inputs=[ui_checkpoint, ui_vae, ui_forge_preset],
+        queue=False,
+        show_progress=False,
+    ).then(js="clickLoraRefresh", fn=None, queue=False, show_progress=False)
     Context.root_block.load(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False)
 
     refresh_model_loading_parameters()
+
+
+def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_preset: str):
+    checkpoint_change(ui_checkpoint, ui_forge_preset, save=False, refresh=False)
+    modules_change(ui_vae, ui_forge_preset)
 
 
 def on_preset_change(preset: str):
@@ -267,10 +272,6 @@ def on_preset_change(preset: str):
     extra_slider = preset in ("flux", "lumina", "wan")
     distill_label = "Distilled CFG Scale" if preset == "flux" else "Shift"
     batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": 1}
-
-    global _prev, _pending
-    _pending = str(additional_modules) != _prev
-    _prev = str(additional_modules)
 
     return [
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),  # ui_checkpoint
