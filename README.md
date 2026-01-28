@@ -29,7 +29,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 #### New Features
 
-- [X] Support [Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo)
+- [X] Support [Flux.2-Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B)
+    - `4B`, `9B`
+    - `txt2img`, `img2img`, `inpaint`
+- [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
+    - `z-image`, `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
     - `txt2img`, `img2img`, `txt2vid`, `img2vid`
     - use `Refiner` to achieve **High Noise** / **Low Noise** switching
@@ -39,6 +43,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > To export a video, you need to have **[FFmpeg](https://ffmpeg.org/)** installed
 
 - [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image)
+    - `txt2img`
 - [X] Support [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
     - `img2img`, `inpaint`
 
