@@ -457,14 +457,11 @@ function updateInput(target) {
     target.dispatchEvent(e);
 }
 
-let desiredCheckpointName = null;
 function selectCheckpoint(name) {
-    desiredCheckpointName = name;
+    const input = gradioApp().getElementById("change_checkpoint_text").querySelector("textarea");
+    input.value = name;
+    updateInput(input);
     gradioApp().getElementById("change_checkpoint").click();
-}
-let desiredVAEName = 0;
-function selectVAE(vae) {
-    desiredVAEName = vae;
 }
 
 function currentImg2imgSourceResolution(w, h, r) {

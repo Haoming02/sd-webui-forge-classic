@@ -314,18 +314,19 @@ class UiSettings:
                     show_progress=False,
                 )
 
-        def button_set_checkpoint_change(model, vae, dummy):
-            if "Built in" in vae:
-                vae.remove("Built in")
-            model = sd_models.match_checkpoint_to_name(model)
-            return model, vae, opts.dumpjson()
-
+        text_set_checkpoint = gr.Textbox("", elem_id="change_checkpoint_text", visible=False)
         button_set_checkpoint = gr.Button("Change checkpoint", elem_id="change_checkpoint", visible=False)
         button_set_checkpoint.click(
-            fn=button_set_checkpoint_change,
-            js="function(c, v, n){ var ckpt = desiredCheckpointName; var vae = desiredVAEName; if (ckpt == null) ckpt = c; if (vae == 0) vae = v; desiredCheckpointName = null; desiredVAEName = 0; return [ckpt, vae, null]; }",
-            inputs=[main_entry.ui_checkpoint, main_entry.ui_vae, self.dummy_component],
-            outputs=[main_entry.ui_checkpoint, main_entry.ui_vae, self.text_settings],
+            fn=lambda ckpt: ckpt.rsplit("[", 1)[0].strip(),
+            inputs=[text_set_checkpoint],
+            outputs=[main_entry.ui_checkpoint],
+            queue=False,
+            show_progress=False,
+        ).success(
+            fn=main_entry.checkpoint_change,
+            inputs=[main_entry.ui_checkpoint, main_entry.ui_forge_preset],
+            queue=False,
+            show_progress=False,
         )
 
         component_keys = [k for k in opts.data_labels.keys() if k in self.component_dict]

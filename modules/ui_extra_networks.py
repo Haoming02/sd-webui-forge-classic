@@ -267,7 +267,7 @@ class ExtraNetworksPage:
         background_image = f'<img src="{html.escape(preview)}" class="preview" loading="lazy">' if preview else ''
 
         onclick = item.get("onclick", None)
-        if onclick is None:     #   this path is 'Textual Inversion' and 'Lora'
+        if onclick is None:  # Textual Inversion / LoRA
             # Don't quote prompt/neg_prompt since they are stored as js strings already.
             onclick_js_tpl = "cardClicked('{tabname}', {prompt}, {neg_prompt}, {allow_neg});"
             onclick = onclick_js_tpl.format(
@@ -279,9 +279,6 @@ class ExtraNetworksPage:
                 }
             )
             onclick = html.escape(onclick)
-        else:                   #   this path is 'Checkpoints'
-            vae = item.get("vae", [])
-            onclick = html.escape(f"selectVAE({vae});") + onclick
 
         btn_copy_path = self.btn_copy_path_tpl.format(**{"filename": item["filename"]})
         btn_metadata = ""
