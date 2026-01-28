@@ -1,4 +1,4 @@
-<h1 align="center">Stable Diffusion WebUI Forge - Neo</h1>
+<h1 align="center">Stable Diffusion WebUI Forge - Neo (Intel XPU Fork)</h1>
 
 <p align="center"><sup>
 [ <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/classic#stable-diffusion-webui-forge---classic">Classic</a> | Neo ]
@@ -18,6 +18,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 "**Neo**" mainly serves as an continuation for the "`latest`" version of Forge, which was built on [Gradio](https://github.com/gradio-app/gradio) `4.40.0` before lllyasviel became too busy... Additionally, this fork is focused on optimization and usability, with the main goal of being the lightest WebUI without any bloatwares.
+
+> [!Important]
+> **Intel XPU-focused fork.** This branch targets Intel XPU (iGPU/Arc) on
+> Windows/Linux/WSL2. CUDA-specific setup is not the focus here; see the
+> upstream repository for CUDA-first instructions.
 
 > [!Tip]
 > [How to Install](#installation)
