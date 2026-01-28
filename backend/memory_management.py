@@ -479,7 +479,7 @@ class LoadedModel:
 
         real_model = self.model.model
 
-        if is_intel_xpu() and not args.disable_ipex_optimize and "ipex" in globals() and real_model is not None:
+        if is_intel_xpu() and not args.disable_ipex_optimize and ipex is not None and real_model is not None:
             with torch.no_grad():
                 real_model = ipex.optimize(real_model.eval(), inplace=True, graph_mode=True, concat_linear=True)
 
