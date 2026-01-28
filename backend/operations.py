@@ -1,4 +1,6 @@
-# Copyright Forge 2024
+# Copyright (C) 2024 Forge - Establish the Structures
+# Copyright (C) 2025 ComfyUI - where Optimization is Stolen
+# Copyright (C) 2026 Haoming02 - Burnt the Kitchen
 
 import contextlib
 import time
