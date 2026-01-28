@@ -111,9 +111,15 @@ if args.directml is not None:
 
 try:
     import intel_extension_for_pytorch as ipex  # noqa: F401
+except Exception:
+    ipex = None
 
-    _ = torch.xpu.device_count()
-    xpu_available = torch.xpu.is_available()
+try:
+    if hasattr(torch, "xpu"):
+        _ = torch.xpu.device_count()
+        xpu_available = torch.xpu.is_available()
+    else:
+        xpu_available = False
 except Exception:
     xpu_available = False
 
