@@ -29,11 +29,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 >
 > Intel XPU (Windows) setup: [README_XPU.md](README_XPU.md)
 
-> [!Important]
-> This fork is **Intel XPU focused**. If you are looking for the original
-> CUDA-first setup, use the upstream repo; this branch documents and targets
-> Intel XPU on Windows/Linux/WSL2.
-
 <br>
 
 ## Features [Feb.]

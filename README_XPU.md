@@ -110,7 +110,6 @@ WSL2 notes:
 - Update Windows Intel GPU driver to the latest version.
 - Update WSL: `wsl --update`
 - Use `http://localhost:7860` from Windows to access the UI.
-
 ## Troubleshooting
 
 ### WinError 127 / torch_python.dll fails to load
