@@ -4,11 +4,22 @@ from backend import memory_management
 from modules.devices import device
 
 
-def stream_context():
-    if torch.cuda.is_available():
+def stream_context(stream_device=None):
+    dev = stream_device or device
+    if memory_management.is_device_cuda(dev):
         return torch.cuda.stream
-    if torch.xpu.is_available():
+    if memory_management.is_device_xpu(dev) and hasattr(torch, "xpu"):
         return torch.xpu.stream
+    return None
+
+
+def create_stream(stream_device=None, *, priority=0):
+    dev = stream_device or device
+    if memory_management.is_device_cuda(dev):
+        return torch.cuda.Stream(device=dev, priority=priority)
+    if memory_management.is_device_xpu(dev) and hasattr(torch, "xpu"):
+        return torch.xpu.Stream(device=dev, priority=priority)
+    return None
 
 
 def get_current_stream():

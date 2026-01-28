@@ -4,6 +4,8 @@ from collections import defaultdict
 
 import torch
 
+from backend import memory_management
+
 
 class MemUsageMonitor(threading.Thread):
     run_flag = None
@@ -17,21 +19,61 @@ class MemUsageMonitor(threading.Thread):
         self.name = name
         self.device = device
         self.opts = opts
+        self.device_type = self._get_device_type(device)
 
         self.daemon = True
         self.run_flag = threading.Event()
         self.data = defaultdict(int)
 
+        if self.device_type is None:
+            self.disabled = True
+            return
+
         try:
-            self.cuda_mem_get_info()
-            torch.cuda.memory_stats(self.device)
-        except Exception as e:  # AMD or whatever
+            self._mem_get_info()
+            self._memory_stats()
+        except Exception as e:
             print(f"Warning: caught exception '{e}', memory monitor disabled")
             self.disabled = True
 
-    def cuda_mem_get_info(self):
-        index = self.device.index if self.device.index is not None else torch.cuda.current_device()
-        return torch.cuda.mem_get_info(index)
+    def _get_device_type(self, device):
+        if memory_management.is_device_cuda(device):
+            return "cuda"
+        if memory_management.is_device_xpu(device) and hasattr(torch, "xpu"):
+            return "xpu"
+        return None
+
+    def _mem_get_info(self):
+        if self.device_type == "cuda":
+            index = self.device.index if self.device.index is not None else torch.cuda.current_device()
+            return torch.cuda.mem_get_info(index)
+        if self.device_type == "xpu":
+            stats = torch.xpu.memory_stats(self.device)
+            total = torch.xpu.get_device_properties(self.device).total_memory
+            active = stats.get("active_bytes.all.current", 0)
+            free = total - active
+            return free, total
+        raise RuntimeError("Unsupported device for memory monitor")
+
+    def _memory_stats(self):
+        if self.device_type == "cuda":
+            return torch.cuda.memory_stats(self.device)
+        if self.device_type == "xpu":
+            return torch.xpu.memory_stats(self.device)
+        return {}
+
+    def _reset_peak_memory_stats(self):
+        if self.device_type == "cuda":
+            torch.cuda.reset_peak_memory_stats()
+        elif self.device_type == "xpu" and hasattr(torch.xpu, "reset_peak_memory_stats"):
+            torch.xpu.reset_peak_memory_stats()
+
+    def _memory_summary(self):
+        if self.device_type == "cuda":
+            return torch.cuda.memory_summary()
+        if self.device_type == "xpu" and hasattr(torch.xpu, "memory_summary"):
+            return torch.xpu.memory_summary()
+        return None
 
     def run(self):
         if self.disabled:
@@ -40,17 +82,17 @@ class MemUsageMonitor(threading.Thread):
         while True:
             self.run_flag.wait()
 
-            torch.cuda.reset_peak_memory_stats()
+            self._reset_peak_memory_stats()
             self.data.clear()
 
             if self.opts.memmon_poll_rate <= 0:
                 self.run_flag.clear()
                 continue
 
-            self.data["min_free"] = self.cuda_mem_get_info()[0]
+            self.data["min_free"] = self._mem_get_info()[0]
 
             while self.run_flag.is_set():
-                free, total = self.cuda_mem_get_info()
+                free, total = self._mem_get_info()
                 self.data["min_free"] = min(self.data["min_free"], free)
 
                 time.sleep(1 / self.opts.memmon_poll_rate)
@@ -61,28 +103,30 @@ class MemUsageMonitor(threading.Thread):
             print(k, -(v // -(1024**2)))
 
         print(self, "raw torch memory stats:")
-        tm = torch.cuda.memory_stats(self.device)
+        tm = self._memory_stats()
         for k, v in tm.items():
             if "bytes" not in k:
                 continue
             print("\t" if "peak" in k else "", k, -(v // -(1024**2)))
 
-        print(torch.cuda.memory_summary())
+        summary = self._memory_summary()
+        if summary:
+            print(summary)
 
     def monitor(self):
         self.run_flag.set()
 
     def read(self):
         if not self.disabled:
-            free, total = self.cuda_mem_get_info()
+            free, total = self._mem_get_info()
             self.data["free"] = free
             self.data["total"] = total
 
-            torch_stats = torch.cuda.memory_stats(self.device)
-            self.data["active"] = torch_stats["active.all.current"]
-            self.data["active_peak"] = torch_stats["active_bytes.all.peak"]
-            self.data["reserved"] = torch_stats["reserved_bytes.all.current"]
-            self.data["reserved_peak"] = torch_stats["reserved_bytes.all.peak"]
+            torch_stats = self._memory_stats()
+            self.data["active"] = torch_stats.get("active.all.current", torch_stats.get("active_bytes.all.current", 0))
+            self.data["active_peak"] = torch_stats.get("active_bytes.all.peak", torch_stats.get("active.all.peak", 0))
+            self.data["reserved"] = torch_stats.get("reserved_bytes.all.current", 0)
+            self.data["reserved_peak"] = torch_stats.get("reserved_bytes.all.peak", 0)
             self.data["system_peak"] = total - self.data["min_free"]
 
         return self.data

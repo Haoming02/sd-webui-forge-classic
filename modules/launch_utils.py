@@ -319,11 +319,14 @@ def prepare_environment():
         startup_timer.record("install torch")
 
     if not args.skip_torch_cuda_test:
-        success, err = check_run_python("import torch; assert torch.cuda.is_available()", return_error=True)
+        success, err = check_run_python(
+            "import torch; has_xpu = hasattr(torch, 'xpu') and torch.xpu.is_available(); assert torch.cuda.is_available() or has_xpu",
+            return_error=True,
+        )
         if not success:
             if "older driver" in str(err).lower():
                 raise SystemError("Please update your GPU driver to support cu130 ; or manually install older PyTorch")
-            raise RuntimeError("PyTorch is not able to access CUDA")
+            raise RuntimeError("PyTorch is not able to access CUDA or XPU")
         startup_timer.record("torch GPU test")
 
     if not is_installed("packaging"):

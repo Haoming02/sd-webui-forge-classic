@@ -637,6 +637,8 @@ class ModelPatcher:
                 self.patch_weight_to_device(key, device_to=device_to)
             if memory_management.is_device_cuda(device_to):
                 torch.cuda.synchronize()
+            elif memory_management.is_device_xpu(device_to) and hasattr(torch, "xpu"):
+                torch.xpu.synchronize()
 
             logger.debug("lowvram: loaded module regularly {} {}".format(n, m))
             m.forge_patched_weights = True

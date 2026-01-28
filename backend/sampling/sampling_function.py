@@ -401,4 +401,10 @@ def sampling_cleanup(unet: "UnetPatcher"):
     for cnet in unet.list_controlnets():
         cnet.cleanup()
 
+    device = memory_management.get_torch_device()
+    if memory_management.is_device_cuda(device):
+        torch.cuda.synchronize()
+    elif memory_management.is_device_xpu(device) and hasattr(torch, "xpu"):
+        torch.xpu.synchronize()
+
     memory_management.soft_empty_cache()
