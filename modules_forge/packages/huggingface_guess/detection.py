@@ -2,6 +2,8 @@
 
 import logging
 
+import torch
+
 from . import model_list
 
 
@@ -49,14 +51,17 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
         dit_config["n_layers"] = count_blocks(state_dict_keys, "{}layers.".format(key_prefix) + "{}.")
         dit_config["qk_norm"] = True
 
-        if dit_config["dim"] == 2304:  # Lumina 2
+        if dit_config["dim"] == 2304:  # Original Lumina 2
             dit_config["n_heads"] = 24
             dit_config["n_kv_heads"] = 8
             dit_config["axes_dims"] = [32, 32, 32]
             dit_config["axes_lens"] = [300, 512, 512]
             dit_config["rope_theta"] = 10000.0
             dit_config["ffn_dim_multiplier"] = 4.0
-        elif dit_config["dim"] == 3840:  # Z-Image
+            ctd_weight = state_dict.get("{}clip_text_pooled_proj.0.weight".format(key_prefix), None)
+            if ctd_weight is not None:  # NewBie
+                dit_config["clip_text_dim"] = ctd_weight.shape[0]
+        elif dit_config["dim"] == 3840:  # Z-image
             dit_config["nunchaku"] = "{}layers.0.attention.to_out.0.qweight".format(key_prefix) in state_dict_keys
             dit_config["n_heads"] = 30
             dit_config["n_kv_heads"] = 30
@@ -66,6 +71,10 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
             dit_config["ffn_dim_multiplier"] = 8.0 / 3.0
             dit_config["z_image_modulation"] = True
             dit_config["time_scale"] = 1000.0
+            try:
+                dit_config["allow_fp16"] = torch.std(state_dict["{}layers.{}.ffn_norm1.weight".format(key_prefix, dit_config["n_layers"] - 2)], unbiased=False).item() < 0.42
+            except Exception:
+                pass
             if "{}cap_pad_token".format(key_prefix) in state_dict_keys:
                 dit_config["pad_tokens_multiple"] = 32
 

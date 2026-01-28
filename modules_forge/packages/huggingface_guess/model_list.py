@@ -416,7 +416,13 @@ class ZImage(Lumina2):
 
     memory_usage_factor = 2.8
 
-    supported_inference_dtypes = [torch.bfloat16, torch.float16, torch.float32]
+    supported_inference_dtypes = [torch.bfloat16, torch.float32]
+
+    def __init__(self, unet_config):
+        super().__init__(unet_config)
+        if self.unet_config.pop("allow_fp16", False):
+            self.supported_inference_dtypes = ZImage.supported_inference_dtypes.copy()
+            self.supported_inference_dtypes.insert(1, torch.float16)
 
     def clip_target(self, state_dict={}):
         return {"qwen3_4b.transformer": "text_encoder"}
