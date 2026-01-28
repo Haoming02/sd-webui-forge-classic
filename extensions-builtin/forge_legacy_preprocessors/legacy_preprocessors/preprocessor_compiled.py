@@ -184,27 +184,6 @@ legacy_preprocessors = {
             "Depth"
         ]
     },
-    "depth_hand_refiner": {
-        "label": "depth_hand_refiner",
-        "call_function": g_hand_refiner_model.run_model,
-        "unload_function": g_hand_refiner_model.unload,
-        "managed_model": "g_hand_refiner_model",
-        "model_free": False,
-        "no_control_mode": False,
-        "resolution": {
-            "label": "Resolution",
-            "value": 512,
-            "minimum": 64,
-            "maximum": 2048
-        },
-        "slider_1": None,
-        "slider_2": None,
-        "slider_3": None,
-        "priority": 0,
-        "tags": [
-            "Depth"
-        ]
-    },
     "depth_leres": {
         "label": "depth_leres",
         "call_function": functools.partial(leres, boost=False),

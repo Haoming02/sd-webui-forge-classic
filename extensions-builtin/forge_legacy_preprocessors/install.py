@@ -41,14 +41,6 @@ def try_install_from_wheel(pkg_name: str, wheel_url: str):
 
 
 try_install_from_wheel(
-    "handrefinerportable",
-    wheel_url=os.environ.get(
-        "HANDREFINER_WHEEL",
-        "https://github.com/huchenlei/HandRefinerPortable/releases/download/v1.0.1/handrefinerportable-2024.2.12.0-py2.py3-none-any.whl",
-    ),
-)
-
-try_install_from_wheel(
     "depth_anything",
     wheel_url=os.environ.get(
         "DEPTH_ANYTHING_WHEEL",
