@@ -21,6 +21,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 > [!Tip]
 > [How to Install](#installation)
+>
+> Intel XPU (Windows) setup: [README_XPU.md](README_XPU.md)
 
 <br>
 
