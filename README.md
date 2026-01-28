@@ -2,6 +2,8 @@
 
 <p align="center"><sup>
 [ <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/classic#stable-diffusion-webui-forge---classic">Classic</a> | Neo ]
+<br>
+<a href="https://ko-fi.com/Haoming"><img src="https://img.shields.io/badge/Kofi-0D1117.svg?logo=ko-fi&logoColor=white"></a>
 </sup></p>
 
 <p align="center"><img src="html\ui.webp" width=512 alt="UI"></p>
@@ -52,7 +54,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
     - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `t5`, `z-image-turbo`
-    - support LoRAs
+    - support LoRA for `Flux` and `Qwen`
     - see [Commandline](#by-neo)
 - [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
     - `Neta-Lumina`, `NetaYume-Lumina`
@@ -207,12 +209,17 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - `--forge-ref-comfy-home`: Point to a ComfyUI installation to load its `models` folders
     - **i.e.** `diffusion_models`, `clip`
 
+<br>
+
 - `--sage`: Install the `sageattention` package to speed up generation
     - will also attempt to install `triton` automatically
 - `--flash`: Install the `flash_attn` package to speed up generation
 - `--nunchaku`: Install the `nunchaku` package to inference SVDQ models
 - `--bnb`: Install the `bitsandbytes` package to do low-bits (`nf4`) inference
 - `--onnxruntime-gpu`: Install the `onnxruntime` with the latest GPU support
+
+<br>
+
 - `--fast-fp8`: Use the `torch._scaled_mm` function when the model type is `float8_e4m3fn`
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
 - `--autotune`: Enable the `torch.backends.cudnn.benchmark` option
@@ -290,9 +297,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - **Issues** about removed features will simply be ignored
 - **Issues** regarding installation will be ignored if it's obviously user-error
-- Non-Windows platforms will not be officially supported, as I cannot verify nor maintain them
-
-</details>
+- **Issues** caused by [StabilityMatrix](https://github.com/LykosAI/StabilityMatrix) will also be ignored
+    - only open an Issue if you can reproduce it on a clean install following the official [Installation](#installation) guide
+- Linux, macOS, AMD, Intel will not be officially supported, as I cannot verify nor maintain them...
 
 <br>
 
