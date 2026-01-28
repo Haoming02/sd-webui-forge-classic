@@ -1,4 +1,3 @@
-import logging
 import re
 
 import torch
@@ -158,16 +157,22 @@ vae_conversion_map_attn = [
 ]
 
 
-def reshape_weight_for_sd(w):
-    # convert HF linear weights to SD conv2d weights
-    return w.reshape(*w.shape, 1, 1)
+def reshape_weight_for_sd(w, conv3d=False):
+    if conv3d:
+        return w.reshape(*w.shape, 1, 1, 1)
+    else:
+        return w.reshape(*w.shape, 1, 1)
 
 
 def convert_vae_state_dict(vae_state_dict):
     mapping = {k: k for k in vae_state_dict.keys()}
+    conv3d = False
     for k, v in mapping.items():
         for sd_part, hf_part in vae_conversion_map:
             v = v.replace(hf_part, sd_part)
+        if v.endswith(".conv.weight"):
+            if not conv3d and vae_state_dict[k].ndim == 5:
+                conv3d = True
         mapping[k] = v
     for k, v in mapping.items():
         if "attentions" in k:
@@ -179,8 +184,7 @@ def convert_vae_state_dict(vae_state_dict):
     for k, v in new_state_dict.items():
         for weight_name in weights_to_convert:
             if f"mid.attn_1.{weight_name}.weight" in k:
-                logging.debug(f"Reshaping {k} for SD format")
-                new_state_dict[k] = reshape_weight_for_sd(v)
+                new_state_dict[k] = reshape_weight_for_sd(v, conv3d=conv3d)
     return new_state_dict
 
 

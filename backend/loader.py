@@ -11,6 +11,7 @@ import backend.args
 from backend import memory_management, utils
 from backend.diffusion_engine.chroma import Chroma
 from backend.diffusion_engine.flux import Flux
+from backend.diffusion_engine.flux2 import Flux2
 from backend.diffusion_engine.lumina import Lumina2
 from backend.diffusion_engine.qwen import QwenImage
 from backend.diffusion_engine.sd15 import StableDiffusion
@@ -19,14 +20,18 @@ from backend.diffusion_engine.wan import Wan
 from backend.diffusion_engine.zimage import ZImage
 from backend.logging import setup_logger
 from backend.operations import using_forge_operations
-from backend.state_dict import load_state_dict, try_filter_state_dict
+from backend.state_dict import (
+    load_state_dict,
+    state_dict_prefix_replace,
+    try_filter_state_dict,
+)
 from backend.utils import (
     beautiful_print_gguf_state_dict_statics,
     load_torch_file,
     read_arbitrary_config,
 )
 
-possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Wan, QwenImage, Lumina2, ZImage]
+possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage]
 
 logger = logging.getLogger("loader")
 setup_logger(logger)
@@ -58,10 +63,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
                 model = IntegratedAutoencoderKL.from_config(config)
 
-            if "decoder.up_blocks.0.resnets.0.norm1.weight" in state_dict.keys():  # diffusers format
-                from modules_forge.packages.huggingface_guess.diffusers_convert import convert_vae_state_dict
+            load_state_dict(model, state_dict, ignore_start="loss.")
+            return model
+        if cls_name == "AutoencoderKLFlux2":
+            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
+            from backend.nn.vae import AutoencoderKLFlux2
 
-                state_dict = convert_vae_state_dict(state_dict)
+            config = AutoencoderKLFlux2.load_config(config_path)
+
+            with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
+                model = AutoencoderKLFlux2.from_config(config)
 
             load_state_dict(model, state_dict, ignore_start="loss.")
             return model
@@ -152,12 +163,15 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name)
             return model
-        if cls_name == "Qwen3Model":
+        if cls_name in ["Qwen3Model", "Qwen3ForCausalLM"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen3 state dict!"
 
-            from backend.nn.llm.llama import Qwen3_4B
-
             config = read_arbitrary_config(config_path)
+
+            if config["hidden_size"] == 4096:
+                from backend.nn.llm.llama import Qwen3_8B as QTE
+            else:
+                from backend.nn.llm.llama import Qwen3_4B as QTE
 
             storage_dtype = memory_management.text_encoder_dtype()
             state_dict_dtype = utils.weight_dtype(state_dict)
@@ -174,11 +188,11 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 with no_init_weights():
                     with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=False, bnb_dtype=storage_dtype):
-                        model = Qwen3_4B(config)
+                        model = QTE(config)
             else:
                 with no_init_weights():
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
-                        model = Qwen3_4B(config)
+                        model = QTE(config)
 
             load_state_dict(model, state_dict, log_name=cls_name)
             return model
@@ -222,7 +236,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["transformer.encoder.embed_tokens.weight", "logit_scale"])
             return model
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel"]:
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
             pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
@@ -232,7 +246,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.unet import IntegratedUNet2DConditionModel
 
                 model_loader = lambda c: IntegratedUNet2DConditionModel.from_config(c)
-            elif cls_name == "FluxTransformer2DModel":
+            elif cls_name in ["FluxTransformer2DModel", "Flux2Transformer2DModel"]:
                 if guess.nunchaku:
                     from backend.nn.svdq import SVDQFluxTransformer2DModel
 
@@ -395,6 +409,18 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
             asd_new[k] = asd_new[k].dequantize_as_pytorch_parameter()
         asd.clear()
         asd = asd_new
+
+    #   flux 2
+    if "decoder.post_quant_conv.weight" in asd:
+        asd = state_dict_prefix_replace(asd, {"decoder.post_quant_conv.": "post_quant_conv.", "encoder.quant_conv.": "quant_conv."})
+
+    #   diffusers format
+    if "decoder.up_blocks.0.resnets.0.norm1.weight" in asd:
+        from modules_forge.packages.huggingface_guess.diffusers_convert import (
+            convert_vae_state_dict,
+        )
+
+        asd = convert_vae_state_dict(asd)
 
     #   sd / sdxl / wan                  # wan
     if "decoder.conv_in.weight" in asd or "decoder.middle.0.residual.0.gamma" in asd:
@@ -599,8 +625,10 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
 
     elif "model.layers.0.post_attention_layernorm.weight" in asd:
         assert "model.layers.0.self_attn.q_norm.weight" in asd
+        weight: torch.Tensor = asd["model.layers.0.post_attention_layernorm.weight"]
+        size: str = "4b" if weight.shape[0] == 2560 else "8b"
         for k, v in asd.items():
-            sd[f"{text_encoder_key_prefix}qwen3_4b.transformer.{k}"] = v
+            sd[f"{text_encoder_key_prefix}qwen3_{size}.transformer.{k}"] = v
 
     return sd
 

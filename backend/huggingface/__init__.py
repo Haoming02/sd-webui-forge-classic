@@ -14,6 +14,9 @@ class Token:
     z_compress = os.path.join(folder, "z.tokenizer.json.xz")
     z_image = os.path.join(folder, "Tongyi-MAI", "Z-Image-Turbo", "tokenizer", "tokenizer.json")
 
+    f2_4b = os.path.join(folder, "black-forest-labs", "FLUX.2-klein-4B", "tokenizer", "tokenizer.json")
+    f2_9b = os.path.join(folder, "black-forest-labs", "FLUX.2-klein-9B", "tokenizer", "tokenizer.json")
+
 
 class sha256:
     wan = "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
@@ -24,6 +27,9 @@ class sha256:
 
     z = "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
     # https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/blob/main/tokenizer/tokenizer.json
+
+    f2 = "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+    # https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/blob/main/tokenizer/tokenizer.json
 
 
 def decompress(source: str, target: str):
@@ -55,6 +61,12 @@ def process():
     if not os.path.isfile(Token.z_image):
         decompress(Token.z_compress, Token.z_image)
         compare_sha256(Token.z_image, sha256.z)
+    if not os.path.isfile(Token.f2_4b):
+        decompress(Token.z_compress, Token.f2_4b)
+        compare_sha256(Token.f2_4b, sha256.f2)
+    if not os.path.isfile(Token.f2_9b):
+        decompress(Token.z_compress, Token.f2_9b)
+        compare_sha256(Token.f2_9b, sha256.f2)
 
     # if not os.path.isfile(Token.wan_compress):
     #     compress(Token.wan_t2v, Token.wan_compress)

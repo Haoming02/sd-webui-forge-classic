@@ -1,5 +1,5 @@
 import os
-from functools import cache
+from functools import lru_cache
 
 import torch
 from torch import nn
@@ -70,24 +70,33 @@ def model():
     return loaded_model
 
 
-@cache
-def latent_format(latent_format, dtype, device):
-    factors = torch.tensor(latent_format.latent_rgb_factors, dtype=dtype, device=device).transpose(0, 1)
+@lru_cache(maxsize=1, typed=False)
+def latent_format(latent_format):
+    factors = torch.tensor(latent_format.latent_rgb_factors, device="cpu").transpose(0, 1)
 
     if getattr(latent_format, "latent_rgb_factors_bias", None) is None:
-        return factors, None
+        bias = None
+    else:
+        bias = torch.tensor(latent_format.latent_rgb_factors_bias, device="cpu")
 
-    bias = torch.tensor(latent_format.latent_rgb_factors_bias, dtype=dtype, device=device)
-    return factors, bias
+    if getattr(latent_format, "latent_rgb_factors_reshape", None) is None:
+        reshape = None
+    else:
+        reshape = latent_format.latent_rgb_factors_reshape
+
+    return factors, bias, reshape
 
 
-def cheap_approximation(sample):
-    factors, bias = latent_format(shared.sd_model.model_config.latent_format, sample.dtype, sample.device)
+def cheap_approximation(sample: torch.Tensor):
+    factors, bias, reshape = latent_format(shared.sd_model.model_config.latent_format)
+
+    if reshape is not None:
+        sample = reshape(sample)
 
     if sample.ndim == 5:
         sample = sample[0, :, 0]
     else:
         sample = sample[0]
 
-    latent_image = torch.nn.functional.linear(sample.movedim(0, -1), factors, bias=bias)
+    latent_image = torch.nn.functional.linear(sample.movedim(0, -1), factors.to(sample), bias=bias.to(sample))
     return latent_image.permute(2, 0, 1).unsqueeze(0)
