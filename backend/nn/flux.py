@@ -404,7 +404,7 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         patch_size: int,
         qkv_bias: bool,
         guidance_embed: bool,
-        txt_ids_dims: list[int],
+        txt_ids_dims: list[int] = [],
         global_modulation: bool = False,
         mlp_silu_act: bool = False,
         ops_bias: bool = True,
