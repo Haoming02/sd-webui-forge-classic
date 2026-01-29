@@ -108,22 +108,8 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
 
     if "{}single_transformer_blocks.0.mlp_fc1.qweight".format(key_prefix) in state_dict_keys:  # SVDQ Flux
         dit_config = {"nunchaku": True}
-        dit_config["axes_dim"] = [16, 56, 56]
-        dit_config["context_in_dim"] = 4096
-        dit_config["depth"] = 19
-        dit_config["depth_single_blocks"] = 38
-        dit_config["disable_unet_model_creation"] = True
-        dit_config["guidance_embed"] = True
-        dit_config["hidden_size"] = 3072
         dit_config["image_model"] = "flux"
-        dit_config["in_channels"] = 16
-        dit_config["mlp_ratio"] = 4.0
-        dit_config["num_heads"] = 24
-        dit_config["out_channels"] = 16
-        dit_config["patch_size"] = 2
-        dit_config["qkv_bias"] = True
-        dit_config["theta"] = 10000
-        dit_config["vec_in_dim"] = 768
+        dit_config["guidance_embed"] = True
         return dit_config
 
     if "{}double_blocks.0.img_attn.proj.weight.quant_state.bitsandbytes__nf4".format(key_prefix) in state_dict_keys:  # flux1-dev-bnb-nf4
@@ -142,7 +128,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
         dit_config["theta"] = 10000
         dit_config["patch_size"] = 2
         dit_config["qkv_bias"] = True
-        dit_config["guidance_embed"] = "{}guidance_in.in_layer.weight".format(key_prefix) in state_dict_keys
+        dit_config["guidance_embed"] = True
         return dit_config
 
     if "{}double_blocks.0.img_attn.norm.key_norm.scale".format(key_prefix) in state_dict_keys and ("{}img_in.weight".format(key_prefix) in state_dict_keys or f"{key_prefix}distilled_guidance_layer.norms.0.scale" in state_dict_keys):  # Flux.1 / Flux.2
