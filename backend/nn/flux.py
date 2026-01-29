@@ -656,7 +656,11 @@ class IntegratedFluxTransformer2DModel(nn.Module):
                     w = max(w, ref.shape[-1] + w_offset)
 
                 kontext, kontext_ids = self.process_img(ref.to(x), index=index, h_offset=h_offset, w_offset=w_offset)
+                if img.shape[0] == 2:  # batch_cond_uncond
+                    kontext = torch.cat((kontext, kontext), dim=0)
                 img = torch.cat([img, kontext], dim=1)
+                if img_ids.shape[0] == 2:  # batch_cond_uncond
+                    kontext_ids = torch.cat((kontext_ids, kontext_ids), dim=0)
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
 
         txt_ids = torch.zeros((bs, context.shape[1], len(self.axes_dim)), device=x.device, dtype=torch.float32)
