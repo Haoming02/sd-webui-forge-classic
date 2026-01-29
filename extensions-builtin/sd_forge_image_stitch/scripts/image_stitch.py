@@ -59,7 +59,7 @@ class ImageStitch(scripts.Script):
         return [enable, references]
 
     def process(self, p: StableDiffusionProcessing, enable: bool, references: list[tuple[Image.Image, str]]):
-        if not (enable and references and any(dynamic_args[key] for key in ("kontext", "edit"))):
+        if not (enable and references and any(dynamic_args[key] for key in ("kontext", "edit", "klein"))):
             if self.cached_parameters is not None:
                 self.cached_parameters = None
                 p.cached_c = [None, None]
@@ -80,6 +80,7 @@ class ImageStitch(scripts.Script):
         p.cached_uc = [None, None]
 
         for reference, _ in references:
+            reference = self.preprocess(reference)
             image = images.flatten(reference, opts.img2img_background_color)
             image = np.array(image, dtype=np.float32) / 255.0
             image = np.moveaxis(image, 2, 0)
@@ -90,6 +91,14 @@ class ImageStitch(scripts.Script):
                 approximation_indexes.get(opts.sd_vae_encode_method),
                 p.sd_model,
             )
+
+    @staticmethod
+    def preprocess(img: Image.Image) -> Image.Image:
+        w, h = img.size
+        if w % 64 == 0 and h % 64 == 0:
+            return img
+
+        return images.resize_image(1, img, round(w / 64) * 64, round(w / 64) * 64)
 
     @staticmethod
     def hash_image(img: Image.Image) -> int:
