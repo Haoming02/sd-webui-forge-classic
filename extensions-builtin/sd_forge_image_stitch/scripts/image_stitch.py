@@ -5,6 +5,7 @@ from PIL import Image
 
 from backend.args import dynamic_args
 from modules import images, scripts, sd_models
+from modules.api import api
 from modules.processing import StableDiffusionProcessing, StableDiffusionProcessingImg2Img
 from modules.sd_samplers_common import approximation_indexes, images_tensor_to_samples
 from modules.shared import device, opts
@@ -66,10 +67,12 @@ class ImageStitch(scripts.Script):
                 p.cached_uc = [None, None]
             return
 
+        references = self.extract_images(references)
+
         cache: list[str | int] = [str(sd_models.model_data.forge_loading_parameters)]
         if isinstance(p, StableDiffusionProcessingImg2Img):
             cache.append(p.init_img_hash)
-        for reference, _ in references:
+        for reference in references:
             cache.append(self.hash_image(reference))
 
         if self.cached_parameters == cache:
@@ -79,7 +82,7 @@ class ImageStitch(scripts.Script):
         p.cached_c = [None, None]
         p.cached_uc = [None, None]
 
-        for reference, _ in references:
+        for reference in references:
             reference = self.preprocess(reference)
             image = images.flatten(reference, opts.img2img_background_color)
             image = np.array(image, dtype=np.float32) / 255.0
@@ -91,6 +94,12 @@ class ImageStitch(scripts.Script):
                 approximation_indexes.get(opts.sd_vae_encode_method),
                 p.sd_model,
             )
+
+    @staticmethod
+    def extract_images(gallery: list[str | tuple[Image.Image, str]]) -> list[Image.Image]:
+        if isinstance(gallery[0], str):
+            return [api.decode_base64_to_image(img) for img in gallery]
+        return [img for (img, _) in gallery]
 
     @staticmethod
     def preprocess(img: Image.Image) -> Image.Image:
