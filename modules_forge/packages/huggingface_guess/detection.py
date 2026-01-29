@@ -7,7 +7,7 @@ import torch
 from . import model_list
 
 
-def count_blocks(state_dict_keys, prefix_string):
+def count_blocks(state_dict_keys: list[str], prefix_string: str) -> int:
     count = 0
     while True:
         c = False
@@ -167,22 +167,22 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
         in_key = "{}img_in.weight".format(key_prefix)
         if in_key in state_dict_keys:
             w = state_dict[in_key]
-            dit_config["in_channels"] = w.shape[1] // (patch_size * patch_size)
-            dit_config["hidden_size"] = w.shape[0]
+            dit_config["in_channels"] = int(w.shape[1] // (patch_size * patch_size))
+            dit_config["hidden_size"] = int(w.shape[0])
 
         txt_in_key = "{}txt_in.weight".format(key_prefix)
         if txt_in_key in state_dict_keys:
             w = state_dict[txt_in_key]
-            dit_config["context_in_dim"] = w.shape[1]
-            dit_config["hidden_size"] = w.shape[0]
+            dit_config["context_in_dim"] = int(w.shape[1])
+            dit_config["hidden_size"] = int(w.shape[0])
 
         vec_in_key = "{}vector_in.in_layer.weight".format(key_prefix)
         if vec_in_key in state_dict_keys:
-            dit_config["vec_in_dim"] = state_dict[vec_in_key].shape[1]
+            dit_config["vec_in_dim"] = int(state_dict[vec_in_key].shape[1])
         else:
             dit_config["vec_in_dim"] = None
 
-        dit_config["num_heads"] = dit_config["hidden_size"] // sum(dit_config["axes_dim"])
+        dit_config["num_heads"] = int(dit_config["hidden_size"] // sum(dit_config["axes_dim"]))
         dit_config["depth"] = count_blocks(state_dict_keys, "{}double_blocks.".format(key_prefix) + "{}.")
         dit_config["depth_single_blocks"] = count_blocks(state_dict_keys, "{}single_blocks.".format(key_prefix) + "{}.")
 
