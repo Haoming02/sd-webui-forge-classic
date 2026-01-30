@@ -18,7 +18,7 @@ if not exist "%VENV_PYTHON%" (
 )
 
 set "PYTHON=%VENV_PYTHON%"
-set "COMMANDLINE_ARGS=--gpu-only --skip-install --skip-prepare-environment --no-hashing"
+set "COMMANDLINE_ARGS=--gpu-only --skip-install --skip-prepare-environment --no-hashing --use-pytorch-cross-attention --disable-xformers --disable-sage --disable-flash"
 set "TORCH_COMMAND=pip install torch==2.10.0+xpu torchvision==0.25.0+xpu --index-url https://download.pytorch.org/whl/xpu"
 
 call webui.bat
