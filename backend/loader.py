@@ -124,7 +124,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 with no_init_weights():
-                    with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=False, bnb_dtype=storage_dtype):
+                    with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=True, bnb_dtype=storage_dtype):
                         model = Qwen25_7BVLI(config)
             else:
                 with no_init_weights():
@@ -354,61 +354,10 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
     vae_key_prefix = guess.vae_key_prefix[0]
     text_encoder_key_prefix = guess.text_encoder_key_prefix[0]
 
-    if "enc.blk.0.attn_k.weight" in asd:
-        gguf_t5_format = {  # city96
-            "enc.": "encoder.",
-            ".blk.": ".block.",
-            "token_embd": "shared",
-            "output_norm": "final_layer_norm",
-            "attn_q": "layer.0.SelfAttention.q",
-            "attn_k": "layer.0.SelfAttention.k",
-            "attn_v": "layer.0.SelfAttention.v",
-            "attn_o": "layer.0.SelfAttention.o",
-            "attn_norm": "layer.0.layer_norm",
-            "attn_rel_b": "layer.0.SelfAttention.relative_attention_bias",
-            "ffn_up": "layer.1.DenseReluDense.wi_1",
-            "ffn_down": "layer.1.DenseReluDense.wo",
-            "ffn_gate": "layer.1.DenseReluDense.wi_0",
-            "ffn_norm": "layer.1.layer_norm",
-        }
-        asd_new = {}
-        for k, v in asd.items():
-            for s, d in gguf_t5_format.items():
-                k = k.replace(s, d)
-            asd_new[k] = v
-        for k in ("shared.weight",):
-            asd_new[k] = asd_new[k].dequantize_as_pytorch_parameter()
-        asd.clear()
-        asd = asd_new
+    if path.endswith("gguf"):
+        from backend.loader_gguf import gguf_remapping
 
-    if "blk.0.attn_norm.weight" in asd:
-        gguf_llm_format = {  # city96
-            "blk.": "model.layers.",
-            "attn_norm": "input_layernorm",
-            "attn_q_norm.": "self_attn.q_norm.",
-            "attn_k_norm.": "self_attn.k_norm.",
-            "attn_v_norm.": "self_attn.v_norm.",
-            "attn_q": "self_attn.q_proj",
-            "attn_k": "self_attn.k_proj",
-            "attn_v": "self_attn.v_proj",
-            "attn_output": "self_attn.o_proj",
-            "ffn_up": "mlp.up_proj",
-            "ffn_down": "mlp.down_proj",
-            "ffn_gate": "mlp.gate_proj",
-            "ffn_norm": "post_attention_layernorm",
-            "token_embd": "model.embed_tokens",
-            "output_norm": "model.norm",
-            "output.weight": "lm_head.weight",
-        }
-        asd_new = {}
-        for k, v in asd.items():
-            for s, d in gguf_llm_format.items():
-                k = k.replace(s, d)
-            asd_new[k] = v
-        for k in ("model.embed_tokens.weight",):
-            asd_new[k] = asd_new[k].dequantize_as_pytorch_parameter()
-        asd.clear()
-        asd = asd_new
+        asd = gguf_remapping(asd)
 
     #   flux 2
     if "decoder.post_quant_conv.weight" in asd:
@@ -629,6 +578,10 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
         size: str = "4b" if weight.shape[0] == 2560 else "8b"
         for k, v in asd.items():
             sd[f"{text_encoder_key_prefix}qwen3_{size}.transformer.{k}"] = v
+
+    if "visual.blocks.0.attn.proj.weight" in asd:
+        for k, v in asd.items():
+            sd[f"{text_encoder_key_prefix}qwen25_7b.{k}"] = v
 
     return sd
 
