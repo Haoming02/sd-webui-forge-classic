@@ -1,4 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/ldm/wan/vae.py
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ldm/wan/vae.py
 # Copyright Wan 2024-2025
 # Reference: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/vae.py
 
@@ -14,6 +14,16 @@ from backend.operations import ForgeOperations as ops
 CACHE_T = 2
 
 
+def torch_cat_if_needed(xl, dim):
+    xl = [x for x in xl if x is not None and x.shape[dim] > 0]
+    if len(xl) > 1:
+        return torch.cat(xl, dim)
+    elif len(xl) == 1:
+        return xl[0]
+    else:
+        return None
+
+
 class CausalConv3d(ops.Conv3d):
     """
     Causal 3d convolusion.
@@ -21,21 +31,27 @@ class CausalConv3d(ops.Conv3d):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._padding = (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 2 * self.padding[0], 0)
-        self.padding = (0, 0, 0)
+        self._padding = 2 * self.padding[0]
+        self.padding = (0, self.padding[1], self.padding[2])
 
     def forward(self, x, cache_x=None, cache_list=None, cache_idx=None):
         if cache_list is not None:
             cache_x = cache_list[cache_idx]
             cache_list[cache_idx] = None
 
-        padding = list(self._padding)
-        if cache_x is not None and self._padding[4] > 0:
-            cache_x = cache_x.to(x.device)
-            x = torch.cat([cache_x, x], dim=2)
-            padding[4] -= cache_x.shape[2]
+        if cache_x is None and x.shape[2] == 1:
+            return super().forward(x, autopad="causal_zero")
+
+        if self._padding > 0:
+            padding_needed = self._padding
+            if cache_x is not None:
+                cache_x = cache_x.to(x.device)
+                padding_needed = max(0, padding_needed - cache_x.shape[2])
+            padding_shape = list(x.shape)
+            padding_shape[2] = padding_needed
+            padding = torch.zeros(padding_shape, device=x.device, dtype=x.dtype)
+            x = torch_cat_if_needed([padding, cache_x, x], dim=2)
             del cache_x
-        x = F.pad(x, padding)
 
         return super().forward(x)
 
@@ -186,7 +202,7 @@ class AttentionBlock(nn.Module):
 
 class Encoder3d(nn.Module):
 
-    def __init__(self, dim=128, z_dim=4, dim_mult=[1, 2, 4, 4], num_res_blocks=2, attn_scales=[], temporal_downsample=[True, True, False], dropout=0.0):
+    def __init__(self, dim=128, z_dim=4, input_channels=3, dim_mult=[1, 2, 4, 4], num_res_blocks=2, attn_scales=[], temporal_downsample=[True, True, False], dropout=0.0):
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -200,7 +216,7 @@ class Encoder3d(nn.Module):
         scale = 1.0
 
         # init block
-        self.conv1 = CausalConv3d(3, dims[0], 3, padding=1)
+        self.conv1 = CausalConv3d(input_channels, dims[0], 3, padding=1)
 
         # downsample blocks
         downsamples = []
@@ -270,7 +286,7 @@ class Encoder3d(nn.Module):
 
 class Decoder3d(nn.Module):
 
-    def __init__(self, dim=128, z_dim=4, dim_mult=[1, 2, 4, 4], num_res_blocks=2, attn_scales=[], temporal_upsample=[False, True, True], dropout=0.0):
+    def __init__(self, dim=128, z_dim=4, output_channels=3, dim_mult=[1, 2, 4, 4], num_res_blocks=2, attn_scales=[], temporal_upsample=[False, True, True], dropout=0.0):
         super().__init__()
         self.dim = dim
         self.z_dim = z_dim
@@ -309,7 +325,7 @@ class Decoder3d(nn.Module):
         self.upsamples = nn.Sequential(*upsamples)
 
         # output blocks
-        self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, 3, 3, padding=1))
+        self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, output_channels, 3, padding=1))
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         ## conv1
@@ -367,7 +383,7 @@ class WanVAE(nn.Module, ConfigMixin):
     config_name = "config.json"
 
     @register_to_config
-    def __init__(self, base_dim=128, z_dim=4, dim_mult=[1, 2, 4, 4], num_res_blocks=2, attn_scales=[], temporal_downsample=[True, True, False], dropout=0.0):
+    def __init__(self, base_dim=128, z_dim=4, dim_mult=[1, 2, 4, 4], num_res_blocks=2, attn_scales=[], temporal_downsample=[True, True, False], image_channels=3, dropout=0.0):
         super().__init__()
         self.dim = base_dim
         self.z_dim = z_dim
@@ -378,18 +394,20 @@ class WanVAE(nn.Module, ConfigMixin):
         self.temporal_upsample = temporal_downsample[::-1]
 
         # modules
-        self.encoder = Encoder3d(base_dim, z_dim * 2, dim_mult, num_res_blocks, attn_scales, self.temporal_downsample, dropout)
+        self.encoder = Encoder3d(base_dim, z_dim * 2, image_channels, dim_mult, num_res_blocks, attn_scales, self.temporal_downsample, dropout)
         self.conv1 = CausalConv3d(z_dim * 2, z_dim * 2, 1)
         self.conv2 = CausalConv3d(z_dim, z_dim, 1)
-        self.decoder = Decoder3d(base_dim, z_dim, dim_mult, num_res_blocks, attn_scales, self.temporal_upsample, dropout)
+        self.decoder = Decoder3d(base_dim, z_dim, image_channels, dim_mult, num_res_blocks, attn_scales, self.temporal_upsample, dropout)
 
         self.latent_format = None
 
     def encode(self, x):
         conv_idx = [0]
-        feat_map = [None] * count_conv3d(self.decoder)
         t = x.shape[2]
         iter_ = 1 + (t - 1) // 4
+        feat_map = None
+        if iter_ > 1:
+            feat_map = [None] * count_conv3d(self.decoder)
         for i in range(iter_):
             conv_idx = [0]
             if i == 0:
@@ -402,8 +420,10 @@ class WanVAE(nn.Module, ConfigMixin):
 
     def decode(self, z):
         conv_idx = [0]
-        feat_map = [None] * count_conv3d(self.decoder)
         iter_ = z.shape[2]
+        feat_map = None
+        if iter_ > 1:
+            feat_map = [None] * count_conv3d(self.decoder)
         x = self.conv2(z)
         for i in range(iter_):
             conv_idx = [0]

@@ -1481,24 +1481,7 @@ NVIDIA_CONV3D_WORKAROUND = False
 try:
     if is_nvidia():
         cudnn_version = torch.backends.cudnn.version()
-        if (cudnn_version >= 91002 and cudnn_version < 91500) and torch_version_numeric >= (2, 9) and torch_version_numeric <= (2, 10):
+        if (91002 <= cudnn_version < 91500) and ((2, 9) <= torch_version_numeric <= (2, 10)):
             NVIDIA_CONV3D_WORKAROUND = True
 except Exception:
     pass
-else:
-    from functools import wraps
-
-    _forward = torch.nn.Conv3d._conv_forward
-
-    @wraps(_forward)
-    def patched_forward(self, input, weight, bias, *args, **kwargs):
-        if weight.dtype in (torch.float16, torch.bfloat16):
-            out = torch.cudnn_convolution(input, weight, self.padding, self.stride, self.dilation, self.groups, benchmark=False, deterministic=False, allow_tf32=True)
-            if bias is not None:
-                out += bias.reshape((1, -1) + (1,) * (out.ndim - 2))
-            return out
-        else:
-            return _forward(self, input, weight, bias, *args, **kwargs)
-
-    if NVIDIA_CONV3D_WORKAROUND:
-        torch.nn.Conv3d._conv_forward = patched_forward

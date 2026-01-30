@@ -256,11 +256,22 @@ class ForgeOperations:
         def reset_parameters(self):
             return None
 
-        def forward(self, x):
-            if self.parameters_manual_cast:
+        def _conv_forward(self, input, weight, bias, autopad=None, *args, **kwargs):
+            if autopad == "causal_zero":
+                weight = weight[:, :, -input.shape[2] :, :, :]
+            if memory_management.NVIDIA_CONV3D_WORKAROUND and weight.dtype in (torch.float16, torch.bfloat16):
+                out = torch.cudnn_convolution(input, weight, self.padding, self.stride, self.dilation, self.groups, benchmark=False, deterministic=False, allow_tf32=True)
+                if bias is not None:
+                    out += bias.reshape((1, -1) + (1,) * (out.ndim - 2))
+                return out
+            else:
+                return super()._conv_forward(input, weight, bias, *args, **kwargs)
+
+        def forward(self, x, *, autopad=None):
+            if self.parameters_manual_cast or autopad is not None:
                 weight, bias, signal = weights_manual_cast(self, x)
                 with main_stream_worker(weight, bias, signal):
-                    return self._conv_forward(x, weight, bias)
+                    return self._conv_forward(x, weight, bias, autopad)
             else:
                 weight, bias = get_weight_and_bias(self)
                 return super()._conv_forward(x, weight, bias)
