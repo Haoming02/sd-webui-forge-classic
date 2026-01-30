@@ -164,7 +164,7 @@ def process_batch(p, input, output_dir, inpaint_mask_dir, args, to_scale=False, 
     return batch_results
 
 
-def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, negative_prompt: str, prompt_styles, init_img, sketch, sketch_fg, init_img_with_mask, init_img_with_mask_fg, inpaint_color_sketch, inpaint_color_sketch_fg, init_img_inpaint, init_mask_inpaint, mask_blur: int, mask_alpha: float, inpainting_fill: int, n_iter: int, batch_size: int, cfg_scale: float, distilled_cfg_scale: float, image_cfg_scale: float, denoising_strength: float, selected_scale_tab: int, height: int, width: int, scale_by: float, resize_mode: int, inpaint_full_res: bool, inpaint_full_res_padding: int, inpainting_mask_invert: int, img2img_batch_input_dir: str, img2img_batch_output_dir: str, img2img_batch_inpaint_mask_dir: str, override_settings_texts, img2img_batch_use_png_info: bool, img2img_batch_png_info_props: list, img2img_batch_png_info_dir: str, img2img_batch_source_type: str, img2img_batch_upload: list, *args):
+def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, negative_prompt: str, prompt_styles, init_img, sketch, sketch_fg, init_img_with_mask, init_img_with_mask_fg, inpaint_color_sketch, inpaint_color_sketch_fg, init_img_inpaint, init_mask_inpaint, init_mask_inpaint_fg, mask_blur: int, mask_alpha: float, inpainting_fill: int, n_iter: int, batch_size: int, cfg_scale: float, distilled_cfg_scale: float, image_cfg_scale: float, denoising_strength: float, selected_scale_tab: int, height: int, width: int, scale_by: float, resize_mode: int, inpaint_full_res: bool, inpaint_full_res_padding: int, inpainting_mask_invert: int, img2img_batch_input_dir: str, img2img_batch_output_dir: str, img2img_batch_inpaint_mask_dir: str, override_settings_texts, img2img_batch_use_png_info: bool, img2img_batch_png_info_props: list, img2img_batch_png_info_dir: str, img2img_batch_source_type: str, img2img_batch_upload: list, *args):
 
     override_settings = create_override_settings_dict(override_settings_texts)
 
@@ -194,7 +194,10 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
         mask = Image.merge("RGBA", (mask, mask, mask, Image.new("L", mask.size, 255)))
     elif mode == 4:  # inpaint upload mask
         image = init_img_inpaint
-        mask = init_mask_inpaint
+        if isinstance(init_mask_inpaint, Image.Image) and isinstance(init_mask_inpaint_fg, Image.Image):
+            mask = Image.alpha_composite(init_mask_inpaint.convert("RGBA"), init_mask_inpaint_fg.convert("RGBA"))
+        else:
+            mask = init_mask_inpaint or init_mask_inpaint_fg
 
     if mask and isinstance(mask, Image.Image):
         mask = mask.point(lambda v: 255 if v > 128 else 0)

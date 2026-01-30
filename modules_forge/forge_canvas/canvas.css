@@ -85,6 +85,10 @@
     background-color: #3e3e3e;
 }
 
+.forge-btn-active {
+    background-color: #6b4b4b !important;
+}
+
 .forge-toolbar-box-a {
     flex-wrap: wrap;
 }

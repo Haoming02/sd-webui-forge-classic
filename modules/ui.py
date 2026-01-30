@@ -537,7 +537,15 @@ def create_ui():
 
                             with gr.TabItem("Inpaint upload", id="inpaint_upload", elem_id="img2img_inpaint_upload_tab") as tab_inpaint_upload:
                                 init_img_inpaint = gr.Image(label="Image for img2img", show_label=False, source="upload", interactive=True, type="pil", elem_id="img_inpaint_base")
-                                init_mask_inpaint = gr.Image(label="Mask", source="upload", interactive=True, type="pil", image_mode="RGBA", elem_id="img_inpaint_mask")
+                                init_mask_inpaint = ForgeCanvas(
+                                    elem_id="img_inpaint_mask",
+                                    contrast_scribbles=opts.img2img_inpaint_mask_high_contrast,
+                                    scribble_color=opts.img2img_inpaint_mask_brush_color,
+                                    scribble_color_fixed=True,
+                                    scribble_alpha=opts.img2img_inpaint_mask_scribble_alpha,
+                                    scribble_alpha_fixed=True,
+                                    scribble_softness_fixed=True,
+                                )
 
                             with gr.TabItem("Batch", id="batch", elem_id="img2img_batch_tab") as tab_batch:
                                 with gr.Tabs(elem_id="img2img_batch_source"):
@@ -714,7 +722,8 @@ def create_ui():
                 inpaint_color_sketch.background,
                 inpaint_color_sketch.foreground,
                 init_img_inpaint,
-                init_mask_inpaint,
+                init_mask_inpaint.background,
+                init_mask_inpaint.foreground,
                 mask_blur,
                 mask_alpha,
                 inpainting_fill,

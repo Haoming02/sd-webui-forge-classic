@@ -95,6 +95,7 @@ class ForgeCanvas {
         this._held_S = false;
 
         this._original_alpha = null;
+        this._eraser_locked = false;
     }
 
     init() {
@@ -113,6 +114,7 @@ class ForgeCanvas {
         const resetButton = document.getElementById(`resetButton_${self.uuid}`);
         const undoButton = document.getElementById(`undoButton_${self.uuid}`);
         const redoButton = document.getElementById(`redoButton_${self.uuid}`);
+        const eraseButton = document.getElementById(`eraseButton_${self.uuid}`);
 
         const uploadHint = document.getElementById(`uploadHint_${self.uuid}`);
         const scribbleIndicator = document.getElementById(`scribbleIndicator_${self.uuid}`);
@@ -145,6 +147,35 @@ class ForgeCanvas {
         const scribbleSoftnessLabel = document.getElementById(`softnessLabel_${self.uuid}`);
         scribbleSoftness.value = self.scribbleSoftness;
         scribbleSoftnessLabel.textContent = `Brush Softness (${self.scribbleSoftness})`;
+
+        const setEraser = (active, temporary = false) => {
+            if (active) {
+                if (self._original_alpha === null) {
+                    self._original_alpha = scribbleAlpha.value;
+                }
+                scribbleAlpha.value = 0.0;
+                updateInput(scribbleAlpha);
+                scribbleIndicator.style.border = "2px dotted";
+                if (!temporary) {
+                    self._eraser_locked = true;
+                    if (eraseButton) eraseButton.classList.add("forge-btn-active");
+                }
+                return;
+            }
+
+            if (temporary && self._eraser_locked) {
+                return;
+            }
+
+            if (self._original_alpha !== null) {
+                scribbleAlpha.value = self._original_alpha;
+                self._original_alpha = null;
+                updateInput(scribbleAlpha);
+            }
+            scribbleIndicator.style.border = "1px solid";
+            self._eraser_locked = false;
+            if (eraseButton) eraseButton.classList.remove("forge-btn-active");
+        };
 
         const indicatorSize = self.scribbleWidth * 4;
         scribbleIndicator.style.width = `${indicatorSize}px`;
@@ -230,6 +261,16 @@ class ForgeCanvas {
         redoButton.addEventListener("click", () => {
             self.redo();
         });
+
+        if (eraseButton) {
+            eraseButton.addEventListener("click", () => {
+                if (self._eraser_locked) {
+                    setEraser(false, false);
+                } else {
+                    setEraser(true, false);
+                }
+            });
+        }
 
         scribbleColor.addEventListener("input", (e) => {
             self.scribbleColor = e.target.value;
@@ -428,11 +469,7 @@ class ForgeCanvas {
             if (!self.pointerInsideContainer) return;
             if (e.shiftKey) {
                 e.preventDefault();
-                if (this._original_alpha === null)
-                    this._original_alpha = scribbleAlpha.value;
-                scribbleAlpha.value = 0.0;
-                updateInput(scribbleAlpha);
-                scribbleIndicator.style.border = "2px dotted";
+                setEraser(true, true);
                 return;
             }
             if (e.ctrlKey && e.key === "z") {
@@ -470,12 +507,7 @@ class ForgeCanvas {
             this._held_A = false;
             this._held_S = false;
 
-            if (this._original_alpha !== null) {
-                scribbleAlpha.value = this._original_alpha;
-                this._original_alpha = null;
-                updateInput(scribbleAlpha);
-                scribbleIndicator.style.border = "1px solid";
-            }
+            setEraser(false, true);
         });
 
         maxButton.addEventListener("click", () => {
