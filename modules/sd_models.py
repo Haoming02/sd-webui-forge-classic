@@ -320,6 +320,8 @@ def forge_model_reload():
     timer = Timer()
 
     if model_data.sd_model is not None:
+        if memory_management.is_device_cuda(memory_management.get_torch_device()) and memory_management.NUM_STREAMS > 0:
+            torch.cuda.synchronize()
         model_data.sd_model = None
         model_data.forge_hash = ""
         memory_management.unload_all_models()
