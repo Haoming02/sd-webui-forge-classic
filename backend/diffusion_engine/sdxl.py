@@ -83,6 +83,11 @@ class StableDiffusionXL(ForgeDiffusionEngine):
 
         flat = torch.flatten(torch.cat(out)).unsqueeze(dim=0).repeat(clip_pooled.shape[0], 1).to(clip_pooled)
 
+        if opts.sdxl_zero_neg and getattr(prompt, "is_negative_prompt", False) and all(x == "" for x in prompt):
+            clip_pooled = torch.zeros_like(clip_pooled)
+            cond_l = torch.zeros_like(cond_l)
+            cond_g = torch.zeros_like(cond_g)
+
         # ensure cond_l and cond_g have the same length
         max_len = max(cond_l.shape[1], cond_g.shape[1])
         cond_l = torch.cat([cond_l, cond_l.new_zeros(cond_l.size(0), max_len - cond_l.shape[1], cond_l.size(2))], dim=1)
@@ -180,6 +185,10 @@ class StableDiffusionXLRefiner(ForgeDiffusionEngine):
         out = [self.embedder(torch.Tensor([height])), self.embedder(torch.Tensor([width])), self.embedder(torch.Tensor([crop_h])), self.embedder(torch.Tensor([crop_w])), self.embedder(torch.Tensor([aesthetic]))]
 
         flat = torch.flatten(torch.cat(out)).unsqueeze(dim=0).repeat(clip_pooled.shape[0], 1).to(clip_pooled)
+
+        if opts.sdxl_zero_neg and is_negative_prompt and all(x == "" for x in prompt):
+            clip_pooled = torch.zeros_like(clip_pooled)
+            cond_g = torch.zeros_like(cond_g)
 
         cond = dict(
             crossattn=cond_g,
