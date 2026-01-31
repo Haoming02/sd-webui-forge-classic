@@ -98,5 +98,5 @@ def cheap_approximation(sample: torch.Tensor):
     else:
         sample = sample[0]
 
-    latent_image = torch.nn.functional.linear(sample.movedim(0, -1), factors.to(sample), bias=bias.to(sample))
+    latent_image = torch.nn.functional.linear(sample.movedim(0, -1), factors.to(sample), bias=bias.to(sample) if bias is not None else None)
     return latent_image.permute(2, 0, 1).unsqueeze(0)
