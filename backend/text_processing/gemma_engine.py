@@ -43,10 +43,8 @@ class GemmaTextProcessingEngine:
 
         chunks = []
         chunk = PromptChunk()
-        token_count = 0
 
         def next_chunk():
-            nonlocal token_count
             nonlocal chunk
 
             chunk.tokens = [self.id_start] + chunk.tokens
@@ -70,7 +68,7 @@ class GemmaTextProcessingEngine:
         if chunk.tokens or not chunks:
             next_chunk()
 
-        return chunks, token_count
+        return chunks
 
     @staticmethod
     def process_template(text: str, negative: bool) -> str:
@@ -96,22 +94,12 @@ class GemmaTextProcessingEngine:
             if line in cache:
                 line_z_values = cache[line]
             else:
-                chunks, token_count = self.tokenize_line(line)
+                chunks = self.tokenize_line(line)
                 line_z_values = []
-
-                # pad all chunks to length of longest chunk
-                # max_tokens = 0
-                # for chunk in chunks:
-                #     max_tokens = max(len(chunk.tokens), max_tokens)
 
                 for chunk in chunks:
                     tokens = chunk.tokens
                     multipliers = chunk.multipliers
-
-                    # remaining_count = max_tokens - len(tokens)
-                    # if remaining_count > 0:
-                    #     tokens += [self.id_pad] * remaining_count
-                    #     multipliers += [1.0] * remaining_count
 
                     z = self.process_tokens([tokens], [multipliers])[0]
                     line_z_values.append(z)
@@ -155,6 +143,13 @@ class GemmaTextProcessingEngine:
 
     def process_tokens(self, batch_tokens, batch_multipliers):
         embeds, mask, count = self.process_embeds(batch_tokens)
+
+        self.emphasis.tokens = batch_tokens
+        self.emphasis.multipliers = torch.asarray(batch_multipliers).to(embeds)
+        self.emphasis.z = embeds
+        self.emphasis.after_transformers()
+        embeds = self.emphasis.z
+
         _, z = self.text_encoder(
             None,
             attention_mask=mask,

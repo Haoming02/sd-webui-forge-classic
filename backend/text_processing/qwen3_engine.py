@@ -120,6 +120,13 @@ class Qwen3TextProcessingEngine:
 
     def process_tokens(self, batch_tokens, batch_multipliers):
         embeds, mask, count = self.process_embeds(batch_tokens)
+
+        self.emphasis.tokens = batch_tokens
+        self.emphasis.multipliers = torch.asarray(batch_multipliers).to(embeds)
+        self.emphasis.z = embeds
+        self.emphasis.after_transformers()
+        embeds = self.emphasis.z
+
         _, z = self.text_encoder(
             None,
             attention_mask=mask,
