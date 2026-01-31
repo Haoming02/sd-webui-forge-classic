@@ -205,10 +205,8 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
     if selected_scale_tab == 1 and not is_batch:
         assert image, "Can't scale by because no image is selected"
 
-        width = int(image.width * scale_by)
-        width -= width % 8
-        height = int(image.height * scale_by)
-        height -= height % 8
+        width = round(image.width * scale_by / 64) * 64
+        height = round(image.height * scale_by / 64) * 64
 
     assert 0.0 <= denoising_strength <= 1.0, "can only work with strength in [0.0, 1.0]"
 
