@@ -1656,9 +1656,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     denoising_strength: float = 0.75
     image_cfg_scale: float = None
     mask: Any = None
-    mask_blur_x: int = 4
-    mask_blur_y: int = 4
-    mask_blur: int = None
+    mask_blur: int = 4
     mask_round: bool = True
     inpainting_fill: int = 0
     inpaint_full_res: bool = True
@@ -1686,16 +1684,12 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
         self.initial_noise_multiplier = opts.initial_noise_multiplier if self.initial_noise_multiplier is None else self.initial_noise_multiplier
 
     @property
-    def mask_blur(self):
-        if self.mask_blur_x == self.mask_blur_y:
-            return self.mask_blur_x
-        return None
+    def mask_blur_x(self):
+        return self.mask_blur
 
-    @mask_blur.setter
-    def mask_blur(self, value):
-        if isinstance(value, int):
-            self.mask_blur_x = value
-            self.mask_blur_y = value
+    @property
+    def mask_blur_y(self):
+        return self.mask_blur
 
     def init(self, all_prompts, all_seeds, all_subseeds):
         self.extra_generation_params["Denoising strength"] = self.denoising_strength
@@ -1716,19 +1710,12 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
                 image_mask = ImageOps.invert(image_mask)
                 self.extra_generation_params["Mask mode"] = "Inpaint not masked"
 
-            if self.mask_blur_x > 0:
+            if self.mask_blur > 0:
                 np_mask = np.array(image_mask)
-                kernel_size = 2 * int(2.5 * self.mask_blur_x + 0.5) + 1
-                np_mask = cv2.GaussianBlur(np_mask, (kernel_size, 1), self.mask_blur_x)
+                kernel_size = 2 * int(2.5 * self.mask_blur + 0.5) + 1
+                np_mask = cv2.GaussianBlur(np_mask, (kernel_size, kernel_size), self.mask_blur)
                 image_mask = Image.fromarray(np_mask)
 
-            if self.mask_blur_y > 0:
-                np_mask = np.array(image_mask)
-                kernel_size = 2 * int(2.5 * self.mask_blur_y + 0.5) + 1
-                np_mask = cv2.GaussianBlur(np_mask, (1, kernel_size), self.mask_blur_y)
-                image_mask = Image.fromarray(np_mask)
-
-            if self.mask_blur_x > 0 or self.mask_blur_y > 0:
                 self.extra_generation_params["Mask blur"] = self.mask_blur
 
             if self.inpaint_full_res:
