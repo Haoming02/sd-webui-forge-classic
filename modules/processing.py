@@ -1408,7 +1408,9 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             devices.torch_gc()
 
             if self.latent_scale_mode is None:
-                decoded_samples = torch.stack(decode_latent_batch(self.sd_model, samples, target_device=devices.cpu, check_for_nans=True)).to(dtype=torch.float32)
+                decoded_samples = decode_latent_batch(self.sd_model, samples, target_device=devices.cpu, check_for_nans=True)
+                decoded_samples = torch.stack(decoded_samples).float()
+                decoded_samples = torch.clamp((decoded_samples + 1.0) / 2.0, min=0.0, max=1.0)
             else:
                 decoded_samples = None
 
@@ -1468,7 +1470,11 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             for i in range(samples.shape[0]):
                 save_intermediate(samples, i)
 
+            if (_5d := len(samples.shape)) == 5:
+                samples = samples.squeeze(2)
             samples = torch.nn.functional.interpolate(samples, size=(target_height // opt_f, target_width // opt_f), mode=self.latent_scale_mode["mode"], antialias=self.latent_scale_mode["antialias"])
+            if _5d:
+                samples = samples.unsqueeze(2)
 
             # Avoid making the inpainting conditioning unless necessary as
             # this does need some extra compute to decode / encode the image again.
@@ -1477,10 +1483,11 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             else:
                 image_conditioning = self.txt2img_image_conditioning(samples)
         else:
-            lowres_samples = torch.clamp((decoded_samples + 1.0) / 2.0, min=0.0, max=1.0)
+            if len(decoded_samples.shape) == 5:
+                decoded_samples = decoded_samples.squeeze(0)
 
             batch_images = []
-            for i, x_sample in enumerate(lowres_samples):
+            for i, x_sample in enumerate(decoded_samples):
                 x_sample = 255.0 * np.moveaxis(x_sample.cpu().numpy(), 0, 2)
                 x_sample = x_sample.astype(np.uint8)
                 image = Image.fromarray(x_sample)
