@@ -567,6 +567,11 @@ def minimum_inference_memory() -> float:
 
 
 def free_memory(memory_required: float, device: torch.device, keep_loaded: list["LoadedModel"] = []):
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.xpu.is_available():
+        torch.xpu.synchronize()
+
     cleanup_models_gc()
     unloaded_model = []
     can_unload = []
