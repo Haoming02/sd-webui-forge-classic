@@ -239,9 +239,11 @@ def attention_sage(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=
         if mask.ndim == 3:
             mask = mask.unsqueeze(1)
 
+    _fallback: bool = (IS_SAGE_2 and dim_head > 128) or ((not IS_SAGE_2) and (dim_head not in (64, 96, 128)))
+
     try:
-        out = sageattn(q, k, v, attn_mask=mask, is_causal=False, tensor_layout=tensor_layout)
-        _fallback = False
+        if not _fallback:
+            out = sageattn(q, k, v, attn_mask=mask, is_causal=False, tensor_layout=tensor_layout)
     except Exception as e:
         logger.error(f"Error running sageattn: {e}")
         _fallback = True
