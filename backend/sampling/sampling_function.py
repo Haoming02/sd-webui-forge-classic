@@ -401,9 +401,4 @@ def sampling_cleanup(unet: "UnetPatcher"):
     for cnet in unet.list_controlnets():
         cnet.cleanup()
 
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    elif torch.xpu.is_available():
-        torch.xpu.synchronize()
-
     memory_management.soft_empty_cache()
