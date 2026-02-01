@@ -258,8 +258,8 @@ def forge_main_entry():
 
 
 def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_preset: str):
-    checkpoint_change(ui_checkpoint, ui_forge_preset, save=False, refresh=False)
-    modules_change(ui_vae, ui_forge_preset)
+    modules_change(ui_vae, ui_forge_preset, save=False, refresh=False)
+    checkpoint_change(ui_checkpoint, ui_forge_preset, save=True, refresh=True)
 
 
 def on_preset_change(preset: str):
