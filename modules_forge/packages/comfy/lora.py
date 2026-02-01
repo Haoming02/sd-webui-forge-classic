@@ -1,4 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/lora.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.11.0/comfy/lora.py
 
 """
 This file is part of ComfyUI.
@@ -205,6 +205,7 @@ def model_lora_keys_unet(model, key_map={}):
                 key_map["transformer.{}".format(k[: -len(".weight")])] = to  # simpletrainer and probably regular diffusers flux lora format
                 key_map["lycoris_{}".format(k[: -len(".weight")].replace(".", "_"))] = to  # simpletrainer lycoris
                 key_map["lora_transformer_{}".format(k[: -len(".weight")].replace(".", "_"))] = to  # onetrainer
+                key_map[k[: -len(".weight")]] = to  # DiffSynth lora format
         for k in sdk:
             hidden_size = model.diffusion_model.config.get("hidden_size", 0)
             if k.endswith(".weight") and ".linear1." in k:
@@ -227,6 +228,8 @@ def model_lora_keys_unet(model, key_map={}):
                 to = diffusers_keys[k]
                 key_lora = k[: -len(".weight")]
                 key_map["diffusion_model.{}".format(key_lora)] = to
+                key_map["transformer.{}".format(key_lora)] = to
                 key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = to
+                key_map[key_lora] = to
 
     return key_map
