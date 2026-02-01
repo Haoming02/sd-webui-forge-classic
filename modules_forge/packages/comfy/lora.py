@@ -209,6 +209,10 @@ def model_lora_keys_unet(model, key_map={}):
             hidden_size = model.diffusion_model.config.get("hidden_size", 0)
             if k.endswith(".weight") and ".linear1." in k:
                 key_map["{}".format(k.replace(".linear1.weight", ".linear1_qkv"))] = (k, (0, 0, hidden_size * 3))
+            if k.endswith(".linear1.weight") and ".single_blocks." in k: #simpletuner and regular diffusers flux2 lora format
+                key_map[k.replace("diffusion_model.single_blocks.", "transformer.single_transformer_blocks.").replace(".linear1.weight", ".attn.to_qkv_mlp_proj")] = k
+            if k.endswith(".linear2.weight") and ".single_blocks." in k:
+                key_map[k.replace("diffusion_model.single_blocks.", "transformer.single_transformer_blocks.").replace(".linear2.weight", ".attn.to_out")] = k
 
     if "qwen" in _model_name:
         for k in sdk:
