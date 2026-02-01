@@ -1467,12 +1467,14 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         self.sampler = sd_samplers.create_sampler(img2img_sampler_name, self.sd_model)
 
         if self.latent_scale_mode is not None:
+            if _5d := (len(samples.shape) == 5):
+                samples = samples.squeeze(2)
+
             for i in range(samples.shape[0]):
                 save_intermediate(samples, i)
 
-            if (_5d := len(samples.shape)) == 5:
-                samples = samples.squeeze(2)
             samples = torch.nn.functional.interpolate(samples, size=(target_height // opt_f, target_width // opt_f), mode=self.latent_scale_mode["mode"], antialias=self.latent_scale_mode["antialias"])
+
             if _5d:
                 samples = samples.unsqueeze(2)
 
