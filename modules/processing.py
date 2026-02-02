@@ -1368,6 +1368,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
                 samples = None
                 decoded_samples = torch.asarray(np.expand_dims(image, 0))
+                decoded_samples = torch.clamp((decoded_samples + 1.0) / 2.0, min=0.0, max=1.0)
 
             else:
                 image = np.array(self.firstpass_image).astype(np.float32) / 255.0
