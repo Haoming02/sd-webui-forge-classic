@@ -146,6 +146,7 @@ dynamic_args = dict(
     nunchaku=False,
     ref_latents=[],
     concat_latent=None,
+    ops=None,
 )
 """
 Some parameters that are used throughout the Webui
@@ -157,4 +158,5 @@ Some parameters that are used throughout the Webui
 - nunchaku: `bool` - Nunchaku (SVDQ) Models
 - ref_latents: `list[torch.Tensor]` - Reference Latent(s) for Flux Kontext & Qwen-Image-Edit
 - concat_latent: `torch.Tensor` - Input Latent for Wan 2.2 I2V
+- ops: `str` - Operations for the Diffusion Model
 """

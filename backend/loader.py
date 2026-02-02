@@ -316,6 +316,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             else:
                 computation_dtype = memory_management.inference_cast(weight_dtype=storage_dtype, inference_device=load_device, supported_dtypes=guess.supported_inference_dtypes)
 
+            backend.args.dynamic_args["ops"] = None
+
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
                 with using_forge_operations(device=initial_device, dtype=computation_dtype, manual_cast_enabled=False, bnb_dtype=storage_dtype):
