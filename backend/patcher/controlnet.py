@@ -344,6 +344,7 @@ class ControlNet(ControlBase):
 
     def cleanup(self):
         self.model_sampling_current = None
+        memory_management.unload_model(self.control_model_wrapped)
         super().cleanup()
 
 

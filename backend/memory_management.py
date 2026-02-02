@@ -1313,6 +1313,21 @@ def soft_empty_cache(force=False):
     signal_empty_cache = False
 
 
+def unload_model(model: "ModelPatcher") -> bool:
+    index = None
+    for i, p in enumerate(current_loaded_models):
+        if p.model == model:
+            index = i
+            break
+
+    if index is not None:
+        mdl = current_loaded_models.pop(index)
+        del mdl
+        return True
+
+    return False
+
+
 def unload_all_models():
     free_memory(1e30, get_torch_device())
 
