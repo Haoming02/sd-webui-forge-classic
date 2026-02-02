@@ -30,6 +30,11 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
     if dynamic_args.get("nunchaku", False):
         model.model.diffusion_model.loras.append((filename, strength_model))
         return model, clip
+    if dynamic_args.get("ops", "").endswith("Int8"):
+        from backend.operations_int8 import load_lora_int8
+
+        model = load_lora_int8(model, lora, strength_model, filename)
+        return model, clip
 
     model_flag: str = type(model.model).__name__ if model is not None else "default"
 

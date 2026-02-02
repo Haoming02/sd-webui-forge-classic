@@ -83,53 +83,143 @@ def int8_forward_dynamic(x: torch.Tensor, weight: torch.Tensor, weight_scale: fl
     return res_scaled
 
 
-# region INT8 LoRA Adapter - High Precision, Low RAM Patching
+# region Dynamic LoRA Hook
 
 
-from modules_forge.packages.comfy.weight_adapter import LoRAAdapter
-
-
-class INT8LoRAPatchAdapter(LoRAAdapter):
+class DynamicLoRAHook:
     """
-    Specialized LoRA adapter that patches INT8 weights IN-PLACE in INT8 space.
+    Hook registered on the diffusion_model to synchronize dynamic LoRA attributes
+    with the current ModelPatcher context at the start of each forward pass.
     """
 
-    def __init__(self, loaded_keys, weights, weight_scale, seed=0):
-        super().__init__(loaded_keys, weights)
-        self.weight_scale = weight_scale
-        self.seed = seed
+    def __init__(self):
+        self.current_lora_id = None
 
-    def calculate_weight(self, weight, key, strength, strength_model, offset, function, intermediate_dtype=torch.float32, original_weight=None):
-        v = self.weights
-        up, down, alpha = v[0], v[1], v[2]
+    def pre_forward(self, module, input_args, input_kwargs):
+        # 1. Try to find transformer_options
+        transformer_options = input_kwargs.get("transformer_options", {})
+        if not transformer_options:
+            # Fallback for models that pass it in context
+            context = input_args[2] if len(input_args) > 2 else None
+            if isinstance(context, dict) and "transformer_options" in context:
+                transformer_options = context["transformer_options"]
 
-        rank = down.shape[0] if down.ndim >= 2 else 1
-        scale = (alpha / rank) * strength if alpha is not None else strength
+        dynamic_loras = transformer_options.get("dynamic_loras", [])
 
-        device = weight.device
+        # 2. Generate a unique ID for this set of LoRAs
+        # We use handles/strengths to detect changes
+        lora_id = hash(tuple((id(d["patches"]), d["strength"]) for d in dynamic_loras)) if dynamic_loras else None
 
-        # Compute LoRA Delta in high-precision on GPU
-        comp_device = torch.device("cuda") if torch.cuda.is_available() else device
+        if lora_id == self.current_lora_id:
+            return None  # Already synchronized
 
-        up_f = up.to(comp_device, dtype=intermediate_dtype)
-        down_f = down.to(comp_device, dtype=intermediate_dtype)
+        # 3. Synchronize all linear layers
+        self.apply_composition(module, dynamic_loras)
+        self.current_lora_id = lora_id
+        return None
 
-        # Handle possible mid weights (LoCon/LoHA)
-        if v[3] is not None:
-            mid_f = v[3].to(comp_device, dtype=intermediate_dtype)
-            lora_diff = torch.mm(up_f.flatten(1), torch.mm(mid_f.flatten(1), down_f.flatten(1))).reshape(weight.shape)
-        else:
-            lora_diff = torch.mm(up_f.flatten(1), down_f.flatten(1)).reshape(weight.shape)
+    def apply_composition(self, diffusion_model, dynamic_loras):
+        # Pre-group patches by layer
+        layer_patches = {}
+        if dynamic_loras:
+            for entry in dynamic_loras:
+                strength = entry["strength"]
+                for key, adapter in entry["patches"].items():
+                    if key not in layer_patches:
+                        layer_patches[key] = []
+                    layer_patches[key].append((adapter, strength))
 
-        # Apply Patch
-        if weight.dtype == torch.int8:
-            # --- INT8 SPACE PATCHING ---
-            delta_f = lora_diff * scale
-            delta_int8 = stochastic_round_int8_delta(delta_f, self.weight_scale, self.seed)
+        # Update all modules
+        for name, module in diffusion_model.named_modules():
+            if not hasattr(module, "lora_A"):
+                continue
 
-            # Perform integer addition (int32 for safety) then clamp
-            res = weight.to(comp_device, torch.int32) + delta_int8.to(comp_device, torch.int32)
-            return torch.clamp(res, -128, 127).to(torch.int8).to(device)
-        else:
-            # Fallback: Standard Float Patching
-            return weight + (lora_diff * scale).to(weight.device, weight.dtype)
+            # Find patches for this module
+            # ComfyUI keys are often 'diffusion_model.path.to.weight' or 'path.to.weight'
+            possible_keys = [f"diffusion_model.{name}.weight", f"{name}.weight"]
+            patches = None
+            for pk in possible_keys:
+                if pk in layer_patches:
+                    patches = layer_patches[pk]
+                    break
+
+            if not patches:
+                module.lora_A = None
+                module.lora_B = None
+                module.lora_alpha = None
+                continue
+
+            # Compose
+            all_A = []
+            all_B = []
+            for adapter, strength in patches:
+                v = adapter.weights
+                up, down, alpha, mid = v[0], v[1], v[2], v[3]
+                rank = down.shape[0] if down.ndim >= 2 else 1
+                scale = (alpha / rank) * strength if alpha is not None else strength
+
+                curr_A = down
+                if mid is not None:
+                    curr_A = torch.mm(mid.flatten(1), down.flatten(1)).reshape(down.shape)
+
+                all_A.append(curr_A * scale)
+                all_B.append(up)
+
+            if all_A:
+                device = getattr(module, "weight", torch.tensor(0)).device
+                module.lora_A = torch.cat(all_A, dim=0).to(device)
+                module.lora_B = torch.cat(all_B, dim=1).to(device)
+                module.lora_alpha = None
+            else:
+                module.lora_A = None
+                module.lora_B = None
+
+    @classmethod
+    def register(cls, diffusion_model):
+        if not hasattr(diffusion_model, "_dynamic_lora_hook"):
+            hook = cls()
+            diffusion_model._dynamic_lora_hook = hook
+            diffusion_model.register_forward_pre_hook(hook.pre_forward, with_kwargs=True)
+        return diffusion_model._dynamic_lora_hook
+
+
+# region load_lora_int8
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.patcher.unet import UnetPatcher
+
+
+from backend.patcher.lora import load_lora, model_lora_keys_unet
+
+
+def load_lora_int8(model: "UnetPatcher", lora: dict[str, torch.Tensor], strength: float, lora_name: str) -> "UnetPatcher":
+    if strength == 0:
+        return model
+
+    model_patcher = model.clone()
+
+    # 1. Get Patch Map
+    key_map = model_lora_keys_unet(model_patcher.model)
+
+    patch_dict, _unmatch = load_lora(lora, key_map)
+
+    # 2. Register Global Hook (if not exists)
+    DynamicLoRAHook.register(model_patcher.model.diffusion_model)
+
+    # 3. Add to Dynamic LoRA list in transformer_options
+    # This ensures ComfyUI's cloning handles everything and it's non-sticky
+    if "transformer_options" not in model_patcher.model_options:
+        model_patcher.model_options["transformer_options"] = {}
+
+    opts = model_patcher.model_options["transformer_options"]
+    if "dynamic_loras" not in opts:
+        opts["dynamic_loras"] = []
+    else:
+        # Shallow copy the list to avoid modifying the parent patcher's list
+        opts["dynamic_loras"] = opts["dynamic_loras"].copy()
+
+    opts["dynamic_loras"].append({"name": lora_name, "strength": strength, "patches": patch_dict})
+
+    return model_patcher
