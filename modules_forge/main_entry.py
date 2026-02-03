@@ -28,7 +28,7 @@ forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
     "float8-e4m3fn (fp16 LoRA)": (torch.float8_e4m3fn, True),
     "float8-e5m2": (torch.float8_e5m2, False),
     "float8-e5m2 (fp16 LoRA)": (torch.float8_e5m2, True),
-    "int8": (torch.int8, False),
+    "int8": (torch.int8, False), 
     "int8 (fp16 LoRA)": (torch.int8, True),
 }
 
@@ -212,6 +212,7 @@ def forge_main_entry():
     ui_txt2img_distilled_cfg = get_a1111_ui_component("txt2img", "Distilled CFG Scale")
     ui_txt2img_sampler = get_a1111_ui_component("txt2img", "sampler_name")
     ui_txt2img_scheduler = get_a1111_ui_component("txt2img", "scheduler")
+    ui_txt2img_steps = get_a1111_ui_component("txt2img", "steps")
 
     ui_img2img_width = get_a1111_ui_component("img2img", "Size-1")
     ui_img2img_height = get_a1111_ui_component("img2img", "Size-2")
@@ -219,6 +220,7 @@ def forge_main_entry():
     ui_img2img_distilled_cfg = get_a1111_ui_component("img2img", "Distilled CFG Scale")
     ui_img2img_sampler = get_a1111_ui_component("img2img", "sampler_name")
     ui_img2img_scheduler = get_a1111_ui_component("img2img", "scheduler")
+    ui_img2img_steps = get_a1111_ui_component("img2img", "steps")
 
     ui_txt2img_hr_cfg = get_a1111_ui_component("txt2img", "Hires CFG Scale")
     ui_txt2img_hr_distilled_cfg = get_a1111_ui_component("txt2img", "Hires Distilled CFG Scale")
@@ -242,6 +244,8 @@ def forge_main_entry():
         ui_img2img_sampler,
         ui_txt2img_scheduler,
         ui_img2img_scheduler,
+        ui_txt2img_steps,
+        ui_img2img_steps,
         ui_txt2img_hr_cfg,
         ui_txt2img_hr_distilled_cfg,
         ui_txt2img_batch_size,
@@ -260,8 +264,8 @@ def forge_main_entry():
 
 
 def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_preset: str):
-    modules_change(ui_vae, ui_forge_preset, save=False, refresh=False)
-    checkpoint_change(ui_checkpoint, ui_forge_preset, save=True, refresh=True)
+    checkpoint_change(ui_checkpoint, ui_forge_preset, save=False, refresh=False)
+    modules_change(ui_vae, ui_forge_preset)
 
 
 def on_preset_change(preset: str):
@@ -291,6 +295,8 @@ def on_preset_change(preset: str):
         gr.update(value=getattr(shared.opts, f"{preset}_i2i_sampler", "Euler")),  # ui_img2img_sampler
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_scheduler", "Simple")),  # ui_txt2img_scheduler
         gr.update(value=getattr(shared.opts, f"{preset}_i2i_scheduler", "Simple")),  # ui_img2img_scheduler
+        gr.update(value=getattr(shared.opts, f"{preset}_t2i_steps", 20)),  # ui_txt2img_steps
+        gr.update(value=getattr(shared.opts, f"{preset}_i2i_steps", 20)),  # ui_img2img_steps
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_hr_cfg", 1.0)),  # ui_txt2img_hr_cfg
         gr.update(visible=extra_slider, label=distill_label, value=getattr(shared.opts, f"{preset}_t2i_hr_d_cfg", 3.0)),  # ui_txt2img_hr_distilled_cfg
         gr.update(**batch_args),  # ui_txt2img_batch_size
