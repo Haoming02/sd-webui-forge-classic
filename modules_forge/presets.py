@@ -64,6 +64,15 @@ CFG = {
     PresetArch.wan: 1.0,
 }
 
+STEPS = {
+    PresetArch.sd: 20,
+    PresetArch.xl: 20,
+    PresetArch.flux: 20,
+    PresetArch.qwen: 20,
+    PresetArch.lumina: 20,
+    PresetArch.wan: 20,
+}
+
 
 def register(options_templates: dict, options_section: Callable, OptionInfo: "OptionInfo"):
     for arch in PresetArch:
@@ -93,16 +102,18 @@ def register(options_templates: dict, options_section: Callable, OptionInfo: "Op
             )
         )
 
-        w, h, cfg = WIDTH[arch], HEIGHT[arch], CFG[arch]
+        w, h, cfg, steps = WIDTH[arch], HEIGHT[arch], CFG[arch], STEPS[arch]
 
         options_templates.update(
             options_section(
                 (f"ui_{name}", name.upper(), "presets"),
                 {
+                    f"{name}_t2i_steps": OptionInfo(steps, "txt2img Steps", gr.Slider, {"minimum": 1, "maximum": 150, "step": 1}),
                     f"{name}_t2i_width": OptionInfo(w, "txt2img Width", gr.Slider, {"minimum": 64, "maximum": 2048, "step": 8}),
                     f"{name}_t2i_height": OptionInfo(h, "txt2img Height", gr.Slider, {"minimum": 64, "maximum": 2048, "step": 8}),
                     f"{name}_t2i_cfg": OptionInfo(cfg, "txt2img CFG", gr.Slider, {"minimum": 1, "maximum": 30, "step": 0.1}),
                     f"{name}_t2i_hr_cfg": OptionInfo(cfg, "txt2img Hires. CFG", gr.Slider, {"minimum": 1, "maximum": 30, "step": 0.1}),
+                    f"{name}_i2i_steps": OptionInfo(steps, "img2img Steps", gr.Slider, {"minimum": 1, "maximum": 150, "step": 1}),
                     f"{name}_i2i_width": OptionInfo(w, "img2img Width", gr.Slider, {"minimum": 64, "maximum": 2048, "step": 8}),
                     f"{name}_i2i_height": OptionInfo(h, "img2img Height", gr.Slider, {"minimum": 64, "maximum": 2048, "step": 8}),
                     f"{name}_i2i_cfg": OptionInfo(cfg, "img2img CFG", gr.Slider, {"minimum": 1, "maximum": 30, "step": 0.1}),
