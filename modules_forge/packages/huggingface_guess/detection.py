@@ -29,7 +29,7 @@ def calculate_transformer_depth(prefix, state_dict_keys, state_dict):
     transformer_keys = sorted(list(filter(lambda a: a.startswith(transformer_prefix), state_dict_keys)))
     if len(transformer_keys) > 0:
         last_transformer_depth = count_blocks(state_dict_keys, transformer_prefix + "{}")
-        context_dim = state_dict["{}0.attn2.to_k.weight".format(transformer_prefix)].shape[1]
+        context_dim = int(state_dict["{}0.attn2.to_k.weight".format(transformer_prefix)].shape[1])
         use_linear_in_transformer = len(state_dict["{}1.proj_in.weight".format(prefix)].shape) == 2
         time_stack = "{}1.time_stack.0.attn1.to_q.weight".format(prefix) in state_dict or "{}1.time_mix_blocks.0.attn1.to_q.weight".format(prefix) in state_dict
         time_stack_cross = "{}1.time_stack.0.attn2.to_q.weight".format(prefix) in state_dict or "{}1.time_mix_blocks.0.attn2.to_q.weight".format(prefix) in state_dict
@@ -60,7 +60,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
             dit_config["ffn_dim_multiplier"] = 4.0
             ctd_weight = state_dict.get("{}clip_text_pooled_proj.0.weight".format(key_prefix), None)
             if ctd_weight is not None:  # NewBie
-                dit_config["clip_text_dim"] = ctd_weight.shape[0]
+                dit_config["clip_text_dim"] = int(ctd_weight.shape[0])
         elif dit_config["dim"] == 3840:  # Z-image
             dit_config["nunchaku"] = "{}layers.0.attention.to_out.0.qweight".format(key_prefix) in state_dict_keys
             dit_config["n_heads"] = 30
@@ -83,8 +83,8 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
     if "{}head.modulation".format(key_prefix) in state_dict_keys:  # Wan 2.1
         dit_config = {}
         dit_config["image_model"] = "wan2.1"
-        dim = state_dict["{}head.modulation".format(key_prefix)].shape[-1]
-        out_dim = state_dict["{}head.head.weight".format(key_prefix)].shape[0] // 4
+        dim = int(state_dict["{}head.modulation".format(key_prefix)].shape[-1])
+        out_dim = int(state_dict["{}head.head.weight".format(key_prefix)].shape[0]) // 4
         dit_config["dim"] = int(dim)
         dit_config["out_dim"] = int(out_dim)
         dit_config["num_heads"] = int(dim // 128)
@@ -103,7 +103,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
             dit_config["model_type"] = "t2v"
         flf_weight = state_dict.get("{}img_emb.emb_pos".format(key_prefix))
         if flf_weight is not None:
-            dit_config["flf_pos_embed_token_number"] = flf_weight.shape[1]
+            dit_config["flf_pos_embed_token_number"] = int(flf_weight.shape[1])
         return dit_config
 
     if "{}single_transformer_blocks.0.mlp_fc1.qweight".format(key_prefix) in state_dict_keys:  # SVDQ Flux
@@ -205,7 +205,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
         _qweight: bool = "{}transformer_blocks.0.attn.to_qkv.qweight".format(key_prefix) in state_dict_keys
         dit_config = {"nunchaku": _qweight}
         dit_config["image_model"] = "qwen_image"
-        dit_config["in_channels"] = state_dict["{}img_in.weight".format(key_prefix)].shape[1]
+        dit_config["in_channels"] = int(state_dict["{}img_in.weight".format(key_prefix)].shape[1])
         dit_config["num_layers"] = count_blocks(state_dict_keys, "{}transformer_blocks.".format(key_prefix) + "{}.")
         return dit_config
 
@@ -222,16 +222,16 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
     y_input = "{}label_emb.0.0.weight".format(key_prefix)
     if y_input in state_dict_keys:
         unet_config["num_classes"] = "sequential"
-        unet_config["adm_in_channels"] = state_dict[y_input].shape[1]
+        unet_config["adm_in_channels"] = int(state_dict[y_input].shape[1])
     else:
         unet_config["adm_in_channels"] = None
 
-    model_channels = state_dict["{}input_blocks.0.0.weight".format(key_prefix)].shape[0]
-    in_channels = state_dict["{}input_blocks.0.0.weight".format(key_prefix)].shape[1]
+    model_channels = int(state_dict["{}input_blocks.0.0.weight".format(key_prefix)].shape[0])
+    in_channels = int(state_dict["{}input_blocks.0.0.weight".format(key_prefix)].shape[1])
 
     out_key = "{}out.2.weight".format(key_prefix)
     if out_key in state_dict:
-        out_channels = state_dict[out_key].shape[0]
+        out_channels = int(state_dict[out_key].shape[0])
     else:
         out_channels = 4
 
@@ -277,7 +277,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
             res_block_prefix = "{}0.in_layers.0.weight".format(prefix)
             if res_block_prefix in block_keys:
                 last_res_blocks += 1
-                last_channel_mult = state_dict["{}0.out_layers.3.weight".format(prefix)].shape[0] // model_channels
+                last_channel_mult = int(state_dict["{}0.out_layers.3.weight".format(prefix)].shape[0]) // model_channels
 
                 out = calculate_transformer_depth(prefix, state_dict_keys, state_dict)
                 if out is not None:
@@ -429,7 +429,7 @@ def unet_config_from_diffusers_unet(state_dict, dtype=None):
             )
             transformer_depth.append(transformer_count)
             if transformer_count > 0:
-                match["context_dim"] = state_dict["down_blocks.{}.attentions.{}.transformer_blocks.0.attn2.to_k.weight".format(i, ab)].shape[1]
+                match["context_dim"] = int(state_dict["down_blocks.{}.attentions.{}.transformer_blocks.0.attn2.to_k.weight".format(i, ab)].shape[1])
 
         attn_res *= 2
         if attn_blocks == 0:
@@ -438,13 +438,13 @@ def unet_config_from_diffusers_unet(state_dict, dtype=None):
 
     match["transformer_depth"] = transformer_depth
 
-    match["model_channels"] = state_dict["conv_in.weight"].shape[0]
-    match["in_channels"] = state_dict["conv_in.weight"].shape[1]
+    match["model_channels"] = int(state_dict["conv_in.weight"].shape[0])
+    match["in_channels"] = int(state_dict["conv_in.weight"].shape[1])
     match["adm_in_channels"] = None
     if "class_embedding.linear_1.weight" in state_dict:
-        match["adm_in_channels"] = state_dict["class_embedding.linear_1.weight"].shape[1]
+        match["adm_in_channels"] = int(state_dict["class_embedding.linear_1.weight"].shape[1])
     elif "add_embedding.linear_1.weight" in state_dict:
-        match["adm_in_channels"] = state_dict["add_embedding.linear_1.weight"].shape[1]
+        match["adm_in_channels"] = int(state_dict["add_embedding.linear_1.weight"].shape[1])
 
     SDXL = {
         "use_checkpoint": False,
