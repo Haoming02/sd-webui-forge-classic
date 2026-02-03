@@ -2,7 +2,7 @@ import math
 
 import torch
 
-from backend import memory_management
+from backend import args, memory_management
 from backend.modules.k_prediction import k_prediction_from_diffusers_scheduler
 
 
@@ -15,7 +15,15 @@ class KModel(torch.nn.Module):
         self.storage_dtype = model.storage_dtype
         self.computation_dtype = model.computation_dtype
 
-        print(f"K-Model Created: {dict(storage_dtype=self.storage_dtype, computation_dtype=self.computation_dtype)}")
+        _store = f"storage: {self.storage_dtype}"
+        _compute = f"computation: {self.computation_dtype}"
+
+        if args.dynamic_args["ops"].endswith("Int8"):
+            _compute += f" + {torch.int8}"
+        if args.dynamic_args["ops"].startswith("fp8"):
+            _compute += f" + {torch.float8_e4m3fn}"
+
+        memory_management.logger.info(f"Diffusion Model: {{{_store}, {_compute}}}")
 
         self.diffusion_model = model
         self.diffusion_model.eval()

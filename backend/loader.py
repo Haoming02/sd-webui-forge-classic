@@ -316,6 +316,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             else:
                 computation_dtype = memory_management.inference_cast(weight_dtype=storage_dtype, inference_device=load_device, supported_dtypes=guess.supported_inference_dtypes)
 
+            backend.args.dynamic_args["ops"] = None
+
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
                 with using_forge_operations(device=initial_device, dtype=computation_dtype, manual_cast_enabled=False, bnb_dtype=storage_dtype):
@@ -324,9 +326,13 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=storage_dtype)
                 need_manual_cast = storage_dtype != computation_dtype
                 to_args = dict(device=initial_device, dtype=storage_dtype)
+                _dtype = storage_dtype  # for fp8_fast
                 ops = False if guess.nunchaku else None
 
-                with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=storage_dtype):
+                if _dtype_overwrite is torch.int8 and storage_dtype is torch.bfloat16:
+                    _dtype = str(guess.__class__.__name__)
+
+                with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=_dtype):
                     model = model_loader(unet_config).to(**to_args)
 
             model = pre_func(model)
