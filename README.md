@@ -24,7 +24,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Jan.]
+## Features [Feb.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -42,10 +42,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > To export a video, you need to have **[FFmpeg](https://ffmpeg.org/)** installed
 
-- [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image)
-    - `txt2img`
-- [X] Support [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
-    - `img2img`, `inpaint`
+- [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) / [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
+    - `txt2img` / `img2img`, `inpaint`
 
 > [!Note]
 > Since the layers between **Qwen-Image** and **Qwen-Image-Edit** are exactly the same, to be properly detected as an **Edit** model, the model needs to include "`qwen`" and "`edit`" in its path, either the file name or folder name.
@@ -58,13 +56,12 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
-    - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `t5`, `z-image-turbo`
+    - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `z-image-turbo`
     - support LoRA for `Flux` and `Qwen`
     - see [Commandline](#by-neo)
 - [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
     - `Neta-Lumina`, `NetaYume-Lumina`
-- [X] Support [Chroma](https://huggingface.co/lodestones/Chroma)
-    - special thanks: [@croquelois](https://github.com/lllyasviel/stable-diffusion-webui-forge/pull/2925)
+- [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
 
 > [!Tip]
 > Check out [Download Models](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Download-Models) for where to get each model and the accompanying modules
@@ -80,8 +77,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - requires **manually** installing [uv](https://github.com/astral-sh/uv/releases)
     - drastically speed up installation
     - see [Commandline](#by-neo)
-- [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), and fast `fp16_accumulation`
+- [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), `fp16_accumulation`, `torch._scaled_mm`
     - see [Commandline](#by-neo)
+- [X] Implement Triton Kernel for `matmul` in `torch.int8`
+    - speed up `bf16` models
+    - enable by selecting `int8` in the `Diffusion in Low Bits`
 - [X] Implement Seed Variance Enhancer
     - improve seed-to-seed variance for distilled models
 - [X] Implement RescaleCFG
@@ -276,6 +276,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
+> [!Tip]
+> Check out [Extra Installations](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations) for how to install `git`, `uv`, and `FFmpeg`
+
+<br>
+
 ## Attention Functions
 
 > [!Important]
@@ -293,7 +298,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 4. `PyTorch`
 5. `Basic`
 
-> [!Tip]
+> [!Note]
 > To skip a specific attention, add the respective disable arg such as `--disable-sage`
 
 <br>
