@@ -65,7 +65,7 @@ def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Ten
     return weight, bias
 
 
-def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dtype: bool = False, skip_bias_dtype: bool = False, weight_fn: Callable = None, bias_fn: Callable = None, *, dtype: torch.dtype = None, _cast: bool = True):
+def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dtype: bool = False, skip_bias_dtype: bool = False, weight_fn: Callable = None, bias_fn: Callable = None, *, dtype: torch.dtype = None, _cast: bool = True, _scale: bool = True):
     weight, bias = None, None
     target_dtype, target_device = x.dtype, x.device
     weight_has_function: bool = weight_fn is not None
@@ -103,6 +103,9 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
             bias = memory_management.cast_to(layer.bias, **bias_args, copy=bias_has_function, context=context)
 
     memory_management.sync_stream(target_device, offload_stream)
+
+    if not _scale:
+        return weight, bias
 
     weight_a = weight
     bias_a = bias
@@ -704,7 +707,7 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
     input_shape, input_dtype = input.shape, input.dtype
 
     if len(input.shape) == 3:
-        w, bias, s = weights_manual_cast(self, input, dtype=dtype)
+        w, bias = weights_manual_cast(self, input, dtype=dtype, _scale=False)
         w = w.t()
 
         scale_weight: torch.Tensor = getattr(self, "scale_weight", None)
