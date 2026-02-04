@@ -710,14 +710,13 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
         w, bias = weights_manual_cast(self, input, dtype=dtype, _scale=False)
         w = w.t()
 
-        scale_weight: torch.Tensor = getattr(self, "scale_weight", None)
-
-        if scale_weight is None:
+        if getattr(self, "scale_weight", None) is None:
             scale_weight = torch.ones((), device=input.device, dtype=torch.float32)
         else:
-            scale_weight = scale_weight.to(input.device)
+            scale_weight = self.scale_weight.to(input.device)
 
-        scale_input = torch.ones((), device=input.device, dtype=torch.float32)
+        scale_input = torch.ones((), device=input.device, dtype=torch.float32)  # TODO ?
+
         input = torch.clamp(input, min=-448, max=448, out=input)
         input = input.reshape(-1, input_shape[2]).to(dtype).contiguous()
 
