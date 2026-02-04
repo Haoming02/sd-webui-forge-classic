@@ -11,6 +11,9 @@ from modules.ui_components import FormRow
 from modules.ui_gradio_extensions import reload_javascript
 from modules_forge import main_entry
 
+CURRENT_ROW: gr.Row = None
+DUMMY = gr.State(None)
+
 
 def get_value_for_setting(key):
     value = getattr(opts, key)
@@ -46,6 +49,17 @@ def create_setting_component(key, is_quicksettings=False):
 
     if comp == gr.State:
         return gr.State(fun())
+    elif comp == FormRow:
+        global CURRENT_ROW
+
+        if CURRENT_ROW is None:
+            CURRENT_ROW = FormRow()
+            CURRENT_ROW.__enter__()
+        else:
+            CURRENT_ROW.__exit__()
+            CURRENT_ROW = None
+
+        return DUMMY
 
     if info.refresh is not None:
         if is_quicksettings:

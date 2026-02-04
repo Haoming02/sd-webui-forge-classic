@@ -1,4 +1,3 @@
-import os
 import json
 import sys
 from dataclasses import dataclass
@@ -6,8 +5,9 @@ from dataclasses import dataclass
 import gradio as gr
 
 from modules import errors
-from modules.shared_cmd_options import cmd_opts
 from modules.paths_internal import script_path
+from modules.shared_cmd_options import cmd_opts
+from modules.ui_components import FormRow
 
 
 class OptionInfo:
@@ -68,6 +68,13 @@ class OptionHTML(OptionInfo):
 class OptionDiv(OptionInfo):
     def __init__(self):
         super().__init__("", label="", component=lambda **kwargs: gr.HTML(elem_classes="settings-div", **kwargs))
+
+        self.do_not_save = True
+
+
+class OptionRow(OptionInfo):
+    def __init__(self):
+        super().__init__("", label="", component=FormRow)
 
         self.do_not_save = True
 

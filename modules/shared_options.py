@@ -594,4 +594,4 @@ options_templates.update(
 )
 
 forge_shared_options.register(options_templates, options_section, OptionInfo)
-forge_presets.register(options_templates, options_section, OptionInfo)
+forge_presets.register(options_templates)
