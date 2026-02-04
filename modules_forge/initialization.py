@@ -13,6 +13,17 @@ def initialize_forge():
 
     INITIALIZED = True
 
+    # region Comfy
+    # https://github.com/Comfy-Org/ComfyUI/blob/v0.10.0/main.py
+
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    os.environ["DO_NOT_TRACK"] = "1"
+
+    if os.name == "nt":
+        os.environ["MIMALLOC_PURGE_DELAY"] = "0"
+
+    # endregion
+
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "modules_forge", "packages"))
 
     from backend.args import args
@@ -21,9 +32,14 @@ def initialize_forge():
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_device_id)
         print("Set device to:", args.gpu_device_id)
 
-    if args.cuda_malloc:
-        from modules_forge.cuda_malloc import try_cuda_malloc
+    from modules_forge.cuda_malloc import get_torch_version, try_cuda_malloc
 
+    if "rocm" in get_torch_version():
+        # https://github.com/Comfy-Org/ComfyUI/blob/v0.10.0/main.py
+        os.environ["TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL"] = "1"
+        os.environ["OCL_SET_SVM_SIZE"] = "262144"
+
+    if args.cuda_malloc:
         try_cuda_malloc()
         startup_timer.record("cuda_malloc")
 

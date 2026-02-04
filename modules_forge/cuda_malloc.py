@@ -29,25 +29,22 @@ def cuda_malloc_supported() -> bool:
     return True
 
 
+try:
+    torch_spec = importlib.util.find_spec("torch")
+    for folder in torch_spec.submodule_search_locations:
+        ver_file = os.path.join(folder, "version.py")
+        if os.path.isfile(ver_file):
+            spec = importlib.util.spec_from_file_location("torch_version_import", ver_file)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            version = module.__version__
+except Exception:
+    version = ""
+
+
 def try_cuda_malloc():
     if not cuda_malloc_supported():
         return
-
-    try:
-        torch_spec = importlib.util.find_spec("torch")
-        for folder in torch_spec.submodule_search_locations:
-            ver_file = os.path.join(folder, "version.py")
-            if os.path.isfile(ver_file):
-                spec = importlib.util.spec_from_file_location("torch_version_import", ver_file)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                version: str = module.__version__
-    except Exception:
-        return
-    else:
-        support: bool = int(version[0]) >= 2 and "+cu" in version
-        if not support:
-            return
 
     env_var = os.environ.get("PYTORCH_CUDA_ALLOC_CONF", None)
 
@@ -57,3 +54,7 @@ def try_cuda_malloc():
         env_var += ",backend:cudaMallocAsync"
 
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = env_var
+
+
+def get_torch_version() -> str:
+    return str(version)
