@@ -71,6 +71,14 @@ SHIFT = {
 }
 
 
+def use_distill(arch: str) -> bool:
+    return arch in [preset.name for preset in DISTILL.keys()]
+
+
+def use_shift(arch: str) -> bool:
+    return arch in [preset.name for preset in SHIFT.keys()]
+
+
 def register(options_templates: dict):
     from gradio import Dropdown, Slider
 
