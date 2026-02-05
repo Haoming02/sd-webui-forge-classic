@@ -58,9 +58,7 @@ def create_setting_component(key, is_quicksettings=False):
             CURRENT_ROW.__exit__()
             CURRENT_ROW = None
 
-        if UiSettings.DUMMY is None:
-            UiSettings.DUMMY = gr.State(None)
-        return UiSettings.DUMMY
+        return gr.State(None)
 
     if info.refresh is not None:
         if is_quicksettings:
@@ -89,8 +87,6 @@ class UiSettings:
     show_all_pages = None
     show_one_page = None
     search_input = None
-
-    DUMMY: gr.State = None
 
     def run_settings(self, *args):
         changed = []
