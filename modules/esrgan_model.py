@@ -3,18 +3,17 @@ from functools import lru_cache
 
 from PIL import Image
 
+from backend.memory_management import free_memory, module_size, soft_empty_cache
 from modules import devices, errors, modelloader
 from modules.shared import opts
 from modules.upscaler import Upscaler, UpscalerData
 from modules.upscaler_utils import upscale_with_model
-from modules_forge.utils import prepare_free_memory
-
 
 PREFER_HALF = opts.prefer_fp16_upscalers
 if PREFER_HALF:
     print("[Upscalers] Prefer Half-Precision:", PREFER_HALF)
 
-MEM_RATIO = {"DRCT": 0.8, "DAT": 0.4}
+MEM_RATIO = {"DRCT": 0.75, "DAT": 0.25}
 
 
 class UpscalerESRGAN(Upscaler):
@@ -48,9 +47,8 @@ class UpscalerESRGAN(Upscaler):
             self.scalers.append(scaler_data)
 
     def do_upscale(self, img: Image.Image, selected_model: str):
-        from backend.memory_management import free_memory
+        soft_empty_cache()
 
-        prepare_free_memory()
         try:
             model = self.load_model(selected_model)
         except Exception:
@@ -58,8 +56,8 @@ class UpscalerESRGAN(Upscaler):
             return img
 
         free_memory(
-            #       (W * H)       * C *          dtype            *    scale    *                 ratio                       *  MB  *                      GPU
-            (opts.ESRGAN_tile**2) * 3 * (2 if PREFER_HALF else 4) * model.scale * MEM_RATIO.get(model.architecture.name, 0.2) * 1024 * (1.1 if opts.composite_tiles_on_gpu else 1.0),
+            #       (W * H)       * C *          dtype            *    scale    *                  ratio                       *  MB  *                      GPU
+            (opts.ESRGAN_tile**2) * 3 * (2 if PREFER_HALF else 4) * model.scale * MEM_RATIO.get(model.architecture.name, 0.05) * 1024 * (1.1 if opts.composite_tiles_on_gpu else 1.0) + module_size(model.model),
             device=devices.device_esrgan,
         )
 
@@ -81,6 +79,6 @@ class UpscalerESRGAN(Upscaler):
                 file_name=path.rsplit("/", 1)[-1],
             )
 
-        model = modelloader.load_spandrel_model(filename, device="cpu", prefer_half=PREFER_HALF)
+        model = modelloader.load_spandrel_model(filename, device=devices.cpu, prefer_half=PREFER_HALF)
         model.to(devices.device_esrgan)
         return model

@@ -28,11 +28,7 @@ class FaceRestorerGFPGAN(face_restoration_utils.CommonFaceRestoration):
             download_name="GFPGANv1.4.pth",
             ext_filter=[".pth"],
         ):
-            return modelloader.load_spandrel_model(
-                model_path,
-                device=devices.device_gfpgan,
-                expected_architecture="GFPGAN",
-            ).model
+            return modelloader.load_spandrel_model(model_path, device=devices.device_gfpgan).model
         raise ValueError("No GFPGAN Model Found")
 
     def restore(self, np_image):

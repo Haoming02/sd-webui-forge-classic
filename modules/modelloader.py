@@ -8,6 +8,7 @@ import spandrel
 import spandrel_extra_arches
 import torch
 
+from backend.utils import load_torch_file
 from modules import shared
 from modules.upscaler import Upscaler, UpscalerLanczos, UpscalerNearest, UpscalerNone  # noqa
 from modules.util import load_file_from_url  # noqa
@@ -93,33 +94,20 @@ def load_upscalers():
     ]
 
 
-def load_spandrel_model(
-    path: str | os.PathLike,
-    *,
-    device: str | torch.device | None,
-    prefer_half: bool = False,
-    dtype: str | torch.dtype | None = None,
-    expected_architecture: str | None = None,
-) -> spandrel.ModelDescriptor:
-    model_descriptor = spandrel.ModelLoader(device=device).load_from_file(str(path))
+def load_spandrel_model(path: os.PathLike, device: torch.device | None, prefer_half: bool = False, *args, **kwargs) -> spandrel.ImageModelDescriptor:
+    sd = load_torch_file(path, safe_load=True, device=device)
+    model_descriptor = spandrel.ModelLoader(device=device).load_from_state_dict(sd)
+
     arch = model_descriptor.architecture
     logger.info(f'Loaded {arch.name} Model: "{os.path.basename(path)}"')
 
-    half = False
     if prefer_half:
         if model_descriptor.supports_half:
-            model_descriptor.model.half()
-            half = True
+            model_descriptor.half()
         elif model_descriptor.supports_bfloat16:
-            model_descriptor.model.bfloat16()
-            half = True
+            model_descriptor.bfloat16()
         else:
             logger.warning(f"Model {path} does not support half precision...")
 
-    if dtype:
-        model_descriptor.model.to(dtype=dtype)
-
-    logger.debug("Loaded %s from %s (device=%s, half=%s, dtype=%s)", arch, path, device, half, dtype)
-
-    model_descriptor.model.eval()
+    model_descriptor.eval()
     return model_descriptor

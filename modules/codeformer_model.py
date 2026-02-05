@@ -28,11 +28,7 @@ class FaceRestorerCodeFormer(face_restoration_utils.CommonFaceRestoration):
             download_name="codeformer-v0.1.0.pth",
             ext_filter=[".pth"],
         ):
-            return modelloader.load_spandrel_model(
-                model_path,
-                device=devices.device_codeformer,
-                expected_architecture="CodeFormer",
-            ).model
+            return modelloader.load_spandrel_model(model_path, device=devices.device_codeformer).model
         raise ValueError("No CodeFormer Model Found")
 
     def restore(self, np_image, w: float | None = None):
