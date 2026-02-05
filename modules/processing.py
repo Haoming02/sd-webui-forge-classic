@@ -900,11 +900,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     else:
         p.all_subseeds = [int(subseed) + x for x in range(len(p.all_prompts))]
 
-    if os.path.exists(cmd_opts.embeddings_dir) and not p.do_not_reload_embeddings:
-        # todo: reload ti
-        # model_hijack.embedding_db.load_textual_inversion_embeddings()
-        pass
-
     if p.scripts is not None:
         p.scripts.process(p)
 
