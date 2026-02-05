@@ -1,7 +1,9 @@
 import torch
-from transformers import CLIPVisionConfig, CLIPVisionModelWithProjection, modeling_utils
+from transformers import CLIPVisionConfig, CLIPVisionModelWithProjection
+from transformers.modeling_utils import no_init_weights
 
-from backend import memory_management, operations
+from backend import memory_management
+from backend.operations import using_forge_operations
 from backend.patcher.base import ModelPatcher
 from backend.state_dict import state_dict_prefix_replace, transformers_convert
 from backend.utils import load_torch_file
@@ -47,11 +49,11 @@ class ClipVisionModel:
         else:
             self.dtype = torch.float32
 
-        with operations.using_forge_operations():
-            with modeling_utils.no_init_weights():
+        with no_init_weights():
+            with using_forge_operations(device=self.offload_device, dtype=self.dtype):
                 self.model = CLIPVisionModelWithProjection(config)
 
-        self.model.to(self.dtype)
+        self.model.to(self.offload_device, self.dtype)
         self.patcher = ModelPatcher(self.model, load_device=self.load_device, offload_device=self.offload_device)
 
     def load_sd(self, sd):
