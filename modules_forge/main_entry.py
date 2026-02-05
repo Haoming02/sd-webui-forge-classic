@@ -288,23 +288,23 @@ def on_preset_change(preset: str):
         gr.update(value=[os.path.basename(m) for m in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]),
         gr.update(value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),
         # ui_txt2img_steps, ui_txt2img_hr_steps, ui_img2img_steps
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_step", 20)),
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_hr_step", 20)),
-        gr.update(value=getattr(shared.opts, f"{preset}_i2i_step", 20)),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_step", 20)) > 0 else gr.skip(),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_hr_step", 20)) > 0 else gr.skip(),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_step", 20)) > 0 else gr.skip(),
         # ui_txt2img_sampler, ui_img2img_sampler, ui_txt2img_scheduler, ui_img2img_scheduler
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_sampler", "Euler")),
         gr.update(value=getattr(shared.opts, f"{preset}_i2i_sampler", "Euler")),
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_scheduler", "Simple")),
         gr.update(value=getattr(shared.opts, f"{preset}_i2i_scheduler", "Simple")),
         # ui_txt2img_width, ui_img2img_width, ui_txt2img_height, ui_img2img_height
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_width", 1024)),
-        gr.update(value=getattr(shared.opts, f"{preset}_i2i_width", 1024)),
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_height", 1024)),
-        gr.update(value=getattr(shared.opts, f"{preset}_i2i_height", 1024)),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_width", 1024)) > 0 else gr.skip(),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_width", 1024)) > 0 else gr.skip(),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_height", 1024)) > 0 else gr.skip(),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_height", 1024)) > 0 else gr.skip(),
         # ui_txt2img_cfg, ui_txt2img_hr_cfg, ui_img2img_cfg
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_cfg", 1.0)),
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_hr_cfg", 1.0)),
-        gr.update(value=getattr(shared.opts, f"{preset}_i2i_cfg", 1.0)),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_cfg", 1.0)) > 0 else gr.skip(),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_hr_cfg", 1.0)) > 0 else gr.skip(),
+        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_cfg", 1.0)) > 0 else gr.skip(),
         # ui_txt2img_distilled_cfg, ui_img2img_distilled_cfg, ui_txt2img_hr_distilled_cfg
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_dcfg", 3.0), **d_args),
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_hr_dcfg", 3.0), **d_args),

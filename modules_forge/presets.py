@@ -152,9 +152,9 @@ def register(options_templates: dict):
                     (f"ui_{name}", name.upper(), "presets"),
                     {
                         f"{name}_dcfg1": OptionRow(),
-                        f"{name}_t2i_dcfg": OptionInfo(distill, "txt2img Distilled CFG", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
-                        f"{name}_t2i_hr_dcfg": OptionInfo(distill, "txt2img Hires. Distilled CFG", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
-                        f"{name}_i2i_dcfg": OptionInfo(distill, "img2img Distilled CFG", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
+                        f"{name}_t2i_dcfg": OptionInfo(distill, "txt2img Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
+                        f"{name}_t2i_hr_dcfg": OptionInfo(distill, "txt2img Hires. Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
+                        f"{name}_i2i_dcfg": OptionInfo(distill, "img2img Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
                         f"{name}_dcfg0": OptionRow(),
                     },
                 )
@@ -166,9 +166,9 @@ def register(options_templates: dict):
                     (f"ui_{name}", name.upper(), "presets"),
                     {
                         f"{name}_dcfg1": OptionRow(),
-                        f"{name}_t2i_dcfg": OptionInfo(shift, "txt2img Shift", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
-                        f"{name}_t2i_hr_dcfg": OptionInfo(shift, "txt2img Hires. Shift", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
-                        f"{name}_i2i_dcfg": OptionInfo(shift, "img2img Shift", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
+                        f"{name}_t2i_dcfg": OptionInfo(shift, "txt2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
+                        f"{name}_t2i_hr_dcfg": OptionInfo(shift, "txt2img Hires. Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
+                        f"{name}_i2i_dcfg": OptionInfo(shift, "img2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
                         f"{name}_dcfg0": OptionRow(),
                     },
                 )
