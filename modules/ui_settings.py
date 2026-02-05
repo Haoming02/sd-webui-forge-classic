@@ -12,7 +12,6 @@ from modules.ui_gradio_extensions import reload_javascript
 from modules_forge import main_entry
 
 CURRENT_ROW: gr.Row = None
-DUMMY = gr.State(None)
 
 
 def get_value_for_setting(key):
@@ -59,7 +58,9 @@ def create_setting_component(key, is_quicksettings=False):
             CURRENT_ROW.__exit__()
             CURRENT_ROW = None
 
-        return DUMMY
+        if UiSettings.DUMMY is None:
+            UiSettings.DUMMY = gr.State(None)
+        return UiSettings.DUMMY
 
     if info.refresh is not None:
         if is_quicksettings:
@@ -88,6 +89,8 @@ class UiSettings:
     show_all_pages = None
     show_one_page = None
     search_input = None
+
+    DUMMY: gr.State = None
 
     def run_settings(self, *args):
         changed = []
