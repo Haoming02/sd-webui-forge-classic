@@ -7,9 +7,38 @@ import torch
 from einops import rearrange, repeat
 
 from backend.args import args
+from backend.memory_management import logger
 from backend.operations_gguf import ParameterGGUF
-from modules import safe
 from modules_forge.packages import gguf
+
+if not hasattr(torch.serialization, "add_safe_globals"):
+    logger.critical("Update your PyTorch...")
+    raise SystemExit
+
+
+class ModelCheckpoint:
+    pass
+
+
+ModelCheckpoint.__module__ = "pytorch_lightning.callbacks.model_checkpoint"
+
+
+def scalar(*args, **kwargs):
+    from numpy.core.multiarray import scalar as sc
+
+    return sc(*args, **kwargs)
+
+
+scalar.__module__ = "numpy.core.multiarray"
+
+from _codecs import encode
+
+from numpy import dtype
+from numpy.dtypes import Float64DType
+
+torch.serialization.add_safe_globals([ModelCheckpoint, scalar, dtype, Float64DType, encode])
+logger.debug("Models will always be loaded safely")
+
 
 MMAP_TORCH_FILES = args.mmap_torch_files
 DISABLE_MMAP = args.disable_mmap
@@ -27,12 +56,12 @@ def read_arbitrary_config(directory: os.PathLike) -> dict:
     return config_data
 
 
-def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=False) -> dict[str, torch.Tensor]:
-    """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/utils.py#L53"""
-    if device is None:
-        device = torch.device("cpu")
+def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=False) -> dict[str, torch.Tensor]:
+    """https://github.com/Comfy-Org/ComfyUI/blob/v0.10.0/comfy/utils.py#L59"""
 
+    device = device or torch.device("cpu")
     metadata = None
+
     if ckpt.lower().endswith((".safetensors", ".sft")):
         try:
             with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:
@@ -54,14 +83,10 @@ def load_torch_file(ckpt: str, safe_load=False, device=None, *, return_metadata=
             sd[str(tensor.name)] = ParameterGGUF(tensor)
 
     else:
-        torch_args = {}
-
-        if not safe_load:
-            torch_args["pickle_module"] = safe
-        else:
-            torch_args["weights_only"] = True
-            if MMAP_TORCH_FILES:
-                torch_args["mmap"] = True
+        assert safe_load
+        torch_args = {"weights_only": True}
+        if MMAP_TORCH_FILES:
+            torch_args["mmap"] = True
 
         pl_sd = torch.load(ckpt, map_location=device, **torch_args)
 
