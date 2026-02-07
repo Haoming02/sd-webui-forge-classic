@@ -280,7 +280,7 @@ def on_preset_change(preset: str):
     else:
         d_args = {"visible": False}
 
-    batch_args = {"minimum": 1, "maximum": 97, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": 1}
+    batch_args = {"minimum": 1, "maximum": 241, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": 1}
 
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
