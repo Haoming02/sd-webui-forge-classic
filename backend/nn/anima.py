@@ -15,6 +15,15 @@ Porting policy in this file:
 - Keep class/function names close to upstream where possible.
 - Mark intentional local behavior differences with `PORT_NOTE`.
 - Avoid silent behavior changes; if needed, document the reason inline.
+
+Local modifications from upstream:
+- Integrated Anima-specific text conditioning in-model by accepting
+  `t5xxl_ids` / `t5xxl_weights` via kwargs and applying adapter/weights in
+  `IntegratedAnimaTransformer.forward`.
+- Added optional in-model padding of cross-attention sequence length to 512 to
+  match Comfy runtime behavior for Anima conditioning.
+- Added checkpoint key conversion helper (`convert_anima_state_dict`) for
+  single-file weights stored under `net.*` prefix.
 """
 
 import math
