@@ -159,31 +159,26 @@ def replace_torchsde_browinan():
 
 replace_torchsde_browinan()
 
-LORA_REPLACEMENTS = None
 
-
-def _parse_replacements():
-    global LORA_REPLACEMENTS
-    LORA_REPLACEMENTS = []
-
+def _parse_replacements() -> list[tuple[str, str]]:
+    replacements = []
     for entry in opts.refiner_lora_replacement.split("\n"):
         before, after = entry.split("=", 1)
-        LORA_REPLACEMENTS.append((before.strip(), after.strip()))
+        replacements.append((before.strip(), after.strip()))
+    return replacements
 
 
 def apply_lora_for_refiner(loras: list[extra_networks.ExtraNetworkParams]):
     if not loras:
         return []
 
-    if LORA_REPLACEMENTS is None:
-        _parse_replacements()
-
+    lora_replacements = _parse_replacements()
     result = []
 
     for lora in loras:
         items: list[str | float] = lora.items
         assert isinstance(items[0], str)
-        for before, after in LORA_REPLACEMENTS:
+        for before, after in lora_replacements:
             items[0] = items[0].replace(before, after)
         result.append(extra_networks.ExtraNetworkParams(items))
 
