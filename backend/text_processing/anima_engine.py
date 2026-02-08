@@ -15,6 +15,12 @@ Design intent:
 - Qwen3 encoder produces `crossattn`.
 - T5 tokenizer provides `t5xxl_ids` / `t5xxl_weights` for LLM adapter.
 - Keep token-weight behavior explicit and documented when diverging.
+
+Local modifications from upstream:
+- Added variable-length batch padding for Qwen token ids/attention masks so
+  prompt scheduling forms like `[a|b|c]` do not fail on tensor concatenation.
+- Added matching padding for emphasis multipliers to keep weighting aligned
+  with padded sequence length.
 """
 
 from typing import TYPE_CHECKING
@@ -105,6 +111,7 @@ class AnimaTextProcessingEngine:
         embeds_out = []
         attention_masks = []
         num_tokens = []
+        max_len = max(len(tokens) for tokens in batch_tokens) if len(batch_tokens) > 0 else 0
 
         for tokens in batch_tokens:
             attention_mask = []
@@ -116,6 +123,11 @@ class AnimaTextProcessingEngine:
                 if not eos and int(token) == self.id_pad:
                     eos = True
 
+            if len(token_ids) < max_len:
+                pad_n = max_len - len(token_ids)
+                token_ids.extend([self.id_pad] * pad_n)
+                attention_mask.extend([0] * pad_n)
+
             token_tensor = torch.tensor([token_ids], device=device, dtype=torch.long)
             token_embed = self.text_encoder.get_input_embeddings()(token_tensor)
             embeds_out.append(token_embed)
@@ -126,9 +138,18 @@ class AnimaTextProcessingEngine:
 
     def process_tokens(self, batch_tokens, batch_multipliers):
         embeds, mask, count = self.process_embeds(batch_tokens)
-        if embeds.size(1) == len(batch_multipliers[0]):
+        seq_len = embeds.size(1)
+        padded_multipliers = []
+        for multipliers in batch_multipliers:
+            if len(multipliers) < seq_len:
+                multipliers = multipliers + [1.0] * (seq_len - len(multipliers))
+            else:
+                multipliers = multipliers[:seq_len]
+            padded_multipliers.append(multipliers)
+
+        if len(padded_multipliers) > 0 and embeds.size(1) == len(padded_multipliers[0]):
             self.emphasis.tokens = batch_tokens
-            self.emphasis.multipliers = torch.asarray(batch_multipliers).to(embeds)
+            self.emphasis.multipliers = torch.asarray(padded_multipliers).to(embeds)
             self.emphasis.z = embeds
             self.emphasis.after_transformers()
             embeds = self.emphasis.z
