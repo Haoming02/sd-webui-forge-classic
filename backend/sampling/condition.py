@@ -107,7 +107,16 @@ def compile_conditions(cond):
     cross_attn = cond["crossattn"]
     pooled_output = cond["vector"]
 
-    result = dict(cross_attn=cross_attn, pooled_output=pooled_output, model_conds=dict(c_crossattn=ConditionCrossAttn(cross_attn), y=Condition(pooled_output)))
+    model_conds = dict(c_crossattn=ConditionCrossAttn(cross_attn), y=Condition(pooled_output))
+
+    # Allow model-specific extra tensor conditions (e.g. token ids).
+    for k, v in cond.items():
+        if k in {"crossattn", "vector", "guidance"}:
+            continue
+        if isinstance(v, torch.Tensor):
+            model_conds[k] = Condition(v)
+
+    result = dict(cross_attn=cross_attn, pooled_output=pooled_output, model_conds=model_conds)
 
     if "guidance" in cond:
         result["model_conds"]["guidance"] = Condition(cond["guidance"])
