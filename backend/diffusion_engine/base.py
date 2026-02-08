@@ -1,4 +1,9 @@
-from backend import utils
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
+
+from backend import memory_management, utils
 
 
 class ForgeObjects:
@@ -26,6 +31,9 @@ class ForgeDiffusionEngine:
         self.current_lora_hash = str([])
 
         self.fix_for_webui_backward_compatibility()
+
+        self.ini_latent: "torch.Tensor" = None  # image from img2img input
+        self.ref_latents: list["torch.Tensor"] = []  # images from ImageStitch
 
     def set_clip_skip(self, clip_skip):
         pass
@@ -58,6 +66,11 @@ class ForgeDiffusionEngine:
         self.is_sdxl = False
         self.is_flux = False  # affects the usage of TAESD
         self.is_wan = False  # affects the usage of WanVAE (B, C, T, H, W)
+
+    def clear_references(self):
+        # called by ImageStitch
+        self.ref_latents.clear()
+        memory_management.soft_empty_cache()
 
     def save_unet(self, filename):
         import safetensors.torch as sf

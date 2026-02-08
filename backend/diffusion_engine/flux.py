@@ -66,8 +66,6 @@ class Flux(ForgeDiffusionEngine):
 
         self.is_flux = True
 
-        self.ref_latents = []
-
     def set_clip_skip(self, clip_skip):
         self.text_processing_engine_l.clip_skip = clip_skip
 
@@ -86,12 +84,14 @@ class Flux(ForgeDiffusionEngine):
             print("Distilled CFG Scale is ignored for Schnell")
 
         if not prompt.is_negative_prompt:
-            if dynamic_args["kontext"] and self.ref_latents:
-                dynamic_args["ref_latents"] = self.ref_latents.copy()
-                self.ref_latents.clear()
-            else:
+            if not dynamic_args["kontext"]:
                 dynamic_args["ref_latents"].clear()
-                self.ref_latents.clear()
+            else:
+                _references = [*self.ref_latents]
+                if self.ini_latent is not None:
+                    _references.insert(0, self.ini_latent)
+                    self.ini_latent = None
+                dynamic_args["ref_latents"] = _references.copy()
 
         return cond
 
@@ -104,7 +104,13 @@ class Flux(ForgeDiffusionEngine):
     def encode_first_stage(self, x):
         sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
-        self.ref_latents.append(sample.cpu())
+
+        if dynamic_args["kontext"]:
+            if dynamic_args["is_referencing"]:
+                self.ref_latents.append(sample.cpu())
+            else:
+                self.ini_latent = sample.cpu()
+
         return sample.to(x)
 
     @torch.inference_mode()

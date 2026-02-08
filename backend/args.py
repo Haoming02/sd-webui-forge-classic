@@ -147,6 +147,7 @@ dynamic_args = dict(
     klein=False,
     ref_latents=[],
     concat_latent=None,
+    is_referencing=False,
     ops=None,
 )
 """
@@ -160,5 +161,6 @@ Some parameters that are used throughout the Webui
 - klein: `bool` - Flux.2 Klein
 - ref_latents: `list[torch.Tensor]` - Reference Latent(s) for Flux Kontext & Qwen-Image-Edit
 - concat_latent: `torch.Tensor` - Input Latent for Wan 2.2 I2V
+- is_referencing: `bool` - Appending Reference Latent(s) (by. ImageStitch)
 - ops: `str` - Operations for the Diffusion Model
 """
