@@ -1,10 +1,11 @@
 /* temporary fix to load default gradio font in frontend instead of backend */
 
-@import url('webui-assets/css/sourcesanspro.css');
+@import url("webui-assets/css/sourcesanspro.css");
 
 /* general gradio fixes */
 
-:root, .dark {
+:root,
+.dark {
     --checkbox-label-gap: 0.25em 0.1em;
     --section-header-text-size: 12pt;
     --block-background-fill: transparent;
@@ -47,7 +48,8 @@ div.form {
     box-shadow: none !important;
 }
 
-div.gradio-group, div.styler {
+div.gradio-group,
+div.styler {
     border-width: 0 !important;
     background: none;
 }
@@ -74,7 +76,7 @@ div.compact {
     white-space: nowrap;
 }
 
-@media (pointer:fine) {
+@media (pointer: fine) {
     .gradio-dropdown ul.options li.item {
         padding: 0.05em 0;
     }
@@ -133,7 +135,8 @@ div.gradio-html.min {
     width: 100%;
 }
 
-.gradio-container .prose a, .gradio-container .prose a:visited {
+.gradio-container .prose a,
+.gradio-container .prose a:visited {
     color: unset;
     text-decoration: none;
 }
@@ -153,7 +156,10 @@ a {
 }
 
 /* gradio 3.39 puts a lot of overflow: hidden all over the place for an unknown reason. */
-div.gradio-container, .block.gradio-textbox, div.gradio-group, div.gradio-dropdown {
+div.gradio-container,
+.block.gradio-textbox,
+div.gradio-group,
+div.gradio-dropdown {
     overflow: visible !important;
 }
 
@@ -161,7 +167,6 @@ div.gradio-container, .block.gradio-textbox, div.gradio-group, div.gradio-dropdo
 .unequal-height {
     align-content: flex-start;
 }
-
 
 /* general styled components */
 
@@ -179,8 +184,11 @@ div.gradio-container, .block.gradio-textbox, div.gradio-group, div.gradio-dropdo
     color: var(--button-secondary-text-color);
 }
 
-.gradio-button.secondary-down, .gradio-button.secondary-down:hover {
-    box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.25) inset, 0px 0px 3px rgba(0, 0, 0, 0.15) inset;
+.gradio-button.secondary-down,
+.gradio-button.secondary-down:hover {
+    box-shadow:
+        1px 1px 1px rgba(0, 0, 0, 0.25) inset,
+        0px 0px 3px rgba(0, 0, 0, 0.15) inset;
 }
 
 .gradio-button.secondary-down:hover {
@@ -216,7 +224,6 @@ input[type="checkbox"].input-accordion-checkbox {
     margin-right: 0.5em;
 }
 
-
 /* txt2img/img2img specific */
 
 .block.token-counter {
@@ -235,13 +242,17 @@ input[type="checkbox"].input-accordion-checkbox {
 
 .block.token-counter span {
     background: var(--input-background-fill) !important;
-    box-shadow: 0 0 0.0 0.3em rgba(192, 192, 192, 0.15), inset 0 0 0.6em rgba(192, 192, 192, 0.075);
+    box-shadow:
+        0 0 0 0.3em rgba(192, 192, 192, 0.15),
+        inset 0 0 0.6em rgba(192, 192, 192, 0.075);
     border: 2px solid rgba(192, 192, 192, 0.4) !important;
     border-radius: 0.4em;
 }
 
 .block.token-counter.error span {
-    box-shadow: 0 0 0.0 0.3em rgba(255, 0, 0, 0.15), inset 0 0 0.6em rgba(255, 0, 0, 0.075);
+    box-shadow:
+        0 0 0 0.3em rgba(255, 0, 0, 0.15),
+        inset 0 0 0.6em rgba(255, 0, 0, 0.075);
     border: 2px solid rgba(255, 0, 0, 0.4) !important;
 }
 
@@ -253,18 +264,18 @@ input[type="checkbox"].input-accordion-checkbox {
     padding: 0.1em 0.75em;
 }
 
-[id$=_subseed_show] {
+[id$="_subseed_show"] {
     min-width: auto !important;
     flex-grow: 0 !important;
     display: flex;
 }
 
-[id$=_subseed_show] label {
+[id$="_subseed_show"] label {
     margin-bottom: 0.65em;
     align-self: end;
 }
 
-[id$=_seed_extras]>div {
+[id$="_seed_extras"]>div {
     gap: 0.5em;
 }
 
@@ -286,7 +297,11 @@ input[type="checkbox"].input-accordion-checkbox {
     display: inline-block;
 }
 
-.html-log .performance p.time, .performance p.vram, .performance p.profile, .performance p.time abbr, .performance p.vram abbr {
+.html-log .performance p.time,
+.performance p.vram,
+.performance p.profile,
+.performance p.time abbr,
+.performance p.vram abbr {
     margin-bottom: 0;
     color: var(--block-title-text-color);
 }
@@ -304,20 +319,25 @@ input[type="checkbox"].input-accordion-checkbox {
     font-weight: bold;
 }
 
-#txt2img_generate, #img2img_generate {
+#txt2img_generate,
+#img2img_generate {
     min-height: 4.5em;
 }
 
-#txt2img_generate, #img2img_generate {
+#txt2img_generate,
+#img2img_generate {
     min-height: 4.5em;
 }
 
-.generate-box-compact #txt2img_generate, .generate-box-compact #img2img_generate {
+.generate-box-compact #txt2img_generate,
+.generate-box-compact #img2img_generate {
     min-height: 3em;
 }
 
 @media screen and (min-width: 2500px) {
-    #txt2img_gallery, #img2img_gallery {
+
+    #txt2img_gallery,
+    #img2img_gallery {
         min-height: 768px;
     }
 }
@@ -326,20 +346,23 @@ input[type="checkbox"].input-accordion-checkbox {
     object-fit: scale-down !important;
 }
 
-#txt2img_actions_column, #img2img_actions_column {
+#txt2img_actions_column,
+#img2img_actions_column {
     gap: 0.5em;
 }
 
-#txt2img_tools, #img2img_tools {
+#txt2img_tools,
+#img2img_tools {
     gap: 0.4em;
 }
-
 
 .generate-box {
     position: relative;
 }
 
-.gradio-button.generate-box-skip, .gradio-button.generate-box-interrupt, .gradio-button.generate-box-interrupting {
+.gradio-button.generate-box-skip,
+.gradio-button.generate-box-interrupt,
+.gradio-button.generate-box-interrupting {
     position: absolute;
     width: 50%;
     height: 100%;
@@ -347,11 +370,14 @@ input[type="checkbox"].input-accordion-checkbox {
     background: #b4c0cc;
 }
 
-.gradio-button.generate-box-skip:hover, .gradio-button.generate-box-interrupt:hover, .gradio-button.generate-box-interrupting:hover {
+.gradio-button.generate-box-skip:hover,
+.gradio-button.generate-box-interrupt:hover,
+.gradio-button.generate-box-interrupting:hover {
     background: #c2cfdb;
 }
 
-.gradio-button.generate-box-interrupt, .gradio-button.generate-box-interrupting {
+.gradio-button.generate-box-interrupt,
+.gradio-button.generate-box-interrupting {
     left: 0;
     border-radius: 0.5rem 0 0 0.5rem;
 }
@@ -366,11 +392,13 @@ input[type="checkbox"].input-accordion-checkbox {
     align-items: end;
 }
 
-#txtimg_hr_finalres .resolution, #img2img_scale_resolution_preview .resolution {
+#txtimg_hr_finalres .resolution,
+#img2img_scale_resolution_preview .resolution {
     font-weight: bold;
 }
 
-#txtimg_hr_finalres div.pending, #img2img_scale_resolution_preview div.pending {
+#txtimg_hr_finalres div.pending,
+#img2img_scale_resolution_preview div.pending {
     opacity: 1;
     transition: opacity 0s;
 }
@@ -379,7 +407,7 @@ input[type="checkbox"].input-accordion-checkbox {
     opacity: 0.5;
 }
 
-[id$=_column_batch] {
+[id$="_column_batch"] {
     min-width: min(13.5em, 100%) !important;
 }
 
@@ -425,11 +453,15 @@ div.toprow-compact-tools {
 
 /* settings */
 #quicksettings {
-    --checkbox-label-padding: 6px 6px;
+    --checkbox-label-padding: 0.5em;
     align-items: flex-start;
 }
 
-#quicksettings>div, #quicksettings>fieldset {
+#quicksettings>* {
+    min-width: unset !important;
+}
+
+#quicksettings>div {
     width: fit-content;
     flex: 0 1 fit-content;
     padding: 0;
@@ -438,39 +470,93 @@ div.toprow-compact-tools {
     background: none;
 }
 
-#quicksettings>div.model_selection {
-    min-width: 20em !important;
+#quicksettings>button {
+    margin: auto 0;
+    margin-top: 1.5em;
 }
 
-#quicksettings>div.model_selection input {
-    margin-left: 2% !important;
-    /* override the margin set for subdued */
-    width: 100%;
+#quicksettings div span[data-testid="block-info"] {
+    margin-bottom: 0.25em !important;
 }
 
 #quicksettings .icon-wrap {
-    margin-right: -4% !important;
-    background-color: var(--background-fill-secondary);
+    margin-right: -1em !important;
+    background: none;
+}
+
+#quicksettings>div.gradio-dropdown input {
+    cursor: pointer;
+    padding-right: 1em;
+}
+
+#quicksettings>div.model_selection ul {
+    border: var(--input-border-width) solid var(--input-border-color);
+    border-radius: var(--input-radius);
+    padding: 0 0.5em;
 }
 
 #quicksettings>div.model_selection li {
     overflow-x: visible !important;
     width: 100% !important;
-    /* Set size to max element */
+    border-radius: 0 !important;
 }
 
-#quicksettings .subdued {
-    display: block;
+#quicksettings .gradio-slider {
+    min-width: 10em !important;
+    margin-top: 1em;
+}
+
+#quicksettings .gradio-slider span {
+    margin-right: 1em;
+}
+
+#quicksettings .gradio-slider input[type="range"] {
+    width: 100%;
+}
+
+#quicksettings .gradio-checkbox {
+    margin-top: 2em;
+}
+
+#forge_ui_preset input {
+    width: 4em;
+}
+
+#setting_sd_model_checkpoint input {
+    width: 20em;
+}
+
+#setting_sd_vae input {
+    width: 2em;
+    height: 18px !important;
     margin-left: auto;
-    width: 30px;
 }
 
-#quicksettings div span[data-testid="block-info"] {
-    margin-bottom: unset !important;
+#setting_sd_vae .icon-wrap {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    right: var(--size-5);
+    color: var(--body-text-color);
+    width: var(--size-5);
+    pointer-events: none;
 }
 
-#quicksettings>button {
-    margin: auto 0px;
+#setting_sd_vae div.wrap-inner {
+    min-width: 20em;
+    height: 40px !important;
+    cursor: pointer;
+    padding: 0em 2em 0em 0.5em;
+}
+
+#setting_sd_vae div.token {
+    height: 32px;
+    border-radius: 4px;
+    margin: auto;
+}
+
+#forge_ui_dtype input {
+    width: 12em;
 }
 
 #settings {
@@ -544,12 +630,17 @@ table.popup-table .link {
     color: var(--body-text-color);
 }
 
-#settings .gradio-textbox, #settings .gradio-slider, #settings .gradio-number, #settings .gradio-dropdown, #settings .gradio-checkboxgroup, #settings .gradio-radio {
+#settings .gradio-textbox,
+#settings .gradio-slider,
+#settings .gradio-number,
+#settings .gradio-dropdown,
+#settings .gradio-checkboxgroup,
+#settings .gradio-radio {
     margin-top: 0.75em;
 }
 
 #settings span .settings-comment {
-    display: inline
+    display: inline;
 }
 
 .settings-comment a {
@@ -602,7 +693,7 @@ table.popup-table .link {
     position: relative;
 }
 
-[id$=_results].mobile {
+[id$="_results"].mobile {
     margin-top: 28px;
 }
 
@@ -740,7 +831,8 @@ table.popup-table .link {
     width: 1em;
 }
 
-.modalControls span:hover, .modalControls span:focus {
+.modalControls span:hover,
+.modalControls span:focus {
     color: #999;
     text-decoration: none;
 }
@@ -843,7 +935,6 @@ table.popup-table .link {
     background: var(--primary-700);
 }
 
-
 /* extensions */
 
 #tab_extensions table {
@@ -852,7 +943,8 @@ table.popup-table .link {
     display: block;
 }
 
-#tab_extensions table td, #tab_extensions table th {
+#tab_extensions table td,
+#tab_extensions table th {
     border: 1px solid #ccc;
     padding: 0.25em 0.5em;
 }
@@ -883,7 +975,7 @@ table.popup-table .link {
     margin: 0.5em 0;
     display: flex;
     margin-top: auto;
-    opacity: 0.80;
+    opacity: 0.8;
     font-size: 90%;
 }
 
@@ -957,7 +1049,7 @@ footer {
     margin-left: auto;
 }
 
-.extra-networks>div>[id *='_extra_'] {
+.extra-networks>div>[id*="_extra_"] {
     margin: 0.3em;
 }
 
@@ -978,7 +1070,8 @@ footer {
     max-width: 12em;
 }
 
-#txt2img_extra_view, #img2img_extra_view {
+#txt2img_extra_view,
+#img2img_extra_view {
     width: auto;
 }
 
@@ -1053,7 +1146,8 @@ footer {
     height: 100%;
 }
 
-.extra-network-pane .card, .standalone-card-preview.card {
+.extra-network-pane .card,
+.standalone-card-preview.card {
     display: inline-block;
     margin: 0.5rem;
     width: 16rem;
@@ -1067,7 +1161,7 @@ footer {
     overflow: hidden;
     cursor: pointer;
 
-    background-image: url('./file=html/card-no-preview.jpg')
+    background-image: url("./file=html/card-no-preview.jpg");
 }
 
 .extra-network-pane .card:hover {
@@ -1153,7 +1247,8 @@ footer {
     text-align: left;
 }
 
-.edit-user-metadata .file-metadata th, .edit-user-metadata .file-metadata td {
+.edit-user-metadata .file-metadata th,
+.edit-user-metadata .file-metadata td {
     padding: 0.3em 1em;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -1200,10 +1295,11 @@ div.accordions>div.input-accordion.input-accordion-open {
     flex-flow: column;
 }
 
-
 /* sticky right hand columns */
 
-#img2img_results, #txt2img_results, #extras_results {
+#img2img_results,
+#txt2img_results,
+#extras_results {
     position: sticky;
     top: 0.5em;
 }
@@ -1230,7 +1326,7 @@ body.resizing .resize-handle {
 }
 
 .resize-handle::after {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     bottom: 0;
@@ -1299,7 +1395,6 @@ body.resizing .resize-handle {
     overflow: hidden;
 }
 
-
 .extra-network-pane .extra-network-cards::-webkit-scrollbar,
 .extra-network-pane .extra-network-tree::-webkit-scrollbar {
     background-color: transparent;
@@ -1353,7 +1448,8 @@ body.resizing .resize-handle {
 .extra-network-tree .tree-list--subgroup {
     margin: 0 !important;
     padding: 0 !important;
-    box-shadow: 0.5rem 0 0 var(--body-background-fill) inset,
+    box-shadow:
+        0.5rem 0 0 var(--body-background-fill) inset,
         0.7rem 0 0 var(--neutral-800) inset;
 }
 
@@ -1489,11 +1585,9 @@ body.resizing .resize-handle {
     line-height: 1rem;
 }
 
-
 .extra-network-control .extra-network-control--search .extra-network-control--search-text::placeholder {
     color: var(--input-placeholder-color);
 }
-
 
 /* <input> clear button (x on right side) styling */
 .extra-network-control .extra-network-control--search .extra-network-control--search-text::-webkit-search-cancel-button {
@@ -1653,7 +1747,6 @@ body.resizing .resize-handle {
     align-items: right;
 }
 
-
 /* Icon for button when it is before label. */
 .extra-network-tree .tree-list-item-visual--leading {
     grid-area: leading-visual;
@@ -1703,24 +1796,14 @@ body.resizing .resize-handle {
     opacity: 0.25 !important;
 }
 
-#quicksettings .gradio-slider span {
-    padding-right: 8px;
-}
-
-#quicksettings .gradio-slider>div.wrap {
-    width: 200px;
-}
-
-#quicksettings .gradio-slider input[type="range"] {
-    width: 200px;
-}
-
-#txt2img_enable_mahiro, #img2img_enable_mahiro {
+#txt2img_enable_mahiro,
+#img2img_enable_mahiro {
     min-width: 0 !important;
     margin: auto 2em;
 }
 
-#txt2img_prompt_container.prompt-container-scroll, #img2img_prompt_container.prompt-container-scroll {
+#txt2img_prompt_container.prompt-container-scroll,
+#img2img_prompt_container.prompt-container-scroll {
     display: flex;
     flex-direction: row;
     overflow: auto;
