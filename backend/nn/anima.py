@@ -133,42 +133,6 @@ class VideoRopePosition3DEmb(VideoPositionEmb):
         return rearrange(em_T_H_W_D, "t h w d (i j) -> (t h w) d i j", i=2, j=2).float()
 
 
-class LearnablePosEmbAxis(VideoPositionEmb):
-    def __init__(
-        self,
-        *,  # enforce keyword arguments
-        interpolation: str,
-        model_channels: int,
-        len_h: int,
-        len_w: int,
-        len_t: int,
-        device=None,
-        dtype=None,
-        **kwargs,
-    ):
-        del kwargs  # unused
-        super().__init__()
-        self.interpolation = interpolation
-        assert self.interpolation in ["crop"], f"Unknown interpolation method {self.interpolation}"
-
-        self.pos_emb_h = nn.Parameter(torch.empty(len_h, model_channels, device=device, dtype=dtype))
-        self.pos_emb_w = nn.Parameter(torch.empty(len_w, model_channels, device=device, dtype=dtype))
-        self.pos_emb_t = nn.Parameter(torch.empty(len_t, model_channels, device=device, dtype=dtype))
-
-    def generate_embeddings(self, B_T_H_W_C: torch.Size, fps=Optional[torch.Tensor], device=None, dtype=None) -> torch.Tensor:
-        B, T, H, W, _ = B_T_H_W_C
-        if self.interpolation == "crop":
-            emb_h_H = self.pos_emb_h[:H].to(device=device, dtype=dtype)
-            emb_w_W = self.pos_emb_w[:W].to(device=device, dtype=dtype)
-            emb_t_T = self.pos_emb_t[:T].to(device=device, dtype=dtype)
-            emb = repeat(emb_t_T, "t d-> b t h w d", b=B, h=H, w=W) + repeat(emb_h_H, "h d-> b t h w d", b=B, t=T, w=W) + repeat(emb_w_W, "w d-> b t h w d", b=B, t=T, h=H)
-            assert list(emb.shape)[:4] == [B, T, H, W], f"bad shape: {list(emb.shape)[:4]} != {B, T, H, W}"
-        else:
-            raise ValueError(f"Unknown interpolation method {self.interpolation}")
-
-        return normalize(emb, dim=-1, eps=1e-6)
-
-
 # ---------------------- Feed Forward Network -----------------------
 class GPT2FeedForward(nn.Module):
     def __init__(self, d_model: int, d_ff: int, device=None, dtype=None, operations=None) -> None:
@@ -721,16 +685,6 @@ class MiniTrainDIT(nn.Module):
         self.pos_embedder = cls_type(
             **kwargs,  # type: ignore
         )
-
-        if self.extra_per_block_abs_pos_emb:
-            kwargs["h_extrapolation_ratio"] = self.extra_h_extrapolation_ratio
-            kwargs["w_extrapolation_ratio"] = self.extra_w_extrapolation_ratio
-            kwargs["t_extrapolation_ratio"] = self.extra_t_extrapolation_ratio
-            kwargs["device"] = device
-            kwargs["dtype"] = dtype
-            self.extra_pos_embedder = LearnablePosEmbAxis(
-                **kwargs,  # type: ignore
-            )
 
     def prepare_embedded_sequence(
         self,
