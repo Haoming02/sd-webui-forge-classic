@@ -447,6 +447,8 @@ class Anima(BASE):
 
     supported_inference_dtypes = [torch.bfloat16, torch.float16, torch.float32]
 
+    unet_target = "transformer"
+
     def clip_target(self, state_dict={}):
         return {"qwen3_06b.transformer": "text_encoder"}
 

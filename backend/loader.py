@@ -238,7 +238,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["transformer.encoder.embed_tokens.weight", "logit_scale"])
             return model
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel"]:
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
             pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
@@ -287,6 +287,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.lumina import NextDiT
 
                 model_loader = lambda c: NextDiT(**c)
+            elif cls_name == "CosmosTransformer3DModel":
+                from backend.nn.anima import Anima
+
+                model_loader = lambda c: Anima(**c)
 
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
