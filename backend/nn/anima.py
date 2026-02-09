@@ -1,37 +1,26 @@
-# original code from: https://github.com/nvidia-cosmos/cosmos-predict2
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/text_encoders/anima.py
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ldm/cosmos/predict2.py
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ldm/cosmos/position_embedding.py
 
-import torch
-from torch import nn
-from einops import rearrange
-from einops.layers.torch import Rearrange
+# Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# References: https://github.com/nvidia-cosmos/cosmos-predict2
+
 import logging
-from typing import Callable, Optional, Tuple
 import math
-
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-from typing import List, Optional
+from typing import Callable, Optional
 
 import torch
+import torch.nn.functional as F
 from einops import rearrange, repeat
+from einops.layers.torch import Rearrange
 from torch import nn
-import math
+from torchvision import transforms
+
+from backend.attention import attention_function
+from backend.utils import pad_to_patch_size
 
 
-def normalize(x: torch.Tensor, dim: Optional[List[int]] = None, eps: float = 0) -> torch.Tensor:
+def normalize(x: torch.Tensor, dim: Optional[list[int]] = None, eps: float = 0) -> torch.Tensor:
     """
     Normalizes the input tensor along specified dimensions such that the average square norm of elements is adjusted.
 
@@ -211,13 +200,6 @@ class LearnablePosEmbAxis(VideoPositionEmb):
         return normalize(emb, dim=-1, eps=1e-6)
 
 
-from torchvision import transforms
-
-import comfy.patcher_extension
-from comfy.ldm.modules.attention import optimized_attention
-import comfy.ldm.common_dit
-
-
 def apply_rotary_pos_emb(
     t: torch.Tensor,
     freqs: torch.Tensor,
@@ -275,7 +257,7 @@ def torch_attention_op(q_B_S_H_D: torch.Tensor, k_B_S_H_D: torch.Tensor, v_B_S_H
     q_B_H_S_D = rearrange(q_B_S_H_D, "b ... h k -> b h ... k").view(in_q_shape[0], in_q_shape[-2], -1, in_q_shape[-1])
     k_B_H_S_D = rearrange(k_B_S_H_D, "b ... h v -> b h ... v").view(in_k_shape[0], in_k_shape[-2], -1, in_k_shape[-1])
     v_B_H_S_D = rearrange(v_B_S_H_D, "b ... h v -> b h ... v").view(in_k_shape[0], in_k_shape[-2], -1, in_k_shape[-1])
-    return optimized_attention(q_B_H_S_D, k_B_H_S_D, v_B_H_S_D, in_q_shape[-2], skip_reshape=True, transformer_options=transformer_options)
+    return attention_function(q_B_H_S_D, k_B_H_S_D, v_B_H_S_D, in_q_shape[-2], skip_reshape=True, transformer_options=transformer_options)
 
 
 class SelfCrossAttention(nn.Module):
@@ -366,7 +348,7 @@ class SelfCrossAttention(nn.Module):
             (q, k, v),
         )
 
-        def apply_norm_and_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, rope_emb: Optional[torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        def apply_norm_and_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, rope_emb: Optional[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
             q = self.q_norm(q)
             k = self.k_norm(k)
             v = self.v_norm(v)
@@ -435,7 +417,7 @@ class TimestepEmbedding(nn.Module):
         else:
             self.linear_2 = operations.Linear(out_features, out_features, bias=False, device=device, dtype=dtype)
 
-    def forward(self, sample: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def forward(self, sample: torch.Tensor) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         emb = self.linear_1(sample)
         emb = self.activation(emb)
         emb = self.linear_2(emb)
@@ -924,7 +906,7 @@ class MiniTrainDIT(nn.Module):
         x_B_C_T_H_W: torch.Tensor,
         fps: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Prepares an embedded sequence tensor by applying positional embeddings and handling padding masks.
 
@@ -987,19 +969,8 @@ class MiniTrainDIT(nn.Module):
         padding_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        return comfy.patcher_extension.WrapperExecutor.new_class_executor(self._forward, self, comfy.patcher_extension.get_all_wrappers(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, kwargs.get("transformer_options", {}))).execute(x, timesteps, context, fps, padding_mask, **kwargs)
-
-    def _forward(
-        self,
-        x: torch.Tensor,
-        timesteps: torch.Tensor,
-        context: torch.Tensor,
-        fps: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        **kwargs,
-    ):
         orig_shape = list(x.shape)
-        x = comfy.ldm.common_dit.pad_to_patch_size(x, (self.patch_temporal, self.patch_spatial, self.patch_spatial))
+        x = pad_to_patch_size(x, (self.patch_temporal, self.patch_spatial, self.patch_spatial))
         x_B_C_T_H_W = x
         timesteps_B_T = timesteps
         crossattn_emb = context
@@ -1055,11 +1026,6 @@ class MiniTrainDIT(nn.Module):
         x_B_T_H_W_O = self.final_layer(x_B_T_H_W_D.to(crossattn_emb.dtype), t_embedding_B_T_D, adaln_lora_B_T_3D=adaln_lora_B_T_3D)
         x_B_C_Tt_Hp_Wp = self.unpatchify(x_B_T_H_W_O)[:, :, : orig_shape[-3], : orig_shape[-2], : orig_shape[-1]]
         return x_B_C_Tt_Hp_Wp
-
-
-import torch
-from torch import nn
-import torch.nn.functional as F
 
 
 def rotate_half(x):
