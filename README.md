@@ -163,15 +163,14 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update `protobuf`
     - faster `insightface` loading
 - [X] Update to latest PyTorch
-    - `torch==2.9.1+cu130`
-    - `xformers==0.0.33`
+    - `torch==2.10.0+cu130`
 
 > [!Note]
 > If your GPU does not support the latest PyTorch, manually [install](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations#older-pytorch) older version of PyTorch
 
 - [X] No longer install `open-clip` twice
 - [X] Update some packages to newer versions
-- [X] Update recommended Python to `3.11.9`
+- [X] Update recommended Python to `3.13.12`
 - [X] many more... :tm:
 
 <br>
