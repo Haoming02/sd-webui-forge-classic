@@ -169,6 +169,8 @@ def get_key_weight(model, key):
 class ModelPatcher:
     def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.model = model
+        self.model_device = current_device or offload_device
+        self._safe_set_device(self.model_device)
         self.parent = None
 
         self.current_device = current_device or offload_device
@@ -667,6 +669,16 @@ class ModelPatcher:
         self.model.model_loaded_weight_memory = mem_counter
         self.model.model_offload_buffer_memory = offload_buffer
         self.model.current_weight_patches_uuid = self.patches_uuid
+        self._safe_set_device(device_to)
+
+    def _safe_set_device(self, device_to):
+        """Track device without assuming the model exposes a writable .device property."""
+        self.model_device = device_to
+        try:
+            self.model.device = device_to
+        except AttributeError:
+            # Some HF models expose a read-only device property; keep internal tracker.
+            pass
 
     def patch_model(self, device_to=None, lowvram_model_memory=0, load_weights=True, force_patch_weights=False):
         for k in self.object_patches:
@@ -709,6 +721,7 @@ class ModelPatcher:
             if device_to is not None:
                 self.model.to(device_to)
                 self.current_device = device_to
+                self._safe_set_device(device_to)
             self.model.model_loaded_weight_memory = 0
             self.model.model_offload_buffer_memory = 0
 
@@ -833,7 +846,10 @@ class ModelPatcher:
         return self.model
 
     def current_loaded_device(self):
-        return self.current_device
+        try:
+            return self.model.device
+        except Exception:
+            return getattr(self, "model_device", None) or getattr(self, "current_device", None)
 
     def __del__(self):
         self.unpin_all_weights()

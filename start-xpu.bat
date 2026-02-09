@@ -18,7 +18,6 @@ if not exist "%VENV_PYTHON%" (
 )
 
 set "PYTHON=%VENV_PYTHON%"
-set "COMMANDLINE_ARGS=--gpu-only --skip-install --skip-prepare-environment --no-hashing --use-pytorch-cross-attention --disable-xformers --disable-sage --disable-flash"
 set "SYCL_PI_LEVEL_ZERO_USE_IMMEDIATE_COMMANDLISTS=1"
 set "ZE_FLAT_DEVICE_HIERARCHY=COMBINED"
 set "SYCL_CACHE_PERSISTENT=1"
