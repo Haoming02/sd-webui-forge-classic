@@ -37,14 +37,14 @@ def check_python_version():
     minor = sys.version_info.minor
     micro = sys.version_info.micro
 
-    if not (major == 3 and minor == 11):
+    if not (major == 3 and minor == 13):
         import modules.errors
 
         modules.errors.print_error_explanation(
             f"""
-            This program is tested with 3.11.9 Python, but you have {major}.{minor}.{micro}.
+            This program is tested with 3.13.12 Python, but you have {major}.{minor}.{micro}.
             If you encounter any error regarding unsuccessful package/library installation,
-            please downgrade (or upgrade) to the latest version of 3.11 Python,
+            please downgrade (or upgrade) to the latest version of 3.13 Python,
             and delete the current Python "venv" folder in WebUI's directory.
 
             Use --skip-python-version-check to suppress this warning
@@ -289,13 +289,12 @@ def requirements_met(requirements_file):
 
 def prepare_environment():
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.9.1+cu130 torchvision==0.24.1+cu130 --extra-index-url {torch_index_url}")
-    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.33.post2 --extra-index-url {torch_index_url}")
-    bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.48.2")
+    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.10.0+cu130 torchvision==0.25.0+cu130 --extra-index-url {torch_index_url}")
+    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.34 --extra-index-url {torch_index_url}")
+    bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.1")
 
-    clip_package = os.environ.get("CLIP_PACKAGE", "https://github.com/openai/CLIP/archive/d50d76daa670286dd6cacf3bcd80b5e4823fc8e1.zip")
-    packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==25.0")
-    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_imageslider==0.0.20 gradio_rangeslider==0.0.8")
+    packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.0")
+    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.39.0 gradio_rangeslider==0.0.8")
     requirements_file = os.environ.get("REQS_FILE", "requirements.txt")
 
     try:
@@ -333,24 +332,25 @@ def prepare_environment():
     ver_PY = f"cp{sys.version_info.major}{sys.version_info.minor}"
     ver_SAGE = "2.2.0"
     ver_FLASH = "2.8.3"
-    ver_TRITON = "3.5.1"
-    ver_NUNCHAKU = "1.1.0"
+    ver_TRITON = "3.6.0"
+    ver_NUNCHAKU = "1.2.1"
     ver_TORCH, ver_CUDA = _torch_version()
     v_TORCH = ver_TORCH.rsplit(".", 1)[0]
+    v_CUDA = f"{ver_CUDA[0:-1]}.{ver_CUDA[-1]}"
 
     if os.name == "nt":
-        ver_TRITON += ".post22"
+        ver_TRITON += ".post25"
 
         sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post4/sageattention-{ver_SAGE}+{ver_CUDA}torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.4.19/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.7.13/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
 
     else:
         sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.5.4/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.7.16/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-tech/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
 
     def _verify_nunchaku() -> bool:
         if not is_installed("nunchaku"):
@@ -365,10 +365,6 @@ def prepare_environment():
         target: tuple[int] = packaging.version.parse(ver_NUNCHAKU)
 
         return current >= target
-
-    if not is_installed("clip"):
-        run_pip(f"install {clip_package}", "clip")
-        startup_timer.record("install clip")
 
     if args.xformers and (not is_installed("xformers") or args.reinstall_xformers):
         run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
@@ -430,7 +426,9 @@ def prepare_environment():
 
     if args.onnxruntime_gpu and not is_installed("onnxruntime-gpu"):
         # https://onnxruntime.ai/docs/install/#nightly-for-cuda-13x
+        _deps = "flatbuffers numpy packaging protobuf sympy coloredlogs"
         onnxruntime_package = os.environ.get("ONNX_PACKAGE", "onnxruntime-gpu --pre --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ort-cuda-13-nightly/pypi/simple/")
+        run_pip(f"install {_deps}", "onnxruntime dependencies")
         run_pip(f"install {onnxruntime_package}", "onnxruntime-gpu")
         startup_timer.record("install onnxruntime-gpu")
 
