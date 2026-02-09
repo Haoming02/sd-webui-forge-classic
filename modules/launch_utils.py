@@ -533,20 +533,24 @@ def dump_sysinfo():
     return filename
 
 
-VERSION_UID: Final[str] = "POSTMEM"
+VERSION_UID: Final[str] = "PY313"
 
 
 def verify_version():
     """prompt user to do a clean reinstall"""
     settings_file: os.PathLike = args.ui_settings_file
+
     if not os.path.isfile(settings_file):
-        return  # config.json does not exist on a fresh git clone
+        # config.json does not exist on a fresh git clone
+        with open(settings_file, "w", encoding="utf8") as file:
+            json.dump({"VERSION_UID": VERSION_UID}, file)
+            return
 
     with open(settings_file, "r", encoding="utf8") as file:
         settings: dict[str, Any] = json.load(file)
 
     if settings.get("VERSION_UID", None) == VERSION_UID:
-        return  # key matches
+        return  # already up-to-date
 
     os.system("")
 

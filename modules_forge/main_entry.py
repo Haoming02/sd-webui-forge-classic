@@ -9,7 +9,7 @@ from rich import print_json
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.logging import setup_logger
-from modules import infotext_utils, launch_utils, paths, processing, sd_models, shared, shared_items, ui_common
+from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
 from modules_forge.presets import PresetArch, use_distill, use_shift
 
 logger = logging.getLogger("ui_models")
@@ -200,8 +200,6 @@ def get_a1111_ui_component(tab: str, label: str) -> gr.components.Component:
 
 
 def forge_main_entry():
-    shared.opts.set("VERSION_UID", launch_utils.VERSION_UID)
-
     ui_txt2img_steps = get_a1111_ui_component("txt2img", "Steps")
     ui_txt2img_hr_steps = get_a1111_ui_component("txt2img", "Hires steps")
     ui_img2img_steps = get_a1111_ui_component("img2img", "Steps")
