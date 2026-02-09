@@ -99,9 +99,9 @@ def check_versions():
 
     from modules import shared
 
-    expected_torch = "2.9.0"
-    expected_xformers = "0.0.33"
-    expected_gradio = "4.40.0"
+    expected_torch = "2.10.0"
+    expected_xformers = "0.0.34"
+    expected_gradio = "4.39.0"
 
     _outdated = False
 
@@ -109,7 +109,7 @@ def check_versions():
         _outdated = True
         print_error_explanation(
             f"""
-            You are running torch {torch.__version__}, which is really outdated.
+            You are running torch {torch.__version__}, which is outdated.
             To install the latest version, run with commandline flag --reinstall-torch.
             """.strip()
         )
@@ -121,7 +121,7 @@ def check_versions():
             _outdated = True
             print_error_explanation(
                 f"""
-                You are running xformers {xformers.__version__}, which is really outdated.
+                You are running xformers {xformers.__version__}, which is outdated.
                 To install the latest version, run with commandline flag --reinstall-xformers.
                 """.strip()
             )

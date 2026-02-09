@@ -37,14 +37,14 @@ def check_python_version():
     minor = sys.version_info.minor
     micro = sys.version_info.micro
 
-    if not (major == 3 and minor == 11):
+    if not (major == 3 and minor == 13):
         import modules.errors
 
         modules.errors.print_error_explanation(
             f"""
-            This program is tested with 3.11.9 Python, but you have {major}.{minor}.{micro}.
+            This program is tested with 3.13.12 Python, but you have {major}.{minor}.{micro}.
             If you encounter any error regarding unsuccessful package/library installation,
-            please downgrade (or upgrade) to the latest version of 3.11 Python,
+            please downgrade (or upgrade) to the latest version of 3.13 Python,
             and delete the current Python "venv" folder in WebUI's directory.
 
             Use --skip-python-version-check to suppress this warning
