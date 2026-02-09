@@ -170,8 +170,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if config["hidden_size"] == 4096:
                 from backend.nn.llm.llama import Qwen3_8B as QTE
-            else:
+            elif config["hidden_size"] == 2560:
                 from backend.nn.llm.llama import Qwen3_4B as QTE
+            else:
+                from backend.nn.llm.llama import Qwen3_06B as QTE
 
             storage_dtype = memory_management.text_encoder_dtype()
             state_dict_dtype = utils.weight_dtype(state_dict)
@@ -581,7 +583,7 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
     elif "model.layers.0.post_attention_layernorm.weight" in asd:
         assert "model.layers.0.self_attn.q_norm.weight" in asd
         weight: torch.Tensor = asd["model.layers.0.post_attention_layernorm.weight"]
-        size: str = "4b" if weight.shape[0] == 2560 else "8b"
+        size: str = "06b" if weight.shape[0] == 1024 else ("4b" if weight.shape[0] == 2560 else "8b")
         for k, v in asd.items():
             sd[f"{text_encoder_key_prefix}qwen3_{size}.transformer.{k}"] = v
 
