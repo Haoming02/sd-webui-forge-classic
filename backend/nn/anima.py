@@ -169,16 +169,6 @@ class LearnablePosEmbAxis(VideoPositionEmb):
         return normalize(emb, dim=-1, eps=1e-6)
 
 
-def apply_rotary_pos_emb(
-    t: torch.Tensor,
-    freqs: torch.Tensor,
-) -> torch.Tensor:
-    t_ = t.reshape(*t.shape[:-1], 2, -1).movedim(-2, -1).unsqueeze(-2).float()
-    t_out = freqs[..., 0] * t_[..., 0] + freqs[..., 1] * t_[..., 1]
-    t_out = t_out.movedim(-1, -2).reshape(*t.shape).type_as(t)
-    return t_out
-
-
 # ---------------------- Feed Forward Network -----------------------
 class GPT2FeedForward(nn.Module):
     def __init__(self, d_model: int, d_ff: int, device=None, dtype=None, operations=None) -> None:
@@ -251,6 +241,16 @@ class SelfCrossAttention(nn.Module):
         self._context_dim = context_dim
         self._inner_dim = inner_dim
 
+    @staticmethod
+    def apply_rotary_pos_emb(
+        t: torch.Tensor,
+        freqs: torch.Tensor,
+    ) -> torch.Tensor:
+        t_ = t.reshape(*t.shape[:-1], 2, -1).movedim(-2, -1).unsqueeze(-2).float()
+        t_out = freqs[..., 0] * t_[..., 0] + freqs[..., 1] * t_[..., 1]
+        t_out = t_out.movedim(-1, -2).reshape(*t.shape).type_as(t)
+        return t_out
+
     def compute_qkv(
         self,
         x: torch.Tensor,
@@ -271,8 +271,8 @@ class SelfCrossAttention(nn.Module):
             k = self.k_norm(k)
             v = self.v_norm(v)
             if self.is_selfattn and rope_emb is not None:  # only apply to self-attention!
-                q = apply_rotary_pos_emb(q, rope_emb)
-                k = apply_rotary_pos_emb(k, rope_emb)
+                q = self.apply_rotary_pos_emb(q, rope_emb)
+                k = self.apply_rotary_pos_emb(k, rope_emb)
             return q, k, v
 
         q, k, v = apply_norm_and_rotary_pos_emb(q, k, v, rope_emb)
