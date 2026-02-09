@@ -594,8 +594,8 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
     return sd
 
 
-def preprocess_state_dict(sd):
-    if not any(k.startswith("model.diffusion_model") for k in sd.keys()):
+def preprocess_state_dict(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    if not any(k.startswith(("model.diffusion_model.", "net.")) for k in sd.keys()):
         sd = {f"model.diffusion_model.{k}": v for k, v in sd.items()}
 
     return sd
@@ -605,7 +605,7 @@ def split_state_dict(sd, additional_state_dicts: list = None):
     import huggingface_guess
 
     sd, metadata = load_torch_file(sd, return_metadata=True)
-    # sd = preprocess_state_dict(sd)  # TODO
+    sd = preprocess_state_dict(sd)
     guess = huggingface_guess.guess(sd)
 
     if getattr(guess, "nunchaku", False) and ("Z-Image" in guess.huggingface_repo or "Qwen" in guess.huggingface_repo):
