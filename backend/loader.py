@@ -9,6 +9,7 @@ from transformers.modeling_utils import no_init_weights
 
 import backend.args
 from backend import memory_management, utils
+from backend.diffusion_engine.anima import Anima
 from backend.diffusion_engine.chroma import Chroma
 from backend.diffusion_engine.flux import Flux
 from backend.diffusion_engine.flux2 import Flux2
@@ -31,7 +32,7 @@ from backend.utils import (
     read_arbitrary_config,
 )
 
-possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage]
+possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage, Anima]
 
 logger = logging.getLogger("loader")
 setup_logger(logger)
