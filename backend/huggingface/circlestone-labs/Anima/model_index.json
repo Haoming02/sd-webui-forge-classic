@@ -13,6 +13,10 @@
         "transformers",
         "Qwen2Tokenizer"
     ],
+    "tokenizer_2": [
+        "transformers",
+        "T5TokenizerFast"
+    ],
     "transformer": [
         "diffusers",
         "CosmosTransformer3DModel"
