@@ -426,7 +426,9 @@ def prepare_environment():
 
     if args.onnxruntime_gpu and not is_installed("onnxruntime-gpu"):
         # https://onnxruntime.ai/docs/install/#nightly-for-cuda-13x
+        _deps = "flatbuffers numpy packaging protobuf sympy coloredlogs"
         onnxruntime_package = os.environ.get("ONNX_PACKAGE", "onnxruntime-gpu --pre --index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/ort-cuda-13-nightly/pypi/simple/")
+        run_pip(f"install {_deps}", "onnxruntime dependencies")
         run_pip(f"install {onnxruntime_package}", "onnxruntime-gpu")
         startup_timer.record("install onnxruntime-gpu")
 
