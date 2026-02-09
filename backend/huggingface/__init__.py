@@ -17,6 +17,8 @@ class Token:
     f2_4b = os.path.join(folder, "black-forest-labs", "FLUX.2-klein-4B", "tokenizer", "tokenizer.json")
     f2_9b = os.path.join(folder, "black-forest-labs", "FLUX.2-klein-9B", "tokenizer", "tokenizer.json")
 
+    anima = os.path.join(folder, "circlestone-labs", "Anima", "tokenizer", "tokenizer.json")
+
 
 class sha256:
     wan = "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
@@ -67,6 +69,8 @@ def process():
     if not os.path.isfile(Token.f2_9b):
         decompress(Token.z_compress, Token.f2_9b)
         compare_sha256(Token.f2_9b, sha256.f2)
+    if not os.path.isfile(Token.anima):
+        decompress(Token.z_compress, Token.anima)
 
     # if not os.path.isfile(Token.wan_compress):
     #     compress(Token.wan_t2v, Token.wan_compress)
