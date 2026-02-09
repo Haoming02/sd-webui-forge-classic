@@ -21,17 +21,6 @@ from backend.utils import pad_to_patch_size
 
 
 def normalize(x: torch.Tensor, dim: Optional[list[int]] = None, eps: float = 0) -> torch.Tensor:
-    """
-    Normalizes the input tensor along specified dimensions such that the average square norm of elements is adjusted.
-
-    Args:
-        x (torch.Tensor): The input tensor to normalize.
-        dim (list, optional): The dimensions over which to normalize. If None, normalizes over all dimensions except the first.
-        eps (float, optional): A small constant to ensure numerical stability during division.
-
-    Returns:
-        torch.Tensor: The normalized tensor.
-    """
     if dim is None:
         dim = list(range(1, x.ndim))
     norm = torch.linalg.vector_norm(x, dim=dim, keepdim=True, dtype=torch.float32)
@@ -41,9 +30,6 @@ def normalize(x: torch.Tensor, dim: Optional[list[int]] = None, eps: float = 0) 
 
 class VideoPositionEmb(nn.Module):
     def forward(self, x_B_T_H_W_C: torch.Tensor, fps=Optional[torch.Tensor], device=None, dtype=None) -> torch.Tensor:
-        """
-        It delegates the embedding generation to generate_embeddings function.
-        """
         B_T_H_W_C = x_B_T_H_W_C.shape
         embeddings = self.generate_embeddings(B_T_H_W_C, fps=fps, device=device, dtype=dtype)
 
@@ -106,19 +92,6 @@ class VideoRopePosition3DEmb(VideoPositionEmb):
         device=None,
         dtype=None,
     ):
-        """
-        Generate embeddings for the given input size.
-
-        Args:
-            B_T_H_W_C (torch.Size): Input tensor size (Batch, Time, Height, Width, Channels).
-            fps (Optional[torch.Tensor], optional): Frames per second. Defaults to None.
-            h_ntk_factor (Optional[float], optional): Height NTK factor. If None, uses self.h_ntk_factor.
-            w_ntk_factor (Optional[float], optional): Width NTK factor. If None, uses self.w_ntk_factor.
-            t_ntk_factor (Optional[float], optional): Time NTK factor. If None, uses self.t_ntk_factor.
-
-        Returns:
-            Not specified in the original code snippet.
-        """
         h_ntk_factor = h_ntk_factor if h_ntk_factor is not None else self.h_ntk_factor
         w_ntk_factor = w_ntk_factor if w_ntk_factor is not None else self.w_ntk_factor
         t_ntk_factor = t_ntk_factor if t_ntk_factor is not None else self.t_ntk_factor
@@ -173,10 +146,6 @@ class LearnablePosEmbAxis(VideoPositionEmb):
         dtype=None,
         **kwargs,
     ):
-        """
-        Args:
-            interpolation (str): we curretly only support "crop", ideally when we need extrapolation capacity, we should adjust frequency or other more advanced methods. they are not implemented yet.
-        """
         del kwargs  # unused
         super().__init__()
         self.interpolation = interpolation
@@ -231,27 +200,6 @@ class GPT2FeedForward(nn.Module):
 
 
 def torch_attention_op(q_B_S_H_D: torch.Tensor, k_B_S_H_D: torch.Tensor, v_B_S_H_D: torch.Tensor, transformer_options: Optional[dict] = {}) -> torch.Tensor:
-    """Computes multi-head attention using PyTorch's native implementation.
-
-    This function provides a PyTorch backend alternative to Transformer Engine's attention operation.
-    It rearranges the input tensors to match PyTorch's expected format, computes scaled dot-product
-    attention, and rearranges the output back to the original format.
-
-    The input tensor names use the following dimension conventions:
-
-    - B: batch size
-    - S: sequence length
-    - H: number of attention heads
-    - D: head dimension
-
-    Args:
-        q_B_S_H_D: Query tensor with shape (batch, seq_len, n_heads, head_dim)
-        k_B_S_H_D: Key tensor with shape (batch, seq_len, n_heads, head_dim)
-        v_B_S_H_D: Value tensor with shape (batch, seq_len, n_heads, head_dim)
-
-    Returns:
-        Attention output tensor with shape (batch, seq_len, n_heads * head_dim)
-    """
     in_q_shape = q_B_S_H_D.shape
     in_k_shape = k_B_S_H_D.shape
     q_B_H_S_D = rearrange(q_B_S_H_D, "b ... h k -> b h ... k").view(in_q_shape[0], in_q_shape[-2], -1, in_q_shape[-1])
@@ -261,36 +209,6 @@ def torch_attention_op(q_B_S_H_D: torch.Tensor, k_B_S_H_D: torch.Tensor, v_B_S_H
 
 
 class SelfCrossAttention(nn.Module):
-    """
-    A flexible attention module supporting both self-attention and cross-attention mechanisms.
-
-    This module implements a multi-head attention layer that can operate in either self-attention
-    or cross-attention mode. The mode is determined by whether a context dimension is provided.
-    The implementation uses scaled dot-product attention and supports optional bias terms and
-    dropout regularization.
-
-    Args:
-        query_dim (int): The dimensionality of the query vectors.
-        context_dim (int, optional): The dimensionality of the context (key/value) vectors.
-            If None, the module operates in self-attention mode using query_dim. Default: None
-        n_heads (int, optional): Number of attention heads for multi-head attention. Default: 8
-        head_dim (int, optional): The dimension of each attention head. Default: 64
-        dropout (float, optional): Dropout probability applied to the output. Default: 0.0
-        qkv_format (str, optional): Format specification for QKV tensors. Default: "bshd"
-        backend (str, optional): Backend to use for the attention operation. Default: "transformer_engine"
-
-    Examples:
-        >>> # Self-attention with 512 dimensions and 8 heads
-        >>> self_attn = Attention(query_dim=512)
-        >>> x = torch.randn(32, 16, 512)  # (batch_size, seq_len, dim)
-        >>> out = self_attn(x)  # (32, 16, 512)
-
-        >>> # Cross-attention
-        >>> cross_attn = Attention(query_dim=512, context_dim=256)
-        >>> query = torch.randn(32, 16, 512)
-        >>> context = torch.randn(32, 8, 256)
-        >>> out = cross_attn(query, context)  # (32, 16, 512)
-    """
 
     def __init__(
         self,
@@ -372,11 +290,6 @@ class SelfCrossAttention(nn.Module):
         rope_emb: Optional[torch.Tensor] = None,
         transformer_options: Optional[dict] = {},
     ) -> torch.Tensor:
-        """
-        Args:
-            x (Tensor): The query tensor of shape [B, Mq, K]
-            context (Optional[Tensor]): The key tensor of shape [B, Mk, K] or use x as context [self attention] if None
-        """
         q, k, v = self.compute_qkv(x, context, rope_emb=rope_emb)
         return self.compute_attention(q, k, v, transformer_options=transformer_options)
 
@@ -433,19 +346,6 @@ class TimestepEmbedding(nn.Module):
 
 
 class PatchEmbed(nn.Module):
-    """
-    PatchEmbed is a module for embedding patches from an input tensor by applying either 3D or 2D convolutional layers,
-    depending on the . This module can process inputs with temporal (video) and spatial (image) dimensions,
-    making it suitable for video and image processing tasks. It supports dividing the input into patches
-    and embedding each patch into a vector of size `out_channels`.
-
-    Parameters:
-    - spatial_patch_size (int): The size of each spatial patch.
-    - temporal_patch_size (int): The size of each temporal patch.
-    - in_channels (int): Number of input channels. Default: 3.
-    - out_channels (int): The dimension of the embedding vector for each patch. Default: 768.
-    - bias (bool): If True, adds a learnable bias to the output of the convolutional layers. Default: True.
-    """
 
     def __init__(self, spatial_patch_size: int, temporal_patch_size: int, in_channels: int = 3, out_channels: int = 768, device=None, dtype=None, operations=None):
         super().__init__()
@@ -464,20 +364,6 @@ class PatchEmbed(nn.Module):
         self.dim = in_channels * spatial_patch_size * spatial_patch_size * temporal_patch_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the PatchEmbed module.
-
-        Parameters:
-        - x (torch.Tensor): The input tensor of shape (B, C, T, H, W) where
-            B is the batch size,
-            C is the number of channels,
-            T is the temporal dimension,
-            H is the height, and
-            W is the width of the input.
-
-        Returns:
-        - torch.Tensor: The embedded patches as a tensor, with shape b t h w c.
-        """
         assert x.dim() == 5
         _, _, T, H, W = x.shape
         assert H % self.spatial_patch_size == 0 and W % self.spatial_patch_size == 0, f"H,W {(H, W)} should be divisible by spatial_patch_size {self.spatial_patch_size}"
@@ -487,9 +373,6 @@ class PatchEmbed(nn.Module):
 
 
 class FinalLayer(nn.Module):
-    """
-    The final layer of video DiT.
-    """
 
     def __init__(self, hidden_size: int, spatial_patch_size: int, temporal_patch_size: int, out_channels: int, use_adaln_lora: bool = False, adaln_lora_dim: int = 256, device=None, dtype=None, operations=None):
         super().__init__()
@@ -536,25 +419,6 @@ class FinalLayer(nn.Module):
 
 
 class Block(nn.Module):
-    """
-    A transformer block that combines self-attention, cross-attention and MLP layers with AdaLN modulation.
-    Each component (self-attention, cross-attention, MLP) has its own layer normalization and AdaLN modulation.
-
-    Parameters:
-        x_dim (int): Dimension of input features
-        context_dim (int): Dimension of context features for cross-attention
-        num_heads (int): Number of attention heads
-        mlp_ratio (float): Multiplier for MLP hidden dimension. Default: 4.0
-        use_adaln_lora (bool): Whether to use AdaLN-LoRA modulation. Default: False
-        adaln_lora_dim (int): Hidden dimension for AdaLN-LoRA layers. Default: 256
-
-    The block applies the following sequence:
-    1. Self-attention with AdaLN modulation
-    2. Cross-attention with AdaLN modulation
-    3. MLP with AdaLN modulation
-
-    Each component uses skip connections and layer normalization.
-    """
 
     def __init__(
         self,
@@ -707,39 +571,6 @@ class Block(nn.Module):
 
 
 class MiniTrainDIT(nn.Module):
-    """
-    A clean impl of DIT that can load and  reproduce the training results of the original DIT model in~(cosmos 1)
-    A general implementation of adaln-modulated VIT-like~(DiT) transformer for video processing.
-
-    Args:
-        max_img_h (int): Maximum height of the input images.
-        max_img_w (int): Maximum width of the input images.
-        max_frames (int): Maximum number of frames in the video sequence.
-        in_channels (int): Number of input channels (e.g., RGB channels for color images).
-        out_channels (int): Number of output channels.
-        patch_spatial (tuple): Spatial resolution of patches for input processing.
-        patch_temporal (int): Temporal resolution of patches for input processing.
-        concat_padding_mask (bool): If True, includes a mask channel in the input to handle padding.
-        model_channels (int): Base number of channels used throughout the model.
-        num_blocks (int): Number of transformer blocks.
-        num_heads (int): Number of heads in the multi-head attention layers.
-        mlp_ratio (float): Expansion ratio for MLP blocks.
-        crossattn_emb_channels (int): Number of embedding channels for cross-attention.
-        pos_emb_cls (str): Type of positional embeddings.
-        pos_emb_learnable (bool): Whether positional embeddings are learnable.
-        pos_emb_interpolation (str): Method for interpolating positional embeddings.
-        min_fps (int): Minimum frames per second.
-        max_fps (int): Maximum frames per second.
-        use_adaln_lora (bool): Whether to use AdaLN-LoRA.
-        adaln_lora_dim (int): Dimension for AdaLN-LoRA.
-        rope_h_extrapolation_ratio (float): Height extrapolation ratio for RoPE.
-        rope_w_extrapolation_ratio (float): Width extrapolation ratio for RoPE.
-        rope_t_extrapolation_ratio (float): Temporal extrapolation ratio for RoPE.
-        extra_per_block_abs_pos_emb (bool): Whether to use extra per-block absolute positional embeddings.
-        extra_h_extrapolation_ratio (float): Height extrapolation ratio for extra embeddings.
-        extra_w_extrapolation_ratio (float): Width extrapolation ratio for extra embeddings.
-        extra_t_extrapolation_ratio (float): Temporal extrapolation ratio for extra embeddings.
-    """
 
     def __init__(
         self,
@@ -907,30 +738,6 @@ class MiniTrainDIT(nn.Module):
         fps: Optional[torch.Tensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-        """
-        Prepares an embedded sequence tensor by applying positional embeddings and handling padding masks.
-
-        Args:
-            x_B_C_T_H_W (torch.Tensor): video
-            fps (Optional[torch.Tensor]): Frames per second tensor to be used for positional embedding when required.
-                                    If None, a default value (`self.base_fps`) will be used.
-            padding_mask (Optional[torch.Tensor]): current it is not used
-
-        Returns:
-            Tuple[torch.Tensor, Optional[torch.Tensor]]:
-                - A tensor of shape (B, T, H, W, D) with the embedded sequence.
-                - An optional positional embedding tensor, returned only if the positional embedding class
-                (`self.pos_emb_cls`) includes 'rope'. Otherwise, None.
-
-        Notes:
-            - If `self.concat_padding_mask` is True, a padding mask channel is concatenated to the input tensor.
-            - The method of applying positional embeddings depends on the value of `self.pos_emb_cls`.
-            - If 'rope' is in `self.pos_emb_cls` (case insensitive), the positional embeddings are generated using
-                the `self.pos_embedder` with the shape [T, H, W].
-            - If "fps_aware" is in `self.pos_emb_cls`, the positional embeddings are generated using the
-            `self.pos_embedder` with the fps tensor.
-            - Otherwise, the positional embeddings are generated without considering fps.
-        """
         if self.concat_padding_mask:
             if padding_mask is None:
                 padding_mask = torch.zeros(x_B_C_T_H_W.shape[0], 1, x_B_C_T_H_W.shape[3], x_B_C_T_H_W.shape[4], dtype=x_B_C_T_H_W.dtype, device=x_B_C_T_H_W.device)
@@ -974,12 +781,7 @@ class MiniTrainDIT(nn.Module):
         x_B_C_T_H_W = x
         timesteps_B_T = timesteps
         crossattn_emb = context
-        """
-        Args:
-            x: (B, C, T, H, W) tensor of spatial-temp inputs
-            timesteps: (B, ) tensor of timesteps
-            crossattn_emb: (B, N, D) tensor of cross-attention embeddings
-        """
+
         x_B_T_H_W_D, rope_emb_L_1_1_D, extra_pos_emb_B_T_H_W_D_or_T_H_W_B_D = self.prepare_embedded_sequence(
             x_B_C_T_H_W,
             fps=fps,
