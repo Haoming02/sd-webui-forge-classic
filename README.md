@@ -250,7 +250,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - Set up **venv**
     ```bash
     cd sd-webui-forge-neo
-    uv venv venv --python 3.11 --seed
+    uv venv venv --python 3.13 --seed
     ```
 - Add the `--uv` flag to `webui-user.bat`
 
@@ -261,7 +261,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <details>
 <summary>Deprecated Method</summary>
 
-- Install **[Python 3.11.9](https://www.python.org/downloads/release/python-3119/)**
+- Install **[Python 3.13.12](https://www.python.org/downloads/release/python-31312/)**
     - Remember to enable `Add Python to PATH`
 
 </details>
