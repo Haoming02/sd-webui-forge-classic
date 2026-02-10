@@ -9,6 +9,7 @@ from transformers.modeling_utils import no_init_weights
 
 import backend.args
 from backend import memory_management, utils
+from backend.diffusion_engine.anima import Anima
 from backend.diffusion_engine.chroma import Chroma
 from backend.diffusion_engine.flux import Flux
 from backend.diffusion_engine.flux2 import Flux2
@@ -31,7 +32,7 @@ from backend.utils import (
     read_arbitrary_config,
 )
 
-possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage]
+possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage, Anima]
 
 logger = logging.getLogger("loader")
 setup_logger(logger)
@@ -170,8 +171,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if config["hidden_size"] == 4096:
                 from backend.nn.llm.llama import Qwen3_8B as QTE
-            else:
+            elif config["hidden_size"] == 2560:
                 from backend.nn.llm.llama import Qwen3_4B as QTE
+            else:
+                from backend.nn.llm.llama import Qwen3_06B as QTE
 
             storage_dtype = memory_management.text_encoder_dtype()
             state_dict_dtype = utils.weight_dtype(state_dict)
@@ -236,7 +239,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["transformer.encoder.embed_tokens.weight", "logit_scale"])
             return model
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel"]:
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
             pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
@@ -285,6 +288,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.lumina import NextDiT
 
                 model_loader = lambda c: NextDiT(**c)
+            elif cls_name == "CosmosTransformer3DModel":
+                from backend.nn.anima import Anima
+
+                model_loader = lambda c: Anima(**c)
 
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
@@ -581,7 +588,7 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
     elif "model.layers.0.post_attention_layernorm.weight" in asd:
         assert "model.layers.0.self_attn.q_norm.weight" in asd
         weight: torch.Tensor = asd["model.layers.0.post_attention_layernorm.weight"]
-        size: str = "4b" if weight.shape[0] == 2560 else "8b"
+        size: str = "06b" if weight.shape[0] == 1024 else ("4b" if weight.shape[0] == 2560 else "8b")
         for k, v in asd.items():
             sd[f"{text_encoder_key_prefix}qwen3_{size}.transformer.{k}"] = v
 
@@ -592,8 +599,8 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
     return sd
 
 
-def preprocess_state_dict(sd):
-    if not any(k.startswith("model.diffusion_model") for k in sd.keys()):
+def preprocess_state_dict(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    if not any(k.startswith(("model.diffusion_model.", "net.")) for k in sd.keys()):
         sd = {f"model.diffusion_model.{k}": v for k, v in sd.items()}
 
     return sd

@@ -1,4 +1,4 @@
-# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/supported_models.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/supported_models.py
 
 from enum import Enum
 
@@ -428,6 +428,31 @@ class ZImage(Lumina2):
         return {"qwen3_4b.transformer": "text_encoder"}
 
 
+class Anima(BASE):
+    huggingface_repo = "circlestone-labs/Anima"
+
+    unet_config = {
+        "image_model": "anima",
+    }
+
+    sampling_settings = {
+        "multiplier": 1.0,
+        "shift": 3.0,
+    }
+
+    unet_extra_config = {}
+    latent_format = latent.Wan21
+
+    memory_usage_factor = 1.32
+
+    supported_inference_dtypes = [torch.bfloat16, torch.float16, torch.float32]
+
+    unet_target = "transformer"
+
+    def clip_target(self, state_dict={}):
+        return {"qwen3_06b.transformer": "text_encoder"}
+
+
 class WAN21_T2V(BASE):
     huggingface_repo = "Wan-AI/Wan2.1-T2V-14B"
 
@@ -520,6 +545,7 @@ models = [
     Chroma,
     Lumina2,
     ZImage,
+    Anima,
     WAN21_T2V,
     WAN21_I2V,
     QwenImage,

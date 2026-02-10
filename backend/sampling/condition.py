@@ -2,6 +2,8 @@ import math
 
 import torch
 
+from modules import shared
+
 
 def repeat_to_batch_size(tensor, batch_size):
     if tensor.shape[0] > batch_size:
@@ -89,9 +91,26 @@ class ConditionConstant(Condition):
         return self.cond
 
 
+def anima_preprocess(cross_attn: torch.Tensor, t5xxl_ids: torch.Tensor, t5xxl_weights: torch.Tensor) -> torch.Tensor:
+    device: torch.device = cross_attn.device
+    dtype: torch.dtype = shared.sd_model.forge_objects.unet.model.computation_dtype
+
+    cross_attn = shared.sd_model.forge_objects.unet.model.diffusion_model.preprocess_text_embeds(cross_attn.to(dtype=dtype), t5xxl_ids.to(device=device))
+    if t5xxl_weights is not None:
+        cross_attn *= t5xxl_weights.unsqueeze(-1).to(cross_attn)
+
+    if cross_attn.shape[1] < 512:
+        cross_attn = torch.nn.functional.pad(cross_attn, (0, 0, 0, 512 - cross_attn.shape[1]))
+
+    return cross_attn
+
+
 def compile_conditions(cond):
     if cond is None:
         return None
+
+    if isinstance(cond, dict) and "qwen_cond" in cond and "t5_ids" in cond:
+        cond = anima_preprocess(cond["qwen_cond"], cond["t5_ids"], cond["t5_weights"])
 
     if isinstance(cond, torch.Tensor):
         result = dict(
