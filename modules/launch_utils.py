@@ -294,7 +294,7 @@ def prepare_environment():
     bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.1")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.0")
-    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.39.0 gradio_rangeslider==0.0.8")
+    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_rangeslider==0.0.8")
     requirements_file = os.environ.get("REQS_FILE", "requirements.txt")
 
     try:
