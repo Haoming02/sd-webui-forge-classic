@@ -249,7 +249,7 @@ def run_extensions_installers(settings_file):
     return
 
 
-re_requirement = re.compile(r"\s*(\S+)\s*==\s*(\S+)\s*")
+re_requirement = re.compile(r"\s*(\S+)\s*==\s*([^\s;]+)\s*")
 
 
 def requirements_met(requirements_file):
