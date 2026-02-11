@@ -61,8 +61,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             config = IntegratedAutoencoderKL.load_config(config_path)
 
-            with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
-                model = IntegratedAutoencoderKL.from_config(config)
+            with no_init_weights():
+                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
+                    model = IntegratedAutoencoderKL.from_config(config)
 
             load_state_dict(model, state_dict, ignore_start="loss.")
             return model
@@ -72,8 +73,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             config = AutoencoderKLFlux2.load_config(config_path)
 
-            with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
-                model = AutoencoderKLFlux2.from_config(config)
+            with no_init_weights():
+                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
+                    model = AutoencoderKLFlux2.from_config(config)
 
             load_state_dict(model, state_dict, ignore_start="loss.")
             return model
@@ -83,8 +85,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             config = WanVAE.load_config(config_path)
 
-            with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
-                model = WanVAE.from_config(config)
+            with no_init_weights():
+                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype()):
+                    model = WanVAE.from_config(config)
 
             load_state_dict(model, state_dict)
             return model
@@ -268,6 +271,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 model_loader = lambda c: WanModel(**c)
             elif cls_name == "QwenImageTransformer2DModel":
                 if guess.nunchaku:
+                    guess.unet_config.pop("filename")
                     from backend.nn.svdq import NunchakuQwenImageTransformer2DModel
 
                     model_loader = lambda c: NunchakuQwenImageTransformer2DModel(**c)
@@ -327,8 +331,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
-                with using_forge_operations(device=initial_device, dtype=computation_dtype, manual_cast_enabled=False, bnb_dtype=storage_dtype):
-                    model = model_loader(unet_config)
+                with no_init_weights():
+                    with using_forge_operations(device=initial_device, dtype=computation_dtype, manual_cast_enabled=False, bnb_dtype=storage_dtype):
+                        model = model_loader(unet_config)
             else:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=storage_dtype)
                 need_manual_cast = storage_dtype != computation_dtype
@@ -339,8 +344,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 if _dtype_overwrite is torch.int8 and storage_dtype is torch.bfloat16:
                     _dtype = str(guess.__class__.__name__)
 
-                with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=_dtype):
-                    model = model_loader(unet_config).to(**to_args)
+                with no_init_weights():
+                    with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=_dtype):
+                        model = model_loader(unet_config).to(**to_args)
 
             model = pre_func(model)
             load_state_dict(model, state_dict)
