@@ -40,6 +40,10 @@ class AnimaTextProcessingEngine:
         def next_chunk():
             nonlocal chunk
 
+            if not chunk.qwen_tokens:
+                chunk.qwen_tokens.append(self.id_pad)
+                chunk.qwen_multipliers.append(1.0)
+
             chunk.t5_tokens.append(self.id_end)
             chunk.t5_multipliers.append(1.0)
 
