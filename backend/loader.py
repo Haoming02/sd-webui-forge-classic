@@ -307,7 +307,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             _dtype_overwrite = backend.args.dynamic_args["forge_unet_storage_dtype"]
 
             if guess.nunchaku:
-                storage_dtype = state_dict_dtype
+                storage_dtype = torch.bfloat16
                 logger.info(f"Using Nunchaku Model Data Type: {storage_dtype}")
             elif state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
                 storage_dtype = state_dict_dtype
