@@ -98,3 +98,16 @@
 .range-slider {
     margin-top: -8px;
 }
+
+.cnet-badge {
+    display: inline-block;
+    padding: 0.2em 0.6em;
+    font-size: 0.6em;
+    font-weight: bold;
+    color: white;
+    background-color: green;
+    border-radius: 0.4em;
+    text-align: center;
+    vertical-align: middle;
+    margin: auto 0px auto var(--size-2);
+}
