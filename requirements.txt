@@ -25,6 +25,7 @@ protobuf==4.25.8
 psutil==6.1.1
 pydantic-core==2.27.2
 pydantic==2.10.6
+pyyaml==6.0.3
 rich==14.3.2
 safetensors==0.7.0
 scikit-image==0.25.2

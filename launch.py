@@ -46,6 +46,8 @@ def main():
         launch_utils.configure_a1111_reference(args.forge_ref_a1111_home)
     if args.forge_ref_comfy_home:
         launch_utils.configure_comfy_reference(args.forge_ref_comfy_home)
+    if args.forge_ref_comfy_yaml:
+        launch_utils.configure_comfy_yaml(args.forge_ref_comfy_yaml)
 
     start()
 
