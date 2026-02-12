@@ -296,6 +296,11 @@ class MultiDiffusion(AbstractDiffusion):
         cond_or_uncond: list = args["cond_or_uncond"]
         c_crossattn: Tensor = c_in["c_crossattn"]
 
+        is_5d = x_in.ndim == 5
+        if is_5d:
+            assert x_in.shape[2] == 1
+            x_in = x_in.squeeze(2)
+
         N, C, H, W = x_in.shape
         self.refresh = False
         if self.weights is None or self.h != H or self.w != W:
@@ -318,6 +323,10 @@ class MultiDiffusion(AbstractDiffusion):
                 for key in c_tile:
                     if key in ["y", "c_concat"]:
                         icond = c_tile[key]
+                        if icond.ndim == 5:
+                            assert icond.shape[2] == 1
+                            icond = icond.squeeze(2)
+
                         if icond.shape[2:] == (self.h, self.w):
                             c_tile[key] = torch.cat([icond[bbox.slicer] for bbox in bboxes])
                         else:
@@ -326,12 +335,30 @@ class MultiDiffusion(AbstractDiffusion):
                     self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
                     c_tile["control"] = c_in["control_model"].get_control(x_tile, ts_tile, c_tile, len(cond_or_uncond))
 
+                if is_5d:
+                    x_tile = x_tile.unsqueeze(2)
+                    for key in ["y", "c_concat"]:
+                        if key in c_tile and c_tile[key].ndim == 4:
+                            c_tile[key] = c_tile[key].unsqueeze(2)
+
+                    control = c_tile.get("control")
+                    while control is not None:
+                        if hasattr(control, "cond_hint") and control.cond_hint is not None and control.cond_hint.ndim == 4:
+                            control.cond_hint = control.cond_hint.unsqueeze(2)
+                        control = control.previous_controlnet
+
                 x_tile_out = model_function(x_tile, ts_tile, **c_tile)
+
+                if is_5d:
+                    x_tile_out = x_tile_out.squeeze(2)
 
                 for i, bbox in enumerate(bboxes):
                     self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :]
                 del x_tile_out, x_tile, ts_tile, c_tile
         x_out = torch.where(self.weights > 1, self.x_buffer / self.weights, self.x_buffer)
+
+        if is_5d:
+            x_out = x_out.unsqueeze(2)
 
         return x_out
 
@@ -366,6 +393,11 @@ class MixtureOfDiffusers(AbstractDiffusion):
         cond_or_uncond: list = args["cond_or_uncond"]
         c_crossattn: Tensor = c_in["c_crossattn"]
 
+        is_5d = x_in.ndim == 5
+        if is_5d:
+            assert x_in.shape[2] == 1
+            x_in = x_in.squeeze(2)
+
         N, C, H, W = x_in.shape
 
         self.refresh = False
@@ -388,6 +420,10 @@ class MixtureOfDiffusers(AbstractDiffusion):
                         for key in ["y", "c_concat"]:
                             if key in c_in:
                                 icond = c_in[key]
+                                if icond.ndim == 5:
+                                    assert icond.shape[2] == 1
+                                    icond = icond.squeeze(2)
+
                                 if icond.shape[2:] == (self.h, self.w):
                                     icond = icond[bbox.slicer]
                                 if icond_map.get(key, None) is None:
@@ -410,12 +446,32 @@ class MixtureOfDiffusers(AbstractDiffusion):
                 if "control" in c_in:
                     self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
                     c_tile["control"] = c_in["control_model"].get_control(x_tile, t_tile, c_tile, len(cond_or_uncond))
+
+                if is_5d:
+                    x_tile = x_tile.unsqueeze(2)
+                    for key in ["y", "c_concat"]:
+                        if key in c_tile and c_tile[key].ndim == 4:
+                            c_tile[key] = c_tile[key].unsqueeze(2)
+
+                    control = c_tile.get("control")
+                    while control is not None:
+                        if hasattr(control, "cond_hint") and control.cond_hint is not None and control.cond_hint.ndim == 4:
+                            control.cond_hint = control.cond_hint.unsqueeze(2)
+                        control = control.previous_controlnet
+
                 x_tile_out = model_function(x_tile, t_tile, **c_tile)
+
+                if is_5d:
+                    x_tile_out = x_tile_out.squeeze(2)
+
                 for i, bbox in enumerate(bboxes):
                     w = self.tile_weights * self.rescale_factor[bbox.slicer]
                     self.x_buffer[bbox.slicer] += x_tile_out[i * N : (i + 1) * N, :, :, :] * w
                 del x_tile_out, x_tile, t_tile, c_tile
         x_out = self.x_buffer
+
+        if is_5d:
+            x_out = x_out.unsqueeze(2)
 
         return x_out
 
