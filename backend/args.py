@@ -145,6 +145,7 @@ dynamic_args = dict(
     edit=False,
     nunchaku=False,
     klein=False,
+    wan=False,
     ref_latents=[],
     concat_latent=None,
     is_referencing=False,
@@ -159,6 +160,7 @@ Some parameters that are used throughout the Webui
 - edit: `bool` - Qwen-Image-Edit
 - nunchaku: `bool` - Nunchaku (SVDQ) Models
 - klein: `bool` - Flux.2 Klein
+- wan: `bool` - Wan 2.2
 - ref_latents: `list[torch.Tensor]` - Reference Latent(s) for Flux Kontext & Qwen-Image-Edit
 - concat_latent: `torch.Tensor` - Input Latent for Wan 2.2 I2V
 - is_referencing: `bool` - Appending Reference Latent(s) (by. ImageStitch)

@@ -22,7 +22,7 @@ import modules.paths as paths
 import modules.sd_models as sd_models
 import modules.sd_vae as sd_vae
 import modules.shared as shared
-from backend import memory_management
+from backend import args, memory_management
 from backend.modules.k_prediction import rescale_zero_terminal_snr_sigmas
 from backend.utils import hash_tensor
 from modules import devices, errors, extra_networks, images, infotext_utils, masking, profiling, prompt_parser, rng, scripts, sd_samplers, sd_samplers_common, sd_unet, sd_vae_approx
@@ -849,9 +849,10 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     """this is the main loop that both txt2img and img2img use; it calls func_init once inside all the scopes and func_sample once per batch"""
 
+    _times = 1
     _is_video = False
     video_path = None
-    if shared.sd_model.is_wan:
+    if shared.sd_model.is_wan and args.dynamic_args["wan"]:
         _times = ((getattr(p, "batch_size", 1) - 1) // 4) + 1  # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy_extras/nodes_wan.py#L41
         p.batch_size = (_times - 1) * 4 + 1
         _is_video: bool = _times > 1
@@ -1386,7 +1387,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             # here we generate an image normally
 
             x = self.rng.next()
-            if shared.sd_model.is_wan:  # enforce batch_size of 1
+            if shared.sd_model.is_wan and args.dynamic_args["wan"]:  # enforce batch_size of 1
                 x = x[0].unsqueeze(0)
 
             self.sd_model.forge_objects = self.sd_model.forge_objects_after_applying_lora.shallow_copy()
@@ -1858,7 +1859,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         x = self.rng.next()
-        if shared.sd_model.is_wan:  # enforce batch_size of 1
+        if shared.sd_model.is_wan and args.dynamic_args["wan"]:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)
 
         if self.initial_noise_multiplier != 1.0:
