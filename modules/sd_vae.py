@@ -1,63 +1,73 @@
 import glob
-import os
+import os.path
 from copy import deepcopy
-from dataclasses import dataclass
 
-from modules import extra_networks, hashes, paths, sd_models, shared
+import torch
+
+from backend import memory_management, utils
+from modules import hashes, paths, sd_models, shared
 
 vae_path = os.path.abspath(os.path.join(paths.models_path, "VAE"))
-vae_dict = {}
+vae_ignore_keys: set[str] = {"model_ema.decay", "model_ema.num_updates"}
+vae_dict: dict[str, os.PathLike] = {}
 
-base_vae = None
-loaded_vae_file = None
-checkpoint_info = None
+base_vae: dict[str, torch.Tensor] = None
+loaded_vae_file: os.PathLike = None
+checkpoint_info: "sd_models.CheckpointInfo" = None
 
 
-def get_loaded_vae_name():
+@torch.inference_mode()
+def _load_vae_dict(model, vae_sd: dict):
+    sd = {k: v for k, v in vae_sd.items() if k[0:4] != "loss" and k not in vae_ignore_keys}
+    model.first_stage_model.load_state_dict(sd)
+
+
+def get_loaded_vae_name() -> str:
     if loaded_vae_file is None:
         return None
-
     return os.path.basename(loaded_vae_file)
 
 
-def get_loaded_vae_hash():
+def get_loaded_vae_hash() -> str:
     if loaded_vae_file is None:
         return None
 
     sha256 = hashes.sha256(loaded_vae_file, "vae")
-
     return sha256[0:10] if sha256 else None
 
 
-def get_base_vae(model):
-    if base_vae is not None and checkpoint_info == model.sd_checkpoint_info and model:
-        return base_vae
-    return None
+# def get_base_vae(model):
+#     if base_vae is not None and checkpoint_info == model.sd_checkpoint_info and model:
+#         return base_vae
+#     return None
 
 
 def store_base_vae(model):
     global base_vae, checkpoint_info
-    if checkpoint_info != model.sd_checkpoint_info:
-        assert not loaded_vae_file, "Trying to store non-base VAE!"
-        base_vae = deepcopy(model.first_stage_model.state_dict())
-        checkpoint_info = model.sd_checkpoint_info
+    assert loaded_vae_file is None
+    memory_management.logger.debug("Storing Original VAE...")
+    base_vae = deepcopy(model.first_stage_model.state_dict())
+    checkpoint_info = model.sd_checkpoint_info
 
 
 def delete_base_vae():
     global base_vae, checkpoint_info
     base_vae = None
     checkpoint_info = None
+    memory_management.soft_empty_cache()
 
 
 def restore_base_vae(model):
     global loaded_vae_file
-    if base_vae is not None and checkpoint_info == model.sd_checkpoint_info:
-        print("Restoring base VAE")
-        loaded_vae_file = None
+    if base_vae is None:
+        return
+    memory_management.logger.debug("Restoring Original VAE...")
+    _load_vae_dict(model, base_vae)
+    loaded_vae_file = None
     delete_base_vae()
 
 
-def get_filename(filepath):
+def get_filename(filepath: os.PathLike) -> str:
     return os.path.basename(filepath)
 
 
@@ -86,80 +96,93 @@ def refresh_vae_list():
     vae_dict.update(dict(sorted(vae_dict.items(), key=lambda item: shared.natural_sort_key(item[0]))))
 
 
-def find_vae_near_checkpoint(checkpoint_file):
-    checkpoint_path = os.path.basename(checkpoint_file).rsplit(".", 1)[0]
-    for vae_file in vae_dict.values():
-        if os.path.basename(vae_file).startswith(checkpoint_path):
-            return vae_file
+# def find_vae_near_checkpoint(checkpoint_file):
+#     checkpoint_path = os.path.basename(checkpoint_file).rsplit(".", 1)[0]
+#     for vae_file in vae_dict.values():
+#         if os.path.basename(vae_file).startswith(checkpoint_path):
+#             return vae_file
 
-    return None
-
-
-@dataclass
-class VaeResolution:
-    vae: str = None
-    source: str = None
-    resolved: bool = True
-
-    def tuple(self):
-        return self.vae, self.source
+#     return None
 
 
-def is_automatic():
-    return shared.opts.sd_vae in {"Automatic", "auto"}  # "auto" for people with old config
+# @dataclass
+# class VaeResolution:
+#     vae: str = None
+#     source: str = None
+#     resolved: bool = True
+
+#     def tuple(self):
+#         return self.vae, self.source
 
 
-def resolve_vae_from_setting() -> VaeResolution:
-    if shared.opts.sd_vae == "None":
-        return VaeResolution()
-
-    vae_from_options = vae_dict.get(shared.opts.sd_vae, None)
-    if vae_from_options is not None:
-        return VaeResolution(vae_from_options, "specified in settings")
-
-    if not is_automatic():
-        print(f"Couldn't find VAE named {shared.opts.sd_vae}; using None instead")
-
-    return VaeResolution(resolved=False)
+# def is_automatic():
+#     return shared.opts.sd_vae in {"Automatic", "auto"}  # "auto" for people with old config
 
 
-def resolve_vae_from_user_metadata(checkpoint_file) -> VaeResolution:
-    metadata = extra_networks.get_user_metadata(checkpoint_file)
-    vae_metadata = metadata.get("vae", None)
-    if vae_metadata is not None and vae_metadata != "Automatic":
-        if vae_metadata == "None":
-            return VaeResolution()
+# def resolve_vae_from_setting() -> VaeResolution:
+#     if shared.opts.sd_vae == "None":
+#         return VaeResolution()
 
-        vae_from_metadata = vae_dict.get(vae_metadata, None)
-        if vae_from_metadata is not None:
-            return VaeResolution(vae_from_metadata, "from user metadata")
+#     vae_from_options = vae_dict.get(shared.opts.sd_vae, None)
+#     if vae_from_options is not None:
+#         return VaeResolution(vae_from_options, "specified in settings")
 
-    return VaeResolution(resolved=False)
+#     if not is_automatic():
+#         print(f"Couldn't find VAE named {shared.opts.sd_vae}; using None instead")
 
-
-def resolve_vae_near_checkpoint(checkpoint_file) -> VaeResolution:
-    vae_near_checkpoint = find_vae_near_checkpoint(checkpoint_file)
-    if vae_near_checkpoint is not None and (not shared.opts.sd_vae_overrides_per_model_preferences or is_automatic()):
-        return VaeResolution(vae_near_checkpoint, "found near the checkpoint")
-
-    return VaeResolution(resolved=False)
+#     return VaeResolution(resolved=False)
 
 
-def resolve_vae(checkpoint_file) -> VaeResolution:
-    if shared.cmd_opts.vae_path is not None:
-        return VaeResolution(shared.cmd_opts.vae_path, "from commandline argument")
+# def resolve_vae_from_user_metadata(checkpoint_file) -> VaeResolution:
+#     metadata = extra_networks.get_user_metadata(checkpoint_file)
+#     vae_metadata = metadata.get("vae", None)
+#     if vae_metadata is not None and vae_metadata != "Automatic":
+#         if vae_metadata == "None":
+#             return VaeResolution()
 
-    if shared.opts.sd_vae_overrides_per_model_preferences and not is_automatic():
-        return resolve_vae_from_setting()
+#         vae_from_metadata = vae_dict.get(vae_metadata, None)
+#         if vae_from_metadata is not None:
+#             return VaeResolution(vae_from_metadata, "from user metadata")
 
-    res = resolve_vae_from_user_metadata(checkpoint_file)
-    if res.resolved:
-        return res
+#     return VaeResolution(resolved=False)
 
-    res = resolve_vae_near_checkpoint(checkpoint_file)
-    if res.resolved:
-        return res
 
-    res = resolve_vae_from_setting()
+# def resolve_vae_near_checkpoint(checkpoint_file) -> VaeResolution:
+#     vae_near_checkpoint = find_vae_near_checkpoint(checkpoint_file)
+#     if vae_near_checkpoint is not None and (not shared.opts.sd_vae_overrides_per_model_preferences or is_automatic()):
+#         return VaeResolution(vae_near_checkpoint, "found near the checkpoint")
 
-    return res
+#     return VaeResolution(resolved=False)
+
+
+# def resolve_vae(checkpoint_file) -> VaeResolution:
+#     if shared.cmd_opts.vae_path is not None:
+#         return VaeResolution(shared.cmd_opts.vae_path, "from commandline argument")
+
+#     if shared.opts.sd_vae_overrides_per_model_preferences and not is_automatic():
+#         return resolve_vae_from_setting()
+
+#     res = resolve_vae_from_user_metadata(checkpoint_file)
+#     if res.resolved:
+#         return res
+
+#     res = resolve_vae_near_checkpoint(checkpoint_file)
+#     if res.resolved:
+#         return res
+
+#     res = resolve_vae_from_setting()
+
+#     return res
+
+
+def reload_vae_weights(vae: str):
+    if vae in (None, "None", "Automatic"):
+        return
+
+    store_base_vae(shared.sd_model)
+    vae_sd = utils.load_torch_file(vae)
+    _load_vae_dict(shared.sd_model, vae_sd)
+
+
+def restore_vae_weights():
+    restore_base_vae(shared.sd_model)
