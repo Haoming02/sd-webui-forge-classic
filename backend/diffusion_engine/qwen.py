@@ -116,10 +116,11 @@ class QwenImage(ForgeDiffusionEngine):
         sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
 
-        if dynamic_args["is_referencing"]:
-            self.ref_latents.append(start_image.cpu())
-        else:
-            self.ini_latent = start_image.cpu()
+        if dynamic_args["edit"]:
+            if dynamic_args["is_referencing"]:
+                self.ref_latents.append(start_image.cpu())
+            else:
+                self.ini_latent = start_image.cpu()
 
         return sample.to(x)
 
