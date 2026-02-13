@@ -276,7 +276,7 @@ options_templates.update(
             "initial_noise_multiplier": OptionInfo(1.0, "Noise Multiplier for img2img", gr.Slider, {"minimum": 0.0, "maximum": 1.5, "step": 0.05}, infotext="Noise multiplier"),
             "img2img_extra_noise": OptionInfo(0.0, "Extra Noise Multiplier for img2img and Hires. fix", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Extra noise").info("0 = disabled; higher = more details in generation"),
             "img2img_color_correction": OptionInfo(False, "Apply color correction to img2img results to match original colors"),
-            "img2img_fix_steps": OptionInfo(False, "During img2img, do exactly the number of Steps the slider specifies").info("otherwise, only process <b>Sampling steps</b> x <b>Denoising strength</b> steps"),
+            "img2img_fix_steps": OptionInfo(False, "During img2img, do exactly the number of Steps the slider specifies").info("otherwise, only process <b>Sampling steps</b> x <b>Denoising strength</b> steps").info("only affects SD1 and SDXL"),
             "img2img_background_color": OptionInfo("#808080", "For img2img, fill the transparent parts of the input image with this color", ui_components.FormColorPicker, {}),
             "img2img_sketch_default_brush_color": OptionInfo("#ff0000", "Initial Brush Color for Sketch", ui_components.FormColorPicker, {}).needs_reload_ui(),
             "img2img_inpaint_mask_brush_color": OptionInfo("#808080", "Brush Color for Inpaint Mask", ui_components.FormColorPicker, {}).needs_reload_ui(),
