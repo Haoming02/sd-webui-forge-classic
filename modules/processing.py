@@ -6,7 +6,6 @@ import logging
 import math
 import os
 import random
-import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -23,6 +22,7 @@ import modules.sd_models as sd_models
 import modules.sd_vae as sd_vae
 import modules.shared as shared
 from backend import args, memory_management
+from backend.logging import setup_logger
 from backend.modules.k_prediction import rescale_zero_terminal_snr_sigmas
 from backend.utils import hash_tensor
 from modules import devices, errors, extra_networks, images, infotext_utils, masking, profiling, prompt_parser, rng, scripts, sd_samplers, sd_samplers_common, sd_unet, sd_vae_approx
@@ -34,7 +34,9 @@ from modules.sysinfo import set_config
 from modules_forge import main_entry
 from modules_forge.utils import apply_circular_forge
 
-# some of those options should not be changed at all because they would break the model, so I removed them from options.
+logger = logging.getLogger("processing")
+setup_logger(logger)
+
 opt_C = 4
 opt_f = 8
 
@@ -216,8 +218,7 @@ class StableDiffusionProcessing:
         StableDiffusionProcessing.cached_uc = [None, None, None]
 
     def __post_init__(self):
-        if self.sampler_index is not None:
-            print("sampler_index argument for StableDiffusionProcessing does not do anything; use sampler_name", file=sys.stderr)
+        assert self.sampler_index is None
 
         self.comments = {}
 
@@ -486,7 +487,7 @@ class StableDiffusionProcessing:
 
         if self.cfg_scale == 1:
             self.uc = None
-            print("Skipping unconditional conditioning when CFG = 1. Negative Prompts are ignored.")
+            logger.info("Negative Prompts are Ignored when CFG = 1.0")
         else:
             self.uc = self.get_conds_with_caching(prompt_parser.get_learned_conditioning, negative_prompts, total_steps, [self.cached_uc], self.extra_network_data)
 
@@ -1604,7 +1605,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
         if self.hr_cfg == 1:
             self.hr_uc = None
-            print("Skipping unconditional conditioning (HR pass) when CFG = 1. Negative Prompts are ignored.")
+            logger.info("Negative Prompts are Ignored when CFG = 1.0")
         else:
             self.hr_uc = self.get_conds_with_caching(prompt_parser.get_learned_conditioning, hr_negative_prompts, self.firstpass_steps, [self.cached_hr_uc, self.cached_uc], self.hr_extra_network_data, total_steps)
 
@@ -1697,6 +1698,9 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     def init(self, all_prompts, all_seeds, all_subseeds):
         self.extra_generation_params["Denoising strength"] = self.denoising_strength
 
+        if (args.dynamic_args["kontext"] or args.dynamic_args["edit"]) and self.denoising_strength < 0.9:
+            logger.warning("Edit Models require High Denoising Strength")
+
         self.image_cfg_scale: float = None
 
         self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
@@ -1740,7 +1744,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
                     self.inpaint_full_res = False
                     massage = 'Unable to perform "Inpaint Only mask" because mask is blank, switch to img2img mode.'
                     self.sd_model.comments.append(massage)
-                    logging.info(massage)
+                    logger.info(massage)
             else:
                 image_mask = images.resize_image(self.resize_mode, image_mask, self.width, self.height)
                 np_mask = np.array(image_mask)
