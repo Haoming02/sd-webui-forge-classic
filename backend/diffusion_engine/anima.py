@@ -30,6 +30,7 @@ class Anima(ForgeDiffusionEngine):
             text_encoder=clip.cond_stage_model.qwen3_06b,
             qwen_tokenizer=clip.tokenizer.qwen3_06b,
             t5_tokenizer=clip.tokenizer.t5xxl,
+            unet=unet,
         )
 
         self.forge_objects = ForgeObjects(unet=unet, clip=clip, vae=vae, clipvision=None)
@@ -46,7 +47,7 @@ class Anima(ForgeDiffusionEngine):
     @torch.inference_mode()
     def get_prompt_lengths_on_ui(self, prompt):
         token_count = len(self.text_processing_engine_anima.tokenize([prompt])[0][0])
-        return token_count, max(999, token_count)
+        return token_count, max(512, token_count)
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):

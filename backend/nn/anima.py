@@ -797,6 +797,7 @@ class Anima(MiniTrainDIT):
 
     def preprocess_text_embeds(self, text_embeds, text_ids):
         if text_ids is not None:
-            return self.llm_adapter(text_embeds, text_ids)
+            device = self.llm_adapter.embed.weight.device
+            return self.llm_adapter(text_embeds.to(device), text_ids.to(device))
         else:
             return text_embeds

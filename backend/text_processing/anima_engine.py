@@ -1,3 +1,10 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.patcher.unet import UnetPatcher
+
+import weakref
+
 import torch
 
 from backend import memory_management
@@ -14,15 +21,21 @@ class PromptChunk:
 
 
 class AnimaTextProcessingEngine:
-    def __init__(self, text_encoder, qwen_tokenizer, t5_tokenizer):
+    def __init__(self, text_encoder, qwen_tokenizer, t5_tokenizer, unet):
         super().__init__()
 
         self.text_encoder = text_encoder
         self.qwen_tokenizer = qwen_tokenizer
         self.t5_tokenizer = t5_tokenizer
 
+        self._unet = weakref.ref(unet)
+
         self.id_pad = 151643
         self.id_end = 1
+
+    @property
+    def unet(self) -> " UnetPatcher":
+        return self._unet()
 
     def tokenize(self, texts):
         return (
@@ -72,7 +85,7 @@ class AnimaTextProcessingEngine:
         return chunks
 
     def __call__(self, texts):
-        zs, ti, tw = [], [], []
+        zs = []
         cache = {}
 
         self.emphasis = emphasis.get_current_option(opts.emphasis)()
@@ -92,17 +105,30 @@ class AnimaTextProcessingEngine:
 
                 cache[line] = z
 
-            zs.append(z)
-            ti.append(torch.tensor(chunk.t5_tokens, dtype=torch.int))
-            tw.append(torch.tensor(chunk.t5_multipliers))
+            zs.append(
+                self.anima_preprocess(
+                    z,
+                    torch.tensor(chunk.t5_tokens, dtype=torch.int),
+                    torch.tensor(chunk.t5_multipliers),
+                )
+            )
 
-        z = {
-            "qwen_cond": zs,
-            "t5_ids": ti,
-            "t5_weights": tw,
-        }
+        return zs
 
-        return z
+    def anima_preprocess(self, cross_attn: torch.Tensor, t5xxl_ids: torch.Tensor, t5xxl_weights: torch.Tensor) -> torch.Tensor:
+        dtype: torch.dtype = self.unet.model.computation_dtype
+
+        cross_attn = cross_attn.unsqueeze(0).to(dtype=dtype)
+        t5xxl_ids = t5xxl_ids.unsqueeze(0)
+
+        cross_attn = self.unet.model.diffusion_model.preprocess_text_embeds(cross_attn, t5xxl_ids)
+        if t5xxl_weights is not None:
+            cross_attn *= t5xxl_weights.unsqueeze(0).unsqueeze(-1).to(cross_attn)
+
+        if cross_attn.shape[1] < 512:
+            cross_attn = torch.nn.functional.pad(cross_attn, (0, 0, 0, 512 - cross_attn.shape[1]))
+
+        return cross_attn
 
     def process_embeds(self, batch_tokens):
         device = memory_management.text_encoder_device()
