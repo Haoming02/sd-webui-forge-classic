@@ -200,6 +200,31 @@ def bong_tangent_scheduler(n, sigma_min, sigma_max, device, *, start=1.0, middle
     return tan_sigmas.to(device)
 
 
+def flow_match_euler_discrete_scheduler(n, sigma_min, sigma_max, inner_model, device):
+    from diffusers.schedulers.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
+
+    unet = inner_model.inner_model.forge_objects.unet
+
+    config = {
+        "num_train_timesteps": 1000,
+        "shift": getattr(unet.model.predictor, "shift", 1.0),
+        "use_dynamic_shifting": shared.opts.use_dynamic_shifting,
+        "invert_sigmas": shared.opts.invert_sigmas,
+        "shift_terminal": None,
+        "use_karras_sigmas": shared.opts.use_karras_sigmas,
+        "use_exponential_sigmas": shared.opts.use_exponential_sigmas,
+        "use_beta_sigmas": shared.opts.use_beta_sigmas,
+        "time_shift_type": "exponential",
+        "stochastic_sampling": shared.opts.stochastic_sampling,
+    }
+
+    scheduler = FlowMatchEulerDiscreteScheduler.from_config(config)
+    scheduler.set_timesteps(n, device=device, mu=0.0)
+    sigmas = scheduler.sigmas
+
+    return torch.FloatTensor(sigmas).to(device)
+
+
 schedulers = [
     Scheduler("automatic", "Automatic", None),
     Scheduler("karras", "Karras", k_diffusion.sampling.get_sigmas_karras, default_rho=7.0),
@@ -216,6 +241,7 @@ schedulers = [
     Scheduler("beta", "Beta", beta_scheduler, need_inner_model=True),
     Scheduler("turbo", "Turbo", turbo_scheduler, need_inner_model=True),
     Scheduler("bong_tangent", "Bong Tangent", bong_tangent_scheduler),
+    Scheduler("flow_match", "FlowMatchEulerDiscrete", flow_match_euler_discrete_scheduler, need_inner_model=True),
 ]
 
 schedulers_map = {**{x.name: x for x in schedulers}, **{x.label: x for x in schedulers}}

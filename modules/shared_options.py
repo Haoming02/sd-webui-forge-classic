@@ -551,6 +551,12 @@ options_templates.update(
             "sd_noise_schedule": OptionInfo("Default", "Noise schedule for sampling", gr.Radio, {"choices": ("Default", "Zero Terminal SNR")}, infotext="Noise Schedule"),
             "beta_dist_alpha": OptionInfo(0.6, "Beta scheduler - alpha", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler alpha"),
             "beta_dist_beta": OptionInfo(0.6, "Beta scheduler - beta", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler beta"),
+            "use_dynamic_shifting": OptionInfo(False, "use_dynamic_shifting"),
+            "invert_sigmas": OptionInfo(False, "invert_sigmas"),
+            "use_karras_sigmas": OptionInfo(False, "use_karras_sigmas"),
+            "use_exponential_sigmas": OptionInfo(False, "use_exponential_sigmas"),
+            "use_beta_sigmas": OptionInfo(False, "use_beta_sigmas"),
+            "stochastic_sampling": OptionInfo(False, "stochastic_sampling"),
         },
     )
 )
