@@ -519,11 +519,11 @@ div.toprow-compact-tools {
 }
 
 #forge_ui_preset input {
-    width: 6em;
+    width: 5em;
 }
 
 #setting_sd_model_checkpoint input {
-    width: 20em;
+    width: 20vw;
 }
 
 #setting_sd_modules input {
@@ -543,7 +543,7 @@ div.toprow-compact-tools {
 }
 
 #setting_sd_modules div.wrap-inner {
-    min-width: 20em;
+    min-width: 20vw;
     height: 40px !important;
     cursor: pointer;
     padding: 0em 2em 0em 0.5em;
