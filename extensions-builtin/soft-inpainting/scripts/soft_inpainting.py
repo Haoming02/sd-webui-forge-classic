@@ -1,24 +1,32 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules.processing import StableDiffusionProcessing
+
 import math
+from dataclasses import dataclass
 
 import gradio as gr
 import numpy as np
+import torch
 from joblib import Parallel, cpu_count, delayed
+from PIL import Image
 
 import modules.scripts as scripts
 from modules.torch_utils import float64
 from modules.ui_components import InputAccordion
 
 
+@dataclass
 class SoftInpaintingSettings:
-    def __init__(self, mask_blend_power, mask_blend_scale, inpaint_detail_preservation, composite_mask_influence, composite_difference_threshold, composite_difference_contrast):
-        self.mask_blend_power = mask_blend_power
-        self.mask_blend_scale = mask_blend_scale
-        self.inpaint_detail_preservation = inpaint_detail_preservation
-        self.composite_mask_influence = composite_mask_influence
-        self.composite_difference_threshold = composite_difference_threshold
-        self.composite_difference_contrast = composite_difference_contrast
+    mask_blend_power: float | str
+    mask_blend_scale: float | str
+    inpaint_detail_preservation: float | str
+    composite_mask_influence: float | str
+    composite_difference_threshold: float | str
+    composite_difference_contrast: float | str
 
-    def add_generation_params(self, dest):
+    def add_generation_params(self, dest: dict):
         dest[enabled_gen_param_label] = True
         dest[gen_param_labels.mask_blend_power] = self.mask_blend_power
         dest[gen_param_labels.mask_blend_scale] = self.mask_blend_scale
@@ -28,82 +36,57 @@ class SoftInpaintingSettings:
         dest[gen_param_labels.composite_difference_contrast] = self.composite_difference_contrast
 
 
-# ------------------- Methods -------------------
+# region Methods
 
 
-def processing_uses_inpainting(p):
-    # TODO: Figure out a better way to determine if inpainting is being used by p
-    if getattr(p, "image_mask", None) is not None:
-        return True
-
+def processing_uses_inpainting(p: "StableDiffusionProcessing") -> bool:
     if getattr(p, "mask", None) is not None:
         return True
-
+    if getattr(p, "image_mask", None) is not None:
+        return True
     if getattr(p, "nmask", None) is not None:
         return True
 
     return False
 
 
-def latent_blend(settings, a, b, t):
+def latent_blend(settings: "SoftInpaintingSettings", a: torch.Tensor, b: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
     """
-    Interpolates two latent image representations according to the parameter t,
+    Interpolates two latent image representations according to the parameter `t`,
     where the interpolated vectors' magnitudes are also interpolated separately.
-    The "detail_preservation" factor biases the magnitude interpolation towards
+    The `detail_preservation` factor biases the magnitude interpolation towards
     the larger of the two magnitudes.
     """
-    import torch
 
-    # NOTE: We use inplace operations wherever possible.
+    ndim = a.ndim
 
-    if len(t.shape) == 3:
-        # [4][w][h] to [1][4][w][h]
-        t2 = t.unsqueeze(0)
-        # [4][w][h] to [1][1][w][h] - the [4] seem redundant.
-        t3 = t[0].unsqueeze(0).unsqueeze(0)
-    else:
-        t2 = t
-        t3 = t[:, 0][:, None]
+    if t.ndim == 3:
+        t = t.unsqueeze(0)
 
-    one_minus_t2 = 1 - t2
-    one_minus_t3 = 1 - t3
+    if ndim == 5 and t.ndim == 4:
+        t = t.unsqueeze(2)
 
-    # Linearly interpolate the image vectors.
-    a_scaled = a * one_minus_t2
-    b_scaled = b * t2
-    image_interp = a_scaled
-    image_interp.add_(b_scaled)
+    one_minus_t = 1 - t
+
+    image_interp = a * one_minus_t
+    image_interp.add_(b * t)
     result_type = image_interp.dtype
-    del a_scaled, b_scaled, t2, one_minus_t2
 
-    # Calculate the magnitude of the interpolated vectors. (We will remove this magnitude.)
-    # 64-bit operations are used here to allow large exponents.
     current_magnitude = torch.norm(image_interp, p=2, dim=1, keepdim=True).to(float64(image_interp)).add_(0.00001)
 
-    # Interpolate the powered magnitudes, then un-power them (bring them back to a power of 1).
-    a_magnitude = torch.norm(a, p=2, dim=1, keepdim=True).to(float64(a)).pow_(settings.inpaint_detail_preservation) * one_minus_t3
-    b_magnitude = torch.norm(b, p=2, dim=1, keepdim=True).to(float64(b)).pow_(settings.inpaint_detail_preservation) * t3
+    a_magnitude = torch.norm(a, p=2, dim=1, keepdim=True).to(float64(a)).pow_(settings.inpaint_detail_preservation) * one_minus_t
+    b_magnitude = torch.norm(b, p=2, dim=1, keepdim=True).to(float64(b)).pow_(settings.inpaint_detail_preservation) * t
+
     desired_magnitude = a_magnitude
     desired_magnitude.add_(b_magnitude).pow_(1 / settings.inpaint_detail_preservation)
-    del a_magnitude, b_magnitude, t3, one_minus_t3
 
-    # Change the linearly interpolated image vectors' magnitudes to the value we want.
-    # This is the last 64-bit operation.
-    image_interp_scaling_factor = desired_magnitude
-    image_interp_scaling_factor.div_(current_magnitude)
-    image_interp_scaling_factor = image_interp_scaling_factor.to(result_type)
-    image_interp_scaled = image_interp
-    image_interp_scaled.mul_(image_interp_scaling_factor)
-    del current_magnitude
-    del desired_magnitude
-    del image_interp
-    del image_interp_scaling_factor
-    del result_type
+    scale = desired_magnitude.div_(current_magnitude).to(result_type)
+    image_interp.mul_(scale)
 
-    return image_interp_scaled
+    return image_interp
 
 
-def get_modified_nmask(settings, nmask, sigma):
+def get_modified_nmask(settings: "SoftInpaintingSettings", nmask: torch.Tensor, sigma: float) -> torch.Tensor:
     """
     Converts a negative mask representing the transparency of the original latent vectors being overlaid
     to a mask that is scaled according to the denoising strength for this step.
@@ -115,33 +98,35 @@ def get_modified_nmask(settings, nmask, sigma):
     We bring this transparency to a power, as this allows one to simulate N number of blending operations
     where N can be any positive real value. Using this one can control the balance of influence between
     the denoiser and the original latents according to the sigma value.
-
-    NOTE: "mask" is not used
     """
-    import torch
-
     return torch.pow(nmask, (sigma**settings.mask_blend_power) * settings.mask_blend_scale)
 
 
-def apply_adaptive_masks(settings: SoftInpaintingSettings, nmask, latent_orig, latent_processed, overlay_images, width, height, paste_to):
-    import torch
-    from PIL import Image, ImageFilter, ImageOps
+def apply_adaptive_masks(settings: "SoftInpaintingSettings", nmask: torch.Tensor, latent_orig: torch.Tensor, latent_processed: torch.Tensor, overlay_images: list[Image.Image], width: int, height: int, paste_to: tuple[int]) -> list[Image.Image]:
+    from PIL import ImageFilter, ImageOps
 
     import modules.images as images
     import modules.processing as proc
 
-    # TODO: Bias the blending according to the latent mask, add adjustable parameter for bias control.
-    if len(nmask.shape) == 3:
-        latent_mask = nmask[0].float()
-    else:
+    if nmask.ndim == 4:  # (B, C, H, W)
         latent_mask = nmask[:, 0].float()
+    elif nmask.ndim == 5:  # (B, C, T, H, W)
+        latent_mask = nmask[:, 0]
+        latent_mask = latent_mask.mean(dim=1).float()
+
     # convert the original mask into a form we use to scale distances for thresholding
     mask_scalar = 1 - (torch.clamp(latent_mask, min=0, max=1) ** (settings.mask_blend_scale / 2))
     mask_scalar = 0.5 * (1 - settings.composite_mask_influence) + mask_scalar * settings.composite_mask_influence
     mask_scalar = mask_scalar / (1.00001 - mask_scalar)
     mask_scalar = mask_scalar.cpu().numpy()
 
-    latent_distance = torch.norm(latent_processed - latent_orig, p=2, dim=1)
+    latent_diff = latent_processed - latent_orig
+
+    if latent_diff.ndim == 4:
+        latent_distance = torch.norm(latent_diff, p=2, dim=1)
+    elif latent_diff.ndim == 5:
+        latent_distance = torch.norm(latent_diff, p=2, dim=1)
+        latent_distance = latent_distance.mean(dim=1)
 
     kernel, kernel_center = get_gaussian_kernel(stddev_radius=1.5, max_radius=2)
 
@@ -189,14 +174,17 @@ def apply_adaptive_masks(settings: SoftInpaintingSettings, nmask, latent_orig, l
     return masks_for_overlay
 
 
-def apply_masks(settings, nmask, overlay_images, width, height, paste_to):
-    import torch
-    from PIL import Image, ImageFilter, ImageOps
+def apply_masks(settings: "SoftInpaintingSettings", nmask: torch.Tensor, overlay_images: list[Image.Image], width: int, height: int, paste_to: tuple[int]) -> list[Image.Image]:
+    from PIL import ImageFilter, ImageOps
 
     import modules.images as images
     import modules.processing as proc
 
-    converted_mask = nmask[0].float()
+    if nmask.ndim == 4:
+        converted_mask = nmask[0, 0].float()
+    elif nmask.ndim == 5:  # (B, C, T, H, W)
+        converted_mask = nmask[0, 0].mean(dim=0).float()
+
     converted_mask = torch.clamp(converted_mask, min=0, max=1).pow_(settings.mask_blend_scale / 2)
     converted_mask = 255.0 * converted_mask
     converted_mask = converted_mask.cpu().numpy().astype(np.uint8)
@@ -457,7 +445,7 @@ def get_gaussian_kernel(stddev_radius=1.0, max_radius=2):
     return kernel, kernel_center
 
 
-# ------------------- Constants -------------------
+# region Constants
 
 
 default = SoftInpaintingSettings(1, 0.5, 4, 0, 0.5, 2)
@@ -503,7 +491,7 @@ el_ids = SoftInpaintingSettings(
 )
 
 
-# ------------------- Script -------------------
+# region Script
 
 
 class Script(scripts.ScriptBuiltinUI):
