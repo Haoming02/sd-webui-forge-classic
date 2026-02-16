@@ -58,51 +58,32 @@ def latent_blend(settings: "SoftInpaintingSettings", a: torch.Tensor, b: torch.T
     the larger of the two magnitudes.
     """
 
-    if len(t.shape) == 3:
-        # [4][w][h] to [1][4][w][h]
-        t2 = t.unsqueeze(0)
-        # [4][w][h] to [1][1][w][h] - the [4] seem redundant.
-        t3 = t[0].unsqueeze(0).unsqueeze(0)
-    else:
-        t2 = t
-        t3 = t[:, 0][:, None]
+    ndim = a.ndim
 
-    one_minus_t2 = 1 - t2
-    one_minus_t3 = 1 - t3
+    if t.ndim == 3:
+        t = t.unsqueeze(0)
 
-    # Linearly interpolate the image vectors.
-    a_scaled = a * one_minus_t2
-    b_scaled = b * t2
-    image_interp = a_scaled
-    image_interp.add_(b_scaled)
+    if ndim == 5 and t.ndim == 4:
+        t = t.unsqueeze(2)
+
+    one_minus_t = 1 - t
+
+    image_interp = a * one_minus_t
+    image_interp.add_(b * t)
     result_type = image_interp.dtype
-    del a_scaled, b_scaled, t2, one_minus_t2
 
-    # Calculate the magnitude of the interpolated vectors. (We will remove this magnitude.)
-    # 64-bit operations are used here to allow large exponents.
     current_magnitude = torch.norm(image_interp, p=2, dim=1, keepdim=True).to(float64(image_interp)).add_(0.00001)
 
-    # Interpolate the powered magnitudes, then un-power them (bring them back to a power of 1).
-    a_magnitude = torch.norm(a, p=2, dim=1, keepdim=True).to(float64(a)).pow_(settings.inpaint_detail_preservation) * one_minus_t3
-    b_magnitude = torch.norm(b, p=2, dim=1, keepdim=True).to(float64(b)).pow_(settings.inpaint_detail_preservation) * t3
+    a_magnitude = torch.norm(a, p=2, dim=1, keepdim=True).to(float64(a)).pow_(settings.inpaint_detail_preservation) * one_minus_t
+    b_magnitude = torch.norm(b, p=2, dim=1, keepdim=True).to(float64(b)).pow_(settings.inpaint_detail_preservation) * t
+
     desired_magnitude = a_magnitude
     desired_magnitude.add_(b_magnitude).pow_(1 / settings.inpaint_detail_preservation)
-    del a_magnitude, b_magnitude, t3, one_minus_t3
 
-    # Change the linearly interpolated image vectors' magnitudes to the value we want.
-    # This is the last 64-bit operation.
-    image_interp_scaling_factor = desired_magnitude
-    image_interp_scaling_factor.div_(current_magnitude)
-    image_interp_scaling_factor = image_interp_scaling_factor.to(result_type)
-    image_interp_scaled = image_interp
-    image_interp_scaled.mul_(image_interp_scaling_factor)
-    del current_magnitude
-    del desired_magnitude
-    del image_interp
-    del image_interp_scaling_factor
-    del result_type
+    scale = desired_magnitude.div_(current_magnitude).to(result_type)
+    image_interp.mul_(scale)
 
-    return image_interp_scaled
+    return image_interp
 
 
 def get_modified_nmask(settings: "SoftInpaintingSettings", nmask: torch.Tensor, sigma: float) -> torch.Tensor:
@@ -127,18 +108,25 @@ def apply_adaptive_masks(settings: "SoftInpaintingSettings", nmask: torch.Tensor
     import modules.images as images
     import modules.processing as proc
 
-    # TODO: Bias the blending according to the latent mask, add adjustable parameter for bias control.
-    if len(nmask.shape) == 3:
-        latent_mask = nmask[0].float()
-    else:
+    if nmask.ndim == 4:  # (B, C, H, W)
         latent_mask = nmask[:, 0].float()
+    elif nmask.ndim == 5:  # (B, C, T, H, W)
+        latent_mask = nmask[:, 0]
+        latent_mask = latent_mask.mean(dim=1).float()
+
     # convert the original mask into a form we use to scale distances for thresholding
     mask_scalar = 1 - (torch.clamp(latent_mask, min=0, max=1) ** (settings.mask_blend_scale / 2))
     mask_scalar = 0.5 * (1 - settings.composite_mask_influence) + mask_scalar * settings.composite_mask_influence
     mask_scalar = mask_scalar / (1.00001 - mask_scalar)
     mask_scalar = mask_scalar.cpu().numpy()
 
-    latent_distance = torch.norm(latent_processed - latent_orig, p=2, dim=1)
+    latent_diff = latent_processed - latent_orig
+
+    if latent_diff.ndim == 4:
+        latent_distance = torch.norm(latent_diff, p=2, dim=1)
+    elif latent_diff.ndim == 5:
+        latent_distance = torch.norm(latent_diff, p=2, dim=1)
+        latent_distance = latent_distance.mean(dim=1)
 
     kernel, kernel_center = get_gaussian_kernel(stddev_radius=1.5, max_radius=2)
 
@@ -192,7 +180,11 @@ def apply_masks(settings: "SoftInpaintingSettings", nmask: torch.Tensor, overlay
     import modules.images as images
     import modules.processing as proc
 
-    converted_mask = nmask[0].float()
+    if nmask.ndim == 4:
+        converted_mask = nmask[0, 0].float()
+    elif nmask.ndim == 5:  # (B, C, T, H, W)
+        converted_mask = nmask[0, 0].mean(dim=0).float()
+
     converted_mask = torch.clamp(converted_mask, min=0, max=1).pow_(settings.mask_blend_scale / 2)
     converted_mask = 255.0 * converted_mask
     converted_mask = converted_mask.cpu().numpy().astype(np.uint8)
