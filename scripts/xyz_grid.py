@@ -6,6 +6,7 @@ from collections import namedtuple
 from copy import copy
 from io import StringIO
 from itertools import chain, permutations
+from typing import TypeVar
 
 import gradio as gr
 import numpy as np
@@ -25,12 +26,15 @@ from modules import (
 )
 from modules.processing import (
     Processed,
+    StableDiffusionProcessing,
     StableDiffusionProcessingTxt2Img,
     process_images,
 )
 from modules.sd_models import model_data, select_checkpoint
 from modules.shared import opts, state
 from modules.ui_components import ToolButton
+
+T = TypeVar("T")
 
 fill_values_symbol = "\U0001f4d2"  # 📒
 
@@ -40,22 +44,22 @@ AxisInfo = namedtuple("AxisInfo", ["axis", "values"])
 # region Apply
 
 
-def apply_field(field):
-    def fun(p, x, xs):
+def apply_field(field: str):
+    def fun(p: StableDiffusionProcessing, x: T, xs: list[T]):
         setattr(p, field, x)
 
     return fun
 
 
-def apply_prompt(p, x, xs):
+def apply_prompt(p: StableDiffusionProcessing, x: str, xs: list[str]):
     if xs[0] not in p.prompt and xs[0] not in p.negative_prompt:
-        raise RuntimeError(f"Prompt S/R did not find {xs[0]} in prompt or negative prompt.")
+        raise RuntimeError(f'Prompt S/R did not find "{xs[0]}" in either prompt or negative prompt...')
 
     p.prompt = p.prompt.replace(xs[0], x)
     p.negative_prompt = p.negative_prompt.replace(xs[0], x)
 
 
-def apply_order(p, x, xs):
+def apply_order(p: StableDiffusionProcessing, x: list[str], _):
     token_order = []
 
     # Initially grab the tokens from the prompt, so they can be replaced in order of earliest seen
@@ -77,49 +81,48 @@ def apply_order(p, x, xs):
     for idx, part in enumerate(prompt_parts):
         prompt_tmp += part
         prompt_tmp += x[idx]
+
     p.prompt = prompt_tmp + p.prompt
 
 
-def apply_checkpoint(p, x, xs):
-    info = modules.sd_models.get_closet_checkpoint_match(x)
-    if info is None:
-        raise RuntimeError(f"Unknown checkpoint: {x}")
-    # skip if the checkpoint was last override
+def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
+    if (info := modules.sd_models.get_closet_checkpoint_match(x)) is None:
+        raise ValueError(f'Unknown Checkpoint: "{x}"')
+
     if info.name == p.override_settings.get("sd_model_checkpoint", None):
         return
-    org_cp = getattr(opts, "sd_model_checkpoint", None)
+
+    orig_ckpt = getattr(opts, "sd_model_checkpoint", None)
     p.override_settings["sd_model_checkpoint"] = info.name
+
     opts.set("sd_model_checkpoint", info.name)
     refresh_loading_params_for_xyz_grid()
-    # This saves part of the reload
-    opts.set("sd_model_checkpoint", org_cp)
+    opts.set("sd_model_checkpoint", orig_ckpt)
 
 
-def apply_size(p, x: str, xs) -> None:
+def apply_size(p: StableDiffusionProcessing, x: str, _):
     try:
-        width, _, height = x.partition("x")
-        width = int(width.strip())
-        height = int(height.strip())
-        p.width = width
-        p.height = height
+        width, height = x.split("x")
+        p.width = int(width.strip())
+        p.height = int(height.strip())
     except ValueError:
-        print(f"Invalid size in XYZ plot: {x}")
+        print(f'Invalid Size "{x}" for X/Y/Z Plot')
 
 
-def apply_vae(p, x, xs):
+def apply_vae(p: StableDiffusionProcessing, x: str, _):
     p.override_settings["sd_vae"] = find_vae(x)
 
 
-def apply_styles(p: StableDiffusionProcessingTxt2Img, x: str, _):
+def apply_styles(p: StableDiffusionProcessing, x: str, _):
     p.styles.extend(x.split(","))
 
 
-def apply_uni_pc_order(p, x, xs):
+def apply_uni_pc_order(p: StableDiffusionProcessing, x: int, _):
     p.override_settings["uni_pc_order"] = min(x, p.steps - 1)
 
 
-def apply_face_restore(p, opt, x):
-    opt = opt.lower()
+def apply_face_restore(p: StableDiffusionProcessing, x: str, _):
+    opt = x.lower()
     if opt == "codeformer":
         is_active = True
         p.face_restoration_model = "CodeFormer"
@@ -132,11 +135,12 @@ def apply_face_restore(p, opt, x):
     p.restore_faces = is_active
 
 
-def apply_override(field, boolean: bool = False):
-    def fun(p, x, xs):
+def apply_override(field: str, boolean: bool = False):
+    def fun(p: StableDiffusionProcessing, x: T, xs: list[T]):
         if boolean:
-            x = True if x.lower() == "true" else False
-        p.override_settings[field] = x
+            p.override_settings[field] = True if x.lower() == "true" else False
+        else:
+            p.override_settings[field] = x
 
     return fun
 
@@ -144,34 +148,34 @@ def apply_override(field, boolean: bool = False):
 # region Validation
 
 
-def confirm_samplers(p, xs):
+def confirm_samplers(p: StableDiffusionProcessing, xs: list[str]):
     for x in xs:
         if x.lower() not in sd_samplers.samplers_map:
-            raise RuntimeError(f"Unknown sampler: {x}")
+            raise ValueError(f'Unknown Sampler: "{x}"')
 
 
-def confirm_checkpoints(p, xs):
+def confirm_checkpoints(p: StableDiffusionProcessing, xs: list[str]):
     for x in xs:
         if modules.sd_models.get_closet_checkpoint_match(x) is None:
-            raise RuntimeError(f"Unknown checkpoint: {x}")
+            raise RuntimeError(f'Unknown Checkpoint: "{x}"')
 
 
-def confirm_checkpoints_or_none(p, xs):
+def confirm_checkpoints_or_none(p: StableDiffusionProcessing, xs: list[str]):
     for x in xs:
-        if x in (None, "", "None", "none"):
+        if x in (None, "None", "none", ""):
             continue
 
         if modules.sd_models.get_closet_checkpoint_match(x) is None:
-            raise RuntimeError(f"Unknown checkpoint: {x}")
+            raise RuntimeError(f'Unknown Checkpoint: "{x}"')
 
 
-def confirm_range(min_val, max_val, axis_label):
+def confirm_range(min_val: float, max_val: float, axis_label: str):
     """Generates a AxisOption.confirm() function that checks all values are within the specified range."""
 
-    def confirm_range_fun(p, xs):
+    def confirm_range_fun(p: StableDiffusionProcessing, xs: list[float]):
         for x in xs:
             if not (max_val >= x >= min_val):
-                raise ValueError(f'{axis_label} value "{x}" out of range [{min_val}, {max_val}]')
+                raise ValueError(f'"{axis_label}" value "{x}" is out of range [{min_val}, {max_val}]')
 
     return confirm_range_fun
 
@@ -179,7 +183,7 @@ def confirm_range(min_val, max_val, axis_label):
 def refresh_loading_params_for_xyz_grid():
     """
     Refreshes the loading parameters for the model,
-    prompts a reload in sd_models.forge_model_reload()
+    causes a reload in sd_models.forge_model_reload()
     """
     checkpoint_info = select_checkpoint()
 
@@ -202,47 +206,47 @@ def boolean_choice(reverse: bool = False):
     return choice
 
 
-def format_value_add_label(p, opt, x):
+def format_value_add_label(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> str:
     if type(x) == float:
         x = round(x, 8)
 
     return f"{opt.label}: {x}"
 
 
-def format_value(p, opt, x):
+def format_value(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> T:
     if type(x) == float:
         x = round(x, 8)
     return x
 
 
-def format_value_join_list(p, opt, x):
+def format_value_join_list(p: StableDiffusionProcessing, opt: "AxisOption", x: str) -> str:
     return ", ".join(x)
 
 
-def do_nothing(p, x, xs):
+def do_nothing(*args, **kwargs):
     pass
 
 
-def format_nothing(p, opt, x):
+def format_nothing(*args, **kwargs) -> str:
     return ""
 
 
-def format_remove_path(p, opt, x):
+def format_remove_path(p: StableDiffusionProcessing, opt: "AxisOption", x: os.PathLike) -> str:
     return os.path.basename(x)
 
 
-def str_permutations(x):
+def str_permutations(x: str) -> str:
     """dummy function for specifying it in AxisOption's type when you want to get a list of permutations"""
     return x
 
 
-def list_to_csv_string(data_list):
+def list_to_csv_string(data_list: list[str]) -> str:
     with StringIO() as o:
         csv.writer(o).writerow(data_list)
         return o.getvalue().strip()
 
 
-def csv_string_to_list_strip(data_str):
+def csv_string_to_list_strip(data_str: str) -> list[str]:
     return list(map(str.strip, chain.from_iterable(csv.reader(StringIO(data_str), skipinitialspace=True))))
 
 
