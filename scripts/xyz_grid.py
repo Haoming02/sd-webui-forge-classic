@@ -31,7 +31,7 @@ from modules.processing import (
     process_images,
 )
 from modules.sd_models import model_data, select_checkpoint
-from modules.shared import opts, state
+from modules.shared import cmd_opts, opts, state
 from modules.ui_components import ToolButton
 
 T = TypeVar("T")
@@ -280,52 +280,58 @@ class AxisOptionTxt2Img(AxisOption):
 axis_options = [
     AxisOption("Nothing", str, do_nothing, format_value=format_nothing),
     AxisOption("Seed", int, apply_field("seed")),
-    AxisOption("Var. seed", int, apply_field("subseed")),
-    AxisOption("Var. strength", float, apply_field("subseed_strength")),
     AxisOption("Steps", int, apply_field("steps")),
     AxisOptionTxt2Img("Hires steps", int, apply_field("hr_second_pass_steps")),
+    AxisOption("Size", str, apply_size),
     AxisOption("CFG Scale", float, apply_field("cfg_scale")),
     AxisOption("Distilled CFG Scale", float, apply_field("distilled_cfg_scale")),
     AxisOption("Rescale CFG", float, apply_field("rescale_cfg")),
     AxisOption("MaHiRo", str, apply_field("mahiro"), choices=boolean_choice(reverse=True)),
-    AxisOptionImg2Img("Image CFG Scale", float, apply_field("image_cfg_scale")),
     AxisOption("Prompt S/R", str, apply_prompt, format_value=format_value),
     AxisOption("Prompt order", str_permutations, apply_order, format_value=format_value_join_list),
     AxisOptionTxt2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers if x.name not in opts.hide_samplers]),
     AxisOptionTxt2Img("Hires sampler", str, apply_field("hr_sampler_name"), confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
     AxisOptionImg2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
-    AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=1.0, choices=lambda: sorted(sd_models.checkpoints_list, key=str.casefold)),
-    AxisOption("Negative Guidance minimum sigma", float, apply_field("s_min_uncond")),
-    AxisOption("Sigma Churn", float, apply_field("s_churn")),
-    AxisOption("Sigma min", float, apply_field("s_tmin")),
-    AxisOption("Sigma max", float, apply_field("s_tmax")),
-    AxisOption("Sigma noise", float, apply_field("s_noise")),
     AxisOption("Schedule type", str, apply_field("scheduler"), choices=lambda: [x.label for x in sd_schedulers.schedulers]),
-    AxisOption("Schedule min sigma", float, apply_override("sigma_min")),
-    AxisOption("Schedule max sigma", float, apply_override("sigma_max")),
-    AxisOption("Schedule rho", float, apply_override("rho")),
-    AxisOption("Beta schedule alpha", float, apply_override("beta_dist_alpha")),
-    AxisOption("Beta schedule beta", float, apply_override("beta_dist_beta")),
-    AxisOption("Eta", float, apply_field("eta")),
+    AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=1.0, choices=lambda: sorted(sd_models.checkpoints_list, key=str.casefold)),
+    AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["Automatic", "None"] + list(sd_vae.vae_dict)),
     AxisOption("Clip skip", int, apply_override("CLIP_stop_at_last_layers")),
     AxisOption("Denoising", float, apply_field("denoising_strength")),
     AxisOption("Initial noise multiplier", float, apply_field("initial_noise_multiplier")),
     AxisOption("Extra noise", float, apply_override("img2img_extra_noise")),
     AxisOptionTxt2Img("Hires upscaler", str, apply_field("hr_upscaler"), choices=lambda: [*shared.latent_upscale_modes, *[x.name for x in shared.sd_upscalers]]),
-    AxisOptionImg2Img("Cond. Image Mask Weight", float, apply_field("inpainting_mask_weight")),
-    AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["Automatic", "None"] + list(sd_vae.vae_dict)),
     AxisOption("Styles", str, apply_styles, choices=lambda: list(shared.prompt_styles.styles)),
-    AxisOption("UniPC Order", int, apply_uni_pc_order, cost=0.5),
     AxisOption("Face restore", str, apply_face_restore, format_value=format_value),
+    AxisOption("Negative Guidance minimum sigma", float, apply_field("s_min_uncond")),
     AxisOption("Token merging ratio", float, apply_override("token_merging_ratio")),
     AxisOption("Token merging ratio high-res", float, apply_override("token_merging_ratio_hr")),
-    AxisOption("Always discard next-to-last sigma", str, apply_override("always_discard_next_to_last_sigma", boolean=True), choices=boolean_choice(reverse=True)),
-    AxisOption("SGM noise multiplier", str, apply_override("sgm_noise_multiplier", boolean=True), choices=boolean_choice(reverse=True)),
     AxisOption("Refiner checkpoint", str, apply_field("refiner_checkpoint"), format_value=format_remove_path, confirm=confirm_checkpoints_or_none, cost=1.0, choices=lambda: ["None"] + sorted(sd_models.checkpoints_list, key=str.casefold)),
     AxisOption("Refiner switch at", float, apply_field("refiner_switch_at")),
     AxisOption("RNG source", str, apply_override("randn_source"), choices=lambda: ["GPU", "CPU", "NV"]),
-    AxisOption("Size", str, apply_size),
 ]
+
+if cmd_opts.adv_samplers:
+    axis_options.extend(
+        [
+            AxisOption("Var. seed", int, apply_field("subseed")),
+            AxisOption("Var. strength", float, apply_field("subseed_strength")),
+            AxisOptionImg2Img("Image CFG Scale", float, apply_field("image_cfg_scale")),
+            AxisOption("Sigma Churn", float, apply_field("s_churn")),
+            AxisOption("Sigma min", float, apply_field("s_tmin")),
+            AxisOption("Sigma max", float, apply_field("s_tmax")),
+            AxisOption("Sigma noise", float, apply_field("s_noise")),
+            AxisOption("Schedule min sigma", float, apply_override("sigma_min")),
+            AxisOption("Schedule max sigma", float, apply_override("sigma_max")),
+            AxisOption("Schedule rho", float, apply_override("rho")),
+            AxisOption("Beta schedule alpha", float, apply_override("beta_dist_alpha")),
+            AxisOption("Beta schedule beta", float, apply_override("beta_dist_beta")),
+            AxisOption("Eta", float, apply_field("eta")),
+            AxisOptionImg2Img("Cond. Image Mask Weight", float, apply_field("inpainting_mask_weight")),
+            AxisOption("UniPC Order", int, apply_uni_pc_order, cost=0.5),
+            AxisOption("Always discard next-to-last sigma", str, apply_override("always_discard_next_to_last_sigma", boolean=True), choices=boolean_choice(reverse=True)),
+            AxisOption("SGM noise multiplier", str, apply_override("sgm_noise_multiplier", boolean=True), choices=boolean_choice(reverse=True)),
+        ]
+    )
 
 
 # region Main
