@@ -34,7 +34,7 @@ from modules.ui_components import ToolButton
 
 fill_values_symbol = "\U0001f4d2"  # 📒
 
-AxisInfo = namedtuple('AxisInfo', ['axis', 'values'])
+AxisInfo = namedtuple("AxisInfo", ["axis", "values"])
 
 
 def apply_field(field):
@@ -67,7 +67,7 @@ def apply_order(p, x, xs):
     for _, token in token_order:
         n = p.prompt.find(token)
         prompt_parts.append(p.prompt[0:n])
-        p.prompt = p.prompt[n + len(token):]
+        p.prompt = p.prompt[n + len(token) :]
 
     # Rebuild the prompt with the tokens in the order we want
     prompt_tmp = ""
@@ -88,14 +88,15 @@ def apply_checkpoint(p, x, xs):
     if info is None:
         raise RuntimeError(f"Unknown checkpoint: {x}")
     # skip if the checkpoint was last override
-    if info.name == p.override_settings.get('sd_model_checkpoint', None):
+    if info.name == p.override_settings.get("sd_model_checkpoint", None):
         return
-    org_cp = getattr(opts, 'sd_model_checkpoint', None)
-    p.override_settings['sd_model_checkpoint'] = info.name
-    opts.set('sd_model_checkpoint', info.name)
+    org_cp = getattr(opts, "sd_model_checkpoint", None)
+    p.override_settings["sd_model_checkpoint"] = info.name
+    opts.set("sd_model_checkpoint", info.name)
     refresh_loading_params_for_xyz_grid()
     # This saves part of the reload
-    opts.set('sd_model_checkpoint', org_cp)
+    opts.set("sd_model_checkpoint", org_cp)
+
 
 def refresh_loading_params_for_xyz_grid():
     """
@@ -104,11 +105,7 @@ def refresh_loading_params_for_xyz_grid():
     """
     checkpoint_info = select_checkpoint()
 
-    model_data.forge_loading_parameters = dict(
-        checkpoint_info=checkpoint_info,
-        additional_modules=shared.opts.forge_additional_modules,
-        unet_storage_dtype=model_data.forge_loading_parameters.get('unet_storage_dtype', None)
-    )
+    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None))
 
 
 def confirm_checkpoints(p, xs):
@@ -139,7 +136,7 @@ def confirm_range(min_val, max_val, axis_label):
 
 def apply_size(p, x: str, xs) -> None:
     try:
-        width, _, height = x.partition('x')
+        width, _, height = x.partition("x")
         width = int(width.strip())
         height = int(height.strip())
         p.width = width
@@ -162,23 +159,23 @@ def apply_vae(p, x, xs):
 
 
 def apply_styles(p: StableDiffusionProcessingTxt2Img, x: str, _):
-    p.styles.extend(x.split(','))
+    p.styles.extend(x.split(","))
 
 
 def apply_uni_pc_order(p, x, xs):
-    p.override_settings['uni_pc_order'] = min(x, p.steps - 1)
+    p.override_settings["uni_pc_order"] = min(x, p.steps - 1)
 
 
 def apply_face_restore(p, opt, x):
     opt = opt.lower()
-    if opt == 'codeformer':
+    if opt == "codeformer":
         is_active = True
-        p.face_restoration_model = 'CodeFormer'
-    elif opt == 'gfpgan':
+        p.face_restoration_model = "CodeFormer"
+    elif opt == "gfpgan":
         is_active = True
-        p.face_restoration_model = 'GFPGAN'
+        p.face_restoration_model = "GFPGAN"
     else:
-        is_active = opt in ('true', 'yes', 'y', '1')
+        is_active = opt in ("true", "yes", "y", "1")
 
     p.restore_faces = is_active
 
@@ -297,22 +294,22 @@ axis_options = [
     AxisOption("Beta schedule alpha", float, apply_override("beta_dist_alpha")),
     AxisOption("Beta schedule beta", float, apply_override("beta_dist_beta")),
     AxisOption("Eta", float, apply_field("eta")),
-    AxisOption("Clip skip", int, apply_override('CLIP_stop_at_last_layers')),
+    AxisOption("Clip skip", int, apply_override("CLIP_stop_at_last_layers")),
     AxisOption("Denoising", float, apply_field("denoising_strength")),
     AxisOption("Initial noise multiplier", float, apply_field("initial_noise_multiplier")),
     AxisOption("Extra noise", float, apply_override("img2img_extra_noise")),
     AxisOptionTxt2Img("Hires upscaler", str, apply_field("hr_upscaler"), choices=lambda: [*shared.latent_upscale_modes, *[x.name for x in shared.sd_upscalers]]),
     AxisOptionImg2Img("Cond. Image Mask Weight", float, apply_field("inpainting_mask_weight")),
-    AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ['Automatic', 'None'] + list(sd_vae.vae_dict)),
+    AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["Automatic", "None"] + list(sd_vae.vae_dict)),
     AxisOption("Styles", str, apply_styles, choices=lambda: list(shared.prompt_styles.styles)),
     AxisOption("UniPC Order", int, apply_uni_pc_order, cost=0.5),
     AxisOption("Face restore", str, apply_face_restore, format_value=format_value),
-    AxisOption("Token merging ratio", float, apply_override('token_merging_ratio')),
-    AxisOption("Token merging ratio high-res", float, apply_override('token_merging_ratio_hr')),
-    AxisOption("Always discard next-to-last sigma", str, apply_override('always_discard_next_to_last_sigma', boolean=True), choices=boolean_choice(reverse=True)),
-    AxisOption("SGM noise multiplier", str, apply_override('sgm_noise_multiplier', boolean=True), choices=boolean_choice(reverse=True)),
-    AxisOption("Refiner checkpoint", str, apply_field('refiner_checkpoint'), format_value=format_remove_path, confirm=confirm_checkpoints_or_none, cost=1.0, choices=lambda: ['None'] + sorted(sd_models.checkpoints_list, key=str.casefold)),
-    AxisOption("Refiner switch at", float, apply_field('refiner_switch_at')),
+    AxisOption("Token merging ratio", float, apply_override("token_merging_ratio")),
+    AxisOption("Token merging ratio high-res", float, apply_override("token_merging_ratio_hr")),
+    AxisOption("Always discard next-to-last sigma", str, apply_override("always_discard_next_to_last_sigma", boolean=True), choices=boolean_choice(reverse=True)),
+    AxisOption("SGM noise multiplier", str, apply_override("sgm_noise_multiplier", boolean=True), choices=boolean_choice(reverse=True)),
+    AxisOption("Refiner checkpoint", str, apply_field("refiner_checkpoint"), format_value=format_remove_path, confirm=confirm_checkpoints_or_none, cost=1.0, choices=lambda: ["None"] + sorted(sd_models.checkpoints_list, key=str.casefold)),
+    AxisOption("Refiner switch at", float, apply_field("refiner_switch_at")),
     AxisOption("RNG source", str, apply_override("randn_source"), choices=lambda: ["GPU", "CPU", "NV"]),
     AxisOption("Size", str, apply_size),
 ]
@@ -323,7 +320,7 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
     ver_texts = [[images.GridAnnotation(y)] for y in y_labels]
     title_texts = [[images.GridAnnotation(z)] for z in z_labels]
 
-    list_size = (len(xs) * len(ys) * len(zs))
+    list_size = len(xs) * len(ys) * len(zs)
 
     processed_result = None
 
@@ -364,9 +361,9 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
                 cell_size = processed_result.images[0].size
             processed_result.images[idx] = Image.new(cell_mode, cell_size)
 
-    if first_axes_processed == 'x':
+    if first_axes_processed == "x":
         for ix, x in enumerate(xs):
-            if second_axes_processed == 'y':
+            if second_axes_processed == "y":
                 for iy, y in enumerate(ys):
                     for iz, z in enumerate(zs):
                         process_cell(x, y, z, ix, iy, iz)
@@ -374,9 +371,9 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
                 for iz, z in enumerate(zs):
                     for iy, y in enumerate(ys):
                         process_cell(x, y, z, ix, iy, iz)
-    elif first_axes_processed == 'y':
+    elif first_axes_processed == "y":
         for iy, y in enumerate(ys):
-            if second_axes_processed == 'x':
+            if second_axes_processed == "x":
                 for ix, x in enumerate(xs):
                     for iz, z in enumerate(zs):
                         process_cell(x, y, z, ix, iy, iz)
@@ -384,9 +381,9 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
                 for iz, z in enumerate(zs):
                     for ix, x in enumerate(xs):
                         process_cell(x, y, z, ix, iy, iz)
-    elif first_axes_processed == 'z':
+    elif first_axes_processed == "z":
         for iz, z in enumerate(zs):
-            if second_axes_processed == 'x':
+            if second_axes_processed == "x":
                 for ix, x in enumerate(xs):
                     for iy, y in enumerate(ys):
                         process_cell(x, y, z, ix, iy, iz)
@@ -474,16 +471,16 @@ class Script(scripts.Script):
 
         with gr.Row(variant="compact", elem_id="axis_options"):
             with gr.Column():
-                draw_legend = gr.Checkbox(label='Draw legend', value=True, elem_id=self.elem_id("draw_legend"))
-                no_fixed_seeds = gr.Checkbox(label='Keep -1 for seeds', value=False, elem_id=self.elem_id("no_fixed_seeds"))
+                draw_legend = gr.Checkbox(label="Draw legend", value=True, elem_id=self.elem_id("draw_legend"))
+                no_fixed_seeds = gr.Checkbox(label="Keep -1 for seeds", value=False, elem_id=self.elem_id("no_fixed_seeds"))
                 with gr.Row():
-                    vary_seeds_x = gr.Checkbox(label='Vary seeds for X', value=False, min_width=80, elem_id=self.elem_id("vary_seeds_x"), tooltip="Use different seeds for images along X axis.")
-                    vary_seeds_y = gr.Checkbox(label='Vary seeds for Y', value=False, min_width=80, elem_id=self.elem_id("vary_seeds_y"), tooltip="Use different seeds for images along Y axis.")
-                    vary_seeds_z = gr.Checkbox(label='Vary seeds for Z', value=False, min_width=80, elem_id=self.elem_id("vary_seeds_z"), tooltip="Use different seeds for images along Z axis.")
+                    vary_seeds_x = gr.Checkbox(label="Vary seeds for X", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_x"), tooltip="Use different seeds for images along X axis.")
+                    vary_seeds_y = gr.Checkbox(label="Vary seeds for Y", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_y"), tooltip="Use different seeds for images along Y axis.")
+                    vary_seeds_z = gr.Checkbox(label="Vary seeds for Z", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_z"), tooltip="Use different seeds for images along Z axis.")
             with gr.Column():
-                include_lone_images = gr.Checkbox(label='Include Sub Images', value=False, elem_id=self.elem_id("include_lone_images"))
-                include_sub_grids = gr.Checkbox(label='Include Sub Grids', value=False, elem_id=self.elem_id("include_sub_grids"))
-                csv_mode = gr.Checkbox(label='Use text inputs instead of dropdowns', value=False, elem_id=self.elem_id("csv_mode"))
+                include_lone_images = gr.Checkbox(label="Include Sub Images", value=False, elem_id=self.elem_id("include_lone_images"))
+                include_sub_grids = gr.Checkbox(label="Include Sub Grids", value=False, elem_id=self.elem_id("include_sub_grids"))
+                csv_mode = gr.Checkbox(label="Use text inputs instead of dropdowns", value=False, elem_id=self.elem_id("csv_mode"))
             with gr.Column():
                 margin_size = gr.Slider(label="Grid margins (px)", minimum=0, maximum=500, value=0, step=2, elem_id=self.elem_id("margin_size"))
 
@@ -533,8 +530,7 @@ class Script(scripts.Script):
                         axis_values_dropdown = list(filter(lambda x: x in choices, csv_string_to_list_strip(axis_values)))
                         axis_values = ""
 
-            return (gr.update(visible=has_choices), gr.update(visible=not has_choices or csv_mode, value=axis_values),
-                    gr.update(choices=choices if has_choices else None, visible=has_choices and not csv_mode, value=axis_values_dropdown))
+            return (gr.update(visible=has_choices), gr.update(visible=not has_choices or csv_mode, value=axis_values), gr.update(choices=choices if has_choices else None, visible=has_choices and not csv_mode, value=axis_values_dropdown))
 
         x_type.change(fn=select_axis, inputs=[x_type, x_values, x_values_dropdown, csv_mode], outputs=[fill_x_button, x_values, x_values_dropdown])
         y_type.change(fn=select_axis, inputs=[y_type, y_values, y_values_dropdown, csv_mode], outputs=[fill_y_button, y_values, y_values_dropdown])
@@ -578,7 +574,7 @@ class Script(scripts.Script):
             p.batch_size = 1
 
         def process_axis(opt, vals, vals_dropdown):
-            if opt.label == 'Nothing':
+            if opt.label == "Nothing":
                 return [0]
 
             if opt.choices is not None and not csv_mode:
@@ -592,7 +588,7 @@ class Script(scripts.Script):
                 valslist_ext = []
 
                 for val in valslist:
-                    if val.strip() == '':
+                    if val.strip() == "":
                         continue
                     m = re_range.fullmatch(val)
                     mc = re_range_count.fullmatch(val)
@@ -616,7 +612,7 @@ class Script(scripts.Script):
                 valslist_ext = []
 
                 for val in valslist:
-                    if val.strip() == '':
+                    if val.strip() == "":
                         continue
                     m = re_range_float.fullmatch(val)
                     mc = re_range_count_float.fullmatch(val)
@@ -665,11 +661,11 @@ class Script(scripts.Script):
         # this could be moved to common code, but unlikely to be ever triggered anywhere else
         Image.MAX_IMAGE_PIXELS = None  # disable check in Pillow and rely on check below to allow large custom image sizes
         grid_mp = round(len(xs) * len(ys) * len(zs) * p.width * p.height / 1000000)
-        assert grid_mp < opts.img_max_size_mp, f'Error: Resulting grid would be too large ({grid_mp} MPixels) (max configured size is {opts.img_max_size_mp} MPixels)'
+        assert grid_mp < opts.img_max_size_mp, f"Error: Resulting grid would be too large ({grid_mp} MPixels) (max configured size is {opts.img_max_size_mp} MPixels)"
 
         def fix_axis_seeds(axis_opt, axis_list):
-            if axis_opt.label in ['Seed', 'Var. seed']:
-                return [int(random.randrange(4294967294)) if val is None or val == '' or val == -1 else val for val in axis_list]
+            if axis_opt.label in ["Seed", "Var. seed"]:
+                return [int(random.randrange(4294967294)) if val is None or val == "" or val == -1 else val for val in axis_list]
             else:
                 return axis_list
 
@@ -678,11 +674,11 @@ class Script(scripts.Script):
             ys = fix_axis_seeds(y_opt, ys)
             zs = fix_axis_seeds(z_opt, zs)
 
-        if x_opt.label == 'Steps':
+        if x_opt.label == "Steps":
             total_steps = sum(xs) * len(ys) * len(zs)
-        elif y_opt.label == 'Steps':
+        elif y_opt.label == "Steps":
             total_steps = sum(ys) * len(xs) * len(zs)
-        elif z_opt.label == 'Steps':
+        elif z_opt.label == "Steps":
             total_steps = sum(zs) * len(xs) * len(ys)
         else:
             total_steps = p.steps * len(xs) * len(ys) * len(zs)
@@ -703,7 +699,7 @@ class Script(scripts.Script):
 
         image_cell_count = p.n_iter * p.batch_size
         cell_console_text = f"; {image_cell_count} images per cell" if image_cell_count > 1 else ""
-        plural_s = 's' if len(zs) > 1 else ''
+        plural_s = "s" if len(zs) > 1 else ""
         print(f"X/Y/Z plot will create {len(xs) * len(ys) * len(zs) * image_cell_count} images on {len(zs)} {len(xs)}x{len(ys)} grid{plural_s}{cell_console_text}. (Total steps to process: {total_steps})")
         shared.total_tqdm.updateTotal(total_steps)
 
@@ -714,26 +710,26 @@ class Script(scripts.Script):
         # If one of the axes is very slow to change between (like SD model
         # checkpoint), then make sure it is in the outer iteration of the nested
         # `for` loop.
-        first_axes_processed = 'z'
-        second_axes_processed = 'y'
+        first_axes_processed = "z"
+        second_axes_processed = "y"
         if x_opt.cost > y_opt.cost and x_opt.cost > z_opt.cost:
-            first_axes_processed = 'x'
+            first_axes_processed = "x"
             if y_opt.cost > z_opt.cost:
-                second_axes_processed = 'y'
+                second_axes_processed = "y"
             else:
-                second_axes_processed = 'z'
+                second_axes_processed = "z"
         elif y_opt.cost > x_opt.cost and y_opt.cost > z_opt.cost:
-            first_axes_processed = 'y'
+            first_axes_processed = "y"
             if x_opt.cost > z_opt.cost:
-                second_axes_processed = 'x'
+                second_axes_processed = "x"
             else:
-                second_axes_processed = 'z'
+                second_axes_processed = "z"
         elif z_opt.cost > x_opt.cost and z_opt.cost > y_opt.cost:
-            first_axes_processed = 'z'
+            first_axes_processed = "z"
             if x_opt.cost > y_opt.cost:
-                second_axes_processed = 'x'
+                second_axes_processed = "x"
             else:
-                second_axes_processed = 'y'
+                second_axes_processed = "y"
 
         grid_infotext = [None] * (1 + len(zs))
 
@@ -768,15 +764,15 @@ class Script(scripts.Script):
             subgrid_index = 1 + iz
             if grid_infotext[subgrid_index] is None and ix == 0 and iy == 0:
                 pc.extra_generation_params = copy(pc.extra_generation_params)
-                pc.extra_generation_params['Script'] = self.title()
+                pc.extra_generation_params["Script"] = self.title()
 
-                if x_opt.label != 'Nothing':
+                if x_opt.label != "Nothing":
                     pc.extra_generation_params["X Type"] = x_opt.label
                     pc.extra_generation_params["X Values"] = x_values
                     if x_opt.label in ["Seed", "Var. seed"] and not no_fixed_seeds:
                         pc.extra_generation_params["Fixed X Values"] = ", ".join([str(x) for x in xs])
 
-                if y_opt.label != 'Nothing':
+                if y_opt.label != "Nothing":
                     pc.extra_generation_params["Y Type"] = y_opt.label
                     pc.extra_generation_params["Y Values"] = y_values
                     if y_opt.label in ["Seed", "Var. seed"] and not no_fixed_seeds:
@@ -788,7 +784,7 @@ class Script(scripts.Script):
             if grid_infotext[0] is None and ix == 0 and iy == 0 and iz == 0:
                 pc.extra_generation_params = copy(pc.extra_generation_params)
 
-                if z_opt.label != 'Nothing':
+                if z_opt.label != "Nothing":
                     pc.extra_generation_params["Z Type"] = z_opt.label
                     pc.extra_generation_params["Z Values"] = z_values
                     if z_opt.label in ["Seed", "Var. seed"] and not no_fixed_seeds:
@@ -799,22 +795,7 @@ class Script(scripts.Script):
             return res
 
         with SharedSettingsStackHelper():
-            processed = draw_xyz_grid(
-                p,
-                xs=xs,
-                ys=ys,
-                zs=zs,
-                x_labels=[x_opt.format_value(p, x_opt, x) for x in xs],
-                y_labels=[y_opt.format_value(p, y_opt, y) for y in ys],
-                z_labels=[z_opt.format_value(p, z_opt, z) for z in zs],
-                cell=cell,
-                draw_legend=draw_legend,
-                include_lone_images=include_lone_images,
-                include_sub_grids=include_sub_grids,
-                first_axes_processed=first_axes_processed,
-                second_axes_processed=second_axes_processed,
-                margin_size=margin_size
-            )
+            processed = draw_xyz_grid(p, xs=xs, ys=ys, zs=zs, x_labels=[x_opt.format_value(p, x_opt, x) for x in xs], y_labels=[y_opt.format_value(p, y_opt, y) for y in ys], z_labels=[z_opt.format_value(p, z_opt, z) for z in zs], cell=cell, draw_legend=draw_legend, include_lone_images=include_lone_images, include_sub_grids=include_sub_grids, first_axes_processed=first_axes_processed, second_axes_processed=second_axes_processed, margin_size=margin_size)
 
         # reset loading params to previous state
         refresh_loading_params_for_xyz_grid()
@@ -826,11 +807,11 @@ class Script(scripts.Script):
         z_count = len(zs)
 
         # Set the grid infotexts to the real ones with extra_generation_params (1 main grid + z_count sub-grids)
-        processed.infotexts[:1 + z_count] = grid_infotext[:1 + z_count]
+        processed.infotexts[: 1 + z_count] = grid_infotext[: 1 + z_count]
 
         if not include_lone_images:
             # Don't need sub-images anymore, drop from list:
-            processed.images = processed.images[:z_count + 1]
+            processed.images = processed.images[: z_count + 1]
 
         if opts.grid_save:
             # Auto-save main and sub-grids:
