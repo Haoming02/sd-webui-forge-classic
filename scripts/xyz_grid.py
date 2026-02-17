@@ -37,6 +37,9 @@ fill_values_symbol = "\U0001f4d2"  # 📒
 AxisInfo = namedtuple("AxisInfo", ["axis", "values"])
 
 
+# region Apply
+
+
 def apply_field(field):
     def fun(p, x, xs):
         setattr(p, field, x)
@@ -77,12 +80,6 @@ def apply_order(p, x, xs):
     p.prompt = prompt_tmp + p.prompt
 
 
-def confirm_samplers(p, xs):
-    for x in xs:
-        if x.lower() not in sd_samplers.samplers_map:
-            raise RuntimeError(f"Unknown sampler: {x}")
-
-
 def apply_checkpoint(p, x, xs):
     info = modules.sd_models.get_closet_checkpoint_match(x)
     if info is None:
@@ -98,42 +95,6 @@ def apply_checkpoint(p, x, xs):
     opts.set("sd_model_checkpoint", org_cp)
 
 
-def refresh_loading_params_for_xyz_grid():
-    """
-    Refreshes the loading parameters for the model,
-    prompts a reload in sd_models.forge_model_reload()
-    """
-    checkpoint_info = select_checkpoint()
-
-    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None))
-
-
-def confirm_checkpoints(p, xs):
-    for x in xs:
-        if modules.sd_models.get_closet_checkpoint_match(x) is None:
-            raise RuntimeError(f"Unknown checkpoint: {x}")
-
-
-def confirm_checkpoints_or_none(p, xs):
-    for x in xs:
-        if x in (None, "", "None", "none"):
-            continue
-
-        if modules.sd_models.get_closet_checkpoint_match(x) is None:
-            raise RuntimeError(f"Unknown checkpoint: {x}")
-
-
-def confirm_range(min_val, max_val, axis_label):
-    """Generates a AxisOption.confirm() function that checks all values are within the specified range."""
-
-    def confirm_range_fun(p, xs):
-        for x in xs:
-            if not (max_val >= x >= min_val):
-                raise ValueError(f'{axis_label} value "{x}" out of range [{min_val}, {max_val}]')
-
-    return confirm_range_fun
-
-
 def apply_size(p, x: str, xs) -> None:
     try:
         width, _, height = x.partition("x")
@@ -143,15 +104,6 @@ def apply_size(p, x: str, xs) -> None:
         p.height = height
     except ValueError:
         print(f"Invalid size in XYZ plot: {x}")
-
-
-def find_vae(name: str) -> str:
-    if name is None or (name := name.strip().lower()) == "none":
-        return "None"
-    elif name in ("auto", "automatic"):
-        return "Automatic"
-    else:
-        return sd_vae.vae_dict[name]
 
 
 def apply_vae(p, x, xs):
@@ -187,6 +139,60 @@ def apply_override(field, boolean: bool = False):
         p.override_settings[field] = x
 
     return fun
+
+
+# region Validation
+
+
+def confirm_samplers(p, xs):
+    for x in xs:
+        if x.lower() not in sd_samplers.samplers_map:
+            raise RuntimeError(f"Unknown sampler: {x}")
+
+
+def confirm_checkpoints(p, xs):
+    for x in xs:
+        if modules.sd_models.get_closet_checkpoint_match(x) is None:
+            raise RuntimeError(f"Unknown checkpoint: {x}")
+
+
+def confirm_checkpoints_or_none(p, xs):
+    for x in xs:
+        if x in (None, "", "None", "none"):
+            continue
+
+        if modules.sd_models.get_closet_checkpoint_match(x) is None:
+            raise RuntimeError(f"Unknown checkpoint: {x}")
+
+
+def confirm_range(min_val, max_val, axis_label):
+    """Generates a AxisOption.confirm() function that checks all values are within the specified range."""
+
+    def confirm_range_fun(p, xs):
+        for x in xs:
+            if not (max_val >= x >= min_val):
+                raise ValueError(f'{axis_label} value "{x}" out of range [{min_val}, {max_val}]')
+
+    return confirm_range_fun
+
+
+def refresh_loading_params_for_xyz_grid():
+    """
+    Refreshes the loading parameters for the model,
+    prompts a reload in sd_models.forge_model_reload()
+    """
+    checkpoint_info = select_checkpoint()
+
+    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None))
+
+
+def find_vae(name: str) -> str:
+    if name is None or (name := name.strip().lower()) == "none":
+        return "None"
+    elif name in ("auto", "automatic"):
+        return "Automatic"
+    else:
+        return sd_vae.vae_dict[name]
 
 
 def boolean_choice(reverse: bool = False):
@@ -238,6 +244,9 @@ def list_to_csv_string(data_list):
 
 def csv_string_to_list_strip(data_str):
     return list(map(str.strip, chain.from_iterable(csv.reader(StringIO(data_str), skipinitialspace=True))))
+
+
+# region Options
 
 
 class AxisOption:
@@ -313,6 +322,9 @@ axis_options = [
     AxisOption("RNG source", str, apply_override("randn_source"), choices=lambda: ["GPU", "CPU", "NV"]),
     AxisOption("Size", str, apply_size),
 ]
+
+
+# region Main
 
 
 def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend, include_lone_images, include_sub_grids, first_axes_processed, second_axes_processed, margin_size):
@@ -440,6 +452,9 @@ re_range_float = re.compile(r"\s*([+-]?\s*\d+(?:.\d*)?)\s*-\s*([+-]?\s*\d+(?:.\d
 
 re_range_count = re.compile(r"\s*([+-]?\s*\d+)\s*-\s*([+-]?\s*\d+)(?:\s*\[(\d+)\s*])?\s*")
 re_range_count_float = re.compile(r"\s*([+-]?\s*\d+(?:.\d*)?)\s*-\s*([+-]?\s*\d+(?:.\d*)?)(?:\s*\[(\d+(?:.\d*)?)\s*])?\s*")
+
+
+# region Script
 
 
 class Script(scripts.Script):
