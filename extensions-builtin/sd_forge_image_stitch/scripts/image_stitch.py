@@ -110,7 +110,7 @@ class ImageStitch(scripts.Script):
         if w % 64 == 0 and h % 64 == 0:
             return img
 
-        return images.resize_image(1, img, round(w / 64) * 64, round(w / 64) * 64)
+        return images.resize_image(1, img, round(w / 64) * 64, round(h / 64) * 64)
 
     @staticmethod
     def hash_image(img: Image.Image) -> int:
