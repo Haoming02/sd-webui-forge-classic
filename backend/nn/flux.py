@@ -201,7 +201,7 @@ class SiLUActivation(nn.Module):
 
 
 class DoubleStreamBlock(nn.Module):
-    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float, qkv_bias: bool = False, flipped_img_txt=False, modulation=True, mlp_silu_act=False, proj_bias=True, yak_mlp=False):
+    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float, qkv_bias: bool = False, modulation=True, mlp_silu_act=False, proj_bias=True, yak_mlp=False):
         super().__init__()
 
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
@@ -229,8 +229,6 @@ class DoubleStreamBlock(nn.Module):
 
         self.txt_mlp = build_mlp(hidden_size, mlp_hidden_dim, mlp_silu_act=mlp_silu_act, yak_mlp=yak_mlp)
 
-        self.flipped_img_txt = flipped_img_txt
-
     def forward(self, img: torch.Tensor, txt: torch.Tensor, vec: torch.Tensor, pe: torch.Tensor, attn_mask=None, modulation_dims_img=None, modulation_dims_txt=None, transformer_options={}):
         if self.modulation:
             img_mod1, img_mod2 = self.img_mod(vec)
@@ -256,30 +254,17 @@ class DoubleStreamBlock(nn.Module):
         del txt_qkv
         txt_q, txt_k = self.txt_attn.norm(txt_q, txt_k, txt_v)
 
-        if self.flipped_img_txt:
-            q = torch.cat((img_q, txt_q), dim=2)
-            del img_q, txt_q
-            k = torch.cat((img_k, txt_k), dim=2)
-            del img_k, txt_k
-            v = torch.cat((img_v, txt_v), dim=2)
-            del img_v, txt_v
-            # run actual attention
-            attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
-            del q, k, v
+        q = torch.cat((txt_q, img_q), dim=2)
+        del txt_q, img_q
+        k = torch.cat((txt_k, img_k), dim=2)
+        del txt_k, img_k
+        v = torch.cat((txt_v, img_v), dim=2)
+        del txt_v, img_v
+        # run actual attention
+        attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
+        del q, k, v
 
-            img_attn, txt_attn = attn[:, : img.shape[1]], attn[:, img.shape[1] :]
-        else:
-            q = torch.cat((txt_q, img_q), dim=2)
-            del txt_q, img_q
-            k = torch.cat((txt_k, img_k), dim=2)
-            del txt_k, img_k
-            v = torch.cat((txt_v, img_v), dim=2)
-            del txt_v, img_v
-            # run actual attention
-            attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
-            del q, k, v
-
-            txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
+        txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
         # calculate the img blocks
         img += apply_mod(self.img_attn.proj(img_attn), img_mod1.gate, None, modulation_dims_img)
