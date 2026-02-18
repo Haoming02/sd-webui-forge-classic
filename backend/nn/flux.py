@@ -121,27 +121,11 @@ def build_mlp(hidden_size: int, mlp_hidden_dim: int, mlp_silu_act: bool = False,
         )
 
 
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int):
-        super().__init__()
-        self.scale = nn.Parameter(torch.empty(dim))
-
-    def forward(self, x: torch.Tensor):
-        return RMSNorm.rms_norm(x, self.scale, 1e-6)
-
-    @staticmethod
-    def rms_norm(x: torch.Tensor, weight: nn.Parameter, eps=1e-6):
-        if weight is None:
-            return nn.functional.rms_norm(x, (x.shape[-1],), eps=eps)
-        else:
-            return nn.functional.rms_norm(x, weight.shape, weight=memory_management.cast_to(weight, dtype=x.dtype, device=x.device), eps=eps)
-
-
 class QKNorm(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
-        self.query_norm = RMSNorm(dim)
-        self.key_norm = RMSNorm(dim)
+        self.query_norm = nn.RMSNorm(dim)
+        self.key_norm = nn.RMSNorm(dim)
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> tuple:
         q = self.query_norm(q)
@@ -440,7 +424,7 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         self.guidance_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size, bias=ops_bias) if guidance_embed else nn.Identity()
         self.txt_in = nn.Linear(context_in_dim, self.hidden_size, bias=ops_bias)
 
-        self.txt_norm = RMSNorm(context_in_dim) if txt_norm else None
+        self.txt_norm = nn.RMSNorm(context_in_dim) if txt_norm else None
 
         self.double_blocks = nn.ModuleList(
             [

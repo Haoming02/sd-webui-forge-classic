@@ -330,6 +330,12 @@ class ForgeOperations:
             self.bias = None
             self.add = add  # used by llama.py
 
+        def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+            if prefix + "scale" in state_dict:  # Flux
+                self.weight = torch.nn.Parameter(state_dict[prefix + "scale"].to(device=self.weight.device, dtype=self.weight.dtype))
+            else:
+                super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+
         def reset_parameters(self):
             self.bias = None
             return None
