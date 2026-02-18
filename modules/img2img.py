@@ -73,8 +73,12 @@ def process_batch(p, input, output_dir, inpaint_mask_dir, args, to_scale=False, 
         img = ImageOps.exif_transpose(img)
 
         if to_scale:
-            p.width = int(img.width * scale_by)
-            p.height = int(img.height * scale_by)
+            p.width = round(img.width * scale_by / 64) * 64
+            p.height = round(img.height * scale_by / 64) * 64
+
+        _w, _h = img.size
+        if not (_w % 64 == 0 and _h % 64 == 0):
+            img = images.resize_image(1, img, round(_w / 64) * 64, round(_h / 64) * 64)
 
         p.init_images = [img] * p.batch_size
 
