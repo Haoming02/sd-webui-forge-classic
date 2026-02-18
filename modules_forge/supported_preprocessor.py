@@ -1,28 +1,25 @@
 import cv2
 import torch
 
-from modules_forge.shared import add_supported_preprocessor, preprocessor_dir
 from backend import memory_management
-from backend.patcher.base import ModelPatcher
 from backend.patcher import clipvision
-from modules_forge.utils import resize_image_with_pad
+from backend.patcher.base import ModelPatcher
 from modules.modelloader import load_file_from_url
-from modules_forge.utils import numpy_to_pytorch
+from modules_forge.shared import add_supported_preprocessor, preprocessor_dir
+from modules_forge.utils import numpy_to_pytorch, resize_image_with_pad
 
 
 class PreprocessorParameter:
-    def __init__(self, minimum=0.0, maximum=1.0, step=0.01, label='Parameter 1', value=0.5, visible=False, **kwargs):
-        self.gradio_update_kwargs = dict(
-            minimum=minimum, maximum=maximum, step=step, label=label, value=value, visible=visible, **kwargs
-        )
+    def __init__(self, minimum=0.0, maximum=1.0, step=0.01, label="Parameter 1", value=0.5, visible=False, **kwargs):
+        self.gradio_update_kwargs = dict(minimum=minimum, maximum=maximum, step=step, label=label, value=value, visible=visible, **kwargs)
 
 
 class Preprocessor:
     def __init__(self):
-        self.name = 'PreprocessorBase'
+        self.name = "PreprocessorBase"
         self.tags = []
         self.model_filename_filters = []
-        self.slider_resolution = PreprocessorParameter(label='Resolution', minimum=128, maximum=2048, value=512, step=8, visible=True)
+        self.slider_resolution = PreprocessorParameter(label="Resolution", minimum=128, maximum=2048, value=512, step=8, visible=True)
         self.slider_1 = PreprocessorParameter()
         self.slider_2 = PreprocessorParameter()
         self.slider_3 = PreprocessorParameter()
@@ -40,7 +37,7 @@ class Preprocessor:
             load_device = memory_management.get_torch_device()
 
         if offload_device is None:
-            offload_device = torch.device('cpu')
+            offload_device = torch.device("cpu")
 
         if not memory_management.should_use_fp16(load_device):
             dtype = torch.float32
@@ -75,18 +72,18 @@ class Preprocessor:
 class PreprocessorNone(Preprocessor):
     def __init__(self):
         super().__init__()
-        self.name = 'None'
+        self.name = "None"
         self.sorting_priority = 10
 
 
 class PreprocessorCanny(Preprocessor):
     def __init__(self):
         super().__init__()
-        self.name = 'canny'
-        self.tags = ['Canny']
-        self.model_filename_filters = ['canny']
-        self.slider_1 = PreprocessorParameter(minimum=0, maximum=256, step=1, value=100, label='Low Threshold', visible=True)
-        self.slider_2 = PreprocessorParameter(minimum=0, maximum=256, step=1, value=200, label='High Threshold', visible=True)
+        self.name = "canny"
+        self.tags = ["Canny"]
+        self.model_filename_filters = ["canny"]
+        self.slider_1 = PreprocessorParameter(minimum=0, maximum=256, step=1, value=100, label="Low Threshold", visible=True)
+        self.slider_2 = PreprocessorParameter(minimum=0, maximum=256, step=1, value=200, label="High Threshold", visible=True)
         self.sorting_priority = 100
         self.use_soft_projection_in_hr_fix = True
 
@@ -118,11 +115,7 @@ class PreprocessorClipVision(Preprocessor):
         if self.clipvision is not None:
             return self.clipvision
 
-        ckpt_path = load_file_from_url(
-            url=self.url,
-            model_dir=preprocessor_dir,
-            file_name=self.filename
-        )
+        ckpt_path = load_file_from_url(url=self.url, model_dir=preprocessor_dir, file_name=self.filename)
 
         if ckpt_path in PreprocessorClipVision.global_cache:
             self.clipvision = PreprocessorClipVision.global_cache[ckpt_path]

@@ -1,8 +1,9 @@
 import torch
-from backend import operations, memory_management
-from backend.patcher.base import ModelPatcher
+from transformers.modeling_utils import no_init_weights
 
-from transformers import modeling_utils
+from backend import memory_management
+from backend.operations import using_forge_operations
+from backend.patcher.base import ModelPatcher
 
 
 class DiffusersModelPatcher:
@@ -15,15 +16,15 @@ class DiffusersModelPatcher:
 
         self.dtype = dtype
 
-        with operations.using_forge_operations():
-            with modeling_utils.no_init_weights():
+        with no_init_weights():
+            with using_forge_operations():
                 self.pipeline = pipeline_class.from_pretrained(*args, **kwargs)
 
-        if hasattr(self.pipeline, 'unet'):
-            if hasattr(self.pipeline.unet, 'set_attn_processor'):
+        if hasattr(self.pipeline, "unet"):
+            if hasattr(self.pipeline.unet, "set_attn_processor"):
                 from diffusers.models.attention_processor import AttnProcessor2_0
+
                 self.pipeline.unet.set_attn_processor(AttnProcessor2_0())
-                print('Attention optimization applied to DiffusersModelPatcher')
 
         self.pipeline = self.pipeline.to(device=offload_device)
 
@@ -35,14 +36,15 @@ class DiffusersModelPatcher:
         self.patcher = ModelPatcher(
             model=self.pipeline,
             load_device=load_device,
-            offload_device=offload_device)
+            offload_device=offload_device,
+        )
 
     def prepare_memory_before_sampling(self, batchsize, latent_width, latent_height):
         area = 2 * batchsize * latent_width * latent_height
         inference_memory = (((area * 0.6) / 0.9) + 1024) * (1024 * 1024)
         memory_management.load_models_gpu(
             models=[self.patcher],
-            memory_required=inference_memory
+            memory_required=inference_memory,
         )
 
     def move_tensor_to_current_device(self, x):

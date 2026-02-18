@@ -9,13 +9,19 @@ from rich import print_json
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.logging import setup_logger
-from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
+from modules import (
+    infotext_utils,
+    paths,
+    processing,
+    sd_models,
+    shared,
+    shared_items,
+    ui_common,
+)
 from modules_forge.presets import PresetArch, use_distill, use_shift
 
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
-
-total_vram = int(memory_management.total_vram)
 
 ui_forge_preset: gr.Radio
 ui_checkpoint: gr.Dropdown
