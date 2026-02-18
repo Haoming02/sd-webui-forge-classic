@@ -61,7 +61,7 @@ class TorchCompileForForge(scripts.Script):
         del kmodel._compile_config
         del kmodel._model_backup
 
-    def process(self, p, behavior: str, backend: str, mode: str):
+    def process_batch(self, p, behavior: str, backend: str, mode: str, **kwargs):
         kmodel: "KModel" = p.sd_model.forge_objects.unet.model
         enable: bool = hasattr(kmodel, "_compile_config") if behavior == "auto" else (behavior == "enable")
 
