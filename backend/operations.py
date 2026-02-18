@@ -105,7 +105,7 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
     memory_management.sync_stream(target_device, offload_stream)
 
     if not _scale:
-        return weight, bias
+        return weight, bias, (offload_stream, weight, bias)
 
     weight_a = weight
     bias_a = bias
@@ -713,7 +713,7 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
     input_shape, input_dtype = input.shape, input.dtype
 
     if len(input.shape) == 3:
-        w, bias = weights_manual_cast(self, input, dtype=dtype, _scale=False)
+        w, bias, signal = weights_manual_cast(self, input, dtype=dtype, _scale=False)
         w = w.t()
 
         if getattr(self, "scale_weight", None) is None:
@@ -726,7 +726,8 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
         input = torch.clamp(input, min=-448, max=448, out=input)
         input = input.reshape(-1, input_shape[2]).to(dtype).contiguous()
 
-        o = torch._scaled_mm(input, w, out_dtype=input_dtype, bias=bias, scale_a=scale_input, scale_b=scale_weight)
+        with main_stream_worker(w, bias, signal):
+            o = torch._scaled_mm(input, w, out_dtype=input_dtype, bias=bias, scale_a=scale_input, scale_b=scale_weight)
 
         if isinstance(o, tuple):
             o = o[0]
