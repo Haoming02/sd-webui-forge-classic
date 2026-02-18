@@ -304,7 +304,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             state_dict_parameters = utils.calculate_parameters(state_dict)
             state_dict_dtype = utils.weight_dtype(state_dict)
 
-            _dtype_overwrite = backend.args.dynamic_args["forge_unet_storage_dtype"]
+            try_int8: bool = False
+
+            override_dtype = backend.args.dynamic_args["forge_unet_storage_dtype"]
+            if override_dtype is torch.int8:
+                if state_dict_dtype is torch.bfloat16:
+                    override_dtype = torch.bfloat16
+                    try_int8 = True
+                else:
+                    override_dtype = None
+                    logger.warning("int8 only supports bfloat16 models...")
 
             if guess.nunchaku:
                 storage_dtype = torch.bfloat16
@@ -316,7 +325,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 if state_dict_dtype == "gguf":
                     beautiful_print_gguf_state_dict_statics(state_dict)
             else:
-                storage_dtype = memory_management.unet_dtype(device=load_device, model_params=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes, weight_dtype=_dtype_overwrite or state_dict_dtype)
+                if override_dtype is not None:
+                    storage_dtype = override_dtype
+                else:
+                    storage_dtype = memory_management.unet_dtype(device=load_device, model_params=state_dict_parameters, supported_dtypes=guess.supported_inference_dtypes, weight_dtype=state_dict_dtype)
                 if storage_dtype == state_dict_dtype:
                     logger.info(f"Using Default Model Data Type: {storage_dtype}")
                 else:
@@ -331,21 +343,28 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
+                need_manual_cast = False
+                to_args = dict(device=initial_device, dtype=computation_dtype)
+                ops = None
+
                 with no_init_weights():
-                    with using_forge_operations(device=initial_device, dtype=computation_dtype, manual_cast_enabled=False, bnb_dtype=storage_dtype):
+                    with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=storage_dtype):
                         model = model_loader(unet_config)
             else:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=storage_dtype)
                 need_manual_cast = storage_dtype != computation_dtype
                 to_args = dict(device=initial_device, dtype=storage_dtype)
-                _dtype = storage_dtype  # for fp8_fast
                 ops = False if guess.nunchaku else None
 
-                if _dtype_overwrite is torch.int8 and storage_dtype is torch.bfloat16:
-                    _dtype = str(guess.__class__.__name__)
+                if try_int8:  # int8 matmul
+                    extra_dtype = str(guess.__class__.__name__)
+                elif storage_dtype is torch.float8_e4m3fn:  # fp8 matmul
+                    extra_dtype = torch.float8_e4m3fn
+                else:
+                    extra_dtype = None
 
                 with no_init_weights():
-                    with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=_dtype):
+                    with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=extra_dtype):
                         model = model_loader(unet_config).to(**to_args)
 
             model = pre_func(model)
