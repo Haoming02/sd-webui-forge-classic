@@ -75,8 +75,10 @@ class TorchCompileForForge(scripts.Script):
         else:
             config = dict(backend=backend, dynamic=True, fullgraph=True)
 
+        _cache: str = str(config) + p.sd_model.current_lora_hash
+
         if (_config := getattr(kmodel, "_compile_config", None)) is not None:
-            if _config != config:
+            if _config != _cache:
                 self.restore(kmodel)
             else:
                 return
@@ -90,4 +92,4 @@ class TorchCompileForForge(scripts.Script):
             torch.compile(model, **config),
         )
 
-        kmodel._compile_config = config
+        kmodel._compile_config = _cache
