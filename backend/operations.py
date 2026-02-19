@@ -13,6 +13,74 @@ from backend.args import args, dynamic_args
 from backend.patcher.lora import merge_lora_to_weight
 
 
+def _calc_mantissa(abs_x, exponent, normal_mask, mantissa_bits, exponent_bias, generator=None):
+    mantissa_scaled = torch.where(
+        normal_mask,
+        (abs_x / (2.0 ** (exponent - exponent_bias)) - 1.0) * (2**mantissa_bits),
+        (abs_x / (2.0 ** (-exponent_bias + 1 - mantissa_bits))),
+    )
+    mantissa_scaled += torch.rand(
+        mantissa_scaled.size(),
+        dtype=mantissa_scaled.dtype,
+        layout=mantissa_scaled.layout,
+        device=mantissa_scaled.device,
+        generator=generator,
+    )
+    return mantissa_scaled.floor() / (2**mantissa_bits)
+
+
+def _stochastic_round_to_fp8(value: torch.Tensor, dtype: torch.dtype, seed: int) -> torch.Tensor:
+    if dtype == torch.float8_e4m3fn:
+        exponent_bits, mantissa_bits, exponent_bias = 4, 3, 7
+    elif dtype == torch.float8_e5m2:
+        exponent_bits, mantissa_bits, exponent_bias = 5, 2, 15
+    else:
+        return value.to(dtype=dtype)
+
+    generator = torch.Generator(device=value.device)
+    generator.manual_seed(int(seed))
+
+    def _round_chunk(chunk: torch.Tensor) -> torch.Tensor:
+        x = chunk.to(dtype=torch.float16)
+        sign = torch.sign(x)
+        abs_x = x.abs()
+        sign = torch.where(abs_x == 0, 0, sign)
+
+        exponent = torch.clamp(
+            torch.floor(torch.log2(abs_x)) + exponent_bias,
+            0,
+            2**exponent_bits - 1,
+        )
+        normal_mask = ~(exponent == 0)
+        abs_x[:] = _calc_mantissa(abs_x, exponent, normal_mask, mantissa_bits, exponent_bias, generator=generator)
+
+        sign *= torch.where(
+            normal_mask,
+            (2.0 ** (exponent - exponent_bias)) * (1.0 + abs_x),
+            (2.0 ** (-exponent_bias + 1)) * abs_x,
+        )
+
+        finfo = torch.finfo(dtype)
+        sign.clamp_(min=finfo.min, max=finfo.max)
+        return sign
+
+    if value.ndim == 0:
+        return _round_chunk(value).to(dtype=dtype)
+
+    out = torch.empty_like(value, dtype=dtype)
+
+    # Process in slices to cap peak memory on very large layers.
+    rows = max(1, value.shape[0])
+    num_slices = max(1, int(value.numel() / (4096 * 4096)))
+    slice_size = max(1, round(rows / num_slices))
+
+    for i in range(0, rows, slice_size):
+        rounded = _round_chunk(value[i:i + slice_size])
+        out[i:i + slice_size].copy_(rounded.to(dtype=dtype))
+
+    return out
+
+
 def scaled_dot_product_attention(q, k, v, *args, **kwargs):
     return torch.nn.functional.scaled_dot_product_attention(q, k, v, *args, **kwargs)
 
@@ -180,7 +248,15 @@ class ForgeOperations:
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
             if hasattr(self, "dummy"):
                 if prefix + "weight" in state_dict:
-                    self.weight = torch.nn.Parameter(state_dict[prefix + "weight"].to(**self.dummy))
+                    weight = state_dict[prefix + "weight"]
+                    has_weight_scale = prefix + "scale_weight" in state_dict or prefix + "weight_scale" in state_dict
+
+                    # Mixed fp8 checkpoints can contain a small set of unscaled BF16 weights.
+                    # Preserve their source dtype to keep offline LoRA behavior consistent.
+                    if self.dummy["dtype"] in memory_management.FLOAT8_TYPES and not has_weight_scale:
+                        self.weight = torch.nn.Parameter(weight.to(device=self.dummy["device"], dtype=weight.dtype))
+                    else:
+                        self.weight = torch.nn.Parameter(weight.to(**self.dummy))
                 if prefix + "bias" in state_dict:
                     self.bias = torch.nn.Parameter(state_dict[prefix + "bias"].to(**self.dummy))
 
@@ -199,6 +275,60 @@ class ForgeOperations:
 
         def reset_parameters(self):
             return None
+
+        def convert_weight(self, _weight, inplace=False):
+            if self.scale_weight is None:
+                return _weight
+            return _weight * self.scale_weight.to(device=_weight.device, dtype=_weight.dtype)
+
+        def set_weight(self, out_weight, inplace_update=False, seed=0):
+            target_dtype = self.weight.dtype
+
+            # For fp8_scaled weights, re-quantize weight and recalculate scale_weight.
+            if self.scale_weight is not None and target_dtype in memory_management.FLOAT8_TYPES:
+                out_weight_f32 = out_weight.to(dtype=torch.float32)
+                abs_max = out_weight_f32.abs().amax()
+
+                max_fp8 = torch.finfo(target_dtype).max
+                if torch.isfinite(abs_max) and abs_max > 0:
+                    new_scale = (abs_max / max_fp8).to(dtype=torch.float32)
+                else:
+                    new_scale = torch.ones((), dtype=torch.float32, device=out_weight.device)
+
+                new_scale = torch.clamp(new_scale, min=torch.finfo(torch.float32).tiny)
+                normalized = out_weight_f32 / new_scale
+                if seed is not None and int(seed) != 0:
+                    try:
+                        quantized = _stochastic_round_to_fp8(normalized, target_dtype, int(seed))
+                    except torch.OutOfMemoryError:
+                        memory_management.soft_empty_cache()
+                        memory_management.logger.warning(
+                            "OOM during fp8 stochastic rounding in set_weight; falling back to deterministic quantization."
+                        )
+                        quantized = normalized.clamp(min=-max_fp8, max=max_fp8).to(dtype=target_dtype)
+                else:
+                    quantized = normalized.clamp(min=-max_fp8, max=max_fp8).to(dtype=target_dtype)
+
+                if inplace_update:
+                    self.weight.data.copy_(quantized)
+                else:
+                    self.weight = torch.nn.Parameter(quantized, requires_grad=False)
+
+                target_scale = new_scale.to(device=self.scale_weight.device, dtype=self.scale_weight.dtype)
+                if self.scale_weight.shape != target_scale.shape:
+                    target_scale = target_scale.expand_as(self.scale_weight)
+
+                if inplace_update:
+                    self.scale_weight.data.copy_(target_scale)
+                else:
+                    self.scale_weight = torch.nn.Parameter(target_scale, requires_grad=False)
+                return
+
+            out_weight = out_weight.to(dtype=target_dtype)
+            if inplace_update:
+                self.weight.data.copy_(out_weight)
+            else:
+                self.weight = torch.nn.Parameter(out_weight, requires_grad=False)
 
         def forward(self, x):
             # if self.scale_input is not None:  # TODO ?
@@ -748,6 +878,73 @@ class ForgeOperationsNunchaku(ForgeOperations):
 # region fp8
 
 
+def _fp8_prepare_online_lora(linear: torch.nn.Linear, x: torch.Tensor):
+    loras: dict[str, list[torch.Tensor]] = getattr(linear, "forge_online_loras", {})
+    if not loras:
+        return None, None, True
+
+    weight_patches = loras.get("weight", None)
+    bias_patches = loras.get("bias", None)
+
+    # bias patches and non-LoRA adapters are not supported by the fast low-rank path
+    if bias_patches:
+        return None, None, False
+
+    if not weight_patches:
+        return None, None, True
+
+    cache_key = (id(weight_patches), x.device, x.dtype)
+    if getattr(linear, "_forge_fp8_lora_cache_key", None) == cache_key:
+        return linear._forge_fp8_lora_A, linear._forge_fp8_lora_B, True
+
+    all_A = []
+    all_B = []
+
+    for patch in weight_patches:
+        if not isinstance(patch, (tuple, list)) or len(patch) < 5:
+            return None, None, False
+
+        strength, adapter, strength_model, offset, function = patch[:5]
+
+        if strength == 0:
+            continue
+        if strength_model != 1.0 or offset is not None or function is not None:
+            return None, None, False
+
+        # Only classic LoRA can be composed into fast low-rank residual.
+        if getattr(adapter, "name", None) != "lora" or not hasattr(adapter, "weights"):
+            return None, None, False
+
+        up, down, alpha, mid, dora_scale, reshape = adapter.weights
+        if dora_scale is not None or reshape is not None:
+            return None, None, False
+
+        rank = down.shape[0] if down.ndim >= 2 else 1
+        scale = strength * ((alpha / rank) if alpha is not None else 1.0)
+
+        curr_A = down
+        if mid is not None:
+            curr_A = torch.mm(mid.flatten(start_dim=1), down.flatten(start_dim=1)).reshape(down.shape)
+
+        all_A.append(curr_A.flatten(start_dim=1) * scale)
+        all_B.append(up.flatten(start_dim=1))
+
+    if not all_A:
+        linear._forge_fp8_lora_cache_key = cache_key
+        linear._forge_fp8_lora_A = None
+        linear._forge_fp8_lora_B = None
+        return None, None, True
+
+    dtype = x.dtype if x.dtype in [torch.float16, torch.bfloat16, torch.float32] else torch.float16
+    lora_A = torch.cat(all_A, dim=0).to(device=x.device, dtype=dtype, non_blocking=True)
+    lora_B = torch.cat(all_B, dim=1).to(device=x.device, dtype=dtype, non_blocking=True)
+
+    linear._forge_fp8_lora_cache_key = cache_key
+    linear._forge_fp8_lora_A = lora_A
+    linear._forge_fp8_lora_B = lora_B
+    return lora_A, lora_B, True
+
+
 def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
     dtype = self.weight.dtype
     if dtype != torch.float8_e4m3fn:
@@ -761,6 +958,11 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
     input_shape, input_dtype = input.shape, input.dtype
 
     if len(input.shape) == 3:
+        lora_input = input.reshape(-1, input_shape[2])
+        lora_A, lora_B, lora_supported = _fp8_prepare_online_lora(self, input)
+        if not lora_supported:
+            return None
+
         w, bias, signal = weights_manual_cast(self, input, dtype=dtype, _scale=False)
         w = w.t()
 
@@ -780,6 +982,11 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
         if isinstance(o, tuple):
             o = o[0]
 
+        if lora_A is not None and lora_B is not None:
+            lora_x = torch.nn.functional.linear(lora_input.to(lora_A.dtype), lora_A)
+            lora_y = torch.nn.functional.linear(lora_x, lora_B)
+            o = o + lora_y.to(o.dtype)
+
         if tensor_2d:
             return o.reshape(input_shape[0], -1)
 
@@ -796,6 +1003,10 @@ class fp8Operations(ForgeOperations):
                     return out
             except Exception as e:
                 memory_management.logger.error(f"Error during fp8_fast: {e}")
+
+            # Fallback is needed for unsupported online adapter types.
+            if getattr(self, "forge_online_loras", None):
+                return ForgeOperations.Linear.forward(self, x)
 
             weight, bias = get_weight_and_bias(self)
             return torch.nn.functional.linear(x, weight, bias)

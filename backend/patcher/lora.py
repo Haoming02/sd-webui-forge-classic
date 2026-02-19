@@ -2,6 +2,7 @@
 
 import logging
 import weakref
+import zlib
 
 import torch
 
@@ -19,6 +20,10 @@ setup_logger(logger)
 
 
 extra_weight_calculators = {}
+
+
+def _string_to_seed(data: str) -> int:
+    return zlib.crc32(data.encode("utf-8")) & 0xFFFFFFFF
 
 
 @torch.inference_mode()
@@ -208,6 +213,18 @@ class LoraLoader:
             if key not in self.backup:
                 self.backup[key] = weight.to(device=offload_device)
 
+            # Some quantized layers keep an explicit scale parameter next to weight.
+            # Back it up as well so switching LoRA sets can restore exact base state.
+            if child_key == "weight" and hasattr(parent_layer, "scale_weight"):
+                scale_weight = getattr(parent_layer, "scale_weight", None)
+                if isinstance(scale_weight, torch.nn.Parameter):
+                    scale_key = f"{key.rsplit('.', 1)[0]}.scale_weight"
+                    if scale_key not in self.backup:
+                        self.backup[scale_key] = scale_weight.to(device=offload_device)
+
+            set_func = getattr(parent_layer, f"set_{child_key}", None)
+            convert_func = getattr(parent_layer, f"convert_{child_key}", None)
+
             bnb_layer = None
 
             if hasattr(weight, "bnb_quantized"):
@@ -225,6 +242,10 @@ class LoraLoader:
                 from backend.operations_gguf import dequantize_tensor
 
                 weight = dequantize_tensor(weight)
+            elif convert_func is not None:
+                temp_dtype = memory_management.lora_compute_dtype(weight.device)
+                weight = weight.to(dtype=temp_dtype, copy=True)
+                weight = convert_func(weight, inplace=True)
 
             try:
                 weight = merge_lora_to_weight(current_patches, weight, key, computation_dtype=torch.float32)
@@ -246,7 +267,10 @@ class LoraLoader:
                 gguf_cls.quantize_pytorch(weight, gguf_parameter)
                 continue
 
-            utils.set_attr(self.model, key, weight)
+            if set_func is not None:
+                set_func(weight, inplace_update=False, seed=_string_to_seed(key))
+            else:
+                utils.set_attr(self.model, key, weight)
 
         # End
 
