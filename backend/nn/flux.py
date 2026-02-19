@@ -645,9 +645,6 @@ class IntegratedFluxTransformer2DModel(nn.Module):
             for i in self.txt_ids_dims:
                 txt_ids[:, :, i] = torch.linspace(0, context.shape[1] - 1, steps=context.shape[1], device=x.device, dtype=torch.float32)
 
-        if self.patch_size == 1:
-            timestep = timestep / 1000.0  # flux 2
-
         out = self.forward_orig(img, img_ids, context, txt_ids, timestep, y, guidance, control, transformer_options, attn_mask=kwargs.get("attention_mask", None))
         out = out[:, :img_tokens]
 
