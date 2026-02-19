@@ -135,7 +135,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
                         model = Qwen25_7BVLI(config)
 
-            load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["lm_head.weight"])
+            load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
             return model
         if cls_name == "Gemma2Model":
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Gemma2 state dict!"
@@ -165,7 +165,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
                         model = Gemma2_2B(config)
 
-            load_state_dict(model, state_dict, log_name=cls_name)
+            load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
             return model
         if cls_name in ["Qwen3Model", "Qwen3ForCausalLM"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen3 state dict!"
@@ -200,7 +200,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True):
                         model = QTE(config)
 
-            load_state_dict(model, state_dict, log_name=cls_name)
+            load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
             return model
         if cls_name in ["T5EncoderModel", "UMT5EncoderModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have T5 state dict!"
