@@ -67,6 +67,7 @@ class ForgeDiffusionEngine:
         self.is_sd1 = False
         self.is_sdxl = False
         self.is_flux = False  # affects the usage of TAESD
+        self.is_flux2 = False  # affects the usage of TAESD
         self.is_wan = False  # affects the usage of WanVAE (B, C, T, H, W)
 
     @property
