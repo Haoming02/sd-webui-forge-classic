@@ -105,13 +105,6 @@ def guess_latent_channels_and_arch(path):
     return 4, None
 
 
-def _get_flux2_bn():
-    try:
-        return shared.sd_model.forge_objects.vae.first_stage_model.bn
-    except Exception:
-        return None
-
-
 def _pack_flux2_latents(x):
     b, c, h, w = x.shape
     if h % 2 != 0 or w % 2 != 0:
@@ -135,12 +128,6 @@ class Flux2DecoderAdapter(nn.Module):
 
     def forward(self, x):
         if x.shape[1] == 128:
-            bn = _get_flux2_bn()
-            if bn is not None:
-                s = torch.sqrt(bn.running_var.view(1, -1, 1, 1).to(device=x.device, dtype=x.dtype) + bn.eps)
-                m = bn.running_mean.view(1, -1, 1, 1).to(device=x.device, dtype=x.dtype)
-                x = x * s + m
-
             x = _unpack_flux2_latents(x)
 
         return self.decoder_impl(x)
@@ -156,15 +143,6 @@ class Flux2EncoderAdapter(nn.Module):
 
         if x.shape[1] == 32:
             x = _pack_flux2_latents(x)
-            bn = _get_flux2_bn()
-            if bn is not None:
-                x = torch.nn.functional.batch_norm(
-                    x,
-                    bn.running_mean.to(device=x.device, dtype=x.dtype),
-                    bn.running_var.to(device=x.device, dtype=x.dtype),
-                    momentum=bn.momentum,
-                    eps=bn.eps,
-                )
 
         return x
 
