@@ -6,7 +6,6 @@ import logging
 import math
 import os
 import random
-import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,7 +21,8 @@ import modules.paths as paths
 import modules.sd_models as sd_models
 import modules.sd_vae as sd_vae
 import modules.shared as shared
-from backend import memory_management
+from backend import args, memory_management
+from backend.logging import setup_logger
 from backend.modules.k_prediction import rescale_zero_terminal_snr_sigmas
 from backend.utils import hash_tensor
 from modules import devices, errors, extra_networks, images, infotext_utils, masking, profiling, prompt_parser, rng, scripts, sd_samplers, sd_samplers_common, sd_unet, sd_vae_approx
@@ -34,7 +34,9 @@ from modules.sysinfo import set_config
 from modules_forge import main_entry
 from modules_forge.utils import apply_circular_forge
 
-# some of those options should not be changed at all because they would break the model, so I removed them from options.
+logger = logging.getLogger("processing")
+setup_logger(logger)
+
 opt_C = 4
 opt_f = 8
 
@@ -216,8 +218,7 @@ class StableDiffusionProcessing:
         StableDiffusionProcessing.cached_uc = [None, None, None]
 
     def __post_init__(self):
-        if self.sampler_index is not None:
-            print("sampler_index argument for StableDiffusionProcessing does not do anything; use sampler_name", file=sys.stderr)
+        assert self.sampler_index is None
 
         self.comments = {}
 
@@ -486,7 +487,7 @@ class StableDiffusionProcessing:
 
         if self.cfg_scale == 1:
             self.uc = None
-            print("Skipping unconditional conditioning when CFG = 1. Negative Prompts are ignored.")
+            logger.info("Negative Prompts are Ignored when CFG = 1.0")
         else:
             self.uc = self.get_conds_with_caching(prompt_parser.get_learned_conditioning, negative_prompts, total_steps, [self.cached_uc], self.extra_network_data)
 
@@ -817,6 +818,8 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         if sd_models.checkpoint_aliases.get(p.override_settings.get("sd_model_checkpoint")) is None:
             p.override_settings.pop("sd_model_checkpoint", None)
 
+        _vae_override = p.override_settings.pop("sd_vae", None)
+
         # apply any options overrides
         set_config(p.override_settings, is_api=True, run_callbacks=False, save_config=False)
 
@@ -826,6 +829,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
             pass
         else:
             manage_model_and_prompt_cache(p)
+            sd_vae.reload_vae_weights(_vae_override)
 
         # backwards compatibility, fix sampler and scheduler if invalid
         sd_samplers.fix_p_invalid_sampler_and_scheduler(p)
@@ -837,6 +841,8 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         # restore original options
         if p.override_settings_restore_afterwards:
             set_config(stored_opts, save_config=False)
+        if _vae_override is not None:
+            sd_vae.restore_vae_weights()
 
     return res
 
@@ -844,9 +850,10 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     """this is the main loop that both txt2img and img2img use; it calls func_init once inside all the scopes and func_sample once per batch"""
 
+    _times = 1
     _is_video = False
     video_path = None
-    if shared.sd_model.is_wan:
+    if shared.sd_model.is_wan and args.dynamic_args["wan"]:
         _times = ((getattr(p, "batch_size", 1) - 1) // 4) + 1  # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy_extras/nodes_wan.py#L41
         p.batch_size = (_times - 1) * 4 + 1
         _is_video: bool = _times > 1
@@ -1374,6 +1381,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                     self.extra_generation_params["VAE Encoder"] = opts.sd_vae_encode_method
 
                 samples = images_tensor_to_samples(image, approximation_indexes.get(opts.sd_vae_encode_method), self.sd_model)
+                self.sd_model.ini_latent = None  # Edit Model
                 decoded_samples = None
                 devices.torch_gc()
 
@@ -1381,7 +1389,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             # here we generate an image normally
 
             x = self.rng.next()
-            if shared.sd_model.is_wan:  # enforce batch_size of 1
+            if shared.sd_model.is_wan and args.dynamic_args["wan"]:  # enforce batch_size of 1
                 x = x[0].unsqueeze(0)
 
             self.sd_model.forge_objects = self.sd_model.forge_objects_after_applying_lora.shallow_copy()
@@ -1501,7 +1509,10 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
             if opts.sd_vae_encode_method != "Full":
                 self.extra_generation_params["VAE Encoder"] = opts.sd_vae_encode_method
+
             samples = images_tensor_to_samples(decoded_samples, approximation_indexes.get(opts.sd_vae_encode_method))
+            self.sd_model.ini_latent = None  # Edit Model
+            devices.torch_gc()
 
             image_conditioning = self.img2img_image_conditioning(decoded_samples, samples)
 
@@ -1598,7 +1609,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
         if self.hr_cfg == 1:
             self.hr_uc = None
-            print("Skipping unconditional conditioning (HR pass) when CFG = 1. Negative Prompts are ignored.")
+            logger.info("Negative Prompts are Ignored when CFG = 1.0")
         else:
             self.hr_uc = self.get_conds_with_caching(prompt_parser.get_learned_conditioning, hr_negative_prompts, self.firstpass_steps, [self.cached_hr_uc, self.cached_uc], self.hr_extra_network_data, total_steps)
 
@@ -1691,6 +1702,9 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     def init(self, all_prompts, all_seeds, all_subseeds):
         self.extra_generation_params["Denoising strength"] = self.denoising_strength
 
+        if (args.dynamic_args["kontext"] or args.dynamic_args["edit"]) and self.denoising_strength < 0.9:
+            logger.warning("Edit Models require High Denoising Strength")
+
         self.image_cfg_scale: float = None
 
         self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
@@ -1734,7 +1748,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
                     self.inpaint_full_res = False
                     massage = 'Unable to perform "Inpaint Only mask" because mask is blank, switch to img2img mode.'
                     self.sd_model.comments.append(massage)
-                    logging.info(massage)
+                    logger.info(massage)
             else:
                 image_mask = images.resize_image(self.resize_mode, image_mask, self.width, self.height)
                 np_mask = np.array(image_mask)
@@ -1853,7 +1867,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         x = self.rng.next()
-        if shared.sd_model.is_wan:  # enforce batch_size of 1
+        if shared.sd_model.is_wan and args.dynamic_args["wan"]:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)
 
         if self.initial_noise_multiplier != 1.0:

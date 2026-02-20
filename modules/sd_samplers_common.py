@@ -185,6 +185,9 @@ def apply_lora_for_refiner(loras: list[extra_networks.ExtraNetworkParams]):
     return result
 
 
+ORIGINAL_CHECKPOINT: str = None
+
+
 def apply_refiner(cfg_denoiser, x, sigma):
     if not (refiner_switch_at := cfg_denoiser.p.refiner_switch_at):
         return False
@@ -196,6 +199,10 @@ def apply_refiner(cfg_denoiser, x, sigma):
         if float(sigma) > refiner_switch_at:
             return False
 
+    global ORIGINAL_CHECKPOINT
+    if ORIGINAL_CHECKPOINT is not None:
+        return False
+
     refiner_checkpoint_info = cfg_denoiser.p.refiner_checkpoint_info
     if refiner_checkpoint_info is None or shared.sd_model.sd_checkpoint_info == refiner_checkpoint_info:
         return False
@@ -206,6 +213,28 @@ def apply_refiner(cfg_denoiser, x, sigma):
 
     cfg_denoiser.p.extra_generation_params["Refiner"] = refiner_checkpoint_info.short_title
     cfg_denoiser.p.extra_generation_params["Refiner switch at"] = refiner_switch_at
+
+    if opts.refiner_fast_sd:
+        import huggingface_guess
+
+        from backend.loader import preprocess_state_dict
+        from backend.state_dict import load_state_dict, try_filter_state_dict
+        from backend.utils import load_torch_file
+
+        model = sd_models.model_data.get_sd_model().forge_objects.unet.model.diffusion_model
+
+        sd = load_torch_file(refiner_checkpoint_info.filename)
+        sd = preprocess_state_dict(sd)
+
+        guess = huggingface_guess.guess(sd)
+
+        sd = try_filter_state_dict(sd, guess.unet_key_prefix)
+
+        main_entry.logger.info("Reloading state_dict...")
+        ORIGINAL_CHECKPOINT = shared.sd_model.sd_checkpoint_info.filename
+        load_state_dict(model, sd)
+
+        return True
 
     sampling_cleanup(sd_models.model_data.get_sd_model().forge_objects.unet)
 

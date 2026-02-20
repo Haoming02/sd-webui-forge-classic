@@ -1,4 +1,4 @@
-# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.52/comfy/model_detection.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.11.0/comfy/model_detection.py
 
 import logging
 

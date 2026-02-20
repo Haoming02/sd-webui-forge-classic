@@ -1,7 +1,7 @@
 # reference: https://github.com/Comfy-Org/ComfyUI/blob/master/cuda_malloc.py
 
-import os
 import importlib.util
+import os.path
 import subprocess
 
 

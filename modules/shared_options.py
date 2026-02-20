@@ -260,7 +260,7 @@ image to and from latent space representation. Latent space is what Stable Diffu
 to create the resulting image after the sampling is finished. For img2img, VAE is additionally used to process user's input image before the sampling.
                 """
             ),
-            "sd_vae": OptionInfo("Automatic", "SD VAE", gr.Dropdown, lambda: {"choices": shared_items.sd_vae_items()}, refresh=shared_items.refresh_vae_list, infotext="VAE").info("None = always use VAE from checkpoint; Automatic = use VAE with the same filename as checkpoint"),
+            "sd_vae": OptionInfo("Automatic", "SD VAE", gr.Dropdown, {"choices": ("Automatic",), "interactive": False}),
             "sd_vae_overrides_per_model_preferences": OptionInfo(True, '"SD VAE" option overrides per-model preference'),
             "sd_vae_encode_method": OptionInfo("Full", "VAE for Encoding", gr.Radio, {"choices": ("Full", "TAESD")}, infotext="VAE Encoder").info("method to encode image to latent (img2img / Hires. fix / inpaint)"),
             "sd_vae_decode_method": OptionInfo("Full", "VAE for Decoding", gr.Radio, {"choices": ("Full", "TAESD")}, infotext="VAE Decoder").info("method to decode latent to image"),
@@ -369,6 +369,7 @@ options_templates.update(
         ("refiner", "Refiner", "sd"),
         {
             "show_refiner": OptionInfo(False, "Display the Refiner Accordion").info("Refiner swaps the model in the middle of generation; useful for Wan 2.2 <b>High Noise</b> to <b>Low Noise</b> switching").needs_reload_ui(),
+            "refiner_fast_sd": OptionInfo(False, 'Reload "state_dict" Only').info("EXPERIMENTAL").info("does not support LoRA currently"),
             "refiner_use_steps": OptionInfo(False, 'Switch based on "steps" instead').info('by default, Refiner swaps the model based on "sigmas" to match <a href="https://www.reddit.com/r/StableDiffusion/comments/1n3qns1/wan_22_how_many_highsteps_are_needed_a_simple/">Wan 2.2</a> \'s behavior'),
             "refiner_lora_replacement": OptionInfo(
                 "high_noise=low_noise",
@@ -551,6 +552,12 @@ options_templates.update(
             "sd_noise_schedule": OptionInfo("Default", "Noise schedule for sampling", gr.Radio, {"choices": ("Default", "Zero Terminal SNR")}, infotext="Noise Schedule"),
             "beta_dist_alpha": OptionInfo(0.6, "Beta scheduler - alpha", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler alpha"),
             "beta_dist_beta": OptionInfo(0.6, "Beta scheduler - beta", gr.Slider, {"minimum": 0.01, "maximum": 2.0, "step": 0.01}, infotext="Beta scheduler beta"),
+            "use_dynamic_shifting": OptionInfo(False, "use_dynamic_shifting"),
+            "invert_sigmas": OptionInfo(False, "invert_sigmas"),
+            "use_karras_sigmas": OptionInfo(False, "use_karras_sigmas"),
+            "use_exponential_sigmas": OptionInfo(False, "use_exponential_sigmas"),
+            "use_beta_sigmas": OptionInfo(False, "use_beta_sigmas"),
+            "stochastic_sampling": OptionInfo(False, "stochastic_sampling"),
         },
     )
 )

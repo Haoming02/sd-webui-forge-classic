@@ -95,6 +95,7 @@ parser.add_argument("--forge-ref-a1111-home", type=Path, help="Look for models i
 
 # args added by. Neo
 parser.add_argument("--forge-ref-comfy-home", type=Path, help="Look for models in an existing installation of ComfyUI", default=None)
+parser.add_argument("--forge-ref-comfy-yaml", type=Path, help="Look for models based on ComfyUI-style YAML config", default=None)
 
 parser = _parser.add_argument_group(description="Forge")
 parser.add_argument("--adv-samplers", action="store_true", help='show the "sampler parameters" advanced settings')

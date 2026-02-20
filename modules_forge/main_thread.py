@@ -1,24 +1,25 @@
-# This file is the main thread that handles all gradio calls for major t2i or i2i processing.
-# Other gradio calls (like those from extensions) are not influenced.
-# By using one single thread to process all major calls, model moving is significantly faster.
+# This file is the main thread that handles all Gradio calls for major T2I / I2I processing
+# Other Gradio calls (e.g. those from Extensions) are not influenced
+# By using one single thread to process all major calls, model moving is significantly faster
 
-
-import time
-import traceback
 import threading
-
+import traceback
+from collections import deque
+from typing import Callable
 
 lock = threading.Lock()
-last_id = 0
-waiting_list = []
-finished_list = []
-last_exception = None
+condition = threading.Condition(lock)
+
+last_id: int = 0
+waiting_queue: deque["Task"] = deque()
+finished_tasks: dict[int, "Task"] = {}
+last_exception: Exception = None
 
 
 class Task:
     def __init__(self, task_id, func, args, kwargs):
-        self.task_id = task_id
-        self.func = func
+        self.task_id: int = task_id
+        self.func: Callable = func
         self.args = args
         self.kwargs = kwargs
         self.result = None
@@ -32,46 +33,45 @@ class Task:
             last_exception = None
         except Exception as e:
             traceback.print_exc()
-            print(e)
             self.exception = e
             last_exception = e
 
 
 def loop():
-    global lock, last_id, waiting_list, finished_list
+    global waiting_queue, finished_tasks
+
     while True:
-        time.sleep(0.01)
-        if len(waiting_list) > 0:
-            with lock:
-                task = waiting_list.pop(0)
+        with condition:
+            while not waiting_queue:
+                condition.wait()
 
-            task.work()
+            task = waiting_queue.popleft()
 
-            with lock:
-                finished_list.append(task)
+        task.work()
+
+        with condition:
+            finished_tasks[task.task_id] = task
+            condition.notify_all()
 
 
 def async_run(func, *args, **kwargs):
-    global lock, last_id, waiting_list, finished_list
-    with lock:
+    global last_id
+
+    with condition:
         last_id += 1
-        new_task = Task(task_id=last_id, func=func, args=args, kwargs=kwargs)
-        waiting_list.append(new_task)
-    return new_task.task_id
+        task = Task(task_id=last_id, func=func, args=args, kwargs=kwargs)
+        waiting_queue.append(task)
+        condition.notify()
+
+        return task.task_id
 
 
 def run_and_wait_result(func, *args, **kwargs):
-    global lock, last_id, waiting_list, finished_list
-    current_id = async_run(func, *args, **kwargs)
-    while True:
-        time.sleep(0.01)
-        finished_task = None
-        for t in finished_list.copy():  # thread safe shallow copy without needing a lock
-            if t.task_id == current_id:
-                finished_task = t
-                break
-        if finished_task is not None:
-            with lock:
-                finished_list.remove(finished_task)
-            return finished_task.result
+    task_id = async_run(func, *args, **kwargs)
 
+    with condition:
+        while task_id not in finished_tasks:
+            condition.wait()
+
+        task = finished_tasks.pop(task_id)
+        return task.result

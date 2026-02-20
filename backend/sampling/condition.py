@@ -2,6 +2,8 @@ import math
 
 import torch
 
+from modules import shared
+
 
 def repeat_to_batch_size(tensor, batch_size):
     if tensor.shape[0] > batch_size:

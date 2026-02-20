@@ -1,4 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.75/comfy/text_encoders/llama.py
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/text_encoders/llama.py
 
 import math
 from dataclasses import asdict, dataclass
@@ -15,6 +15,29 @@ else:
     from backend.attention import attention_basic as attention_function
 
 from backend.nn.llm import qwen_vl
+
+
+@dataclass
+class Qwen3_06BConfig:
+    vocab_size: int = 151936
+    hidden_size: int = 1024
+    intermediate_size: int = 3072
+    num_hidden_layers: int = 28
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 8
+    max_position_embeddings: int = 32768
+    rms_norm_eps: float = 1e-6
+    rope_theta: float = 1000000.0
+    transformer_type: str = "llama"
+    head_dim = 128
+    rms_norm_add = False
+    mlp_activation = "silu"
+    qkv_bias = False
+    rope_dims = None
+    q_norm = "gemma3"
+    k_norm = "gemma3"
+    rope_scale = None
+    final_norm: bool = True
 
 
 @dataclass
@@ -110,13 +133,6 @@ class Gemma2_2B_Config:
     final_norm: bool = True
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 def precompute_freqs_cis(head_dim, position_ids, theta, rope_scale=None, rope_dims=None, device=None):
     if not isinstance(theta, list):
         theta = [theta]
@@ -145,7 +161,9 @@ def precompute_freqs_cis(head_dim, position_ids, theta, rope_scale=None, rope_di
         else:
             cos = cos.unsqueeze(1)
             sin = sin.unsqueeze(1)
-        out.append((cos, sin))
+
+        sin_split = sin.shape[-1] // 2
+        out.append((cos, sin[..., :sin_split], -sin[..., sin_split:]))
 
     if len(out) == 1:
         return out[0]
@@ -157,13 +175,23 @@ def apply_rope(xq, xk, freqs_cis):
     org_dtype = xq.dtype
     cos = freqs_cis[0]
     sin = freqs_cis[1]
-    q_embed = (xq * cos) + (rotate_half(xq) * sin)
-    k_embed = (xk * cos) + (rotate_half(xk) * sin)
+    nsin = freqs_cis[2]
+
+    q_embed = xq * cos
+    q_split = q_embed.shape[-1] // 2
+    q_embed[..., :q_split].addcmul_(xq[..., q_split:], nsin)
+    q_embed[..., q_split:].addcmul_(xq[..., :q_split], sin)
+
+    k_embed = xk * cos
+    k_split = k_embed.shape[-1] // 2
+    k_embed[..., :k_split].addcmul_(xk[..., k_split:], nsin)
+    k_embed[..., k_split:].addcmul_(xk[..., :k_split], sin)
+
     return q_embed.to(org_dtype), k_embed.to(org_dtype)
 
 
 class Attention(nn.Module):
-    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
+    def __init__(self, config: Qwen3_06BConfig | Qwen3_4BConfig | Qwen3_8BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
         super().__init__()
         self.num_heads = config.num_attention_heads
         self.num_kv_heads = config.num_key_value_heads
@@ -193,6 +221,7 @@ class Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         freqs_cis: Optional[torch.Tensor] = None,
         optimized_attention=None,
+        past_key_value: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         batch_size, seq_length, _ = hidden_states.shape
         xq = self.q_proj(hidden_states)
@@ -210,16 +239,36 @@ class Attention(nn.Module):
 
         xq, xk = apply_rope(xq, xk, freqs_cis=freqs_cis)
 
+        present_key_value = None
+        if past_key_value is not None:
+            index = 0
+            num_tokens = xk.shape[2]
+            if len(past_key_value) > 0:
+                past_key, past_value, index = past_key_value
+                if past_key.shape[2] >= (index + num_tokens):
+                    past_key[:, :, index : index + xk.shape[2]] = xk
+                    past_value[:, :, index : index + xv.shape[2]] = xv
+                    xk = past_key[:, :, : index + xk.shape[2]]
+                    xv = past_value[:, :, : index + xv.shape[2]]
+                    present_key_value = (past_key, past_value, index + num_tokens)
+                else:
+                    xk = torch.cat((past_key[:, :, :index], xk), dim=2)
+                    xv = torch.cat((past_value[:, :, :index], xv), dim=2)
+                    present_key_value = (xk, xv, index + num_tokens)
+            else:
+                present_key_value = (xk, xv, index + num_tokens)
+
         xk = xk.repeat_interleave(self.num_heads // self.num_kv_heads, dim=1)
         xv = xv.repeat_interleave(self.num_heads // self.num_kv_heads, dim=1)
 
         output = optimized_attention(xq, xk, xv, self.num_heads, mask=attention_mask, skip_reshape=True)
-        return self.o_proj(output)
+        return self.o_proj(output), present_key_value
 
 
 class MLP(nn.Module):
-    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
+    def __init__(self, config: Qwen3_06BConfig | Qwen3_4BConfig | Qwen3_8BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
         super().__init__()
+
         self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
@@ -233,7 +282,7 @@ class MLP(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
+    def __init__(self, config: Qwen3_06BConfig | Qwen3_4BConfig | Qwen3_8BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
         super().__init__()
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
@@ -246,15 +295,17 @@ class TransformerBlock(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         freqs_cis: Optional[torch.Tensor] = None,
         optimized_attention=None,
+        past_key_value: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         # Self Attention
         residual = x
         x = self.input_layernorm(x)
-        x = self.self_attn(
+        x, present_key_value = self.self_attn(
             hidden_states=x,
             attention_mask=attention_mask,
             freqs_cis=freqs_cis,
             optimized_attention=optimized_attention,
+            past_key_value=past_key_value,
         )
         x = residual + x
 
@@ -264,11 +315,11 @@ class TransformerBlock(nn.Module):
         x = self.mlp(x)
         x = residual + x
 
-        return x
+        return x, present_key_value
 
 
 class TransformerBlockGemma2(nn.Module):
-    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
+    def __init__(self, config: Qwen3_06BConfig | Qwen3_4BConfig | Qwen3_8BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config, index):
         super().__init__()
         self.self_attn = Attention(config)
         self.mlp = MLP(config)
@@ -290,10 +341,17 @@ class TransformerBlockGemma2(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         freqs_cis: Optional[torch.Tensor] = None,
         optimized_attention=None,
+        past_key_value: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
     ):
         if self.transformer_type == "gemma3":
             if self.sliding_attention:
-                assert x.shape[1] <= self.sliding_attention
+                if x.shape[1] > self.sliding_attention:
+                    sliding_mask = torch.full((x.shape[1], x.shape[1]), float("-inf"), device=x.device, dtype=x.dtype)
+                    sliding_mask.tril_(diagonal=-self.sliding_attention)
+                    if attention_mask is not None:
+                        attention_mask = attention_mask + sliding_mask
+                    else:
+                        attention_mask = sliding_mask
                 freqs_cis = freqs_cis[1]
             else:
                 freqs_cis = freqs_cis[0]
@@ -301,11 +359,12 @@ class TransformerBlockGemma2(nn.Module):
         # Self Attention
         residual = x
         x = self.input_layernorm(x)
-        x = self.self_attn(
+        x, present_key_value = self.self_attn(
             hidden_states=x,
             attention_mask=attention_mask,
             freqs_cis=freqs_cis,
             optimized_attention=optimized_attention,
+            past_key_value=past_key_value,
         )
 
         x = self.post_attention_layernorm(x)
@@ -318,11 +377,11 @@ class TransformerBlockGemma2(nn.Module):
         x = self.post_feedforward_layernorm(x)
         x = residual + x
 
-        return x
+        return x, present_key_value
 
 
 class Llama2_(nn.Module):
-    def __init__(self, config: Qwen3_4BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
+    def __init__(self, config: Qwen3_06BConfig | Qwen3_4BConfig | Qwen3_8BConfig | Qwen25_7BVLI_Config | Gemma2_2B_Config):
         super().__init__()
         self.config = config
         self.vocab_size = config.vocab_size
@@ -342,7 +401,7 @@ class Llama2_(nn.Module):
         else:
             self.norm = None
 
-    def forward(self, x, attention_mask=None, embeds=None, num_tokens=None, intermediate_output=None, final_layer_norm_intermediate=True, dtype=None, position_ids=None, embeds_info=[]):
+    def forward(self, x, attention_mask=None, embeds=None, num_tokens=None, intermediate_output=None, final_layer_norm_intermediate=True, dtype=None, position_ids=None, embeds_info=[], past_key_values=None):
         if embeds is not None:
             x = embeds
         else:
@@ -351,21 +410,27 @@ class Llama2_(nn.Module):
         if self.normalize_in:
             x *= self.config.hidden_size**0.5
 
+        seq_len = x.shape[1]
+        past_len = 0
+        if past_key_values is not None and len(past_key_values) > 0:
+            past_len = past_key_values[0][2]
+
         if position_ids is None:
-            position_ids = torch.arange(0, x.shape[1], device=x.device).unsqueeze(0)
+            position_ids = torch.arange(past_len, past_len + seq_len, device=x.device).unsqueeze(0)
 
         freqs_cis = precompute_freqs_cis(self.config.head_dim, position_ids, self.config.rope_theta, self.config.rope_scale, self.config.rope_dims, device=x.device)
 
         mask = None
         if attention_mask is not None:
-            mask = 1.0 - attention_mask.to(x.dtype).reshape((attention_mask.shape[0], 1, -1, attention_mask.shape[-1])).expand(attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1])
-            mask = mask.masked_fill(mask.to(torch.bool), float("-inf"))
+            mask = 1.0 - attention_mask.to(x.dtype).reshape((attention_mask.shape[0], 1, -1, attention_mask.shape[-1])).expand(attention_mask.shape[0], 1, seq_len, attention_mask.shape[-1])
+            mask = mask.masked_fill(mask.to(torch.bool), torch.finfo(x.dtype).min / 4)
 
-        causal_mask = torch.empty(x.shape[1], x.shape[1], dtype=x.dtype, device=x.device).fill_(float("-inf")).triu_(1)
-        if mask is not None:
-            mask += causal_mask
-        else:
-            mask = causal_mask
+        if seq_len > 1:
+            causal_mask = torch.empty(past_len + seq_len, past_len + seq_len, dtype=x.dtype, device=x.device).fill_(torch.finfo(x.dtype).min / 4).triu_(1)
+            if mask is not None:
+                mask += causal_mask
+            else:
+                mask = causal_mask
 
         intermediate = None
         all_intermediate = None
@@ -380,16 +445,27 @@ class Llama2_(nn.Module):
             elif intermediate_output < 0:
                 intermediate_output = len(self.layers) + intermediate_output
 
+        next_key_values = []
         for i, layer in enumerate(self.layers):
             if all_intermediate is not None:
                 if only_layers is None or (i in only_layers):
                     all_intermediate.append(x.unsqueeze(1).clone())
-            x = layer(
+
+            past_kv = None
+            if past_key_values is not None:
+                past_kv = past_key_values[i] if len(past_key_values) > 0 else []
+
+            x, current_kv = layer(
                 x=x,
                 attention_mask=mask,
                 freqs_cis=freqs_cis,
                 optimized_attention=attention_function,
+                past_key_value=past_kv,
             )
+
+            if current_kv is not None:
+                next_key_values.append(current_kv)
+
             if i == intermediate_output:
                 intermediate = x.clone()
 
@@ -406,7 +482,10 @@ class Llama2_(nn.Module):
         if intermediate is not None and final_layer_norm_intermediate and self.norm is not None:
             intermediate = self.norm(intermediate)
 
-        return x, intermediate
+        if len(next_key_values) > 0:
+            return x, intermediate, next_key_values
+        else:
+            return x, intermediate
 
 
 class BaseLlama:
@@ -418,6 +497,21 @@ class BaseLlama:
 
     def forward(self, input_ids, *args, **kwargs):
         return self.model(input_ids, *args, **kwargs)
+
+
+class Qwen3_06B(BaseLlama, nn.Module):
+    def __init__(self, config_dict):
+        super().__init__()
+        config = Qwen3_06BConfig()
+
+        _config_dict = asdict(config)
+        for key, value in _config_dict.items():
+            if key in config_dict:
+                assert value == config_dict[key]
+
+        self.num_layers = config.num_hidden_layers
+
+        self.model = Llama2_(config)
 
 
 class Qwen3_4B(BaseLlama, nn.Module):

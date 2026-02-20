@@ -105,7 +105,7 @@ def weights_manual_cast(layer: torch.nn.Module, x: torch.Tensor, skip_weight_dty
     memory_management.sync_stream(target_device, offload_stream)
 
     if not _scale:
-        return weight, bias
+        return weight, bias, (offload_stream, weight, bias)
 
     weight_a = weight
     bias_a = bias
@@ -177,23 +177,37 @@ class ForgeOperations:
             self.scale_input = None
             self.parameters_manual_cast = current_manual_cast_enabled
 
-        def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        def _load_from_state_dict(self, state_dict: dict[str, torch.Tensor], prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+            state_dict.pop(prefix + "comfy_quant", None)  # TODO
+
+            if self.scale_weight is None:
+                if prefix + "scale_weight" in state_dict:
+                    self.scale_weight = torch.nn.Parameter(state_dict.pop(prefix + "scale_weight"))
+                elif prefix + "weight_scale" in state_dict:
+                    self.scale_weight = torch.nn.Parameter(state_dict.pop(prefix + "weight_scale"))
+            else:
+                if prefix + "weight_scale" in state_dict:
+                    state_dict[prefix + "scale_weight"] = state_dict.pop(prefix + "weight_scale")
+                elif prefix + "scale_weight" not in state_dict:
+                    self.scale_weight = None
+
+            if self.scale_input is None:
+                if prefix + "scale_input" in state_dict:
+                    self.scale_input = torch.nn.Parameter(state_dict.pop(prefix + "scale_input"))
+                elif prefix + "input_scale" in state_dict:
+                    self.scale_input = torch.nn.Parameter(state_dict.pop(prefix + "input_scale"))
+            else:
+                if prefix + "input_scale" in state_dict:
+                    state_dict[prefix + "scale_input"] = state_dict.pop(prefix + "input_scale")
+                elif prefix + "scale_input" not in state_dict:
+                    self.scale_input = None
+
             if hasattr(self, "dummy"):
                 if prefix + "weight" in state_dict:
                     self.weight = torch.nn.Parameter(state_dict[prefix + "weight"].to(**self.dummy))
                 if prefix + "bias" in state_dict:
                     self.bias = torch.nn.Parameter(state_dict[prefix + "bias"].to(**self.dummy))
-
                 del self.dummy
-
-                if prefix + "scale_weight" in state_dict:
-                    self.scale_weight = torch.nn.Parameter(state_dict[prefix + "scale_weight"])
-                elif prefix + "weight_scale" in state_dict:
-                    self.scale_weight = torch.nn.Parameter(state_dict[prefix + "weight_scale"])
-                if prefix + "scale_input" in state_dict:
-                    self.scale_input = torch.nn.Parameter(state_dict[prefix + "scale_input"])
-                elif prefix + "input_scale" in state_dict:
-                    self.scale_input = torch.nn.Parameter(state_dict[prefix + "input_scale"])
             else:
                 super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
@@ -329,6 +343,12 @@ class ForgeOperations:
             self.parameters_manual_cast = current_manual_cast_enabled
             self.bias = None
             self.add = add  # used by llama.py
+
+        def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+            if prefix + "scale" in state_dict:  # Flux
+                self.weight = torch.nn.Parameter(state_dict[prefix + "scale"].to(device=self.weight.device, dtype=self.weight.dtype))
+            else:
+                super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
         def reset_parameters(self):
             self.bias = None
@@ -675,6 +695,48 @@ class ForgeOperationsGGUF(ForgeOperations):
             with main_stream_worker(weight, bias, signal):
                 return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
+    class RMSNorm(torch.nn.RMSNorm):
+        def __init__(self, *args, add=False, **kwargs):
+            kwargs["device"] = current_device
+            kwargs["dtype"] = current_dtype
+            super().__init__(*args, **kwargs)
+            self.dummy = {"device": current_device, "dtype": current_dtype}
+            self.weight = None
+            self.bias = None
+            self.add = add  # used by llama.py
+
+        def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+            if hasattr(self, "dummy"):
+                if (computation_dtype := self.dummy["dtype"]) not in [torch.float16, torch.bfloat16]:
+                    computation_dtype = torch.float16
+
+                if prefix + "scale" in state_dict:
+                    self.weight = state_dict[prefix + "scale"].to(device=self.dummy["device"])
+                elif prefix + "weight" in state_dict:
+                    self.weight = state_dict[prefix + "weight"].to(device=self.dummy["device"])
+
+                self.weight.computation_dtype = computation_dtype
+                del self.dummy
+            else:
+                if prefix + "scale" in state_dict:
+                    self.weight = state_dict[prefix + "scale"]
+                elif prefix + "weight" in state_dict:
+                    self.weight = state_dict[prefix + "weight"]
+
+        def _apply(self, fn, recurse=True):
+            for k, p in self.named_parameters(recurse=False, remove_duplicate=True):
+                setattr(self, k, utils.tensor2parameter(fn(p)))
+            return self
+
+        def reset_parameters(self):
+            self.bias = None
+            return None
+
+        def forward(self, x):
+            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, skip_weight_dtype=True, skip_bias_dtype=True, _cast=False)
+            with main_stream_worker(weight, bias, signal):
+                return torch.nn.functional.rms_norm(x, self.normalized_shape, (weight + 1.0) if self.add else weight, self.eps)
+
 
 # region Nunchaku
 
@@ -713,7 +775,7 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
     input_shape, input_dtype = input.shape, input.dtype
 
     if len(input.shape) == 3:
-        w, bias = weights_manual_cast(self, input, dtype=dtype, _scale=False)
+        w, bias, signal = weights_manual_cast(self, input, dtype=dtype, _scale=False)
         w = w.t()
 
         if getattr(self, "scale_weight", None) is None:
@@ -726,7 +788,8 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
         input = torch.clamp(input, min=-448, max=448, out=input)
         input = input.reshape(-1, input_shape[2]).to(dtype).contiguous()
 
-        o = torch._scaled_mm(input, w, out_dtype=input_dtype, bias=bias, scale_a=scale_input, scale_b=scale_weight)
+        with main_stream_worker(w, bias, signal):
+            o = torch._scaled_mm(input, w, out_dtype=input_dtype, bias=bias, scale_a=scale_input, scale_b=scale_weight)
 
         if isinstance(o, tuple):
             o = o[0]

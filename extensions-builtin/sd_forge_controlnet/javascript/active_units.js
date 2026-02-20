@@ -1,8 +1,36 @@
 (function () {
     const AllControlnet = new Set();
 
+    class ControlNetAccordion {
+        constructor(ext) {
+            const badge = document.createElement("span");
+            badge.classList.add("cnet-badge");
+            badge.style.visibility = "hidden";
+
+            const label = ext.querySelector("button.label-wrap").querySelector("span");
+            label.appendChild(badge);
+            label.style.display = "flex";
+
+            this.badge = badge;
+            this.count = 0;
+        }
+
+        increase() {
+            this.count += 1;
+            this.badge.textContent = `${this.count}x Unit`;
+            this.badge.style.visibility = "visible";
+        }
+
+        decrease() {
+            this.count -= 1;
+            this.badge.textContent = `${this.count}x Unit`;
+            if (this.count === 0) this.badge.style.visibility = "hidden";
+        }
+    }
+
     class ControlNetUnitTab {
-        constructor(tab, index) {
+        constructor(cnet, tab, index) {
+            this.cnet = cnet;
             this.unitHeader = tab.parentNode.querySelector(".tab-nav").querySelectorAll("button")[index];
 
             this.enabledCheckbox = tab.querySelector(".cnet-unit-enabled input");
@@ -50,8 +78,14 @@
         }
 
         updateActiveState() {
-            if (this.enabledCheckbox.checked) this.unitHeader.classList.add("cnet-unit-active");
-            else this.unitHeader.classList.remove("cnet-unit-active");
+            if (this.enabledCheckbox.checked) {
+                this.unitHeader.classList.add("cnet-unit-active");
+                this.cnet.increase();
+            }
+            else {
+                this.unitHeader.classList.remove("cnet-unit-active");
+                this.cnet.decrease();
+            }
         }
 
         updateActiveControlType() {
@@ -73,12 +107,15 @@
     }
 
     onUiLoaded(() => {
-        document.querySelectorAll("#controlnet").forEach((ext) => {
+        for (const tab of ["txt2img", "img2img"]) {
+            const ext = document.getElementById(`${tab}_controlnet`).querySelector("#controlnet");
+
             if (AllControlnet.has(ext)) return;
             AllControlnet.add(ext);
 
+            const cnet = new ControlNetAccordion(ext);
             for (const [i, tab] of ext.querySelectorAll(".tabitem").entries())
-                new ControlNetUnitTab(tab, i);
-        });
+                new ControlNetUnitTab(cnet, tab, i);
+        }
     });
 })();

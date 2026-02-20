@@ -18,6 +18,7 @@ class Token:
     f2_9b = os.path.join(folder, "black-forest-labs", "FLUX.2-klein-9B", "tokenizer", "tokenizer.json")
 
 
+
 class sha256:
     wan = "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
     # https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers/blob/main/tokenizer/tokenizer.json

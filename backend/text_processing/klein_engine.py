@@ -112,6 +112,7 @@ class KleinTextProcessingEngine:
                 attention_mask.append(0 if eos else 1)
                 tokens_temp += [token]
                 if not eos and token == self.id_pad:
+                    attention_mask[-1] = 0
                     eos = True
                 index += 1
 

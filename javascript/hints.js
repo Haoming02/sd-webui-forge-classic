@@ -1,14 +1,16 @@
 // mouseover tooltips for various UI elements
 
 const titles = {
-    "Sampling method": "The algorithm used to refine each step of the image",
-    "Schedule type": "The algorithm used to adjust the magnitude of refinement",
-    "Sampling steps": "The number of times the image is iteratively refined",
+    "Sampling Method": "The algorithm used to refine each step of the image",
+    "Schedule Type": "The algorithm used to adjust the magnitude of refinement",
+    "Sampling Steps": "The number of times the image is iteratively refined",
 
-    "Batch count": "How many batches of images to generate (in sequence)",
-    "Batch size": "How many images to generate in a single batch (in parallel)",
+    "Batch Count": "How many batches of images to generate (in sequence)",
+    "Batch Size": "How many images to generate in a single batch (in parallel)",
 
     "CFG Scale": "The strength used to calculate conditionings",
+    "Rescale CFG": "Reduce the high-contrast burnt-color effects (mainly for v-pred checkpoints)",
+    "MaHiRo": "An alternative algorithm used for CFG calculation",
 
     "Seed": 'Given the same prompts and parameters, you "should" generate the same image if the Seed is also the same',
 
@@ -22,7 +24,7 @@ const titles = {
     "latent noise": "Fill the masked areas with noise (requires high Denoising strength)",
     "latent nothing": "Fill the masked areas with zero values (requires high Denoising strength)",
 
-    "Denoising strength": "How strong should the image be changed",
+    "Denoising Strength": "How strong should the image be changed",
 
     "Hires. fix": "Automatically perform an additional pass of img2img",
     "Hires steps": "Sampling Steps for the img2img pass; use original if 0",
@@ -40,8 +42,15 @@ function updateTooltip(element) {
     if (!tooltip) return;
     element.title = tooltip;
 
-    const field = element.parentNode.querySelector("input");
-    if (field != null) field.title = tooltip;
+    try {
+        for (let i = 0; i < 5; i++) {
+            element = element.parentNode;
+            if (element.classList.contains("block")) break;
+        }
+        const fields = element.querySelectorAll("input");
+        for (const field of fields)
+            field.title = tooltip;
+    } catch { };
 }
 
 const tooltipCheckNodes = new Set();

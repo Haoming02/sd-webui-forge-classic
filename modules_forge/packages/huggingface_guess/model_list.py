@@ -1,4 +1,4 @@
-# reference: https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/supported_models.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/supported_models.py
 
 from enum import Enum
 

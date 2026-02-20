@@ -9,13 +9,19 @@ from rich import print_json
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.logging import setup_logger
-from modules import infotext_utils, paths, processing, sd_models, shared, shared_items, ui_common
+from modules import (
+    infotext_utils,
+    paths,
+    processing,
+    sd_models,
+    shared,
+    shared_items,
+    ui_common,
+)
 from modules_forge.presets import PresetArch, use_distill, use_shift
 
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
-
-total_vram = int(memory_management.total_vram)
 
 ui_forge_preset: gr.Radio
 ui_checkpoint: gr.Dropdown
@@ -71,7 +77,7 @@ def make_checkpoint_manager_ui():
 
     ui_checkpoint = gr.Dropdown(label="Checkpoint", value=None, choices=None, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
 
-    ui_vae = gr.Dropdown(label="VAE / Text Encoder", value=None, choices=None, multiselect=True, elem_id="setting_sd_vae", elem_classes=["model_selection"])
+    ui_vae = gr.Dropdown(label="VAE / Text Encoder", value=None, choices=None, multiselect=True, elem_id="setting_sd_modules", elem_classes=["model_selection"])
 
     def refresh_model_list():
         ckpt_list, vae_list = refresh_models()
@@ -145,6 +151,11 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
     if ckpt.endswith(("gguf", "GGUF")) and not lora_fp16:
         logger.warning("GGUF requires fp16 LoRA ; overriding option")
         lora_fp16 = True
+
+    for mdl in [ckpt, *modules]:
+        for dtype in ("fp4_mixed", "fp4mixed", "fp8mixed", "nvfp4"):
+            if dtype in mdl:
+                logger.error(f'"{dtype}" is currently not supported...')
 
     dynamic_args["online_lora"] = lora_fp16
     logger.info(f"Patch LoRAs on-the-fly: {lora_fp16}")

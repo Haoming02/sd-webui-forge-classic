@@ -37,11 +37,18 @@ def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     return out.to(dtype=torch.float32, device=pos.device)
 
 
-def apply_rope1(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
-    x_ = x.to(dtype=freqs_cis.dtype).reshape(*x.shape[:-1], -1, 1, 2)
-    x_out = freqs_cis[..., 0] * x_[..., 0]
-    x_out.addcmul_(freqs_cis[..., 1], x_[..., 1])
-    return x_out.reshape(*x.shape).type_as(x)
+try:
+    import comfy_kitchen as ck
+except ImportError:
+
+    def apply_rope1(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
+        x_ = x.to(dtype=freqs_cis.dtype).reshape(*x.shape[:-1], -1, 1, 2)
+        x_out = freqs_cis[..., 0] * x_[..., 0]
+        x_out.addcmul_(freqs_cis[..., 1], x_[..., 1])
+        return x_out.reshape(*x.shape).type_as(x)
+
+else:
+    apply_rope1 = ck.apply_rope1
 
 
 def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -121,27 +128,11 @@ def build_mlp(hidden_size: int, mlp_hidden_dim: int, mlp_silu_act: bool = False,
         )
 
 
-class RMSNorm(nn.Module):
-    def __init__(self, dim: int):
-        super().__init__()
-        self.scale = nn.Parameter(torch.empty(dim))
-
-    def forward(self, x: torch.Tensor):
-        return RMSNorm.rms_norm(x, self.scale, 1e-6)
-
-    @staticmethod
-    def rms_norm(x: torch.Tensor, weight: nn.Parameter, eps=1e-6):
-        if weight is None:
-            return nn.functional.rms_norm(x, (x.shape[-1],), eps=eps)
-        else:
-            return nn.functional.rms_norm(x, weight.shape, weight=memory_management.cast_to(weight, dtype=x.dtype, device=x.device), eps=eps)
-
-
 class QKNorm(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
-        self.query_norm = RMSNorm(dim)
-        self.key_norm = RMSNorm(dim)
+        self.query_norm = nn.RMSNorm(dim)
+        self.key_norm = nn.RMSNorm(dim)
 
     def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> tuple:
         q = self.query_norm(q)
@@ -210,7 +201,7 @@ class SiLUActivation(nn.Module):
 
 
 class DoubleStreamBlock(nn.Module):
-    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float, qkv_bias: bool = False, flipped_img_txt=False, modulation=True, mlp_silu_act=False, proj_bias=True, yak_mlp=False):
+    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float, qkv_bias: bool = False, modulation=True, mlp_silu_act=False, proj_bias=True, yak_mlp=False):
         super().__init__()
 
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
@@ -238,8 +229,6 @@ class DoubleStreamBlock(nn.Module):
 
         self.txt_mlp = build_mlp(hidden_size, mlp_hidden_dim, mlp_silu_act=mlp_silu_act, yak_mlp=yak_mlp)
 
-        self.flipped_img_txt = flipped_img_txt
-
     def forward(self, img: torch.Tensor, txt: torch.Tensor, vec: torch.Tensor, pe: torch.Tensor, attn_mask=None, modulation_dims_img=None, modulation_dims_txt=None, transformer_options={}):
         if self.modulation:
             img_mod1, img_mod2 = self.img_mod(vec)
@@ -265,30 +254,17 @@ class DoubleStreamBlock(nn.Module):
         del txt_qkv
         txt_q, txt_k = self.txt_attn.norm(txt_q, txt_k, txt_v)
 
-        if self.flipped_img_txt:
-            q = torch.cat((img_q, txt_q), dim=2)
-            del img_q, txt_q
-            k = torch.cat((img_k, txt_k), dim=2)
-            del img_k, txt_k
-            v = torch.cat((img_v, txt_v), dim=2)
-            del img_v, txt_v
-            # run actual attention
-            attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
-            del q, k, v
+        q = torch.cat((txt_q, img_q), dim=2)
+        del txt_q, img_q
+        k = torch.cat((txt_k, img_k), dim=2)
+        del txt_k, img_k
+        v = torch.cat((txt_v, img_v), dim=2)
+        del txt_v, img_v
+        # run actual attention
+        attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
+        del q, k, v
 
-            img_attn, txt_attn = attn[:, : img.shape[1]], attn[:, img.shape[1] :]
-        else:
-            q = torch.cat((txt_q, img_q), dim=2)
-            del txt_q, img_q
-            k = torch.cat((txt_k, img_k), dim=2)
-            del txt_k, img_k
-            v = torch.cat((txt_v, img_v), dim=2)
-            del txt_v, img_v
-            # run actual attention
-            attn = attention(q, k, v, pe=pe, mask=attn_mask, transformer_options=transformer_options)
-            del q, k, v
-
-            txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
+        txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
         # calculate the img blocks
         img += apply_mod(self.img_attn.proj(img_attn), img_mod1.gate, None, modulation_dims_img)
@@ -440,7 +416,7 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         self.guidance_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size, bias=ops_bias) if guidance_embed else nn.Identity()
         self.txt_in = nn.Linear(context_in_dim, self.hidden_size, bias=ops_bias)
 
-        self.txt_norm = RMSNorm(context_in_dim) if txt_norm else None
+        self.txt_norm = nn.RMSNorm(context_in_dim) if txt_norm else None
 
         self.double_blocks = nn.ModuleList(
             [
@@ -656,11 +632,11 @@ class IntegratedFluxTransformer2DModel(nn.Module):
                     w = max(w, ref.shape[-1] + w_offset)
 
                 kontext, kontext_ids = self.process_img(ref.to(x), index=index, h_offset=h_offset, w_offset=w_offset)
-                if img.shape[0] == 2:  # batch_cond_uncond
-                    kontext = torch.cat((kontext, kontext), dim=0)
+                if img.size(0) > 1:
+                    kontext = kontext.expand(img.shape[0], *kontext.shape[1:])
                 img = torch.cat([img, kontext], dim=1)
-                if img_ids.shape[0] == 2:  # batch_cond_uncond
-                    kontext_ids = torch.cat((kontext_ids, kontext_ids), dim=0)
+                if img_ids.size(0) > 1:
+                    kontext_ids = kontext_ids.expand(img_ids.shape[0], *kontext_ids.shape[1:])
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
 
         txt_ids = torch.zeros((bs, context.shape[1], len(self.axes_dim)), device=x.device, dtype=torch.float32)
@@ -668,9 +644,6 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         if len(self.txt_ids_dims) > 0:
             for i in self.txt_ids_dims:
                 txt_ids[:, :, i] = torch.linspace(0, context.shape[1] - 1, steps=context.shape[1], device=x.device, dtype=torch.float32)
-
-        if self.patch_size == 1:
-            timestep = timestep / 1000.0  # flux 2
 
         out = self.forward_orig(img, img_ids, context, txt_ids, timestep, y, guidance, control, transformer_options, attn_mask=kwargs.get("attention_mask", None))
         out = out[:, :img_tokens]

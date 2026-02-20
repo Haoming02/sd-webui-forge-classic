@@ -249,7 +249,7 @@ def run_extensions_installers(settings_file):
     return
 
 
-re_requirement = re.compile(r"\s*(\S+)\s*==\s*(\S+)\s*")
+re_requirement = re.compile(r"\s*(\S+)\s*==\s*([^\s;]+)\s*")
 
 
 def requirements_met(requirements_file):
@@ -294,7 +294,7 @@ def prepare_environment():
     bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.1")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.0")
-    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.39.0 gradio_rangeslider==0.0.8")
+    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_rangeslider==0.0.8")
     requirements_file = os.environ.get("REQS_FILE", "requirements.txt")
 
     try:
@@ -501,6 +501,39 @@ def configure_comfy_reference(comfy_home: Path):
             continue
 
         sys.argv.extend([ref.arg_name, str(target_path.absolute())])
+
+
+def _configure_yaml(base: str, config: str | list, arg: str):
+    if config is None:
+        return
+    if isinstance(config, str):
+        config = [config]
+
+    assert isinstance(config, list)
+
+    for folder in config:
+        path = os.path.abspath(os.path.normpath(os.path.join(base, folder)))
+        if os.path.isdir(path):
+            sys.argv.extend([arg, str(path)])
+
+
+def configure_comfy_yaml(comfy_yaml: Path):
+    """Append model paths based on an existing Comfy config"""
+
+    import yaml
+
+    with open(comfy_yaml, "r", encoding="utf-8") as file:
+        configs: dict[str, dict[str, os.PathLike]] = yaml.safe_load(file)
+
+    for config in configs.values():
+        base = config.get("base_path", "")
+        _configure_yaml(base, config.get("checkpoints", None), "--ckpt-dirs")
+        _configure_yaml(base, config.get("diffusion_models", None), "--ckpt-dirs")
+        _configure_yaml(base, config.get("unet", None), "--ckpt-dirs")
+        _configure_yaml(base, config.get("clip", None), "--text-encoder-dirs")
+        _configure_yaml(base, config.get("text_encoders", None), "--text-encoder-dirs")
+        _configure_yaml(base, config.get("loras", None), "--lora-dirs")
+        _configure_yaml(base, config.get("vae", None), "--vae-dirs")
 
 
 def start():

@@ -3,14 +3,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import torch
 
+    from backend.patcher.clip import CLIP
+    from backend.patcher.unet import UnetPatcher
+    from backend.patcher.vae import VAE
+
 from backend import memory_management, utils
 
 
 class ForgeObjects:
     def __init__(self, unet, clip, vae, clipvision):
-        self.unet = unet
-        self.clip = clip
-        self.vae = vae
+        self.unet: "UnetPatcher" = unet
+        self.clip: "CLIP" = clip
+        self.vae: "VAE" = vae
         self.clipvision = clipvision
 
     def shallow_copy(self):
@@ -24,9 +28,9 @@ class ForgeDiffusionEngine:
         self.model_config = estimated_config
         self.is_inpaint = estimated_config.inpaint_model()
 
-        self.forge_objects = None
-        self.forge_objects_original = None
-        self.forge_objects_after_applying_lora = None
+        self.forge_objects: "ForgeObjects" = None
+        self.forge_objects_original: "ForgeObjects" = None
+        self.forge_objects_after_applying_lora: "ForgeObjects" = None
 
         self.current_lora_hash = str([])
 
@@ -58,14 +62,26 @@ class ForgeDiffusionEngine:
 
     def fix_for_webui_backward_compatibility(self):
         self.tiling_enabled = False
-        self.first_stage_model = None
-        self.cond_stage_model = None
         self.use_distilled_cfg_scale = False
         self.use_shift = False
         self.is_sd1 = False
         self.is_sdxl = False
         self.is_flux = False  # affects the usage of TAESD
         self.is_wan = False  # affects the usage of WanVAE (B, C, T, H, W)
+
+    @property
+    def first_stage_model(self):
+        try:
+            return self.forge_objects.vae.first_stage_model
+        except Exception:
+            return None
+
+    @property
+    def cond_stage_model(self):
+        try:
+            return self.forge_objects.clip.cond_stage_model
+        except Exception:
+            return None
 
     def clear_references(self):
         # called by ImageStitch

@@ -11,7 +11,6 @@ from backend.nn.flux import (
     EmbedND,
     MLPEmbedder,
     ModulationOut,
-    RMSNorm,
     SingleStreamBlock,
     timestep_embedding,
 )
@@ -33,7 +32,7 @@ class Approximator(nn.Module):
         super().__init__()
         self.in_proj = nn.Linear(in_dim, hidden_dim, bias=True)
         self.layers = nn.ModuleList([MLPEmbedder(hidden_dim, hidden_dim) for _ in range(n_layers)])
-        self.norms = nn.ModuleList([RMSNorm(hidden_dim) for _ in range(n_layers)])
+        self.norms = nn.ModuleList([nn.RMSNorm(hidden_dim) for _ in range(n_layers)])
         self.out_proj = nn.Linear(hidden_dim, out_dim)
 
     @property

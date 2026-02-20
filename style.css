@@ -519,20 +519,20 @@ div.toprow-compact-tools {
 }
 
 #forge_ui_preset input {
-    width: 4em;
+    width: 5em;
 }
 
 #setting_sd_model_checkpoint input {
-    width: 20em;
+    width: 20vw;
 }
 
-#setting_sd_vae input {
+#setting_sd_modules input {
     width: 2em;
     height: 18px !important;
     margin-left: auto;
 }
 
-#setting_sd_vae .icon-wrap {
+#setting_sd_modules .icon-wrap {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
@@ -542,14 +542,14 @@ div.toprow-compact-tools {
     pointer-events: none;
 }
 
-#setting_sd_vae div.wrap-inner {
-    min-width: 20em;
+#setting_sd_modules div.wrap-inner {
+    min-width: 20vw;
     height: 40px !important;
     cursor: pointer;
     padding: 0em 2em 0em 0.5em;
 }
 
-#setting_sd_vae div.token {
+#setting_sd_modules div.token {
     height: 32px;
     border-radius: 4px;
     margin: auto;

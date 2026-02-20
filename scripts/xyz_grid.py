@@ -1,26 +1,35 @@
-from collections import namedtuple
-from copy import copy
-from itertools import permutations, chain
-import random
 import csv
 import os.path
+import random
+import re
+from collections import namedtuple
+from copy import copy
 from io import StringIO
-from PIL import Image
+from itertools import chain, permutations
+
+import gradio as gr
 import numpy as np
+from PIL import Image
 
 import modules.scripts as scripts
-import gradio as gr
-
-from modules import images, sd_samplers, processing, sd_models, sd_vae, sd_schedulers, errors
-from modules.processing import process_images, Processed, StableDiffusionProcessingTxt2Img
-from modules.shared import opts, state
-from modules.sd_models import model_data, select_checkpoint
-import modules.shared as shared
-import modules.sd_samplers
 import modules.sd_models
-import modules.sd_vae
-import re
-
+import modules.shared as shared
+from modules import (
+    errors,
+    images,
+    processing,
+    sd_models,
+    sd_samplers,
+    sd_schedulers,
+    sd_vae,
+)
+from modules.processing import (
+    Processed,
+    StableDiffusionProcessingTxt2Img,
+    process_images,
+)
+from modules.sd_models import model_data, select_checkpoint
+from modules.shared import opts, state
 from modules.ui_components import ToolButton
 
 fill_values_symbol = "\U0001f4d2"  # 📒
@@ -139,16 +148,17 @@ def apply_size(p, x: str, xs) -> None:
         print(f"Invalid size in XYZ plot: {x}")
 
 
-def find_vae(name: str):
-    if (name := name.strip().lower()) in ('auto', 'automatic'):
-        return 'Automatic'
-    elif name == 'none':
-        return 'None'
-    return next((k for k in modules.sd_vae.vae_dict if k.lower() == name), print(f'No VAE found for {name}; using Automatic') or 'Automatic')
+def find_vae(name: str) -> str:
+    if name is None or (name := name.strip().lower()) == "none":
+        return "None"
+    elif name in ("auto", "automatic"):
+        return "Automatic"
+    else:
+        return sd_vae.vae_dict[name]
 
 
 def apply_vae(p, x, xs):
-    p.override_settings['sd_vae'] = find_vae(x)
+    p.override_settings["sd_vae"] = find_vae(x)
 
 
 def apply_styles(p: StableDiffusionProcessingTxt2Img, x: str, _):
