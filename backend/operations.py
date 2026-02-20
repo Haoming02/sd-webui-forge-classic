@@ -177,23 +177,37 @@ class ForgeOperations:
             self.scale_input = None
             self.parameters_manual_cast = current_manual_cast_enabled
 
-        def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        def _load_from_state_dict(self, state_dict: dict[str, torch.Tensor], prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+            state_dict.pop(prefix + "comfy_quant", None)  # TODO
+
+            if self.scale_weight is None:
+                if prefix + "scale_weight" in state_dict:
+                    self.scale_weight = torch.nn.Parameter(state_dict.pop(prefix + "scale_weight"))
+                elif prefix + "weight_scale" in state_dict:
+                    self.scale_weight = torch.nn.Parameter(state_dict.pop(prefix + "weight_scale"))
+            else:
+                if prefix + "weight_scale" in state_dict:
+                    state_dict[prefix + "scale_weight"] = state_dict.pop(prefix + "weight_scale")
+                elif prefix + "scale_weight" not in state_dict:
+                    self.scale_weight = None
+
+            if self.scale_input is None:
+                if prefix + "scale_input" in state_dict:
+                    self.scale_input = torch.nn.Parameter(state_dict.pop(prefix + "scale_input"))
+                elif prefix + "input_scale" in state_dict:
+                    self.scale_input = torch.nn.Parameter(state_dict.pop(prefix + "input_scale"))
+            else:
+                if prefix + "input_scale" in state_dict:
+                    state_dict[prefix + "scale_input"] = state_dict.pop(prefix + "input_scale")
+                elif prefix + "scale_input" not in state_dict:
+                    self.scale_input = None
+
             if hasattr(self, "dummy"):
                 if prefix + "weight" in state_dict:
                     self.weight = torch.nn.Parameter(state_dict[prefix + "weight"].to(**self.dummy))
                 if prefix + "bias" in state_dict:
                     self.bias = torch.nn.Parameter(state_dict[prefix + "bias"].to(**self.dummy))
-
                 del self.dummy
-
-                if prefix + "scale_weight" in state_dict:
-                    self.scale_weight = torch.nn.Parameter(state_dict[prefix + "scale_weight"])
-                elif prefix + "weight_scale" in state_dict:
-                    self.scale_weight = torch.nn.Parameter(state_dict[prefix + "weight_scale"])
-                if prefix + "scale_input" in state_dict:
-                    self.scale_input = torch.nn.Parameter(state_dict[prefix + "scale_input"])
-                elif prefix + "input_scale" in state_dict:
-                    self.scale_input = torch.nn.Parameter(state_dict[prefix + "input_scale"])
             else:
                 super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
