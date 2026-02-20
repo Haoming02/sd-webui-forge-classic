@@ -90,7 +90,6 @@ class ForgeCanvas {
         this.foreground_gradio_bind = new GradioTextAreaBind(this.uuid, "logical_image_foreground");
         this.init();
 
-        this._held_W = false;
         this._held_A = false;
         this._held_S = false;
 
@@ -373,7 +372,7 @@ class ForgeCanvas {
             const delta = e.deltaY * -0.001;
             let scale = true;
 
-            if (this._held_W) {
+            if (e.ctrlKey) {
                 // Width
                 scribbleWidth.value = parseInt(scribbleWidth.value) - Math.sign(e.deltaY) * 3;
                 updateInput(scribbleWidth);
@@ -497,13 +496,11 @@ class ForgeCanvas {
                     maxButton.click();
             }
 
-            if (e.key === "w") this._held_W = true;
             if (e.key === "a") this._held_A = true;
             if (e.key === "s") this._held_S = true;
         });
 
         document.addEventListener("keyup", () => {
-            this._held_W = false;
             this._held_A = false;
             this._held_S = false;
 

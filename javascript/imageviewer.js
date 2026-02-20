@@ -1,5 +1,48 @@
 // A full size 'lightbox' preview modal shown when left clicking on gallery previews
+let modalWheelZoom = 1;
+
+function applyModalWheelZoom() {
+    const modalImage = gradioApp().getElementById("modalImage");
+    if (!modalImage) return;
+
+    modalImage.style.transform = `scale(${modalWheelZoom})`;
+}
+
+function resetModalWheelZoom() {
+    modalWheelZoom = 1;
+    const modalImage = gradioApp().getElementById("modalImage");
+    if (!modalImage) return;
+
+    modalImage.style.transform = "";
+    modalImage.style.transformOrigin = "center center";
+}
+
+function modalWheelZoomHandler(event) {
+    const modalImage = gradioApp().getElementById("modalImage");
+    if (!modalImage || modalImage.style.display === "none") return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const zoomStep = 0.1;
+    const zoomDelta = event.deltaY < 0 ? zoomStep : -zoomStep;
+    const nextZoom = Math.max(0.2, Math.min(8, modalWheelZoom + zoomDelta));
+
+    if (nextZoom === modalWheelZoom) return;
+
+    const rect = modalImage.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+        const x = ((event.clientX - rect.left) / rect.width) * 100;
+        const y = ((event.clientY - rect.top) / rect.height) * 100;
+        modalImage.style.transformOrigin = `${x}% ${y}%`;
+    }
+
+    modalWheelZoom = nextZoom;
+    applyModalWheelZoom();
+}
+
 function closeModal() {
+    resetModalWheelZoom();
     gradioApp().getElementById("lightboxModal").style.display = "none";
 }
 
@@ -13,6 +56,7 @@ function showModal(event) {
         ? "&#x1F5C7;"
         : "&#x1F5C6;";
     const lb = gradioApp().getElementById("lightboxModal");
+    resetModalWheelZoom();
     modalImage.src = source.src;
     if (modalImage.style.display === "none") {
         lb.style.setProperty("background-image", "url(" + source.src + ")");
@@ -71,6 +115,7 @@ function modalImageSwitch(offset) {
             nextButton.click();
             const modalImage = gradioApp().getElementById("modalImage");
             const modal = gradioApp().getElementById("lightboxModal");
+            resetModalWheelZoom();
             modalImage.src = nextButton.children[0].src;
             if (modalImage.style.display === "none") {
                 modal.style.setProperty("background-image", `url(${modalImage.src})`);
@@ -197,6 +242,7 @@ function modalTileImageToggle(event) {
     if (isTiling) {
         modalImage.style.display = "block";
         modal.style.setProperty("background-image", "none");
+        resetModalWheelZoom();
     } else {
         modalImage.style.display = "none";
         modal.style.setProperty("background-image", `url(${modalImage.src})`);
@@ -269,6 +315,10 @@ document.addEventListener("DOMContentLoaded", function () {
     modalImage.onclick = closeModal;
     modalImage.tabIndex = 0;
     modalImage.addEventListener("keydown", modalKeyHandler, true);
+    modalImage.addEventListener("wheel", modalWheelZoomHandler, {
+        passive: false,
+        capture: true,
+    });
     modal.appendChild(modalImage);
 
     const modalPrev = document.createElement("a");
