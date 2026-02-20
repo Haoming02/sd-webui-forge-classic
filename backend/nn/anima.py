@@ -795,6 +795,7 @@ class Anima(MiniTrainDIT):
         super().__init__(*args, **kwargs)
         self.llm_adapter = LLMAdapter()
 
+    @torch.inference_mode()
     def preprocess_text_embeds(self, text_embeds, text_ids):
         if text_ids is not None:
             device = self.llm_adapter.embed.weight.device
