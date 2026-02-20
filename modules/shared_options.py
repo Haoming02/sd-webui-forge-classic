@@ -369,6 +369,7 @@ options_templates.update(
         ("refiner", "Refiner", "sd"),
         {
             "show_refiner": OptionInfo(False, "Display the Refiner Accordion").info("Refiner swaps the model in the middle of generation; useful for Wan 2.2 <b>High Noise</b> to <b>Low Noise</b> switching").needs_reload_ui(),
+            "refiner_fast_sd": OptionInfo(False, 'Reload "state_dict" Only').info("EXPERIMENTAL").info("does not support LoRA currently"),
             "refiner_use_steps": OptionInfo(False, 'Switch based on "steps" instead').info('by default, Refiner swaps the model based on "sigmas" to match <a href="https://www.reddit.com/r/StableDiffusion/comments/1n3qns1/wan_22_how_many_highsteps_are_needed_a_simple/">Wan 2.2</a> \'s behavior'),
             "refiner_lora_replacement": OptionInfo(
                 "high_noise=low_noise",
