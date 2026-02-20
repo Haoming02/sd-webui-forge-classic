@@ -1,10 +1,8 @@
-from __future__ import annotations
-
 import functools
 import logging
 import os.path
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import network
 import torch
@@ -77,14 +75,13 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
     return model, clip
 
 
-def load_network(name, network_on_disk):
+def load_network(name: str, network_on_disk: network.NetworkOnDisk):
     net = network.Network(name, network_on_disk)
     net.mtime = os.path.getmtime(network_on_disk.filename)
-
     return net
 
 
-def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=None):
+def load_networks(names: list[str], te_multipliers: list[float] = None, unet_multipliers: list[float] = None):
     current_sd = sd_models.model_data.get_sd_model()
     if current_sd is None:
         return
@@ -124,13 +121,12 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
         online_mode = False
 
     compiled_lora_targets = []
-    for a, b, c in zip(networks_on_disk, unet_multipliers, te_multipliers):
-        if a is None:
+    for n, u, t in zip(networks_on_disk, unet_multipliers, te_multipliers):
+        if n is None:
             continue
-        compiled_lora_targets.append([a.filename, b, c, online_mode])
+        compiled_lora_targets.append([n.filename, u, t, online_mode])
 
     compiled_lora_targets_hash = str(compiled_lora_targets)
-
     if current_sd.current_lora_hash == compiled_lora_targets_hash:
         return
 
@@ -146,13 +142,14 @@ def load_networks(names, te_multipliers=None, unet_multipliers=None, dyn_dims=No
         current_sd.forge_objects.unet, current_sd.forge_objects.clip = load_lora_for_models(current_sd.forge_objects.unet, current_sd.forge_objects.clip, lora_sd, strength_model, strength_clip, filename=filename, online_mode=online_mode)
 
     current_sd.forge_objects_after_applying_lora = current_sd.forge_objects.shallow_copy()
-    return
 
 
-def process_network_files(names: list[str] | None = None):
+def process_network_files(names: Optional[list[str]] = None):
     candidates = []
+
     for _dir in [shared.cmd_opts.lora_dir, *shared.cmd_opts.lora_dirs]:
         candidates.extend(shared.walk_files(_dir, allowed_extensions=[".pt", ".ckpt", ".safetensors"]))
+
     for filename in candidates:
         if os.path.isdir(filename):
             continue
@@ -169,7 +166,7 @@ def process_network_files(names: list[str] | None = None):
         available_networks[name] = entry
 
         if entry.alias in available_network_aliases:
-            forbidden_network_aliases[entry.alias.lower()] = 1
+            forbidden_network_aliases.add(entry.alias.lower())
 
         available_network_aliases[name] = entry
         available_network_aliases[entry.alias] = entry
@@ -182,9 +179,9 @@ def update_available_networks_by_names(names: list[str]):
 def list_available_networks():
     available_networks.clear()
     available_network_aliases.clear()
-    forbidden_network_aliases.clear()
     available_network_hash_lookup.clear()
-    forbidden_network_aliases.update({"none": 1, "Addams": 1})
+    forbidden_network_aliases.clear()
+    forbidden_network_aliases.update(["none", "Addams"])
 
     os.makedirs(shared.cmd_opts.lora_dir, exist_ok=True)
 
@@ -194,7 +191,7 @@ def list_available_networks():
 re_network_name = re.compile(r"(.*)\s*\([0-9a-fA-F]+\)")
 
 
-def infotext_pasted(infotext, params):
+def infotext_pasted(infotext, params: dict):
     if "AddNet Module 1" in [x[1] for x in scripts.scripts_txt2img.infotext_fields]:
         return  # if the other extension is active, it will handle those fields, no need to do anything
 
@@ -213,8 +210,7 @@ def infotext_pasted(infotext, params):
         if name is None:
             continue
 
-        m = re_network_name.match(name)
-        if m:
+        if m := re_network_name.match(name):
             name = m.group(1)
 
         multiplier = params.get("AddNet Weight A " + num, "1.0")
@@ -227,12 +223,10 @@ def infotext_pasted(infotext, params):
 
 extra_network_lora = None
 
-available_networks = {}
-available_network_aliases = {}
-loaded_networks = []
-loaded_bundle_embeddings = {}
-networks_in_memory = {}
-available_network_hash_lookup = {}
-forbidden_network_aliases = {}
+available_networks: dict[str, "network.NetworkOnDisk"] = {}
+available_network_aliases: dict[str, "network.NetworkOnDisk"] = {}
+available_network_hash_lookup: dict[bytes, "network.NetworkOnDisk"] = {}
+forbidden_network_aliases: set[str] = set()
+loaded_networks: list["network.Network"] = []
 
 list_available_networks()
