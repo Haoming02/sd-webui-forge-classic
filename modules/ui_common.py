@@ -317,7 +317,7 @@ def create_refresh_button(refresh_component, refresh_method, refreshed_args, ele
 
 
 def setup_dialog(button_show, dialog, *, button_close=None):
-    """Sets up the UI so that the dialog (gr.Box) is invisible, and is only shown when buttons_show is clicked, in a fullscreen modal window."""
+    """Sets up the UI so that the dialog (gr.Group) is invisible, and is only shown when buttons_show is clicked, in a fullscreen modal window."""
 
     dialog.visible = False
 

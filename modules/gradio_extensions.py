@@ -3,7 +3,9 @@ import warnings
 from functools import wraps
 
 import gradio as gr
+import gradio.blocks
 import gradio.component_meta
+import gradio.events
 
 from modules import patches, scripts, ui_tempdir
 
@@ -84,9 +86,9 @@ def Blocks_get_config_file(self, *args, **kwargs):
 
 
 original_IOComponent_init = patches.patch(__name__, obj=gr.components.Component, field="__init__", replacement=IOComponent_init)
-original_Block_get_config = patches.patch(__name__, obj=gr.blocks.Block, field="get_config", replacement=Block_get_config)
-original_BlockContext_init = patches.patch(__name__, obj=gr.blocks.BlockContext, field="__init__", replacement=BlockContext_init)
-original_Blocks_get_config_file = patches.patch(__name__, obj=gr.blocks.Blocks, field="get_config_file", replacement=Blocks_get_config_file)
+original_Block_get_config = patches.patch(__name__, obj=gradio.blocks.Block, field="get_config", replacement=Block_get_config)
+original_BlockContext_init = patches.patch(__name__, obj=gradio.blocks.BlockContext, field="__init__", replacement=BlockContext_init)
+original_Blocks_get_config_file = patches.patch(__name__, obj=gradio.blocks.Blocks, field="get_config_file", replacement=Blocks_get_config_file)
 
 
 ui_tempdir.install_ui_tempdir_override()
@@ -116,8 +118,7 @@ class EventWrapper:
 
     def __call__(self, *args, **kwargs):
         if "_js" in kwargs:
-            kwargs["js"] = kwargs["_js"]
-            del kwargs["_js"]
+            kwargs["js"] = kwargs.pop("_js")
         return self.replaced_event(*args, **kwargs)
 
     @property
@@ -159,20 +160,18 @@ for component in set(gr.components.__all__ + gr.layouts.__all__):
     repair(getattr(gr, component, None))
 
 
-class Dependency(gr.events.Dependency):
+class Dependency(gradio.events.Dependency):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        original_then = self.then
 
+        @wraps(original_then)
         def then(*xargs, _js=None, **xkwargs):
             if _js:
                 xkwargs["js"] = _js
-
             return original_then(*xargs, **xkwargs)
 
-        original_then = self.then
         self.then = then
 
 
-gr.events.Dependency = Dependency
-
-gr.Box = gr.Group
+gradio.events.Dependency = Dependency

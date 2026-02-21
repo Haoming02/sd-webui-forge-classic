@@ -164,7 +164,7 @@ class UserMetadataEditor:
         self.setup_save_handler(self.button_save, self.save_user_metadata, [self.edit_description, self.edit_notes])
 
     def create_ui(self):
-        with gr.Box(visible=False, elem_id=self.id_part, elem_classes="edit-user-metadata") as box:
+        with gr.Group(visible=False, elem_id=self.id_part, elem_classes="edit-user-metadata") as box:
             self.box = box
 
             self.edit_name_input = gr.Textbox("Edit user metadata card id", visible=False, elem_id=f"{self.id_part}_name")
