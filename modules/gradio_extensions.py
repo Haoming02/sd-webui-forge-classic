@@ -175,3 +175,4 @@ class Dependency(gradio.events.Dependency):
 
 
 gradio.events.Dependency = Dependency
+gr.Box = gr.Group
