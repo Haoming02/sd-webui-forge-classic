@@ -3,6 +3,7 @@ from lib_multidiffusion.tiled_diffusion import TiledDiffusion
 
 from modules import scripts
 from modules.ui_components import InputAccordion
+from modules.ui_common import ToolButton
 
 
 class MultiDiffusionForForge(scripts.Script):
@@ -18,11 +19,22 @@ class MultiDiffusionForForge(scripts.Script):
         with InputAccordion(False, label=self.title()) as enabled:
             method = gr.Radio(label="Method", choices=("MultiDiffusion", "Mixture of Diffusers"), value="Mixture of Diffusers")
             with gr.Row():
+                detect_image_size_btn = ToolButton(value="\U0001f4d0", elem_id="multidiffusion_detect_image_size_btn", tooltip="Auto detect size from image")
+            with gr.Row():
                 tile_width = gr.Slider(label="Tile Width", minimum=256, maximum=2048, step=64, value=768)
                 tile_height = gr.Slider(label="Tile Height", minimum=256, maximum=2048, step=64, value=768)
             with gr.Row():
                 tile_overlap = gr.Slider(label="Tile Overlap", minimum=0, maximum=1024, step=16, value=64)
                 tile_batch_size = gr.Slider(label="Tile Batch Size", minimum=1, maximum=8, step=1, value=1)
+
+        # Connect the detect image size button to update width and height
+        detect_image_size_btn.click(
+            fn=lambda w, h: (w or gr.skip(), h or gr.skip()),
+            _js="currentImg2imgSourceResolution",
+            inputs=[tile_width, tile_height],
+            outputs=[tile_width, tile_height],
+            show_progress=False,
+        )
 
         return enabled, method, tile_width, tile_height, tile_overlap, tile_batch_size
 
