@@ -93,7 +93,6 @@ def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
         return
 
     orig_ckpt = getattr(opts, "sd_model_checkpoint", None)
-    p.override_settings["sd_model_checkpoint"] = info.name
 
     opts.set("sd_model_checkpoint", info.name)
     refresh_loading_params_for_xyz_grid()
