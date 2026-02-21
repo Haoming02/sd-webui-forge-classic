@@ -10,6 +10,11 @@ from backend.utils import get_attr, set_attr_raw
 from modules import scripts
 
 
+def skip_torch_compile_dict(guard_entries):
+    # https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_torch_compile.py#L5
+    return [("transformer_options" not in entry.name) for entry in guard_entries]
+
+
 class TorchCompileForForge(scripts.Script):
     sorting_priority = 67
 
@@ -24,35 +29,24 @@ class TorchCompileForForge(scripts.Script):
 
     def ui(self, *args, **kwargs):
         with gr.Accordion(open=False, label=self.title()):
-            with gr.Row():
-                behavior = gr.Radio(
-                    label="Behavior",
-                    value="auto",
-                    choices=["enable", "disable", "auto"],
-                    info='"auto" maintains the current status',
-                    scale=2,
-                )
-                gr.Label(
-                    value="Only enable this if you know what you are doing",
-                    show_label=False,
-                    scale=5,
-                )
-            with gr.Row():
-                backend = gr.Radio(
-                    label="Backend",
-                    value="inductor",
-                    choices=["inductor", "cudagraphs"],
-                    scale=2,
-                )
-                mode = gr.Radio(
-                    label="Mode",
-                    value="default",
-                    choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
-                    scale=5,
-                )
+            gr.Markdown(
+                """
+**torch.compile** speeds up the Inference by compiling the model ahead of time
+- **guard_filter_fn:** Compile the Fastest ; Require recompilation if Resolution / Batch Size is changed
+- **dynamic:** Longer to Compile ; Support any Resolution / Batch Size
+- **cudagraphs:** Not Recommended
+                """
+            )
+            preset = gr.Dropdown(
+                label="Preset",
+                value="Automatic",
+                choices=["Automatic", "Disable", "guard_filter_fn", "dynamic", "cudagraphs"],
+                info='"Automatic" maintains the current compile status',
+            )
 
-        backend.change(lambda v: gr.update(visible=(v == "inductor")), inputs=[backend], outputs=[mode], queue=False, show_progress=False)
-        return [behavior, backend, mode]
+            preset.do_not_save_to_config = True
+
+        return [preset]
 
     @staticmethod
     def restore(kmodel: "KModel"):
@@ -73,30 +67,34 @@ class TorchCompileForForge(scripts.Script):
         model = get_attr(kmodel, "_model_backup")
         set_attr_raw(kmodel, "diffusion_model", model)
 
-    def process_batch(self, p, behavior: str, backend: str, mode: str, **kwargs):
+    def process_batch(self, p, preset: str, **kwargs):
         kmodel: "KModel" = p.sd_model.forge_objects.unet.model
-        enable: bool = hasattr(kmodel, "_compile_config") if behavior == "auto" else (behavior == "enable")
+        compiled: bool = hasattr(kmodel, "_compile_config")
+        enable: bool = compiled if preset == "Automatic" else (preset != "Disable")
 
         if not enable:
-            if hasattr(kmodel, "_compile_config"):
+            if compiled:
                 self.restore(kmodel)
             return
 
-        if backend == "inductor":
-            config = dict(backend=backend, mode=mode, dynamic=True, fullgraph=False)
-        else:
-            config = dict(backend=backend, dynamic=True, fullgraph=True)
+        match preset:
+            case "guard_filter_fn":
+                config = dict(backend="inductor", dynamic=False, fullgraph=False, options={"guard_filter_fn": skip_torch_compile_dict})
+            case "dynamic":
+                config = dict(backend="inductor", dynamic=True, fullgraph=False)
+            case "cudagraphs":
+                config = dict(backend="cudagraphs", dynamic=True, fullgraph=True)
+            case _:
+                config: dict = kmodel._compile_config
 
-        _cache: str = str(config) + p.sd_model.current_lora_hash
-
-        if (_config := getattr(kmodel, "_compile_config", None)) is not None:
-            if _config != _cache:
-                self.restore(kmodel)
-            else:
+        if compiled:
+            if kmodel._compile_config == config:
                 c_model = get_attr(kmodel, "_compiled_backup")
                 set_attr_raw(kmodel, "diffusion_model", c_model)
                 del kmodel._compiled_backup
                 return
+
+            self.restore(kmodel)
 
         model = get_attr(kmodel, "diffusion_model")
         set_attr_raw(kmodel, "_model_backup", model)
@@ -107,4 +105,4 @@ class TorchCompileForForge(scripts.Script):
             torch.compile(model, **config),
         )
 
-        kmodel._compile_config = _cache
+        kmodel._compile_config = config
