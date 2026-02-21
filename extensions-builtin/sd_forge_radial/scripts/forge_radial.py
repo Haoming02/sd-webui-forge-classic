@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 import gradio as gr
 import torch
 import torch.nn.functional as F
-from lib_radial.attn_mask import RADIAL_ENABLE, MaskMap, RadialAttention
+from lib_radial.attn_mask import RADIAL_ENABLE
 
 from backend.nn import wan
 from modules import scripts
@@ -19,6 +19,8 @@ ORIG_ATTENTION = wan.attention
 
 
 def get_radial_attn_func(video_token_num, num_frame, block_size, decay_factor, allow_compile):
+    from lib_radial.attn_mask import MaskMap, RadialAttention
+
     mask_map = MaskMap(video_token_num, num_frame)
 
     def radial_attn_func(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
