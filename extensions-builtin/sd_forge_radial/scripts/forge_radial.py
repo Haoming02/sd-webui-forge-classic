@@ -139,14 +139,20 @@ class RadialAttentionForForge(scripts.ScriptBuiltinUI):
 
     def ui(self, *args, **kwargs):
         with InputAccordion(False, label=self.title()) as enable:
-            dense_block = gr.Slider(minimum=0, maximum=40, value=1, step=1, label="dense_block", info="Number of first few Blocks to bypass RadialAttention")
-            dense_timestep = gr.Slider(minimum=0, maximum=100, value=1, step=1, label="dense_timestep", info="Number of first few Steps to bypass RadialAttention")
-            last_dense_timestep = gr.Slider(minimum=0, maximum=100, value=1, step=1, label="last_dense_timestep", info="Number of last few Steps to bypass RadialAttention")
-            block_size = gr.Radio(choices=[64, 128], value=128, label="block_size")
-            decay_factor = gr.Slider(minimum=0.0, maximum=1.0, value=0.2, step=0.1, label="decay_factor", info="Lower is Faster ; Higher is more Accurate")
-            allow_compile = gr.Checkbox(False, label="allow_compile", info="Allow the use of torch.compile")
+            with gr.Row():
+                dense_block = gr.Slider(minimum=0, maximum=40, value=1, step=1, label="Dense Block", info="Number of first few Blocks to bypass RadialAttention")
+                decay_factor = gr.Slider(minimum=0.0, maximum=1.0, value=0.2, step=0.1, label="Decay Factor", info="Lower is Faster ; Higher is more Accurate")
+            with gr.Row():
+                dense_timestep = gr.Slider(minimum=0, maximum=100, value=1, step=1, label="Dense Timestep", info="Number of first few Steps to bypass RadialAttention")
+                last_dense_timestep = gr.Slider(minimum=0, maximum=100, value=1, step=1, label="Last Dense Timestep", info="Number of last few Steps to bypass RadialAttention")
+            with gr.Row():
+                block_size = gr.Radio(choices=[64, 128], value=128, label="Block Size")
+                allow_compile = gr.Checkbox(False, label="Allow Torch.Compile")
 
-        return [enable, dense_block, dense_timestep, last_dense_timestep, block_size, decay_factor, allow_compile]
+        for comp in (comps := (enable, dense_block, dense_timestep, last_dense_timestep, block_size, decay_factor, allow_compile)):
+            comp.do_not_save_to_config = True
+
+        return comps
 
     def process_before_every_sampling(self, p, enable: bool, *args, **kwargs):
         if not enable:
