@@ -15,6 +15,10 @@ from backend.nn.flux import EmbedND, apply_rope1
 from backend.utils import pad_to_patch_size
 
 
+def attention(*args, **kwargs):  # for Radial Attention
+    return attention_function(*args, **kwargs)
+
+
 def sinusoidal_embedding_1d(dim, position):
     # preprocess
     assert dim % 2 == 0
@@ -47,7 +51,7 @@ class WanSelfAttention(nn.Module):
         self.norm_q = nn.RMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
         self.norm_k = nn.RMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
 
-    def forward(self, x, freqs):
+    def forward(self, x, freqs, transformer_options={}):
         r"""
         Args:
             x(Tensor): Shape [B, L, num_heads, C / num_heads]
@@ -66,11 +70,12 @@ class WanSelfAttention(nn.Module):
         q = qkv_fn_q(x)
         k = qkv_fn_k(x)
 
-        x = attention_function(
+        x = attention(
             q.view(b, s, n * d),
             k.view(b, s, n * d),
             self.v(x).view(b, s, n * d),
             heads=self.num_heads,
+            transformer_options=transformer_options,
         )
 
         x = self.o(x)
@@ -177,6 +182,7 @@ class WanAttentionBlock(nn.Module):
         freqs,
         context,
         context_img_len=257,
+        transformer_options={},
     ):
         r"""
         Args:
@@ -193,7 +199,7 @@ class WanAttentionBlock(nn.Module):
         # assert e[0].dtype == torch.float32
 
         # self-attention
-        y = self.self_attn(self.norm1(x) * (1 + repeat_e(e[1], x)) + repeat_e(e[0], x), freqs)
+        y = self.self_attn(self.norm1(x) * (1 + repeat_e(e[1], x)) + repeat_e(e[0], x), freqs, transformer_options=transformer_options)
 
         x = x + y * repeat_e(e[2], x)
 
@@ -357,18 +363,21 @@ class WanModel(nn.Module):
 
         patches_replace = transformer_options.get("patches_replace", {})
         blocks_replace = patches_replace.get("dit", {})
+        transformer_options["total_blocks"] = len(self.blocks)
+        transformer_options["block_type"] = "double"
         for i, block in enumerate(self.blocks):
+            transformer_options["block_index"] = i
             if ("double_block", i) in blocks_replace:
 
                 def block_wrap(args):
                     out = {}
-                    out["img"] = block(args["img"], context=args["txt"], e=args["vec"], freqs=args["pe"], context_img_len=context_img_len)
+                    out["img"] = block(args["img"], context=args["txt"], e=args["vec"], freqs=args["pe"], context_img_len=context_img_len, transformer_options=args["transformer_options"])
                     return out
 
-                out = blocks_replace[("double_block", i)]({"img": x, "txt": context, "vec": e0, "pe": freqs}, {"original_block": block_wrap})
+                out = blocks_replace[("double_block", i)]({"img": x, "txt": context, "vec": e0, "pe": freqs, "transformer_options": transformer_options}, {"original_block": block_wrap})
                 x = out["img"]
             else:
-                x = block(x, e=e0, freqs=freqs, context=context, context_img_len=context_img_len)
+                x = block(x, e=e0, freqs=freqs, context=context, context_img_len=context_img_len, transformer_options=transformer_options)
 
         # head
         x = self.head(x, e)
