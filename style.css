@@ -1810,3 +1810,23 @@ body.resizing .resize-handle {
     height: 185px;
     padding: 1em;
 }
+
+div.xyz_entries {
+    margin-bottom: var(--spacing-lg);
+}
+
+div.xyz_entries .gradio-textbox span, div.xyz_entries .gradio-dropdown.multiselect span {
+    margin-bottom: var(--spacing-lg);
+}
+
+div.xyz_entries button.secondary {
+    margin-left: var(--spacing-lg);
+}
+
+#swap_axes {
+    margin-top: var(--spacing-lg);
+}
+
+#swap_axes button {
+    border-radius: 8px;
+}

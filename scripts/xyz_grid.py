@@ -1,4 +1,5 @@
 import csv
+import logging
 import os.path
 import random
 import re
@@ -6,6 +7,7 @@ from collections import namedtuple
 from copy import copy
 from io import StringIO
 from itertools import chain, permutations
+from math import sqrt
 from typing import TypeVar
 
 import gradio as gr
@@ -15,6 +17,7 @@ from PIL import Image
 import modules.scripts as scripts
 import modules.sd_models
 import modules.shared as shared
+from backend.logging import setup_logger
 from modules import (
     errors,
     images,
@@ -33,6 +36,10 @@ from modules.processing import (
 from modules.sd_models import model_data, select_checkpoint
 from modules.shared import cmd_opts, opts, state
 from modules.ui_components import ToolButton
+
+logger = logging.getLogger("xyz")
+setup_logger(logger)
+
 
 T = TypeVar("T")
 
@@ -105,7 +112,7 @@ def apply_size(p: StableDiffusionProcessing, x: str, _):
         p.width = int(width.strip())
         p.height = int(height.strip())
     except ValueError:
-        print(f'Invalid Size "{x}" for X/Y/Z Plot')
+        logger.error(f'Invalid Size "{x}" for X/Y/Z Plot')
 
 
 def apply_vae(p: StableDiffusionProcessing, x: str, _):
@@ -415,10 +422,10 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
 
     if not processed_result:
         # Should never happen, I've only seen it on one of four open tabs and it needed to refresh.
-        print("Unexpected error: Processing could not begin, you may need to refresh the tab or restart the service.")
+        logger.error("Processing could not begin, you may need to refresh the page or restart the WebUI")
         return Processed(p, [])
     elif not any(processed_result.images):
-        print("Unexpected error: draw_xyz_grid failed to return even a single processed image")
+        logger.error("draw_xyz_grid failed to return any processed image...")
         return Processed(p, [])
 
     z_count = len(zs)
@@ -473,40 +480,39 @@ class Script(scripts.Script):
     def ui(self, is_img2img):
         self.current_axis_options = [x for x in axis_options if type(x) == AxisOption or x.is_img2img == is_img2img]
 
-        with gr.Row():
-            with gr.Column(scale=19):
-                with gr.Row():
-                    x_type = gr.Dropdown(label="X type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[1].label, type="index", elem_id=self.elem_id("x_type"))
-                    x_values = gr.Textbox(label="X values", lines=1, elem_id=self.elem_id("x_values"))
-                    x_values_dropdown = gr.Dropdown(label="X values", visible=False, multiselect=True, interactive=True)
-                    fill_x_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_x_tool_button", visible=False)
+        with gr.Group(elem_classes=["xyz_entries"]):
+            with gr.Row():
+                x_type = gr.Dropdown(label="X type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[1].label, type="index", elem_id=self.elem_id("x_type"), scale=2)
+                x_values = gr.Textbox(label="X values", lines=1, elem_id=self.elem_id("x_values"), scale=5)
+                x_values_dropdown = gr.Dropdown(label="X values", visible=False, multiselect=True, interactive=True, scale=5)
+                fill_x_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_x_tool_button", visible=False, scale=1)
+            with gr.Row():
+                y_type = gr.Dropdown(label="Y type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[0].label, type="index", elem_id=self.elem_id("y_type"), scale=2)
+                y_values = gr.Textbox(label="Y values", lines=1, elem_id=self.elem_id("y_values"), scale=5)
+                y_values_dropdown = gr.Dropdown(label="Y values", visible=False, multiselect=True, interactive=True, scale=5)
+                fill_y_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_y_tool_button", visible=False, scale=1)
+            with gr.Row():
+                z_type = gr.Dropdown(label="Z type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[0].label, type="index", elem_id=self.elem_id("z_type"), scale=2)
+                z_values = gr.Textbox(label="Z values", lines=1, elem_id=self.elem_id("z_values"), scale=5)
+                z_values_dropdown = gr.Dropdown(label="Z values", visible=False, multiselect=True, interactive=True, scale=5)
+                fill_z_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_z_tool_button", visible=False, scale=1)
 
-                with gr.Row():
-                    y_type = gr.Dropdown(label="Y type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[0].label, type="index", elem_id=self.elem_id("y_type"))
-                    y_values = gr.Textbox(label="Y values", lines=1, elem_id=self.elem_id("y_values"))
-                    y_values_dropdown = gr.Dropdown(label="Y values", visible=False, multiselect=True, interactive=True)
-                    fill_y_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_y_tool_button", visible=False)
-
-                with gr.Row():
-                    z_type = gr.Dropdown(label="Z type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[0].label, type="index", elem_id=self.elem_id("z_type"))
-                    z_values = gr.Textbox(label="Z values", lines=1, elem_id=self.elem_id("z_values"))
-                    z_values_dropdown = gr.Dropdown(label="Z values", visible=False, multiselect=True, interactive=True)
-                    fill_z_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_z_tool_button", visible=False)
+        with gr.Row(variant="compact"):
+            row_count = gr.Slider(label="Row Count", info="(set to 0 for auto)", minimum=0, maximum=8, value=0, step=1, elem_id=self.elem_id("row_count"))
+            margin_size = gr.Slider(label="Grid Margins", info="(in pixels)", minimum=0, maximum=500, value=0, step=2, elem_id=self.elem_id("margin_size"))
 
         with gr.Row(variant="compact", elem_id="axis_options"):
-            with gr.Column():
+            with gr.Column(variant="compact", scale=3):
                 draw_legend = gr.Checkbox(label="Draw legend", value=True, elem_id=self.elem_id("draw_legend"))
                 no_fixed_seeds = gr.Checkbox(label="Keep -1 for seeds", value=False, elem_id=self.elem_id("no_fixed_seeds"))
-                with gr.Row():
+                with gr.Row(variant="compact"):
                     vary_seeds_x = gr.Checkbox(label="Vary seeds for X", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_x"), tooltip="Use different seeds for images along X axis.")
                     vary_seeds_y = gr.Checkbox(label="Vary seeds for Y", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_y"), tooltip="Use different seeds for images along Y axis.")
                     vary_seeds_z = gr.Checkbox(label="Vary seeds for Z", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_z"), tooltip="Use different seeds for images along Z axis.")
-            with gr.Column():
+            with gr.Column(variant="compact",scale=2):
                 include_lone_images = gr.Checkbox(label="Include Sub Images", value=False, elem_id=self.elem_id("include_lone_images"))
                 include_sub_grids = gr.Checkbox(label="Include Sub Grids", value=False, elem_id=self.elem_id("include_sub_grids"))
                 csv_mode = gr.Checkbox(label="Use text inputs instead of dropdowns", value=False, elem_id=self.elem_id("csv_mode"))
-            with gr.Column():
-                margin_size = gr.Slider(label="Grid margins (px)", minimum=0, maximum=500, value=0, step=2, elem_id=self.elem_id("margin_size"))
 
         with gr.Row(variant="compact", elem_id="swap_axes"):
             swap_xy_axes_button = gr.Button(value="Swap X/Y axes", elem_id="xy_grid_swap_axes_button")
@@ -586,9 +592,9 @@ class Script(scripts.Script):
             (z_values_dropdown, lambda params: get_dropdown_update_from_params("Z", params)),
         )
 
-        return [x_type, x_values, x_values_dropdown, y_type, y_values, y_values_dropdown, z_type, z_values, z_values_dropdown, draw_legend, include_lone_images, include_sub_grids, no_fixed_seeds, vary_seeds_x, vary_seeds_y, vary_seeds_z, margin_size, csv_mode]
+        return [x_type, x_values, x_values_dropdown, y_type, y_values, y_values_dropdown, z_type, z_values, z_values_dropdown, draw_legend, include_lone_images, include_sub_grids, no_fixed_seeds, vary_seeds_x, vary_seeds_y, vary_seeds_z, row_count, margin_size, csv_mode]
 
-    def run(self, p, x_type, x_values, x_values_dropdown, y_type, y_values, y_values_dropdown, z_type, z_values, z_values_dropdown, draw_legend, include_lone_images, include_sub_grids, no_fixed_seeds, vary_seeds_x, vary_seeds_y, vary_seeds_z, margin_size, csv_mode):
+    def run(self, p, x_type, x_values, x_values_dropdown, y_type, y_values, y_values_dropdown, z_type, z_values, z_values_dropdown, draw_legend, include_lone_images, include_sub_grids, no_fixed_seeds, vary_seeds_x, vary_seeds_y, vary_seeds_z, row_count, margin_size, csv_mode):
         x_type, y_type, z_type = x_type or 0, y_type or 0, z_type or 0  # if axle type is None set to 0
 
         if not no_fixed_seeds:
@@ -724,7 +730,7 @@ class Script(scripts.Script):
         image_cell_count = p.n_iter * p.batch_size
         cell_console_text = f"; {image_cell_count} images per cell" if image_cell_count > 1 else ""
         plural_s = "s" if len(zs) > 1 else ""
-        print(f"X/Y/Z plot will create {len(xs) * len(ys) * len(zs) * image_cell_count} images on {len(zs)} {len(xs)}x{len(ys)} grid{plural_s}{cell_console_text}. (Total steps to process: {total_steps})")
+        logger.info(f"X/Y/Z plot will create {len(xs) * len(ys) * len(zs) * image_cell_count} images on {len(zs)} {len(xs)}x{len(ys)} grid{plural_s}{cell_console_text}. (Total steps to process: {total_steps})")
         shared.total_tqdm.updateTotal(total_steps)
 
         state.xyz_plot_x = AxisInfo(x_opt, xs)
@@ -836,6 +842,49 @@ class Script(scripts.Script):
         if not include_lone_images:
             # Don't need sub-images anymore, drop from list:
             processed.images = processed.images[: z_count + 1]
+
+        def rearrange_image(original_image: Image.Image, target_count: int):
+            width, height = original_image.size
+            width_per_image = int(width // len(xs))
+
+            imgs_per_row = (len(xs) // target_count) + int(len(xs) % target_count != 0)
+            logger.info(f"Converting to {imgs_per_row}x{target_count} grid...")
+
+            new_width = width_per_image * imgs_per_row
+            new_height = height * target_count
+
+            new_image = Image.new("RGB", (new_width, new_height), "white")
+
+            for y in range(target_count):
+                row = original_image.crop(
+                    (
+                        y * (width_per_image * imgs_per_row),
+                        0,
+                        min(width, ((y + 1) * (width_per_image * imgs_per_row))),
+                        height,
+                    )
+                )
+                new_image.paste(row, (0, height * y))
+
+            return new_image
+
+        if row_count == 0:  # Automatic
+            if y_type + z_type > 0:
+                target_count = 1
+            else:
+                target_count = int(sqrt(len(xs)))
+                if target_count > 1:
+                    logger.debug(f"Automatically split into {target_count} rows")
+        else:
+            if y_type + z_type == 0:
+                target_count = row_count
+            else:
+                target_count = 1
+                if row_count > 1:
+                    logger.error("Row Count currently only supports X-Axis...")
+
+        if target_count > 1:
+            processed.images[0] = rearrange_image(processed.images[0], target_count)
 
         if opts.grid_save:
             # Auto-save main and sub-grids:
