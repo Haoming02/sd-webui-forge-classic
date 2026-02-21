@@ -1267,7 +1267,8 @@ footer {
 }
 
 .popup-dialog {
-    width: 56em;
+    width: 60vw;
+    height: auto;
     background: var(--body-background-fill) !important;
     padding: 2em !important;
 }
