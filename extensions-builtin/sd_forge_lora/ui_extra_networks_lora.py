@@ -1,4 +1,4 @@
-import os
+import os.path
 
 import network
 import networks
@@ -21,14 +21,15 @@ class ExtraNetworksPageLora(ui_extra_networks.ExtraNetworksPage):
         if lora_on_disk is None:
             return
 
-        path, ext = os.path.splitext(lora_on_disk.filename)
+        path = os.path.splitext(lora_on_disk.filename)[0]
 
         alias = lora_on_disk.get_alias()
 
         search_terms = [self.search_terms_from_path(lora_on_disk.filename)]
         if lora_on_disk.hash:
             search_terms.append(lora_on_disk.hash)
-        item = {
+
+        item: dict[str, str | dict] = {
             "name": name,
             "filename": lora_on_disk.filename,
             "shorthash": lora_on_disk.shorthash,
@@ -51,21 +52,18 @@ class ExtraNetworksPageLora(ui_extra_networks.ExtraNetworksPage):
         negative_prompt = item["user_metadata"].get("negative text", "")
         item["negative_prompt"] = quote_js(negative_prompt)
 
-        #   filter displayed loras by UI setting
-        sd_version = item["user_metadata"].get("sd version")
-        if sd_version in network.SdVersion.__members__:
+        sd_version: str = item["user_metadata"].get("sd version", None)
+        if sd_version in network.SD_VERSION:
             item["sd_version"] = sd_version
-            sd_version = network.SdVersion[sd_version]
         else:
-            sd_version = lora_on_disk.sd_version  #   use heuristics
-            # sd_version = network.SdVersion.Unknown     #   avoid heuristics
+            sd_version = "Unknown"
 
-        item["sd_version_str"] = str(sd_version)
+        if enable_filter and shared.opts.lora_preset_filter and sd_version not in ("Unknown", shared.opts.forge_preset):
+            return None
 
         return item
 
     def list_items(self):
-        # instantiate a list to protect against concurrent modification
         names = list(networks.available_networks)
         for index, name in enumerate(names):
             item = self.create_item(name, index)

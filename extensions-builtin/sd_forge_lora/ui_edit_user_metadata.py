@@ -8,9 +8,8 @@ import gradio as gr
 from modules import ui_extra_networks_user_metadata
 
 
-def is_non_comma_tagset(tags):
+def is_non_comma_tagset(tags: dict[str, int]) -> bool:
     average_tag_length = sum(len(x) for x in tags.keys()) / len(tags)
-
     return average_tag_length >= 16
 
 
@@ -18,10 +17,10 @@ re_word = re.compile(r"[-_\w']+")
 re_comma = re.compile(r" *, *")
 
 
-def build_tags(metadata):
+def build_tags(metadata: dict) -> list[tuple[str, int]]:
     tags = {}
 
-    ss_tag_frequency = metadata.get("ss_tag_frequency", {})
+    ss_tag_frequency: dict[str, dict[str, int]] = metadata.get("ss_tag_frequency", {})
     if ss_tag_frequency is not None and hasattr(ss_tag_frequency, "items"):
         for _, tags_dict in ss_tag_frequency.items():
             for tag, tag_count in tags_dict.items():
@@ -49,12 +48,12 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
     def __init__(self, ui, tabname, page):
         super().__init__(ui, tabname, page)
 
-        self.select_sd_version = None
+        self.select_sd_version: gr.Dropdown = None
 
-        self.taginfo = None
-        self.edit_activation_text = None
-        self.slider_preferred_weight = None
-        self.edit_notes = None
+        self.taginfo: gr.HighlightedText = None
+        self.edit_activation_text: gr.Textbox = None
+        self.slider_preferred_weight: gr.Slider = None
+        self.edit_notes: gr.Textbox = None
 
     def save_lora_user_metadata(self, name, desc, sd_version, activation_text, preferred_weight, negative_text, notes):
         user_metadata = self.get_user_metadata(name)
@@ -86,7 +85,7 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
 
         ss_training_started_at = metadata.get("ss_training_started_at")
         if ss_training_started_at:
-            table.append(("Date trained:", datetime.datetime.utcfromtimestamp(float(ss_training_started_at)).strftime("%Y-%m-%d %H:%M")))
+            table.append(("Date trained:", datetime.datetime.fromtimestamp(float(ss_training_started_at)).strftime("%Y-%m-%d %H:%M")), datetime.UTC)
 
         ss_bucket_info = metadata.get("ss_bucket_info")
         if ss_bucket_info and "buckets" in ss_bucket_info:
@@ -158,7 +157,9 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
         return ", ".join(sorted(res))
 
     def create_extra_default_items_in_left_column(self):
-        self.select_sd_version = gr.Radio(["SD1", "SDXL", "Flux", "Unknown"], value="Unknown", label="Base model", interactive=True)
+        import network
+
+        self.select_sd_version = gr.Dropdown(choices=network.SD_VERSION, value="Unknown", label="Preset", interactive=True)
 
     def create_editor(self):
         self.create_default_editor_elems()

@@ -16,6 +16,7 @@ shared.options_templates.update(
             "sd_lora": shared.OptionInfo("None", "Add network to prompt", gr.Dropdown, lambda: {"choices": ["None", *networks.available_networks]}, refresh=networks.list_available_networks),
             "lora_preferred_name": shared.OptionInfo("Alias from file", "When adding to prompt, refer to Lora by", gr.Radio, {"choices": ["Alias from file", "Filename"]}),
             "lora_add_hashes_to_infotext": shared.OptionInfo(True, "Add Lora hashes to infotext"),
+            "lora_preset_filter": shared.OptionInfo(False, "Filter Lora based on selected Preset"),
         },
     )
 )
