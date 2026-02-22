@@ -44,8 +44,6 @@ class TorchCompileForForge(scripts.Script):
                 info='"Automatic" maintains the current compile status',
             )
 
-            preset.do_not_save_to_config = True
-
         return [preset]
 
     @staticmethod
