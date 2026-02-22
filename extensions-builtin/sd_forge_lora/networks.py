@@ -24,6 +24,15 @@ setup_logger(logger)
 load_lora_state_dict = functools.partial(load_torch_file, safe_load=True)
 
 
+def process_anima(lora: dict[str, torch.Tensor]):
+    # LLMAdapter was moved from transformer to text_encoder
+
+    keys = list(lora.keys())
+    for k in keys:
+        if k.startswith("diffusion_model.llm_adapter"):
+            lora[k.replace("diffusion_model", "text_encoders.qwen3_06b")] = lora.pop(k)
+
+
 def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, torch.Tensor], strength_model: float, strength_clip: float, filename: str = "default", online_mode: bool = False):
     if dynamic_args.get("nunchaku", False):
         model.model.diffusion_model.loras.append((filename, strength_model))
@@ -38,6 +47,9 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
 
     unet_keys = model_lora_keys_unet(model.model) if model is not None else {}
     clip_keys = model_lora_keys_clip(clip.cond_stage_model) if clip is not None else {}
+
+    if model.model.diffusion_model.__class__.__name__ == "Anima":
+        process_anima(lora)
 
     lora_unmatch = lora
     lora_unet, lora_unmatch = load_lora(lora_unmatch, unet_keys)
