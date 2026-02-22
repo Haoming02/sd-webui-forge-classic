@@ -99,6 +99,7 @@ def register(options_templates: dict):
                 {
                     f"forge_checkpoint_{name}": OptionInfo(None),
                     f"forge_additional_modules_{name}": OptionInfo([]),
+                    f"forge_unet_storage_dtype_{name}": OptionInfo("Automatic"),
                 },
             )
         )

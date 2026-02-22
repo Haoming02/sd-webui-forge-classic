@@ -53,17 +53,6 @@ if memory_management.bnb_enabled():
 module_list: dict[str, os.PathLike] = {}
 
 
-def bind_to_opts(comp: gr.components.Component, k: str, save: bool = False, callback=None):
-    def on_change(v):
-        shared.opts.set(k, v)
-        if save:
-            shared.opts.save(shared.config_filename)
-        if callback is not None:
-            callback()
-
-    comp.change(on_change, inputs=[comp], queue=False, show_progress=False)
-
-
 def make_checkpoint_manager_ui():
     global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype
 
@@ -88,10 +77,10 @@ def make_checkpoint_manager_ui():
     Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
 
     ui_forge_unet_dtype = gr.Dropdown(label="Diffusion in Low Bits", value=lambda: shared.opts.forge_unet_storage_dtype, choices=list(forge_unet_storage_dtype_options.keys()), elem_id="forge_ui_dtype")
-    bind_to_opts(ui_forge_unet_dtype, "forge_unet_storage_dtype", save=True, callback=refresh_model_loading_parameters)
 
     ui_checkpoint.input(checkpoint_change, inputs=[ui_checkpoint, ui_forge_preset], queue=False, show_progress=False)
     ui_vae.input(modules_change, inputs=[ui_vae, ui_forge_preset], queue=False, show_progress=False)
+    ui_forge_unet_dtype.input(dtype_change, inputs=[ui_forge_unet_dtype, ui_forge_preset], queue=False, show_progress=False)
 
 
 def find_files_with_extensions(base_path: os.PathLike, extensions: list[str]) -> dict[str, os.PathLike]:
@@ -203,6 +192,17 @@ def modules_change(module_values: list, preset: str, save=True, refresh=True) ->
     return True
 
 
+def dtype_change(dtype: str, preset: str, save=True, refresh=True) -> bool:
+    shared.opts.set("forge_unet_storage_dtype", dtype)
+    if preset is not None:
+        shared.opts.set(f"forge_unet_storage_dtype_{preset}", dtype)
+
+    if save:
+        shared.opts.save(shared.config_filename)
+    refresh_model_loading_parameters(refresh=refresh)
+    return True
+
+
 def get_a1111_ui_component(tab: str, label: str) -> gr.components.Component:
     fields = infotext_utils.paste_fields[tab]["fields"]
     for f in fields:
@@ -263,7 +263,7 @@ def forge_main_entry():
 
     ui_forge_preset.change(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False).success(
         fn=_load_presets,
-        inputs=[ui_checkpoint, ui_vae, ui_forge_preset],
+        inputs=[ui_checkpoint, ui_vae, ui_forge_unet_dtype, ui_forge_preset],
         queue=False,
         show_progress=False,
     ).then(js="clickLoraRefresh", fn=None, queue=False, show_progress=False)
@@ -272,7 +272,8 @@ def forge_main_entry():
     refresh_model_loading_parameters()
 
 
-def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_preset: str):
+def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_unet_dtype: str, ui_forge_preset: str):
+    dtype_change(ui_forge_unet_dtype, ui_forge_preset, save=False, refresh=False)
     modules_change(ui_vae, ui_forge_preset, save=False, refresh=False)
     checkpoint_change(ui_checkpoint, ui_forge_preset, save=True, refresh=True)
 
@@ -295,7 +296,7 @@ def on_preset_change(preset: str):
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),
         gr.update(value=[os.path.basename(m) for m in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]),
-        gr.update(value=getattr(shared.opts, "forge_unet_storage_dtype", "Automatic")),
+        gr.update(value=getattr(shared.opts, f"forge_unet_storage_dtype_{preset}", "Automatic")),
         # ui_txt2img_steps, ui_txt2img_hr_steps, ui_img2img_steps
         gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_step", 20)) > 0 else gr.skip(),
         gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_hr_step", 20)) > 0 else gr.skip(),
