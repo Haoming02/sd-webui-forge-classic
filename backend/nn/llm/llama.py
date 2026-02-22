@@ -14,6 +14,7 @@ if pytorch_attention_enabled:
 else:
     from backend.attention import attention_basic as attention_function
 
+from backend.nn.anima import LLMAdapter
 from backend.nn.llm import qwen_vl
 
 
@@ -512,6 +513,14 @@ class Qwen3_06B(BaseLlama, nn.Module):
         self.num_layers = config.num_hidden_layers
 
         self.model = Llama2_(config)
+
+        self.llm_adapter = LLMAdapter()
+
+    def preprocess_text_embeds(self, text_embeds, text_ids):
+        if text_ids is not None:
+            return self.llm_adapter(text_embeds, text_ids)
+        else:
+            return text_embeds
 
 
 class Qwen3_4B(BaseLlama, nn.Module):

@@ -631,6 +631,15 @@ def preprocess_state_dict(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor
     return sd
 
 
+def process_anima(dit: dict[str, torch.Tensor], enc: dict[str, torch.Tensor]):
+    # move LLMAdapter from transformer to text_encoder
+
+    keys = list(dit.keys())
+    for k in keys:
+        if k.startswith("llm_adapter"):
+            enc[k] = dit.pop(k)
+
+
 def split_state_dict(sd, additional_state_dicts: list = None):
     import huggingface_guess
 
@@ -671,6 +680,9 @@ def split_state_dict(sd, additional_state_dicts: list = None):
         state_dict[v] = try_filter_state_dict(sd, [k + "."])
 
     state_dict["ignore"] = sd
+
+    if "Anima" in guess.huggingface_repo:
+        process_anima(state_dict["transformer"], state_dict["text_encoder"])
 
     print_dict = {k: len(v) for k, v in state_dict.items()}
     logger.debug(f"StateDict Keys: {print_dict}")

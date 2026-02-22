@@ -30,7 +30,6 @@ class Anima(ForgeDiffusionEngine):
             text_encoder=clip.cond_stage_model.qwen3_06b,
             qwen_tokenizer=clip.tokenizer.qwen3_06b,
             t5_tokenizer=clip.tokenizer.t5xxl,
-            unet=unet,
         )
 
         self.forge_objects = ForgeObjects(unet=unet, clip=clip, vae=vae, clipvision=None)

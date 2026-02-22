@@ -1,9 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from backend.patcher.unet import UnetPatcher
-
-import weakref
+    from backend.nn.llm.llama import Qwen3_06B
 
 import torch
 
@@ -21,21 +19,15 @@ class PromptChunk:
 
 
 class AnimaTextProcessingEngine:
-    def __init__(self, text_encoder, qwen_tokenizer, t5_tokenizer, unet):
+    def __init__(self, text_encoder, qwen_tokenizer, t5_tokenizer):
         super().__init__()
 
-        self.text_encoder = text_encoder
+        self.text_encoder: "Qwen3_06B" = text_encoder
         self.qwen_tokenizer = qwen_tokenizer
         self.t5_tokenizer = t5_tokenizer
 
-        self._unet = weakref.ref(unet)
-
         self.id_pad = 151643
         self.id_end = 1
-
-    @property
-    def unet(self) -> " UnetPatcher":
-        return self._unet()
 
     def tokenize(self, texts):
         return (
@@ -116,12 +108,12 @@ class AnimaTextProcessingEngine:
         return zs
 
     def anima_preprocess(self, cross_attn: torch.Tensor, t5xxl_ids: torch.Tensor, t5xxl_weights: torch.Tensor) -> torch.Tensor:
-        dtype: torch.dtype = self.unet.model.computation_dtype
+        device = memory_management.text_encoder_device()
 
-        cross_attn = cross_attn.unsqueeze(0).to(dtype=dtype)
-        t5xxl_ids = t5xxl_ids.unsqueeze(0)
+        cross_attn = cross_attn.unsqueeze(0).to(device=device)
+        t5xxl_ids = t5xxl_ids.unsqueeze(0).to(device=device)
 
-        cross_attn = self.unet.model.diffusion_model.preprocess_text_embeds(cross_attn, t5xxl_ids)
+        cross_attn = self.text_encoder.preprocess_text_embeds(cross_attn, t5xxl_ids)
         if t5xxl_weights is not None:
             cross_attn *= t5xxl_weights.unsqueeze(0).unsqueeze(-1).to(cross_attn)
 
@@ -160,23 +152,6 @@ class AnimaTextProcessingEngine:
 
             index = 0
             embeds_info = []
-
-            for o in other_embeds:
-                emb, extra = self.text_encoder.preprocess_embed(o[1], device=device)
-                if emb is None:
-                    index += -1
-                    continue
-
-                ind = index + o[0]
-                emb = emb.view(1, -1, emb.shape[-1]).to(device=device, dtype=torch.float32)
-                emb_shape = emb.shape[1]
-
-                assert emb.shape[-1] == tokens_embed.shape[-1]
-                tokens_embed = torch.cat([tokens_embed[:, :ind], emb, tokens_embed[:, ind:]], dim=1)
-                attention_mask = attention_mask[:ind] + [1] * emb_shape + attention_mask[ind:]
-                index += emb_shape - 1
-                emb_type = o[1].get("type", None)
-                embeds_info.append({"type": emb_type, "index": ind, "size": emb_shape, "extra": extra})
 
             embeds_out.append(tokens_embed)
             attention_masks.append(attention_mask)
