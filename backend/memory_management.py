@@ -695,8 +695,8 @@ def load_models_gpu(models: list["ModelPatcher"], memory_required: float = 0, fo
         loaded_model.model_load(lowvram_model_memory, force_patch_weights=force_patch_weights)
         current_loaded_models.insert(0, loaded_model)
 
-    moving_time = time.perf_counter() - execution_start_time
-    logger.info(f"Moving model(s) has taken {moving_time:.2f} seconds")
+    if (moving_time := time.perf_counter() - execution_start_time) > 0.1:
+        logger.info(f"Moving model(s) has taken {moving_time:.2f} seconds")
 
 
 def load_model_gpu(model: "ModelPatcher"):
