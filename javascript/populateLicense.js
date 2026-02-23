@@ -8,13 +8,15 @@ function fetchLicense(id, url) {
 
 function populateLicense() {
     const pairs = [
+        ["comfy", "https://raw.githubusercontent.com/Comfy-Org/ComfyUI/master/LICENSE"],
         ["sd1", "https://raw.githubusercontent.com/Stability-AI/stablediffusion/main/LICENSE"],
         ["sdxl", "https://raw.githubusercontent.com/Stability-AI/generative-models/main/LICENSE-CODE"],
         ["flux", "https://raw.githubusercontent.com/black-forest-labs/flux/main/LICENSE"],
+        ["flux2", "https://raw.githubusercontent.com/black-forest-labs/flux2/main/LICENSE.md"],
         ["qwen", "https://raw.githubusercontent.com/QwenLM/Qwen-Image/refs/heads/main/LICENSE"],
-        ["lumina", "https://raw.githubusercontent.com/Alpha-VLLM/Lumina-Image-2.0/refs/heads/main/LICENSE"],
-        ["wan", "https://raw.githubusercontent.com/Wan-Video/Wan2.2/refs/heads/main/LICENSE.txt"],
-        ["comfy", "https://raw.githubusercontent.com/comfyanonymous/ComfyUI/master/LICENSE"],
+        ["lumina", "https://raw.githubusercontent.com/Alpha-VLLM/Lumina-Image-2.0/main/LICENSE"],
+        ["zimage", "https://raw.githubusercontent.com/Tongyi-MAI/Z-Image/main/LICENSE"],
+        ["wan", "https://raw.githubusercontent.com/Wan-Video/Wan2.2/main/LICENSE.txt"],
         ["chain", "https://raw.githubusercontent.com/chaiNNer-org/chaiNNer/main/LICENSE"],
         ["tfm", "https://raw.githubusercontent.com/huggingface/transformers/main/LICENSE"],
         ["dot", "https://raw.githubusercontent.com/huggingface/diffusers/main/LICENSE"],
