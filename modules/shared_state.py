@@ -122,8 +122,8 @@ class State:
         self.processing_has_refined_job_count = False
         self.job_no = 0
         self.job_timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-        self.current_latent = None
-        self.current_image = None
+        self.current_latent: torch.Tensor = None
+        self.current_image: Image.Image = None
         self.current_image_sampling_step = 0
         self.id_live_preview = 0
         self.skipped = False
@@ -159,13 +159,17 @@ class State:
         import modules.sd_samplers
 
         try:
+            _video: bool = self.current_latent.ndim == 5 and self.current_latent.size(2) > 1
+
             vae_context = nullcontext()
             if self.vae_stream is not None:
                 self.vae_stream.wait_stream(stream.current_stream)
                 vae_context = stream.stream_context()(self.vae_stream)
 
             with vae_context:
-                if shared.opts.show_progress_grid:
+                if _video:
+                    self.assign_current_image(modules.sd_samplers.sample_to_video(self.current_latent))
+                elif shared.opts.show_progress_grid:
                     self.assign_current_image(modules.sd_samplers.samples_to_image_grid(self.current_latent))
                 else:
                     self.assign_current_image(modules.sd_samplers.sample_to_image(self.current_latent))
@@ -177,7 +181,7 @@ class State:
 
     @torch.inference_mode()
     def assign_current_image(self, image: Image.Image):
-        if shared.opts.live_previews_image_format == "jpeg" and image.mode != "RGB":
+        if shared.opts.live_previews_image_format == "jpeg" and not getattr(image, "is_animated", False) and image.mode != "RGB":
             image = image.convert("RGB")
         self.current_image = image
         self.id_live_preview += 1

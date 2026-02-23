@@ -125,22 +125,25 @@ def progressapi(req: ProgressRequest):
         if shared.state.id_live_preview != req.id_live_preview:
             image = shared.state.current_image
             if image is not None:
+                _video: bool = getattr(image, "is_animated", False)
+                _format = "gif" if _video else opts.live_previews_image_format
                 buffered = io.BytesIO()
 
-                if opts.live_previews_image_format == "png":
+                if _format == "png":
                     # using optimize for large images takes an enormous amount of time
                     if max(*image.size) <= 256:
                         save_kwargs = {"optimize": True}
                     else:
                         save_kwargs = {"optimize": False, "compress_level": 1}
-
+                elif _format == "gif":
+                    save_kwargs = {"save_all": True, "loop": 0}
                 else:
                     image = image.convert("RGB")
                     save_kwargs = {}
 
-                image.save(buffered, format=opts.live_previews_image_format, **save_kwargs)
+                image.save(buffered, format=_format, **save_kwargs)
                 base64_image = base64.b64encode(buffered.getvalue()).decode("ascii")
-                live_preview = f"data:image/{opts.live_previews_image_format};base64,{base64_image}"
+                live_preview = f"data:image/{_format};base64,{base64_image}"
                 id_live_preview = shared.state.id_live_preview
 
     return ProgressResponse(active=active, queued=queued, completed=completed, progress=progress, eta=eta, live_preview=live_preview, id_live_preview=id_live_preview, textinfo=shared.state.textinfo)

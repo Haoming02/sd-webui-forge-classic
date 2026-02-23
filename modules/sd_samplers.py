@@ -7,7 +7,7 @@ from modules import sd_samplers_common, sd_samplers_kdiffusion, sd_samplers_time
 from modules_forge import forge_alter_samplers
 
 # imports for functions that previously were here and are used by other modules
-from modules.sd_samplers_common import sample_to_image, samples_to_image_grid  # noqa: F401
+from modules.sd_samplers_common import sample_to_image, samples_to_image_grid, sample_to_video  # noqa: F401
 
 all_samplers = [
     *sd_samplers_kdiffusion.samplers_data_k_diffusion,

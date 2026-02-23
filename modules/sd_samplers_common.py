@@ -92,6 +92,41 @@ def samples_to_image_grid(samples, approximation=None):
     return images.image_grid([single_sample_to_image(sample, approximation) for sample in samples])
 
 
+def frames_to_gif(frames: list[Image.Image], fps=16):
+    import io
+
+    buffer = io.BytesIO()
+
+    frames[0].save(
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=int(1000 / fps),
+        loop=0,
+    )
+
+    buffer.seek(0)
+
+    gif_image = Image.open(buffer)
+    gif_image.load()
+
+    return gif_image
+
+
+def sample_to_video(samples, approximation=None):
+    x_sample = samples_to_images_tensor(samples, approximation)[0] * 0.5 + 0.5
+
+    x_sample = x_sample.cpu()
+    x_sample.mul_(255.0)
+    x_sample.round_()
+    x_sample.clamp_(0.0, 255.0)
+    x_sample = x_sample.to(torch.uint8)
+
+    frames = [Image.fromarray(np.moveaxis(_sample.numpy(), 0, 2)) for _sample in x_sample]
+    return frames_to_gif(frames)
+
+
 def images_tensor_to_samples(image, approximation=None, model=None):
     """image[0, 1] -> latent"""
     x_latent = None

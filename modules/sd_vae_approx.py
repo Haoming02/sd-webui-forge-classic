@@ -94,9 +94,16 @@ def cheap_approximation(sample: torch.Tensor):
         sample = reshape(sample)
 
     if sample.ndim == 5:
-        sample = sample[0, :, 0]
+        samples = torch.unbind(sample[0], dim=1)
+        images = []
+        for sample in samples:
+            latent_image = torch.nn.functional.linear(sample.movedim(0, -1), factors.to(sample), bias=bias.to(sample) if bias is not None else None)
+            images.append(latent_image.permute(2, 0, 1))
+        z = torch.stack(images).unsqueeze(0).squeeze(1)
+
     else:
         sample = sample[0]
+        latent_image = torch.nn.functional.linear(sample.movedim(0, -1), factors.to(sample), bias=bias.to(sample) if bias is not None else None)
+        z = latent_image.permute(2, 0, 1).unsqueeze(0)
 
-    latent_image = torch.nn.functional.linear(sample.movedim(0, -1), factors.to(sample), bias=bias.to(sample) if bias is not None else None)
-    return latent_image.permute(2, 0, 1).unsqueeze(0)
+    return z
