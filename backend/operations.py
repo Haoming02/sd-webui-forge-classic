@@ -694,48 +694,6 @@ class ForgeOperationsGGUF(ForgeOperations):
             with main_stream_worker(weight, bias, signal):
                 return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
-    class RMSNorm(torch.nn.RMSNorm):
-        def __init__(self, *args, add=False, **kwargs):
-            kwargs["device"] = current_device
-            kwargs["dtype"] = current_dtype
-            super().__init__(*args, **kwargs)
-            self.dummy = {"device": current_device, "dtype": current_dtype}
-            self.weight = None
-            self.bias = None
-            self.add = add  # used by llama.py
-
-        def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
-            if hasattr(self, "dummy"):
-                if (computation_dtype := self.dummy["dtype"]) not in [torch.float16, torch.bfloat16]:
-                    computation_dtype = torch.float16
-
-                if prefix + "scale" in state_dict:
-                    self.weight = state_dict[prefix + "scale"].to(device=self.dummy["device"])
-                elif prefix + "weight" in state_dict:
-                    self.weight = state_dict[prefix + "weight"].to(device=self.dummy["device"])
-
-                self.weight.computation_dtype = computation_dtype
-                del self.dummy
-            else:
-                if prefix + "scale" in state_dict:
-                    self.weight = state_dict[prefix + "scale"]
-                elif prefix + "weight" in state_dict:
-                    self.weight = state_dict[prefix + "weight"]
-
-        def _apply(self, fn, recurse=True):
-            for k, p in self.named_parameters(recurse=False, remove_duplicate=True):
-                setattr(self, k, utils.tensor2parameter(fn(p)))
-            return self
-
-        def reset_parameters(self):
-            self.bias = None
-            return None
-
-        def forward(self, x):
-            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, skip_weight_dtype=True, skip_bias_dtype=True, _cast=False)
-            with main_stream_worker(weight, bias, signal):
-                return torch.nn.functional.rms_norm(x, self.normalized_shape, (weight + 1.0) if self.add else weight, self.eps)
-
 
 # region Nunchaku
 
