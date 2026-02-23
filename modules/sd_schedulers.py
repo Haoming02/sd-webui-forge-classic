@@ -1,12 +1,13 @@
 import dataclasses
-from math import atan, pi
+from math import atan, exp, pi
 from typing import Callable
 
 import k_diffusion
 import numpy as np
 import torch
-from modules import shared
 from scipy import stats
+
+from modules import shared
 
 
 def to_d(x: torch.Tensor, sigma: float, denoised: torch.Tensor):
@@ -201,7 +202,9 @@ def bong_tangent_scheduler(n, sigma_min, sigma_max, device, *, start=1.0, middle
 
 
 def flow_match_euler_discrete_scheduler(n, sigma_min, sigma_max, inner_model, device):
-    from diffusers.schedulers.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
+    from diffusers.schedulers.scheduling_flow_match_euler_discrete import (
+        FlowMatchEulerDiscreteScheduler,
+    )
 
     unet = inner_model.inner_model.forge_objects.unet
 
@@ -225,6 +228,42 @@ def flow_match_euler_discrete_scheduler(n, sigma_min, sigma_max, inner_model, de
     return torch.FloatTensor(sigmas).to(device)
 
 
+def generalized_time_snr_shift(t: torch.Tensor, mu: float, sigma: float) -> float:
+    return exp(mu) / (exp(mu) + (1 / t - 1) ** sigma)
+
+
+def compute_empirical_mu(image_seq_len: int, num_steps: int) -> float:
+    a1, b1 = 8.73809524e-05, 1.89833333
+    a2, b2 = 0.00016927, 0.45666666
+
+    if image_seq_len > 4300:
+        mu = a2 * image_seq_len + b2
+        return float(mu)
+
+    m_200 = a2 * image_seq_len + b2
+    m_10 = a1 * image_seq_len + b1
+
+    a = (m_200 - m_10) / 190.0
+    b = m_200 - 200.0 * a
+    mu = a * num_steps + b
+
+    return float(mu)
+
+
+def get_schedule(num_steps: int, image_seq_len: int) -> list[float]:
+    mu = compute_empirical_mu(image_seq_len, num_steps)
+    timesteps = torch.linspace(1, 0, num_steps + 1)
+    timesteps = generalized_time_snr_shift(timesteps, mu, 1.0)
+    return timesteps
+
+
+def flux2_scheduler(n: int, width: int, height: int, sigma_min, sigma_max, device):
+    # https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_flux.py
+    seq_len = width * height / (16 * 16)
+    sigmas = get_schedule(n, round(seq_len))
+    return torch.FloatTensor(sigmas).to(device)
+
+
 schedulers = [
     Scheduler("automatic", "Automatic", None),
     Scheduler("karras", "Karras", k_diffusion.sampling.get_sigmas_karras, default_rho=7.0),
@@ -242,6 +281,7 @@ schedulers = [
     Scheduler("turbo", "Turbo", turbo_scheduler, need_inner_model=True),
     Scheduler("bong_tangent", "Bong Tangent", bong_tangent_scheduler),
     Scheduler("flow_match", "FlowMatchEulerDiscrete", flow_match_euler_discrete_scheduler, need_inner_model=True),
+    Scheduler("flux2", "Flux2", flux2_scheduler),
 ]
 
 schedulers_map = {**{x.name: x for x in schedulers}, **{x.label: x for x in schedulers}}

@@ -79,7 +79,12 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
 
         scheduler_name = (p.hr_scheduler if p.is_hr_pass else p.scheduler) or "Automatic"
         if scheduler_name == "Automatic":
-            scheduler_name = self.config.options.get("scheduler", None)
+            from backend.args import dynamic_args
+
+            if dynamic_args["klein"]:
+                scheduler_name = "Flux2"
+            else:
+                scheduler_name = self.config.options.get("scheduler", None)
 
         scheduler = sd_schedulers.schedulers_map.get(scheduler_name)
 
@@ -115,6 +120,14 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
             if scheduler.label == "Beta":
                 p.extra_generation_params["Beta schedule alpha"] = opts.beta_dist_alpha
                 p.extra_generation_params["Beta schedule beta"] = opts.beta_dist_beta
+
+            if scheduler.label == "Flux2":
+                if p.is_hr_pass:
+                    sigmas_kwargs["width"] = p.hr_upscale_to_x
+                    sigmas_kwargs["height"] = p.hr_upscale_to_y
+                else:
+                    sigmas_kwargs["width"] = p.width
+                    sigmas_kwargs["height"] = p.height
 
             sigmas = scheduler.function(n=steps, **sigmas_kwargs, device=devices.cpu)
 
