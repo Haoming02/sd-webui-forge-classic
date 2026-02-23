@@ -22,7 +22,6 @@ class Flux2(ForgeDiffusionEngine):
     def __init__(self, estimated_config, huggingface_components):
         super().__init__(estimated_config, huggingface_components)
         self.is_inpaint = False
-        self.is_flux2 = True
 
         clip = CLIP(model_dict={"qwen3": huggingface_components["text_encoder"]}, tokenizer_dict={"qwen3": huggingface_components["tokenizer"]})
 
@@ -40,6 +39,8 @@ class Flux2(ForgeDiffusionEngine):
         self.forge_objects = ForgeObjects(unet=unet, clip=clip, vae=vae, clipvision=None)
         self.forge_objects_original = self.forge_objects.shallow_copy()
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
+
+        self.is_flux2 = True
 
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: "SdConditioning"):
