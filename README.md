@@ -17,7 +17,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-"**Neo**" mainly serves as an continuation for the "`latest`" version of Forge, which was built on [Gradio](https://github.com/gradio-app/gradio) `4.40.0` before lllyasviel became too busy... Additionally, this fork is focused on optimization and usability, with the main goal of being able to run the latest models without any bloatwares.
+"**Neo**" mainly serves as an continuation for the "`latest`" version of Forge, which was built on [Gradio](https://github.com/gradio-app/gradio) `4.40.0` before lllyasviel became too busy... Additionally, this fork is focused on optimization and usability, with the main goal of being able to run the latest popular models, on an easy-to-use GUI without any bloatwares.
 
 > [!Tip]
 > [How to Install](#installation)
@@ -83,6 +83,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Implement Triton Kernel for `matmul` in `torch.int8`
     - speed up `bf16` models
     - enable by selecting `int8` in the `Diffusion in Low Bits`
+- [X] Implement [Radial Attention](https://github.com/mit-han-lab/radial-attention)
+    - speed up `Wan 2.2`
+    - requires **manually** installing [SpargeAttn](https://github.com/thu-ml/SpargeAttn)
+- [X] Implement fast `state_dict` switching for Refiner
+    - enable in **Settings/Refiner**
 - [X] Implement Seed Variance Enhancer
     - improve seed-to-seed variance for distilled models
 - [X] Implement RescaleCFG
@@ -93,6 +98,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable in **Settings/UI Alternatives**
 - [X] Implement [Epsilon Scaling](https://github.com/comfyanonymous/ComfyUI/pull/10132)
     - enable in **Settings/Stable Diffusion**
+- [X] Implement Torch.Compile
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
     - enable in **Settings/Upscaling**
@@ -101,6 +107,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update `spandrel`
     - support new Upscaler architectures
 - [X] Add support for `.avif`, `.heif`, and `.jxl` image formats
+- [X] Automatically determine the optimal row count for `X/Y/Z Plot`
 
 #### Removed Features
 
@@ -145,6 +152,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Speed up model loading
 - [X] Improve memory management
 - [X] Improve color correction
+- [X] Update the implementation for `X/Y/Z Plot`
+- [X] Update the implementation for `Soft Inpainting`
 - [X] Update the implementation for `MultiDiffusion`
 - [X] Update the implementation for `uni_pc` and `LCM` samplers
 - [X] Update the implementation of LoRAs
