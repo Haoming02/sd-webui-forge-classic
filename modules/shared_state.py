@@ -23,8 +23,9 @@ class State:
     job_count = 0
     processing_has_refined_job_count = False
     job_timestamp = "0"
-    sampling_step = 0
-    sampling_steps = 0
+    preview_step: int = 0
+    sampling_step: int = 0
+    sampling_steps: int = 0
     current_latent = None
     current_image = None
     current_image_sampling_step = 0
@@ -98,6 +99,7 @@ class State:
 
         self.job_no += 1
         self.sampling_step = 0
+        self.preview_step = 0
         self.current_image_sampling_step = 0
 
     def dict(self):
@@ -117,6 +119,7 @@ class State:
 
     def begin(self, job: str = "(unknown)"):
         self.sampling_step = 0
+        self.preview_step = 0
         self.time_start = time.time()
         self.job_count = -1
         self.processing_has_refined_job_count = False
@@ -144,11 +147,11 @@ class State:
 
     @torch.inference_mode()
     def set_current_image(self):
-        """if enough sampling steps have been made after the last call to this, sets self.current_image from self.current_latent, and modifies self.id_live_preview accordingly"""
-        if not shared.parallel_processing_allowed:
+        if not shared.opts.live_previews_enable or shared.opts.show_progress_every_n_steps == -1:
             return
-
-        if self.sampling_step - self.current_image_sampling_step >= shared.opts.show_progress_every_n_steps and shared.opts.live_previews_enable and shared.opts.show_progress_every_n_steps != -1:
+        if self.preview_step >= self.sampling_steps:
+            return
+        if self.preview_step - self.current_image_sampling_step >= shared.opts.show_progress_every_n_steps:
             self.do_set_current_image()
 
     @torch.inference_mode()

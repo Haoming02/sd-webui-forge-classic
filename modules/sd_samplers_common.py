@@ -155,10 +155,6 @@ def images_tensor_to_samples(image, approximation=None, model=None):
 def store_latent(decoded):
     state.current_latent = decoded
 
-    if opts.live_previews_enable and opts.show_progress_every_n_steps > 0 and shared.state.sampling_step % opts.show_progress_every_n_steps == 0:
-        if not shared.parallel_processing_allowed:
-            shared.state.assign_current_image(sample_to_image(decoded))
-
 
 def is_sampler_using_eta_noise_seed_delta(p):
     """returns whether sampler from config will use eta noise seed delta for image creation"""
@@ -356,6 +352,7 @@ class Sampler:
             raise InterruptedException
 
         state.sampling_step = step
+        state.preview_step = step + 1
         shared.total_tqdm.update()
 
     def launch_sampling(self, steps, func):
@@ -363,6 +360,7 @@ class Sampler:
         self.model_wrap_cfg.total_steps = self.config.total_steps(steps)
         state.sampling_steps = steps
         state.sampling_step = 0
+        state.preview_step = 0
 
         try:
             return func()
