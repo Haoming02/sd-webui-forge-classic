@@ -3,12 +3,16 @@
 # https://github.com/Comfy-Org/ComfyUI/pull/12043
 
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules_forge.packages.huggingface_guess.latent import LatentFormat
 
 import torch
 import torch.nn as nn
 
-from backend.utils import load_torch_file
 from backend.state_dict import load_state_dict
+from backend.utils import load_torch_file
 from modules import devices, paths_internal, shared
 
 URL: str = "https://github.com/madebyollin/taesd/raw/main/"
@@ -117,7 +121,8 @@ def download_model(model_path: os.PathLike, model_url: str):
 
 
 def decoder_model():
-    model_name: str = getattr(shared.sd_model.model_config.latent_format, "taesd_decoder_name", None)
+    latent_format: "LatentFormat" = shared.sd_model.model_config.latent_format
+    model_name: str = latent_format.taesd_decoder_name
     if model_name is None:
         return None
     else:
@@ -141,7 +146,8 @@ def decoder_model():
 
 
 def encoder_model():
-    model_name: str = getattr(shared.sd_model.model_config.latent_format, "taesd_decoder_name", None)
+    latent_format: "LatentFormat" = shared.sd_model.model_config.latent_format
+    model_name: str = latent_format.taesd_decoder_name
     if model_name is None:
         return None
     else:
