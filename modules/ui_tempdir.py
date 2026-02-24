@@ -3,50 +3,48 @@ import tempfile
 from collections import namedtuple
 from pathlib import Path
 
-import gradio.components
 import gradio as gr
-
+import gradio.components  # noqa
 from PIL import PngImagePlugin
 
 from modules import shared
-
 
 Savedfile = namedtuple("Savedfile", ["name"])
 
 
 def register_tmp_file(gradio_app, filename):
-    if hasattr(gradio_app, 'temp_file_sets'):  # gradio 3.15
-        if hasattr(gr.utils, 'abspath'):  # gradio 4.19
+    if hasattr(gradio_app, "temp_file_sets"):  # gradio 3.15
+        if hasattr(gr.utils, "abspath"):  # gradio 4.19
             filename = gr.utils.abspath(filename)
         else:
             filename = os.path.abspath(filename)
 
         gradio_app.temp_file_sets[0] = gradio_app.temp_file_sets[0] | {filename}
 
-    if hasattr(gradio_app, 'temp_dirs'):  # gradio 3.9
+    if hasattr(gradio_app, "temp_dirs"):  # gradio 3.9
         gradio_app.temp_dirs = gradio_app.temp_dirs | {os.path.abspath(os.path.dirname(filename))}
 
 
 def check_tmp_file(gradio_app, filename):
-    if hasattr(gradio_app, 'temp_file_sets'):
-        if hasattr(gr.utils, 'abspath'):  # gradio 4.19
+    if hasattr(gradio_app, "temp_file_sets"):
+        if hasattr(gr.utils, "abspath"):  # gradio 4.19
             filename = gr.utils.abspath(filename)
         else:
             filename = os.path.abspath(filename)
 
         return any(filename in fileset for fileset in gradio_app.temp_file_sets)
 
-    if hasattr(gradio_app, 'temp_dirs'):
+    if hasattr(gradio_app, "temp_dirs"):
         return any(Path(temp_dir).resolve() in Path(filename).resolve().parents for temp_dir in gradio_app.temp_dirs)
 
     return False
 
 
 def save_pil_to_file(pil_image, cache_dir=None, format="png"):
-    already_saved_as = getattr(pil_image, 'already_saved_as', None)
+    already_saved_as = getattr(pil_image, "already_saved_as", None)
     if already_saved_as and os.path.isfile(already_saved_as):
         register_tmp_file(shared.demo, already_saved_as)
-        filename_with_mtime = f'{already_saved_as}?{os.path.getmtime(already_saved_as)}'
+        filename_with_mtime = f"{already_saved_as}?{os.path.getmtime(already_saved_as)}"
         register_tmp_file(shared.demo, filename_with_mtime)
         return filename_with_mtime
 
@@ -85,16 +83,15 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
     """
 
     from gradio import FileData
-    from gradio.data_classes import GradioRootModel
-    from gradio.data_classes import GradioModel
-    from gradio_client import utils as client_utils
+    from gradio.data_classes import GradioModel, GradioRootModel
     from gradio.utils import get_upload_folder, is_in_or_equal, is_static_file
+    from gradio_client import utils as client_utils
 
     async def _move_to_cache(d: dict):
         payload = FileData(**d)
 
         # EDITED
-        payload.path = payload.path.rsplit('?', 1)[0]
+        payload.path = payload.path.rsplit("?", 1)[0]
 
         # If the gradio app developer is returning a URL from
         # postprocess, it means the component can display a URL
@@ -110,18 +107,12 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
                 temp_file_path = payload.path
             else:
                 # If the file is on a remote server, do not move it to cache.
-                if check_in_upload_folder and not client_utils.is_http_url_like(
-                    payload.path
-                ):
+                if check_in_upload_folder and not client_utils.is_http_url_like(payload.path):
                     path = os.path.abspath(payload.path)
                     if not is_in_or_equal(path, get_upload_folder()):
-                        raise ValueError(
-                            f"File {path} is not in the upload folder and cannot be accessed."
-                        )
+                        raise ValueError(f"File {path} is not in the upload folder and cannot be accessed.")
                 if not payload.is_stream:
-                    temp_file_path = await block.async_move_resource_to_block_cache(
-                        payload.path
-                    )
+                    temp_file_path = await block.async_move_resource_to_block_cache(payload.path)
                     if temp_file_path is None:
                         raise ValueError("Did not determine a file path for the resource.")
                     payload.path = temp_file_path
@@ -132,9 +123,7 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
         if block.proxy_url:
             proxy_url = block.proxy_url.rstrip("/")
             url = f"/proxy={proxy_url}{url_prefix}{payload.path}"
-        elif client_utils.is_http_url_like(payload.path) or payload.path.startswith(
-            f"{url_prefix}"
-        ):
+        elif client_utils.is_http_url_like(payload.path) or payload.path.startswith(f"{url_prefix}"):
             url = payload.path
         else:
             url = f"{url_prefix}{payload.path}"
@@ -145,9 +134,7 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
     if isinstance(data, (GradioRootModel, GradioModel)):
         data = data.model_dump()
 
-    return await client_utils.async_traverse(
-        data, _move_to_cache, client_utils.is_file_obj
-    )
+    return await client_utils.async_traverse(data, _move_to_cache, client_utils.is_file_obj)
 
 
 def install_ui_tempdir_override():

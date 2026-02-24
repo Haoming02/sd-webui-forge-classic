@@ -70,7 +70,7 @@ options_templates.update(
             "use_original_name_batch": OptionInfo(True, "During batch process in Extras tab, use the input filename for output filename"),
             "save_selected_only": OptionInfo(True, 'When using the "Save" button, only save the selected image'),
             "save_write_log_csv": OptionInfo(True, 'Write the generation parameters to a log.csv when saving images using the "Save" button'),
-            "temp_dir": OptionInfo(util.truncate_path(os.path.join(data_path, "tmp")), "Directory for temporary images; leave empty to use the system TEMP folder").info("only used for intermediate/interrupted images"),
+            "temp_dir": OptionInfo(util.truncate_path(os.path.join(data_path, "tmp")), "Directory for temporary images; leave empty to use the system TEMP folder").info("for intermediate/interrupted images").needs_restart(),
             "clean_temp_dir_at_start": OptionInfo(True, "Clean up the temporary directory above when starting webui").info("only when the directory is not the system TEMP"),
             "save_incomplete_images": OptionInfo(False, "Save Interrupted Images"),
             "notification_audio": OptionInfo(True, "Play a notification sound after image generation").info('a "notification.mp3" file is required in the root directory').needs_reload_ui(),

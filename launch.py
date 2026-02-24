@@ -35,6 +35,7 @@ def main():
         exit(0)
 
     launch_utils.verify_version()
+    launch_utils.setup_temp_dir()  # needed before import gradio
 
     launch_utils.startup_timer.record("initial startup")
 
