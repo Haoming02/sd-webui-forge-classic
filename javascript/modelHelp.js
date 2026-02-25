@@ -21,7 +21,9 @@
     });
 
     onAfterUiUpdate(() => {
-        const preset = document.getElementById("forge_ui_preset").querySelector("input");
+        if (link == null) return;
+
+        const preset = document.getElementById("forge_ui_preset")?.querySelector("input");
         if (preset == null) return;
         if (["sd", "xl"].includes(preset.value)) {
             link.style.visibility = "hidden";
@@ -29,7 +31,7 @@
         }
 
         const modules = document.getElementById("setting_sd_modules");
-        const input = modules.querySelector("div.wrap-inner");
+        const input = modules?.querySelector("div.wrap-inner");
         if (input == null) return;
         link.style.visibility = input.querySelector("div.token") ? "hidden" : "visible";
     });
