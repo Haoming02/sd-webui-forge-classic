@@ -609,18 +609,3 @@ def verify_version():
     print("\n\n")
 
     input("Press Enter to Continue...")
-
-
-def setup_temp_dir():
-    settings_file: os.PathLike = args.ui_settings_file
-    if not os.path.isfile(settings_file):
-        return
-
-    with open(settings_file, "r", encoding="utf8") as file:
-        settings: dict[str, str] = json.load(file)
-
-    if not (path := settings.get("temp_dir", "").strip()):
-        return
-
-    os.makedirs(path, exist_ok=True)
-    os.environ.setdefault("GRADIO_TEMP_DIR", path)
