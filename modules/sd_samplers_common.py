@@ -271,6 +271,13 @@ def apply_refiner(cfg_denoiser, x, sigma):
         ORIGINAL_CHECKPOINT = shared.sd_model.sd_checkpoint_info.filename
         load_state_dict(model, sd)
 
+        if refiner_checkpoint_info.filename.lower().endswith(".gguf"):
+
+            from backend.memory_management import bake_gguf_model
+
+            sd_model.forge_objects.unet.model.gguf_baked = False
+            sd_model.forge_objects.unet.model = bake_gguf_model(sd_model.forge_objects.unet.model)
+
         # 1. reset the current_lora_hash so networks.py/load_networks() parse the LoRA again
         sd_model.current_lora_hash = str([])
 

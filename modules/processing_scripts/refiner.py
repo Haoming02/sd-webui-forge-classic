@@ -57,10 +57,12 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
 
     @torch.inference_mode()
     def postprocess(self, *args, **kwargs):
-        from modules import sd_samplers_common
+        from modules import sd_samplers_common, shared
 
         if sd_samplers_common.ORIGINAL_CHECKPOINT is None:
             return
+
+        sd_model = shared.sd_model
 
         import huggingface_guess
 
@@ -69,7 +71,7 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
         from backend.utils import load_torch_file
         from modules_forge.main_entry import logger
 
-        model = sd_models.model_data.get_sd_model().forge_objects.unet.model.diffusion_model
+        model = sd_model.forge_objects.unet.model.diffusion_model
 
         sd = load_torch_file(sd_samplers_common.ORIGINAL_CHECKPOINT)
         sd = preprocess_state_dict(sd)
@@ -79,5 +81,13 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
         sd = try_filter_state_dict(sd, guess.unet_key_prefix)
 
         logger.info("Restoring state_dict...")
-        sd_samplers_common.ORIGINAL_CHECKPOINT = None
         load_state_dict(model, sd)
+
+        if sd_samplers_common.ORIGINAL_CHECKPOINT.lower().endswith(".gguf"):
+
+            from backend.memory_management import bake_gguf_model
+
+            sd_model.forge_objects.unet.model.gguf_baked = False
+            sd_model.forge_objects.unet.model = bake_gguf_model(sd_model.forge_objects.unet.model)
+
+        sd_samplers_common.ORIGINAL_CHECKPOINT = None
