@@ -1,0 +1,34 @@
+services:
+  forge-rocm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: forge-rocm
+    restart: unless-stopped
+
+    ports:
+      - "7860:7860"   # Change left side if you want a different host port
+
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+
+    group_add:
+      - video
+      - render
+
+    volumes:
+      - ./:/workspace
+
+    environment:
+      FORGE_HOST: "0.0.0.0"
+      FORGE_ARGS: >-
+        --api
+        --enable-insecure-extension-access
+        --skip-python-version-check
+        --skip-version-check
+        --disable-xformers
+        --skip-torch-cuda-test
+
+    shm_size: "8gb"

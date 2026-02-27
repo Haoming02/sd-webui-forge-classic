@@ -1,0 +1,19 @@
+# Keep docker build context small (avoid models/outputs/caches)
+models/
+outputs/
+cache/
+tmp/
+output/
+__pycache__/
+
+# weights / binaries (very large)
+*.ckpt
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# repo metadata / OS junk
+.git/
+.DS_Store
