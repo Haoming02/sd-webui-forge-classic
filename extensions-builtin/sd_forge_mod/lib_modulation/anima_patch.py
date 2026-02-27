@@ -20,29 +20,22 @@ STATE_KEY = "anima_mod_guidance_state"
 ORIG_FORWARD: Callable = None
 
 
-def _normalize_layer_range(start_layer, end_layer, total_blocks):
-    if total_blocks <= 0:
-        raise RuntimeError("Anima model has no blocks to modulate.")
-
+def _normalize_layer_range(start_layer: int, end_layer: int, total_blocks: int):
     if end_layer < 0:
         end_layer = total_blocks - 1
 
     start_layer = max(0, int(start_layer))
     end_layer = min(total_blocks - 1, int(end_layer))
-    if start_layer > end_layer:
-        raise RuntimeError(f"Invalid layer range: start_layer={start_layer}, end_layer={end_layer}, total_blocks={total_blocks}.")
+
+    assert start_layer < end_layer
     return start_layer, end_layer
 
 
-def _prepare_pooled_for_batch(pooled, batch_size, device, dtype):
+def _prepare_pooled_for_batch(pooled: torch.Tensor, batch_size: int, device: torch.device, dtype: torch.dtype):
     if pooled.ndim == 1:
         pooled = pooled.unsqueeze(0)
-    if pooled.ndim != 2:
-        raise RuntimeError(f"Expected pooled tensor with rank 2, got rank {pooled.ndim}.")
     if pooled.shape[0] == 1:
         pooled = pooled.expand(batch_size, -1)
-    elif pooled.shape[0] != batch_size:
-        raise RuntimeError(f"Pooled tensor batch mismatch: pooled batch={pooled.shape[0]}, expected {batch_size}.")
     return pooled.to(device=device, dtype=dtype)
 
 
@@ -63,20 +56,20 @@ def _project_clip_pooled(pooled, adapter_state):
 
 def register_modulation_wrapper(
     model_patcher: "UnetPatcher",
-    adapter_path,
-    clip_base_pooled,
-    clip_positive_pooled,
-    clip_negative_pooled,
-    w,
-    start_layer,
-    end_layer,
+    adapter_path: str,
+    clip_base_pooled: torch.Tensor,
+    clip_positive_pooled: torch.Tensor,
+    clip_negative_pooled: torch.Tensor,
+    w: float,
+    start_layer: int,
+    end_layer: int,
 ):
     transformer_options = model_patcher.model_options.setdefault("transformer_options", {})
     transformer_options[STATE_KEY] = {
         "adapter_path": adapter_path,
-        "clip_base_pooled": clip_base_pooled.detach().float().cpu().contiguous(),
-        "clip_positive_pooled": clip_positive_pooled.detach().float().cpu().contiguous(),
-        "clip_negative_pooled": clip_negative_pooled.detach().float().cpu().contiguous(),
+        "clip_base_pooled": clip_base_pooled,
+        "clip_positive_pooled": clip_positive_pooled,
+        "clip_negative_pooled": clip_negative_pooled,
         "w": float(w),
         "start_layer": int(start_layer),
         "end_layer": int(end_layer),
@@ -101,11 +94,6 @@ def _forward_with_modulation(diffusion_model: Anima, x: torch.Tensor, timesteps:
     if (state := transformer_options.get(STATE_KEY, None)) is None:
         return ORIG_FORWARD(diffusion_model, x, timesteps, context, fps, padding_mask, **kwargs)
 
-    if not hasattr(diffusion_model, "blocks") or not hasattr(diffusion_model, "prepare_embedded_sequence"):
-        raise RuntimeError("Anima Mod Guidance failed: model is not compatible with MiniTrainDIT internals.")
-    if not getattr(diffusion_model, "use_adaln_lora", False):
-        raise RuntimeError("Anima Mod Guidance requires an Anima/Cosmos model with use_adaln_lora=True.")
-
     orig_shape = list(x.shape)
     x = pad_to_patch_size(x, (diffusion_model.patch_temporal, diffusion_model.patch_spatial, diffusion_model.patch_spatial))
     x_B_C_T_H_W = x
@@ -124,21 +112,14 @@ def _forward_with_modulation(diffusion_model: Anima, x: torch.Tensor, timesteps:
     t_embedding_B_T_D, adaln_lora_B_T_3D = diffusion_model.t_embedder[1](diffusion_model.t_embedder[0](timesteps_B_T).to(x_B_T_H_W_D.dtype))
     t_embedding_B_T_D = diffusion_model.t_embedding_norm(t_embedding_B_T_D)
 
-    if adaln_lora_B_T_3D is None:
-        raise RuntimeError("Anima Mod Guidance failed: model did not produce AdaLN-LoRA embeddings.")
-
     diffusion_model.affline_emb = t_embedding_B_T_D
     diffusion_model.crossattn_emb = crossattn_emb
-
-    if extra_pos_emb is not None and x_B_T_H_W_D.shape != extra_pos_emb.shape:
-        raise RuntimeError("Anima Mod Guidance failed: extra positional embedding shape mismatch " f"{tuple(x_B_T_H_W_D.shape)} != {tuple(extra_pos_emb.shape)}.")
 
     if x_B_T_H_W_D.dtype == torch.float16:
         x_B_T_H_W_D = x_B_T_H_W_D.float()
 
-    adapter_state, adapter_meta = get_typed_adapter(
+    adapter_state = get_typed_adapter(
         state["adapter_path"],
-        diffusion_model,
         device=t_embedding_B_T_D.device,
         dtype=t_embedding_B_T_D.dtype,
     )
@@ -147,12 +128,6 @@ def _forward_with_modulation(diffusion_model: Anima, x: torch.Tensor, timesteps:
     pooled_base = _prepare_pooled_for_batch(state["clip_base_pooled"], batch_size, t_embedding_B_T_D.device, t_embedding_B_T_D.dtype)
     pooled_pos = _prepare_pooled_for_batch(state["clip_positive_pooled"], batch_size, t_embedding_B_T_D.device, t_embedding_B_T_D.dtype)
     pooled_neg = _prepare_pooled_for_batch(state["clip_negative_pooled"], batch_size, t_embedding_B_T_D.device, t_embedding_B_T_D.dtype)
-
-    pooled_dim = pooled_base.shape[1]
-    if pooled_dim != adapter_meta["pooled_dim"]:
-        raise RuntimeError("Anima Mod Guidance failed: pooled embedding dim mismatch for clip_base_conditioning " f"({pooled_dim} vs expected {adapter_meta['pooled_dim']}).")
-    if pooled_pos.shape[1] != adapter_meta["pooled_dim"] or pooled_neg.shape[1] != adapter_meta["pooled_dim"]:
-        raise RuntimeError("Anima Mod Guidance failed: pooled embedding dim mismatch for clip_positive_conditioning/" "clip_negative_conditioning.")
 
     pooled_base_proj = _project_clip_pooled(pooled_base, adapter_state)
     pooled_pos_proj = _project_clip_pooled(pooled_pos, adapter_state)
