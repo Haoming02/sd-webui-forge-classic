@@ -1,6 +1,7 @@
 # https://github.com/Anzhc/Anima-Mod-Guidance-ComfyUI-Node/blob/main/adapter.py
 
 import os.path
+from functools import lru_cache
 
 import torch
 
@@ -34,6 +35,7 @@ def _load_adapter_cpu(resolved_path):
     return state_dict
 
 
+@lru_cache(maxsize=1, typed=False)
 def get_typed_adapter(path: os.PathLike, device: torch.device, dtype: torch.dtype) -> dict[str, torch.Tensor]:
     state_dict = _load_adapter_cpu(path)
     typed_state = {key: value.to(device=device, dtype=dtype) for key, value in state_dict.items()}

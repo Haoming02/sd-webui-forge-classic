@@ -84,8 +84,9 @@ def register_modulation_wrapper(
 
 def unpatch():
     global ORIG_FORWARD
-    Anima.forward = ORIG_FORWARD
-    ORIG_FORWARD = None
+    if ORIG_FORWARD is not None:
+        Anima.forward = ORIG_FORWARD
+        ORIG_FORWARD = None
 
 
 @wraps(ORIG_FORWARD)

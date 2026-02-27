@@ -108,21 +108,26 @@ def load_clip(path: str):
 class ModulationGuidanceForForge(scripts.ScriptBuiltinUI):
     sorting_priority = 260209268
 
+    def __init__(self):
+        self._prev_clip_name: str = None
+        self._prev_clip: torch.nn.Module = None
+
     def title(self):
-        return "Modulation Guidance"
+        return "Modulation Guidance Integrated"
 
     def show(self, is_img2img):
         return scripts.AlwaysVisible
 
     def ui(self, *args, **kwargs):
+        modules = list(module_list.keys())
         with InputAccordion(False, label=self.title()) as enable:
-            modules = list(module_list.keys())
-            clip = gr.Dropdown(choices=modules, value=next(iter(modules), None))
-            pos = gr.Textbox(label="clip_positive_conditioning")
-            neg = gr.Textbox(label="clip_negative_conditioning")
-            w = gr.Slider(label="w", value=3.0, minimum=-20.0, maximum=20.0, step=0.01)
-            start = gr.Slider(label="start_layer", value=0, minimum=0, maximum=1024, step=1)
-            end = gr.Slider(label="end_layer", value=-1, minimum=-1, maximum=1024, step=1)
+            clip = gr.Dropdown(label="Clip-L", choices=modules, value=next(iter(modules), None))
+            pos = gr.Textbox(label="Positive Conditioning", info="Leave Empty to use the First Line of the Main Positive Prompt", lines=3, max_lines=3)
+            neg = gr.Textbox(label="Negative Conditioning", info="Leave Empty to use the Main Negative Prompt", lines=3, max_lines=3)
+            with gr.Row():
+                w = gr.Slider(label="w", value=3.0, minimum=-20.0, maximum=20.0, step=0.5)
+                start = gr.Slider(label="start_layer", value=0, minimum=0, maximum=64, step=1)
+                end = gr.Slider(label="end_layer", value=-1, minimum=-1, maximum=64, step=1)
 
         for comp in (comps := (enable, clip, pos, neg, w, start, end)):
             comp.do_not_save_to_config = True
@@ -130,20 +135,32 @@ class ModulationGuidanceForForge(scripts.ScriptBuiltinUI):
         return comps
 
     def process_before_every_sampling(self, p: StableDiffusionProcessing, enable: bool, clip: str, pos: str, neg: str, w: float, start: int, end: int, **kwargs):
-        if not enable:
+        if not enable or getattr(p, "is_hr_pass", False):
             return
 
-        clip_l = load_clip(module_list[clip])
+        if clip == self._prev_clip_name:
+            clip_l = self._prev_clip
+        else:
+            del self._prev_clip
+            clip_l = load_clip(module_list[clip])
+            self._prev_clip = clip_l
 
-        _, _base = clip_l(SdConditioning([p.prompt], is_negative_prompt=False, width=p.width, height=p.height))
-        _, _pos = clip_l(SdConditioning([pos], is_negative_prompt=False, width=p.width, height=p.height))
-        _, _neg = clip_l(SdConditioning([neg], is_negative_prompt=True, width=p.width, height=p.height))
+        dim = dict(width=p.width, height=p.height)
+        c: str = pos.strip() or p.main_prompt.split("\n", 1)[0]
+        uc: str = neg.strip() or p.main_negative_prompt
+
+        _, _base = clip_l(SdConditioning([p.main_prompt], is_negative_prompt=False, **dim))
+        _, _pos = clip_l(SdConditioning([c], is_negative_prompt=False, **dim))
+        _, _neg = clip_l(SdConditioning([uc], is_negative_prompt=True, **dim))
 
         unet = p.sd_model.forge_objects.unet
 
-        _unet = AnimaModGuidance.patch(unet, _base, _pos, _neg, w, start, end)
-
-        p.sd_model.forge_objects.unet = _unet
+        try:
+            _unet = AnimaModGuidance.patch(unet, _base, _pos, _neg, w, start, end)
+        except AssertionError:
+            print("[Error] Only Anima is supported for Modulation Guidance")
+        else:
+            p.sd_model.forge_objects.unet = _unet
 
     def postprocess(self, *args, **kwargs):
         unpatch()
