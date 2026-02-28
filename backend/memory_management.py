@@ -111,10 +111,19 @@ if args.directml is not None:
 
 try:
     import intel_extension_for_pytorch as ipex  # noqa: F401
-
-    _ = torch.xpu.device_count()
-    xpu_available = torch.xpu.is_available()
-except Exception:
+    try:
+        xpu_device_count = torch.xpu.device_count()
+        xpu_available = torch.xpu.is_available()
+        if xpu_available:
+            logger.info(f"Intel XPU detected: {xpu_device_count} device(s) available")
+    except Exception as e:
+        logger.debug(f"XPU availability check failed: {e}")
+        xpu_available = False
+except ImportError:
+    logger.debug("Intel Extension for PyTorch not installed")
+    xpu_available = False
+except Exception as e:
+    logger.debug(f"XPU initialization failed: {e}")
     xpu_available = False
 
 try:
@@ -130,7 +139,12 @@ if args.cpu:
 
 
 def is_intel_xpu() -> bool:
-    return cpu_state is CPUState.GPU and xpu_available
+    if cpu_state is not CPUState.GPU:
+        return False
+    try:
+        return torch.xpu.is_available()
+    except Exception:
+        return xpu_available
 
 
 def is_nvidia() -> bool:
@@ -150,9 +164,17 @@ def get_torch_device() -> torch.device:
         return torch.device("cpu")
     else:
         if is_intel_xpu():
-            return torch.device("xpu", torch.xpu.current_device())
-        else:
+            try:
+                device_id = torch.xpu.current_device()
+                logger.info(f"Using Intel XPU device: {device_id}")
+                return torch.device("xpu", device_id)
+            except Exception as e:
+                logger.warning(f"Failed to get XPU device: {e}, falling back to CPU")
+                return torch.device("cpu")
+        elif is_nvidia():
             return torch.device(torch.cuda.current_device())
+        else:
+            return torch.device("cpu")
 
 
 def get_total_memory(dev: torch.device = None, torch_total_too: bool = False):
