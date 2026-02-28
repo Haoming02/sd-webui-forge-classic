@@ -49,6 +49,7 @@ fpvae_group.add_argument("--fp32-vae", action="store_true", help="Run the VAE in
 fpvae_group.add_argument("--bf16-vae", action="store_true", help="Run the VAE in bf16")
 fpvae_group.add_argument("--fp16-vae", action="store_true", help="Run the VAE in fp16 (might cause black images)")
 
+parser.add_argument("--vae-in-bf16", action="store_true", dest="bf16_vae", help="Alias for --bf16-vae (Run the VAE in bf16)")
 parser.add_argument("--cpu-vae", action="store_true", help="Run the VAE on the CPU")
 
 fpte_group = parser.add_mutually_exclusive_group()
@@ -76,6 +77,7 @@ parser.add_argument("--disable-flash", action="store_true", help="disable flash_
 parser.add_argument("--disable-xformers", action="store_true", help="disable xformers")
 
 parser.add_argument("--directml", type=int, nargs="?", metavar="DIRECTML_DEVICE", const=-1, help="Use torch-directml")
+parser.add_argument("--use-ipex", action="store_true", help="Use Intel Extension for PyTorch")
 parser.add_argument("--disable-ipex-optimize", action="store_true", help="Disable ipex.optimize default when loading models with Intel's Extension for PyTorch")
 parser.add_argument("--deterministic", action="store_true", help="Use slower deterministic algorithms when possible")
 
@@ -101,6 +103,7 @@ parser.add_argument("--autotune", action="store_true", help="torch.backends.cudn
 
 parser.add_argument("--mmap-torch-files", action="store_true", help="Use mmap when loading ckpt/pt files")
 parser.add_argument("--disable-mmap", action="store_true", help="Don't use mmap when loading safetensors")
+parser.add_argument("--no-download-sd-model", action="store_true", help="Don't download SD model")
 
 
 class SageAttentionFuncs(enum.Enum):
