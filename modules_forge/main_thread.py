@@ -43,7 +43,7 @@ def loop():
     while True:
         with condition:
             while not waiting_queue:
-                condition.wait()
+                condition.wait(timeout=0.1)
 
             task = waiting_queue.popleft()
 
