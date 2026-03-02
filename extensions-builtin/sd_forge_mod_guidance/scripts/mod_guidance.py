@@ -1,6 +1,7 @@
 # https://github.com/Anzhc/Anima-Mod-Guidance-ComfyUI-Node/blob/main/nodes.py
 
 import os.path
+from functools import partial
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -9,8 +10,10 @@ import gradio as gr
 import torch
 from lib_modulation.adapter import resolve_adapter_path
 from lib_modulation.anima_patch import register_modulation_wrapper, unpatch
+from lib_modulation.logging import logger
 
 from modules import scripts
+from modules.infotext_utils import PasteField
 from modules.processing import StableDiffusionProcessing
 from modules.prompt_parser import SdConditioning
 from modules.ui_components import InputAccordion
@@ -71,7 +74,6 @@ def load_clip(path: str):
     from backend.loader import HF
     from backend.nn.clip import IntegratedCLIP
     from backend.operations import using_forge_operations
-    from backend.state_dict import load_state_dict
     from backend.text_processing.classic_engine import ClassicTextProcessingEngine
     from backend.utils import load_torch_file
 
@@ -85,11 +87,15 @@ def load_clip(path: str):
 
     with no_init_weights():
         with using_forge_operations(**to_args, manual_cast_enabled=True):
-            text_encoder = IntegratedCLIP(CLIPTextModel, config, add_text_projection=True).to(**to_args)
+            text_encoder: torch.nn.Module = IntegratedCLIP(CLIPTextModel, config, add_text_projection=True).to(**to_args)
 
     sd = load_torch_file(path)
     sd = preprocess_state_dict(sd)
-    load_state_dict(text_encoder, sd, ignore_errors=["transformer.text_projection.weight", "transformer.text_model.embeddings.position_ids", "logit_scale", "transformer.logit_scale"])
+    missing, _ = text_encoder.load_state_dict(sd, strict=False)
+    del sd
+
+    if len(missing) > 4:
+        raise ValueError
 
     return ClassicTextProcessingEngine(
         text_encoder=text_encoder,
@@ -121,7 +127,10 @@ class ModulationGuidanceForForge(scripts.ScriptBuiltinUI):
     def ui(self, *args, **kwargs):
         modules = list(module_list.keys())
         with InputAccordion(False, label=self.title()) as enable:
-            clip = gr.Dropdown(label="Clip-L", choices=modules, value=next(iter(modules), None))
+            with gr.Row():
+                clip = gr.Dropdown(label="Clip-L", choices=modules, value=next(iter(modules), None))
+                _ = gr.Label("for Anima only", show_label=False)
+                _.do_not_save_to_config = True
             pos = gr.Textbox(label="Positive Conditioning", info="Leave Empty to use the First Line of the Main Positive Prompt", lines=3, max_lines=3)
             neg = gr.Textbox(label="Negative Conditioning", info="Leave Empty to use the Main Negative Prompt", lines=3, max_lines=3)
             with gr.Row():
@@ -129,10 +138,26 @@ class ModulationGuidanceForForge(scripts.ScriptBuiltinUI):
                 start = gr.Slider(label="start_layer", value=0, minimum=0, maximum=64, step=1)
                 end = gr.Slider(label="end_layer", value=-1, minimum=-1, maximum=64, step=1)
 
-        for comp in (comps := (enable, clip, pos, neg, w, start, end)):
-            comp.do_not_save_to_config = True
+        self.infotext_fields = [
+            PasteField(clip, "mg_clip"),
+            PasteField(pos, partial(self.get_prompt, positive=True)),
+            PasteField(neg, partial(self.get_prompt, positive=False)),
+            PasteField(w, "mg_w"),
+            PasteField(start, "mg_start"),
+            PasteField(end, "mg_end"),
+        ]
 
-        return comps
+        return [enable, clip, pos, neg, w, start, end]
+
+    @staticmethod
+    def get_prompt(params: dict, positive: bool):
+        if (p := params.get("mg_pos" if positive else "mg_neg", None)) is None:
+            return gr.skip()
+
+        if p == str(None):
+            return gr.update(value=None)
+        else:
+            return gr.update(value=p)
 
     def process_before_every_sampling(self, p: StableDiffusionProcessing, enable: bool, clip: str, pos: str, neg: str, w: float, start: int, end: int, **kwargs):
         if not enable or getattr(p, "is_hr_pass", False):
@@ -142,12 +167,20 @@ class ModulationGuidanceForForge(scripts.ScriptBuiltinUI):
             clip_l = self._prev_clip
         else:
             del self._prev_clip
-            clip_l = load_clip(module_list[clip])
-            self._prev_clip = clip_l
+            try:
+                clip_l = load_clip(module_list[clip])
+            except ValueError:
+                logger.error(f'"{clip}" is not Clip-L')
+                self._prev_clip_name = None
+                self._prev_clip = None
+                return
+            else:
+                self._prev_clip_name = clip
+                self._prev_clip = clip_l
 
         dim = dict(width=p.width, height=p.height)
-        c: str = pos.strip() or p.main_prompt.split("\n", 1)[0]
-        uc: str = neg.strip() or p.main_negative_prompt
+        c: str = (pos or p.main_prompt.split("\n", 1)[0]).strip()
+        uc: str = (neg or p.main_negative_prompt).strip()
 
         _, _base = clip_l(SdConditioning([p.main_prompt], is_negative_prompt=False, **dim))
         _, _pos = clip_l(SdConditioning([c], is_negative_prompt=False, **dim))
@@ -158,9 +191,20 @@ class ModulationGuidanceForForge(scripts.ScriptBuiltinUI):
         try:
             _unet = AnimaModGuidance.patch(unet, _base, _pos, _neg, w, start, end)
         except AssertionError:
-            print("[Error] Only Anima is supported for Modulation Guidance")
+            logger.error("Only Anima is supported for Modulation Guidance")
         else:
             p.sd_model.forge_objects.unet = _unet
+            p.extra_generation_params.update(
+                {
+                    "modulation_guidance": True,
+                    "mg_clip": clip,
+                    "mg_pos": str(pos.strip() or None),
+                    "mg_neg": str(neg.strip() or None),
+                    "mg_w": float(w),
+                    "mg_start": int(start),
+                    "mg_end": int(end),
+                }
+            )
 
     def postprocess(self, *args, **kwargs):
         unpatch()

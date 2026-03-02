@@ -8,6 +8,8 @@ import torch
 from backend.utils import load_torch_file
 from modules.paths import models_path
 
+from .logging import logger
+
 ADAPTER_URL = "https://huggingface.co/yresearch/cosmos-pooled/resolve/main/checkpoint_4000.pt"
 
 ADAPTER_PATH: os.PathLike = os.path.abspath(os.path.join(models_path, "modulation_guidance", os.path.basename(ADAPTER_URL)))
@@ -15,6 +17,7 @@ ADAPTER_PATH: os.PathLike = os.path.abspath(os.path.join(models_path, "modulatio
 
 def resolve_adapter_path():
     if not os.path.isfile(ADAPTER_PATH):
+        logger.info(f'Downloading Adapter to "{ADAPTER_PATH}"...')
         os.makedirs(os.path.dirname(ADAPTER_PATH), exist_ok=True)
         torch.hub.download_url_to_file(ADAPTER_URL, ADAPTER_PATH)
     return ADAPTER_PATH
