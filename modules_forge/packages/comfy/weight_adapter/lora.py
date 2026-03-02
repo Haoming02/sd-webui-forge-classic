@@ -179,9 +179,9 @@ class LoRAAdapter(WeightAdapterBase):
                 .transpose(0, 1)
             )
         try:
-            lora_diff = torch.mm(mat1.flatten(start_dim=1), mat2.flatten(start_dim=1)).reshape(weight.shape)
-            del mat1, mat2
             if dora_scale is not None:
+                lora_diff = torch.mm(mat1.flatten(start_dim=1), mat2.flatten(start_dim=1)).reshape(weight.shape)
+                del mat1, mat2
                 weight = weight_decompose(
                     dora_scale,
                     weight,
@@ -192,7 +192,24 @@ class LoRAAdapter(WeightAdapterBase):
                     function,
                 )
             else:
-                weight += function(((strength * alpha) * lora_diff).type(weight.dtype))
+                mat1_flat = mat1.flatten(start_dim=1)
+                mat2_flat = mat2.flatten(start_dim=1)
+                del mat1, mat2
+
+                out_dim = mat1_flat.shape[0]
+                chunk_size = 1024
+
+                for i in range(0, out_dim, chunk_size):
+                    end = min(i + chunk_size, out_dim)
+                    diff_chunk = torch.mm(mat1_flat[i:end], mat2_flat)
+                    if strength * alpha != 1.0:
+                        diff_chunk.mul_(strength * alpha)
+
+                    target_shape = weight[i:end].shape
+                    weight[i:end] += function(diff_chunk.reshape(target_shape)).type(weight.dtype)
+                    del diff_chunk
+        except memory_management.OOM_EXCEPTION:
+            raise
         except Exception as e:
             logging.error("ERROR {} {} {}".format(self.name, key, e))
         return weight
