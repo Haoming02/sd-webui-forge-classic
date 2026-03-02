@@ -1,4 +1,6 @@
-from __future__ import annotations
+if __name__ == "__main__":
+    raise SystemError("Call launch.py instead")
+
 
 import os
 import time
@@ -9,7 +11,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from modules import initialize, initialize_util, timer
-from modules_forge import main_thread
 from modules_forge.initialization import initialize_forge
 
 startup_timer = timer.startup_timer
@@ -187,14 +188,3 @@ def api_only():
 
 def webui():
     Thread(target=webui_worker, daemon=True).start()
-
-
-if __name__ == "__main__":
-    from modules.shared_cmd_options import cmd_opts
-
-    if cmd_opts.nowebui:
-        api_only()
-    else:
-        webui()
-
-    main_thread.loop()
