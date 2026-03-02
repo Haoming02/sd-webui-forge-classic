@@ -132,7 +132,7 @@ def get_parameter_devices(model):
 def set_parameter_devices(model, parameter_devices):
     for key, device in parameter_devices.items():
         p = utils.get_attr(model, key)
-        if p.device != device:
+        if not isinstance(p, torch.nn.Parameter) or p.device != device:
             p = utils.tensor2parameter(p.to(device=device))
             utils.set_attr_raw(model, key, p)
     return model
