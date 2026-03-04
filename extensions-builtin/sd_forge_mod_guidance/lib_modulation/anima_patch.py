@@ -75,7 +75,7 @@ def register_modulation_wrapper(
         "end_layer": int(end_layer),
     }
 
-    assert isinstance(model_patcher.model.diffusion_model, Anima)
+    assert model_patcher.model.config.huggingface_repo.endswith("Anima")
 
     global ORIG_FORWARD
     ORIG_FORWARD = Anima.forward
