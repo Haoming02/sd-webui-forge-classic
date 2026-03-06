@@ -1125,7 +1125,7 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                             output_images.append(image_mask_composite)
 
             if _is_video:
-                video_path = images.save_video(p, frames)
+                video_path = images.save_video(p, frames, info=infotext(use_main_prompt=True))
                 del frames
 
             del x_samples_ddim

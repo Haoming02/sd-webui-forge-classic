@@ -896,7 +896,7 @@ def fix_png_transparency(image: Image.Image):
     return image
 
 
-def save_video(p, frames: list[np.ndarray], fps: int = 16, basename: str = "") -> str:
+def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = "") -> str:
     height, width, channels = frames[0].shape
     assert channels == 3, "Frames must be in (H, W, 3) RGB format"
 
@@ -960,6 +960,8 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, basename: str = "") -
         "-profile:v",
         profile,
         "-an",
+        "-metadata",
+        f"description={str(info)}",
         fullfn,
     ]
 
