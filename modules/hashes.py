@@ -1,37 +1,22 @@
 import hashlib
 import os.path
 
-from modules import shared
 import modules.cache
+from modules import shared
 
 dump_cache = modules.cache.dump_cache
 cache = modules.cache.cache
 
 
-def calculate_sha256_real(filename):
-    hash_sha256 = hashlib.sha256()
-    blksize = 1024 * 1024
-
+def calculate_sha256_real(filename: os.PathLike):
     with open(filename, "rb") as f:
-        for chunk in iter(lambda: f.read(blksize), b""):
-            hash_sha256.update(chunk)
-
-    return hash_sha256.hexdigest()
+        return hashlib.file_digest(f, "sha256").hexdigest()
 
 
-def calculate_sha256(filename):
-    print("Calculating real hash: ", filename)
-    return calculate_sha256_real(filename)
+calculate_sha256 = calculate_sha256_real
 
 
-def forge_fake_calculate_sha256(filename):
-    basename = os.path.basename(filename)
-    hash_sha256 = hashlib.sha256()
-    hash_sha256.update(basename.encode('utf-8'))
-    return hash_sha256.hexdigest()
-
-
-def sha256_from_cache(filename, title, use_addnet_hash=False):
+def sha256_from_cache(filename: os.PathLike, title: str, use_addnet_hash=False):
     hashes = cache("hashes-addnet") if use_addnet_hash else cache("hashes")
     try:
         ondisk_mtime = os.path.getmtime(filename)
@@ -50,7 +35,7 @@ def sha256_from_cache(filename, title, use_addnet_hash=False):
     return cached_sha256
 
 
-def sha256(filename, title, use_addnet_hash=False):
+def sha256(filename: os.PathLike, title: str, use_addnet_hash=False):
     hashes = cache("hashes-addnet") if use_addnet_hash else cache("hashes")
 
     sha256_value = sha256_from_cache(filename, title, use_addnet_hash)
@@ -60,9 +45,9 @@ def sha256(filename, title, use_addnet_hash=False):
     if shared.cmd_opts.no_hashing:
         return None
 
-    print(f"Calculating sha256 for {filename}: ", end='', flush=True)
+    print(f"Calculating sha256 for {filename}: ", end="", flush=True)
     sha256_value = calculate_sha256_real(filename)
-    print(f"{sha256_value}")
+    print(sha256_value)
 
     hashes[title] = {
         "mtime": os.path.getmtime(filename),
@@ -89,4 +74,3 @@ def addnet_hash_safetensors(b):
         hash_sha256.update(chunk)
 
     return hash_sha256.hexdigest()
-
