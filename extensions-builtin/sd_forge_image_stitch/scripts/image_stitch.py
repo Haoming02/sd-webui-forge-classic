@@ -4,7 +4,7 @@ import torch
 from PIL import Image
 
 from backend.args import dynamic_args
-from modules import images, scripts
+from modules import images, scripts, sd_models
 from modules.api import api
 from modules.processing import StableDiffusionProcessing
 from modules.sd_samplers_common import images_tensor_to_samples
@@ -77,8 +77,8 @@ class ImageStitch(scripts.Script):
 
         references = self.extract_images(references)
 
-        # cache is based on references here and nothing else
-        cache: list[int] = [self.hash_image(ref) for ref in references]
+        # cache is based on reference inputs & model
+        cache: list[str | int] = [str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references)]
         if self.cached_parameters == cache:
             return
 
