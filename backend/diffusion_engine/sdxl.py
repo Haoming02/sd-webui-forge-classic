@@ -80,6 +80,7 @@ class StableDiffusionXL(ForgeDiffusionEngine):
         if self._RF:
             shift = getattr(prompt, "distilled_cfg_scale", 3.0)
             self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
+            memory_management.logger.debug(f"Shift: {shift}")
 
         cond_l = self.text_processing_engine_l(prompt)
         cond_g, clip_pooled = self.text_processing_engine_g(prompt)

@@ -291,6 +291,7 @@ axis_options = [
     AxisOption("Size", str, apply_size),
     AxisOption("CFG Scale", float, apply_field("cfg_scale")),
     AxisOption("Distilled CFG Scale", float, apply_field("distilled_cfg_scale")),
+    AxisOption("Shift", float, apply_field("distilled_cfg_scale")),
     AxisOption("Rescale CFG", float, apply_field("rescale_cfg")),
     AxisOption("MaHiRo", str, apply_field("mahiro"), choices=boolean_choice(reverse=True)),
     AxisOption("Prompt S/R", str, apply_prompt, format_value=format_value),
@@ -509,7 +510,7 @@ class Script(scripts.Script):
                     vary_seeds_x = gr.Checkbox(label="Vary seeds for X", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_x"), tooltip="Use different seeds for images along X axis.")
                     vary_seeds_y = gr.Checkbox(label="Vary seeds for Y", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_y"), tooltip="Use different seeds for images along Y axis.")
                     vary_seeds_z = gr.Checkbox(label="Vary seeds for Z", value=False, min_width=80, elem_id=self.elem_id("vary_seeds_z"), tooltip="Use different seeds for images along Z axis.")
-            with gr.Column(variant="compact",scale=2):
+            with gr.Column(variant="compact", scale=2):
                 include_lone_images = gr.Checkbox(label="Include Sub Images", value=False, elem_id=self.elem_id("include_lone_images"))
                 include_sub_grids = gr.Checkbox(label="Include Sub Grids", value=False, elem_id=self.elem_id("include_sub_grids"))
                 csv_mode = gr.Checkbox(label="Use text inputs instead of dropdowns", value=False, elem_id=self.elem_id("csv_mode"))

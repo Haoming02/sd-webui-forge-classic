@@ -41,6 +41,7 @@ class Lumina2(ForgeDiffusionEngine):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
         shift = getattr(prompt, "distilled_cfg_scale", 6.0)
         self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
+        memory_management.logger.debug(f"Shift: {shift}")
         return self.text_processing_engine_gemma(prompt)
 
     @torch.inference_mode()
