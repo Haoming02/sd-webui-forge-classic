@@ -17,52 +17,57 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-"**Neo**" mainly serves as an continuation for the "`latest`" version of Forge, which was built on [Gradio](https://github.com/gradio-app/gradio) `4.40.0` before lllyasviel became too busy... Additionally, this fork is focused on optimization and usability, with the main goal of being able to run the latest popular models, on an easy-to-use GUI without any bloatwares.
+"**Neo**" mainly serves as an continuation for the "`latest`" version of Forge, which was built on [Gradio](https://github.com/gradio-app/gradio) `4.40.0` before lllyasviel became too busy... Additionally, this fork is focused on optimization and usability, with the main goal of being able to run the latest popular models via an easy-to-use GUI.
 
 > [!Tip]
 > [How to Install](#installation)
 
 <br>
 
-## Features [Feb.]
+## Features [Mar.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
 
 - [X] Support [Anima](https://huggingface.co/circlestone-labs/Anima)
 - [X] Support [Flux.2-Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B)
-    - `4B`, `9B`
-    - `txt2img`, `img2img`, `inpaint`
+    - `4B` / `9B` *(**not** `dev`)*
 - [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
-    - `z-image`, `z-image-turbo`
+    - `z-image` / `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
-    - `txt2img`, `img2img`, `txt2vid`, `img2vid`
     - use `Refiner` to achieve **High Noise** / **Low Noise** switching
         - enable `Refiner` in **Settings/Refiner**
 
 > [!Important]
 > To export a video, you need to have **[FFmpeg](https://ffmpeg.org/)** installed
 
-- [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) / [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
-    - `txt2img` / `img2img`, `inpaint`
+- [X] Support Advanced SDXL
 
 > [!Note]
-> Since the layers between **Qwen-Image** and **Qwen-Image-Edit** are exactly the same, to be properly detected as an **Edit** model, the model needs to include "`qwen`" and "`edit`" in its path, either the file name or folder name.
+> - **v-prediction:** `state_dict` much includes "`v_pred`"
+> - **Zero Terminal SNR:** `state_dict` much includes "`ztsnr`"
+> - **Rectified Flow:** the model needs to include "`rectified`" in its path *(**e.g.** file name or folder name)*
+
+- [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) / [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
+
+> [!Note]
+> To be detected as an **Edit** model, the model needs to include "`qwen`" and "`edit`" in its path *(**e.g.** file name or folder name)*
 
 - [X] Support [Flux Kontext](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev)
-    - `img2img`, `inpaint`
 
 > [!Note]
-> Since the layers between **Flux-Dev**, **Flux-Krea**, and **Flux-Kontext** are exactly the same, to be properly detected as a **Kontext** model, the model needs to include "`kontext`" in its path, either the file name or folder name.
+> To be detected as a **Kontext** model, the model needs to include "`kontext`" in its path *(**e.g.** file name or folder name)*
 
 - [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
     - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `z-image-turbo`
-    - support LoRA for `Flux` and `Qwen`
+    - only `Flux` and `Qwen` support LoRA currently
     - see [Commandline](#by-neo)
 - [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
-    - `Neta-Lumina`, `NetaYume-Lumina`
+    - `Neta-Lumina` / `NetaYume-Lumina`
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
+
+<br>
 
 > [!Tip]
 > Check out [Download Models](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Download-Models) for where to get each model and the accompanying modules
@@ -96,9 +101,14 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Implement MaHiRo
     - alternative CFG calculation; improve prompt adherence
     - enable in **Settings/UI Alternatives**
+- [X] Implement [Spectrum](https://github.com/hanjq17/Spectrum)
+    - training-free acceleration for all models
+- [X] Implement [Modulation Guidance](https://github.com/quickjkee/modulation-guidance)
+    - quality improvement for `Anima`
 - [X] Implement [Epsilon Scaling](https://github.com/comfyanonymous/ComfyUI/pull/10132)
     - enable in **Settings/Stable Diffusion**
 - [X] Implement Torch.Compile
+- [X] Support TAESD live preview for all models
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
     - enable in **Settings/Upscaling**
