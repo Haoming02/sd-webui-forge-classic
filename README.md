@@ -41,22 +41,22 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > To export a video, you need to have **[FFmpeg](https://ffmpeg.org/)** installed
 
-- [X] Support Advanced SDXL
+- [X] Support advanced **SDXL** models
 
 > [!Note]
-> - **v-prediction:** `state_dict` much includes "`v_pred`"
-> - **Zero Terminal SNR:** `state_dict` much includes "`ztsnr`"
-> - **Rectified Flow:** the model needs to include "`rectified`" in its path *(**e.g.** file name or folder name)*
+> - **v-prediction:** `state_dict` must include "`v_pred`"
+> - **Zero Terminal SNR:** `state_dict` must include "`ztsnr`"
+> - **Rectified Flow:** the model must include "`rectified`" in its path *(**e.g.** file name or folder name)*
 
 - [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) / [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
 
 > [!Note]
-> To be detected as an **Edit** model, the model needs to include "`qwen`" and "`edit`" in its path *(**e.g.** file name or folder name)*
+> To be detected as an **Edit** model, the model must include "`qwen`" and "`edit`" in its path *(**e.g.** file name or folder name)*
 
 - [X] Support [Flux Kontext](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev)
 
 > [!Note]
-> To be detected as a **Kontext** model, the model needs to include "`kontext`" in its path *(**e.g.** file name or folder name)*
+> To be detected as a **Kontext** model, the model must include "`kontext`" in its path *(**e.g.** file name or folder name)*
 
 - [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
