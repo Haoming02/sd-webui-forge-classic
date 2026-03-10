@@ -346,6 +346,10 @@ input[type="checkbox"].input-accordion-checkbox {
     object-fit: scale-down !important;
 }
 
+#txt2img_player video, #img2img_player video {
+    max-height: 60vh;
+}
+
 #txt2img_actions_column,
 #img2img_actions_column {
     gap: 0.5em;
