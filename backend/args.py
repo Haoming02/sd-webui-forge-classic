@@ -144,7 +144,21 @@ if TYPE_CHECKING:
     import torch
 
 
-class dynamic_args:
+class _DynamicArgsMeta(type):
+    def get(cls, key, default=None):
+        return getattr(cls, key, default)
+
+    def __getitem__(cls, key, default=None):
+        return getattr(cls, key, default)
+
+    def __setitem__(cls, key, value):
+        setattr(cls, key, value)
+
+    def __contains__(cls, key):
+        return hasattr(cls, key)
+
+
+class dynamic_args(metaclass=_DynamicArgsMeta):
     """Some parameters that are used throughout the Webui"""
 
     embedding_dir: "os.PathLike" = None
