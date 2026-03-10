@@ -58,7 +58,7 @@ class QwenImage(ForgeDiffusionEngine):
             if _references:
                 return self.get_learned_conditioning_with_image(prompt, _references)
             else:
-                dynamic_args["ref_latents"].clear()
+                dynamic_args.ref_latents.clear()
 
         return self.text_processing_engine_qwen(prompt)
 
@@ -71,7 +71,7 @@ class QwenImage(ForgeDiffusionEngine):
             ref_latents.append(r)
             image_prompts.append(p)
 
-        dynamic_args["ref_latents"] = ref_latents.copy()
+        dynamic_args.ref_latents = ref_latents.copy()
         return self.text_processing_engine_qwen(["\n".join([*image_prompts, *prompt])], images=images_vl)
 
     @torch.inference_mode()
@@ -116,8 +116,8 @@ class QwenImage(ForgeDiffusionEngine):
         sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
 
-        if dynamic_args["edit"]:
-            if dynamic_args["is_referencing"]:
+        if dynamic_args.edit:
+            if dynamic_args.is_referencing:
                 self.ref_latents.append(start_image.cpu())
             else:
                 self.ini_latent = start_image.cpu()

@@ -602,7 +602,7 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         img, img_ids = self.process_img(x)
         img_tokens = img.shape[1]
 
-        ref_latents: list[torch.Tensor] = dynamic_args.get("ref_latents", None)
+        ref_latents: list[torch.Tensor] = ref_latents or dynamic_args.ref_latents
 
         if ref_latents is not None:
             h = 0

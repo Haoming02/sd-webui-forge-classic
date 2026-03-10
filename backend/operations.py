@@ -818,8 +818,8 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
     if operations is ForgeOperationsInt8:
         memory_management.logger.info("Quantizing to int8...")
 
-    if dynamic_args["ops"] is None:
-        dynamic_args["ops"] = str(operations.__name__)
+    if dynamic_args.ops is None:
+        dynamic_args.ops = str(operations.__name__)
 
     op_names = ("Linear", "Conv1d", "Conv2d", "Conv3d", "GroupNorm", "LayerNorm", "RMSNorm", "Embedding")
     backups = {op_name: getattr(torch.nn, op_name) for op_name in op_names}

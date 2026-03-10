@@ -306,7 +306,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             try_int8: bool = False
 
-            override_dtype = backend.args.dynamic_args["forge_unet_storage_dtype"]
+            override_dtype = backend.args.dynamic_args.forge_unet_storage_dtype
             if override_dtype is torch.int8:
                 if state_dict_dtype is torch.bfloat16:
                     override_dtype = torch.bfloat16
@@ -339,7 +339,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             else:
                 computation_dtype = memory_management.inference_cast(weight_dtype=storage_dtype, inference_device=load_device, supported_dtypes=guess.supported_inference_dtypes)
 
-            backend.args.dynamic_args["ops"] = None
+            backend.args.dynamic_args.ops = None
 
             if storage_dtype in ["nf4", "fp4", "gguf"]:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
@@ -706,11 +706,11 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
     if "xl" in repo_name and "rectified" in str(sd).lower():
         estimated_config.sampling_settings["RF"] = True
 
-    backend.args.dynamic_args["kontext"] = "kontext" in str(sd).lower()
-    backend.args.dynamic_args["edit"] = "qwen" in str(sd).lower() and "edit" in str(sd).lower()
-    backend.args.dynamic_args["nunchaku"] = getattr(estimated_config, "nunchaku", False)
-    backend.args.dynamic_args["klein"] = "klein" in repo_name
-    backend.args.dynamic_args["wan"] = "Wan" in repo_name
+    backend.args.dynamic_args.kontext = "kontext" in str(sd).lower()
+    backend.args.dynamic_args.edit = "qwen" in str(sd).lower() and "edit" in str(sd).lower()
+    backend.args.dynamic_args.nunchaku = getattr(estimated_config, "nunchaku", False)
+    backend.args.dynamic_args.klein = "klein" in repo_name
+    backend.args.dynamic_args.wan = "Wan" in repo_name
 
     if getattr(estimated_config, "nunchaku", False):
         estimated_config.unet_config["filename"] = str(sd)

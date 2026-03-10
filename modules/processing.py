@@ -853,7 +853,7 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     _times = 1
     _is_video = False
     video_path = None
-    if shared.sd_model.is_wan and args.dynamic_args["wan"]:
+    if shared.sd_model.is_wan and args.dynamic_args.wan:
         _times = ((getattr(p, "batch_size", 1) - 1) // 4) + 1  # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy_extras/nodes_wan.py#L41
         p.batch_size = (_times - 1) * 4 + 1
         _is_video: bool = _times > 1
@@ -1389,7 +1389,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             # here we generate an image normally
 
             x = self.rng.next()
-            if shared.sd_model.is_wan and args.dynamic_args["wan"]:  # enforce batch_size of 1
+            if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
                 x = x[0].unsqueeze(0)
 
             self.sd_model.forge_objects = self.sd_model.forge_objects_after_applying_lora.shallow_copy()
@@ -1702,7 +1702,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     def init(self, all_prompts, all_seeds, all_subseeds):
         self.extra_generation_params["Denoising strength"] = self.denoising_strength
 
-        if (args.dynamic_args["kontext"] or args.dynamic_args["edit"]) and self.denoising_strength < 0.9:
+        if (args.dynamic_args.kontext or args.dynamic_args.edit) and self.denoising_strength < 0.9:
             logger.warning("Edit Models require High Denoising Strength")
 
         self.image_cfg_scale: float = None
@@ -1867,7 +1867,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         x = self.rng.next()
-        if shared.sd_model.is_wan and args.dynamic_args["wan"]:  # enforce batch_size of 1
+        if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)
 
         if self.initial_noise_multiplier != 1.0:

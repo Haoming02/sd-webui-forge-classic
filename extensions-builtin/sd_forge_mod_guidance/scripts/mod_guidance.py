@@ -100,7 +100,7 @@ def load_clip(path: str):
     return ClassicTextProcessingEngine(
         text_encoder=text_encoder,
         tokenizer=tokenizer,
-        embedding_dir=dynamic_args["embedding_dir"],
+        embedding_dir=dynamic_args.embedding_dir,
         embedding_key="clip_l",
         embedding_expected_shape=2048,
         text_projection=False,

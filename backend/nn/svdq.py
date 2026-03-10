@@ -99,7 +99,7 @@ class SVDQFluxTransformer2DModel(nn.Module):
         img, img_ids = process_img(x)
         img_tokens = img.shape[1]
 
-        ref_latents = dynamic_args.get("ref_latents", None)
+        ref_latents = dynamic_args.ref_latents or None
 
         if ref_latents is not None:
             h = 0
@@ -618,7 +618,7 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         hidden_states, img_ids, orig_shape = self.process_img(x)
         num_embeds = hidden_states.shape[1]
 
-        ref_latents = dynamic_args.get("ref_latents", ref_latents)
+        ref_latents = dynamic_args.ref_latents or None
 
         if ref_latents is not None:
             h = 0

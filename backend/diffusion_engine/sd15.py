@@ -26,7 +26,7 @@ class StableDiffusion(ForgeDiffusionEngine):
         self.text_processing_engine = ClassicTextProcessingEngine(
             text_encoder=clip.cond_stage_model.clip_l,
             tokenizer=clip.tokenizer.clip_l,
-            embedding_dir=dynamic_args["embedding_dir"],
+            embedding_dir=dynamic_args.embedding_dir,
             embedding_key="clip_l",
             embedding_expected_shape=768,
             text_projection=False,

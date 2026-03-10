@@ -136,33 +136,38 @@ sage2.add_argument("--sage-accum-dtype", type=Sage_pv_accum_dtype, default=Sage_
 
 args, _ = parser.parse_known_args()
 
-# TODO: Stop using this to hack every problem...
-dynamic_args = dict(
-    embedding_dir=None,
-    forge_unet_storage_dtype=None,
-    online_lora=False,
-    kontext=False,
-    edit=False,
-    nunchaku=False,
-    klein=False,
-    wan=False,
-    ref_latents=[],
-    concat_latent=None,
-    is_referencing=False,
-    ops=None,
-)
-"""
-Some parameters that are used throughout the Webui
-- embedding_dir: `str` - set in modules/sd_models/forge_model_reload
-- forge_unet_storage_dtype: `torch.dtype` - set in modules/sd_models/forge_model_reload
-- online_lora: `bool` - patch LoRAs on-the-fly
-- kontext: `bool` - Flux Kontext
-- edit: `bool` - Qwen-Image-Edit
-- nunchaku: `bool` - Nunchaku (SVDQ) Models
-- klein: `bool` - Flux.2 Klein
-- wan: `bool` - Wan 2.2
-- ref_latents: `list[torch.Tensor]` - Reference Latent(s) for Flux Kontext & Qwen-Image-Edit
-- concat_latent: `torch.Tensor` - Input Latent for Wan 2.2 I2V
-- is_referencing: `bool` - Appending Reference Latent(s) (by. ImageStitch)
-- ops: `str` - Operations for the Diffusion Model
-"""
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import os
+
+    import torch
+
+
+class dynamic_args:
+    """Some parameters that are used throughout the Webui"""
+
+    embedding_dir: "os.PathLike" = None
+    """set in modules/sd_models/forge_model_reload"""
+    forge_unet_storage_dtype: "torch.dtype" = None
+    """set in modules/sd_models/forge_model_reload"""
+    online_lora: bool = False
+    """patch LoRAs on-the-fly"""
+    kontext: bool = False
+    """Flux Kontext"""
+    edit: bool = False
+    """Qwen-Image-Edit"""
+    nunchaku: bool = False
+    """Nunchaku (SVDQ) Models"""
+    klein: bool = False
+    """Flux.2 Klein"""
+    wan: bool = False
+    """Wan 2.2"""
+    ref_latents: list["torch.Tensor"] = []
+    """Reference Latent(s) for Flux Kontext / Qwen-Image-Edit / Flux.2 Klein"""
+    concat_latent: "torch.Tensor" = None
+    """Input Latent for Wan 2.2 I2V"""
+    is_referencing: bool = False
+    """Appending Reference Latent(s) (by. ImageStitch)"""
+    ops: str = None
+    """Operations for the Diffusion Model"""

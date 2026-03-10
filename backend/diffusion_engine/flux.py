@@ -45,7 +45,7 @@ class Flux(ForgeDiffusionEngine):
         self.text_processing_engine_l = ClassicTextProcessingEngine(
             text_encoder=clip.cond_stage_model.clip_l,
             tokenizer=clip.tokenizer.clip_l,
-            embedding_dir=dynamic_args["embedding_dir"],
+            embedding_dir=dynamic_args.embedding_dir,
             embedding_key="clip_l",
             embedding_expected_shape=768,
             text_projection=False,
@@ -80,14 +80,14 @@ class Flux(ForgeDiffusionEngine):
             memory_management.logger.debug(f"Distilled CFG Scale: {distilled_cfg_scale}")
 
         if not prompt.is_negative_prompt:
-            if not dynamic_args["kontext"]:
-                dynamic_args["ref_latents"].clear()
+            if not dynamic_args.kontext:
+                dynamic_args.ref_latents.clear()
             else:
                 _references = [*self.ref_latents]
                 if self.ini_latent is not None:
                     _references.insert(0, self.ini_latent)
                     self.ini_latent = None
-                dynamic_args["ref_latents"] = _references.copy()
+                dynamic_args.ref_latents = _references.copy()
 
         return cond
 
@@ -101,8 +101,8 @@ class Flux(ForgeDiffusionEngine):
         sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
 
-        if dynamic_args["kontext"]:
-            if dynamic_args["is_referencing"]:
+        if dynamic_args.kontext:
+            if dynamic_args.is_referencing:
                 self.ref_latents.append(sample.cpu())
             else:
                 self.ini_latent = sample.cpu()

@@ -66,7 +66,7 @@ class ImageStitch(scripts.Script):
         p.sd_model.clear_references()
 
     def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]]):
-        if not (enable and references and any(dynamic_args[key] for key in ("kontext", "edit", "klein"))):
+        if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein"))):
             if self.cached_parameters is None:
                 return
 
@@ -85,7 +85,7 @@ class ImageStitch(scripts.Script):
         self.cached_parameters = cache
         self.reset_references(p)
 
-        dynamic_args["is_referencing"] = True
+        dynamic_args.is_referencing = True
 
         for reference in references:
             reference = self.preprocess(reference)
@@ -96,7 +96,7 @@ class ImageStitch(scripts.Script):
 
             images_tensor_to_samples(image.unsqueeze(0), 0, p.sd_model)  # calls encode_first_stage
 
-        dynamic_args["is_referencing"] = False
+        dynamic_args.is_referencing = False
 
     @staticmethod
     def extract_images(gallery: list[str | tuple[Image.Image, str]]) -> list[Image.Image]:

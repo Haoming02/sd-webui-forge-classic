@@ -146,7 +146,7 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
             if dtype in mdl:
                 logger.error(f'"{dtype}" is currently not supported...')
 
-    dynamic_args["online_lora"] = lora_fp16
+    dynamic_args.online_lora = lora_fp16
     logger.info(f"Patch LoRAs on-the-fly: {lora_fp16}")
 
     processing.need_global_unload = True
