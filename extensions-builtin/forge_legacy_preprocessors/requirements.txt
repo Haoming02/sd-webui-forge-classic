@@ -5,4 +5,5 @@ onnx
 onnxruntime
 opencv-python
 svglib
+timm
 yapf
