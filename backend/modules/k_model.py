@@ -22,6 +22,8 @@ class KModel(torch.nn.Module):
             _compute += f" + {torch.int8}"
         if args.dynamic_args.ops.startswith("fp8"):
             _compute += f" + {torch.float8_e4m3fn}"
+        if args.dynamic_args.ops.startswith("Mixed"):
+            _compute = "computation: Mixed"
 
         memory_management.logger.info(f"Diffusion Model: {{{_store}, {_compute}}}")
 

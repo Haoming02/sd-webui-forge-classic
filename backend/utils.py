@@ -149,11 +149,6 @@ def calculate_parameters(sd: dict[str, torch.Tensor], prefix: str = "") -> int:
 
 
 def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype | str:
-    if sd.pop("scaled_fp8", None) is not None:
-        return torch.float8_e4m3fn
-    if sd.pop("transformer.scaled_fp8", None) is not None:
-        return torch.float8_e4m3fn
-
     for k, v in sd.items():
         if hasattr(v, "gguf_cls"):
             return "gguf"
