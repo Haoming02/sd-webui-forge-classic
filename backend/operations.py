@@ -716,67 +716,11 @@ class ForgeOperationsNunchaku(ForgeOperations):
                 return torch.nn.functional.linear(x, weight, bias)
 
 
-# region fp8
+# region Pick OPs
 
 
 if memory_management.ck_enabled():
     from backend.operations_mixed_precision import mixed_precision_ops
-
-
-def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
-    dtype = self.weight.dtype
-    if dtype != torch.float8_e4m3fn:
-        return None
-
-    tensor_2d = False
-    if len(input.shape) == 2:
-        tensor_2d = True
-        input = input.unsqueeze(1)
-
-    input_shape, input_dtype = input.shape, input.dtype
-
-    if len(input.shape) == 3:
-        w, bias, signal = weights_manual_cast(self, input, dtype=dtype, _scale=False)
-        w = w.t()
-
-        if getattr(self, "scale_weight", None) is None:
-            scale_weight = torch.ones((), device=input.device, dtype=torch.float32)
-        else:
-            scale_weight = self.scale_weight.to(input.device)
-
-        scale_input = torch.ones((), device=input.device, dtype=torch.float32)  # TODO ?
-
-        input = torch.clamp(input, min=-448, max=448, out=input)
-        input = input.reshape(-1, input_shape[2]).to(dtype).contiguous()
-
-        with main_stream_worker(w, bias, signal):
-            o = torch._scaled_mm(input, w, out_dtype=input_dtype, bias=bias, scale_a=scale_input, scale_b=scale_weight)
-
-        if isinstance(o, tuple):
-            o = o[0]
-
-        if tensor_2d:
-            return o.reshape(input_shape[0], -1)
-
-        return o.reshape((-1, input_shape[1], self.weight.shape[0]))
-
-    return None
-
-
-class fp8Operations(ForgeOperations):
-    class Linear(ForgeOperations.Linear):
-        def forward(self, x):
-            try:
-                if (out := fp8_linear(self, x)) is not None:
-                    return out
-            except Exception as e:
-                memory_management.logger.error(f"Error during fp8_fast: {e}")
-
-            weight, bias = get_weight_and_bias(self)
-            return torch.nn.functional.linear(x, weight, bias)
-
-
-# region Pick OPs
 
 
 @contextlib.contextmanager
@@ -827,9 +771,7 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
         operations = mixed_precision_ops(quant_config=bnb_dtype, compute_dtype=_dtype, full_precision_mm=_full, disabled=disabled)
 
     if operations is None:
-        if bnb_dtype in [torch.float8_e4m3fn] and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):
-            operations = fp8Operations
-        elif bnb_dtype in ["gguf"]:
+        if bnb_dtype in ["gguf"]:
             operations = ForgeOperationsGGUF
         elif bnb_dtype in ["nf4", "fp4"]:
             assert memory_management.bnb_enabled()
