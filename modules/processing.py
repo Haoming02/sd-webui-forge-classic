@@ -1489,7 +1489,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                 image_conditioning = self.txt2img_image_conditioning(samples)
         else:
             if len(decoded_samples.shape) == 5:
-                decoded_samples = decoded_samples.squeeze(0)
+                decoded_samples = decoded_samples.squeeze(1)
 
             batch_images = []
             for i, x_sample in enumerate(decoded_samples):
