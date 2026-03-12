@@ -1,14 +1,14 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/float.py
+
 import torch
 
 
 def calc_mantissa(abs_x, exponent, normal_mask, MANTISSA_BITS, EXPONENT_BIAS, generator=None):
     mantissa_scaled = torch.where(normal_mask, (abs_x / (2.0 ** (exponent - EXPONENT_BIAS)) - 1.0) * (2**MANTISSA_BITS), (abs_x / (2.0 ** (-EXPONENT_BIAS + 1 - MANTISSA_BITS))))
-
     mantissa_scaled += torch.rand(mantissa_scaled.size(), dtype=mantissa_scaled.dtype, layout=mantissa_scaled.layout, device=mantissa_scaled.device, generator=generator)
     return mantissa_scaled.floor() / (2**MANTISSA_BITS)
 
 
-# Not 100% sure about this
 def manual_stochastic_round_to_float8(x, dtype, generator=None):
     if dtype == torch.float8_e4m3fn:
         EXPONENT_BITS, MANTISSA_BITS, EXPONENT_BIAS = 4, 3, 7
@@ -22,10 +22,8 @@ def manual_stochastic_round_to_float8(x, dtype, generator=None):
     abs_x = x.abs()
     sign = torch.where(abs_x == 0, 0, sign)
 
-    # Combine exponent calculation and clamping
     exponent = torch.clamp(torch.floor(torch.log2(abs_x)) + EXPONENT_BIAS, 0, 2**EXPONENT_BITS - 1)
 
-    # Combine mantissa calculation and rounding
     normal_mask = ~(exponent == 0)
 
     abs_x[:] = calc_mantissa(abs_x, exponent, normal_mask, MANTISSA_BITS, EXPONENT_BIAS, generator=generator)
@@ -57,7 +55,6 @@ def stochastic_rounding(value, dtype, seed=0):
     return value.to(dtype=dtype)
 
 
-# TODO: improve this?
 def stochastic_float_to_fp4_e2m1(x, generator):
     orig_shape = x.shape
     sign = torch.signbit(x).to(torch.uint8)
@@ -82,16 +79,6 @@ def stochastic_float_to_fp4_e2m1(x, generator):
 
 
 def to_blocked(input_matrix, flatten: bool = True) -> torch.Tensor:
-    """
-    Rearrange a large matrix by breaking it into blocks and applying the rearrangement pattern.
-    See:
-        https://docs.nvidia.com/cuda/cublas/index.html#d-block-scaling-factors-layout
-
-    Args:
-        input_matrix: Input tensor of shape (H, W)
-    Returns:
-        Rearranged tensor of shape (32*ceil_div(H,128), 16*ceil_div(W,4))
-    """
 
     def ceil_div(a, b):
         return (a + b - 1) // b
@@ -100,7 +87,6 @@ def to_blocked(input_matrix, flatten: bool = True) -> torch.Tensor:
     n_row_blocks = ceil_div(rows, 128)
     n_col_blocks = ceil_div(cols, 4)
 
-    # Calculate the padded shape
     padded_rows = n_row_blocks * 128
     padded_cols = n_col_blocks * 4
 
@@ -113,7 +99,6 @@ def to_blocked(input_matrix, flatten: bool = True) -> torch.Tensor:
         )
         padded[:rows, :cols] = input_matrix
 
-    # Rearrange the blocks
     blocks = padded.view(n_row_blocks, 128, n_col_blocks, 4).permute(0, 2, 1, 3)
     rearranged = blocks.reshape(-1, 4, 32, 4).transpose(1, 2).reshape(-1, 32, 16)
     if flatten:
@@ -141,13 +126,11 @@ def stochastic_round_quantize_nvfp4_block(x, per_tensor_scale, generator):
 
 def stochastic_round_quantize_nvfp4(x, per_tensor_scale, pad_16x, seed=0):
     def roundup(x: int, multiple: int) -> int:
-        """Round up x to the nearest multiple."""
         return ((x + multiple - 1) // multiple) * multiple
 
     generator = torch.Generator(device=x.device)
     generator.manual_seed(seed)
 
-    # Handle padding
     if pad_16x:
         rows, cols = x.shape
         padded_rows = roundup(rows, 16)
@@ -161,20 +144,16 @@ def stochastic_round_quantize_nvfp4(x, per_tensor_scale, pad_16x, seed=0):
 
 def stochastic_round_quantize_nvfp4_by_block(x, per_tensor_scale, pad_16x, seed=0, block_size=4096 * 4096):
     def roundup(x: int, multiple: int) -> int:
-        """Round up x to the nearest multiple."""
         return ((x + multiple - 1) // multiple) * multiple
 
     orig_shape = x.shape
 
-    # Handle padding
     if pad_16x:
         rows, cols = x.shape
         padded_rows = roundup(rows, 16)
         padded_cols = roundup(cols, 16)
         if padded_rows != rows or padded_cols != cols:
             x = torch.nn.functional.pad(x, (0, padded_cols - cols, 0, padded_rows - rows))
-            # Note: We update orig_shape because the output tensor logic below assumes x.shape matches
-            # what we want to produce. If we pad here, we want the padded output.
             orig_shape = x.shape
 
     orig_shape = list(orig_shape)

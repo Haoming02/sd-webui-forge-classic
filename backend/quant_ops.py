@@ -1,59 +1,37 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/quant_ops.py
+
+import comfy_kitchen as ck
 import torch
-import logging
+from comfy_kitchen.tensor import (  # noqa
+    QuantizedLayout,
+    QuantizedTensor,
+    TensorCoreFP8Layout,
+    TensorCoreNVFP4Layout,
+    get_layout_class,
+    register_layout_class,
+    register_layout_op,
+)
+
+from . import float
+
+if torch.version.cuda is None:
+    ck.registry.disable("cuda")
+else:
+    cuda_version = tuple(map(int, str(torch.version.cuda).split(".")))
+    if cuda_version < (13,):
+        ck.registry.disable("cuda")
 
 try:
-    import comfy_kitchen as ck
-    from comfy_kitchen.tensor import (
-        QuantizedTensor,
-        QuantizedLayout,
-        TensorCoreFP8Layout as _CKFp8Layout,
-        TensorCoreNVFP4Layout as _CKNvfp4Layout,
-        register_layout_op,
-        register_layout_class,
-        get_layout_class,
-    )
-
-    _CK_AVAILABLE = True
-    if torch.version.cuda is None:
-        ck.registry.disable("cuda")
-    else:
-        cuda_version = tuple(map(int, str(torch.version.cuda).split(".")))
-        if cuda_version < (13,):
-            ck.registry.disable("cuda")
-            logging.warning("WARNING: You need pytorch with cu130 or higher to use optimized CUDA operations.")
-
+    import triton  # noqa
+except Exception:
     ck.registry.disable("triton")
-    for k, v in ck.list_backends().items():
-        logging.info(f"Found comfy_kitchen backend {k}: {v}")
-except ImportError as e:
-    logging.error(f"Failed to import comfy_kitchen, Error: {e}, fp8 and fp4 support will not be available.")
-    _CK_AVAILABLE = False
-
-    class QuantizedTensor:
-        pass
-
-    class _CKFp8Layout:
-        pass
-
-    class _CKNvfp4Layout:
-        pass
-
-    def register_layout_class(name, cls):
-        pass
-
-    def get_layout_class(name):
-        return None
 
 
-import comfy.float
-
-# ==============================================================================
-# FP8 Layouts with Comfy-Specific Extensions
-# ==============================================================================
+# region FP8 Layouts
 
 
-class _TensorCoreFP8LayoutBase(_CKFp8Layout):
-    FP8_DTYPE = None  # Must be overridden in subclass
+class _TensorCoreFP8LayoutBase(TensorCoreFP8Layout):
+    FP8_DTYPE = None
 
     @classmethod
     def quantize(cls, tensor, scale=None, stochastic_rounding=0, inplace_ops=False):
@@ -65,7 +43,7 @@ class _TensorCoreFP8LayoutBase(_CKFp8Layout):
 
         if isinstance(scale, str) and scale == "recalculate":
             scale = torch.amax(tensor.abs()).to(dtype=torch.float32) / torch.finfo(cls.FP8_DTYPE).max
-            if tensor.dtype not in [torch.float32, torch.bfloat16]:  # Prevent scale from being too small
+            if tensor.dtype not in [torch.float32, torch.bfloat16]:
                 tensor_info = torch.finfo(tensor.dtype)
                 scale = 1.0 / torch.clamp((1.0 / scale), min=tensor_info.min, max=tensor_info.max)
 
@@ -79,7 +57,7 @@ class _TensorCoreFP8LayoutBase(_CKFp8Layout):
                 tensor *= (1.0 / scale).to(tensor.dtype)
             else:
                 tensor = tensor * (1.0 / scale).to(tensor.dtype)
-            qdata = comfy.float.stochastic_rounding(tensor, dtype=cls.FP8_DTYPE, seed=stochastic_rounding)
+            qdata = float.stochastic_rounding(tensor, dtype=cls.FP8_DTYPE, seed=stochastic_rounding)
         else:
             qdata = ck.quantize_per_tensor_fp8(tensor, scale, cls.FP8_DTYPE)
 
@@ -87,7 +65,7 @@ class _TensorCoreFP8LayoutBase(_CKFp8Layout):
         return qdata, params
 
 
-class TensorCoreNVFP4Layout(_CKNvfp4Layout):
+class TensorCoreNVFP4Layout(TensorCoreNVFP4Layout):
     @classmethod
     def quantize(cls, tensor, scale=None, stochastic_rounding=0, inplace_ops=False):
         if tensor.dim() != 2:
@@ -107,7 +85,7 @@ class TensorCoreNVFP4Layout(_CKNvfp4Layout):
         needs_padding = padded_shape != orig_shape
 
         if stochastic_rounding > 0:
-            qdata, block_scale = comfy.float.stochastic_round_quantize_nvfp4_by_block(tensor, scale, pad_16x=needs_padding, seed=stochastic_rounding)
+            qdata, block_scale = float.stochastic_round_quantize_nvfp4_by_block(tensor, scale, pad_16x=needs_padding, seed=stochastic_rounding)
         else:
             qdata, block_scale = ck.quantize_nvfp4(tensor, scale, pad_16x=needs_padding)
 
@@ -128,13 +106,11 @@ class TensorCoreFP8E5M2Layout(_TensorCoreFP8LayoutBase):
     FP8_DTYPE = torch.float8_e5m2
 
 
-# Backward compatibility alias - default to E4M3
 TensorCoreFP8Layout = TensorCoreFP8E4M3Layout
 
 
-# ==============================================================================
-# Registry
-# ==============================================================================
+# region Registry
+
 
 register_layout_class("TensorCoreFP8Layout", TensorCoreFP8Layout)
 register_layout_class("TensorCoreFP8E4M3Layout", TensorCoreFP8E4M3Layout)
@@ -159,19 +135,3 @@ QUANT_ALGOS = {
         "group_size": 16,
     },
 }
-
-
-# ==============================================================================
-# Re-exports for backward compatibility
-# ==============================================================================
-
-__all__ = [
-    "QuantizedTensor",
-    "QuantizedLayout",
-    "TensorCoreFP8Layout",
-    "TensorCoreFP8E4M3Layout",
-    "TensorCoreFP8E5M2Layout",
-    "TensorCoreNVFP4Layout",
-    "QUANT_ALGOS",
-    "register_layout_op",
-]
