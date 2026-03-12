@@ -89,7 +89,6 @@ class FastChebyshevForecaster:
         self.H_buf.clear()
         self.T_buf.clear()
         self.time_buf.clear()
-        self.t_max = None
 
 
 class SpectrumNode:
