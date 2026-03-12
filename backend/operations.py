@@ -719,6 +719,10 @@ class ForgeOperationsNunchaku(ForgeOperations):
 # region fp8
 
 
+if memory_management.ck_enabled():
+    from backend.operations_mixed_precision import mixed_precision_ops
+
+
 def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
     dtype = self.weight.dtype
     if dtype != torch.float8_e4m3fn:
@@ -803,6 +807,24 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
             case "WAN21_T2V" | "WAN21_I2V":
                 ForgeOperationsInt8.excluded_names = ["patch_embedding", "text_embedding", "time_embedding", "time_projection" "head", "img_emb"]
                 operations = ForgeOperationsInt8
+    elif isinstance(bnb_dtype, dict):
+        # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L950
+        assert memory_management.ck_enabled()
+
+        _device = memory_management.get_torch_device()
+        _dtype = torch.bfloat16 if memory_management.should_use_bf16(_device) else torch.float32
+        fp8_compute = memory_management.supports_fp8_compute(_device)
+        nvfp4_compute = memory_management.supports_nvfp4_compute(_device)
+
+        disabled = set()
+        if not nvfp4_compute:
+            disabled.add("nvfp4")
+        if not fp8_compute:
+            disabled.add("float8_e4m3fn")
+            disabled.add("float8_e5m2")
+
+        _full: bool = bnb_dtype.pop("TE", False)  # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/sd1_clip.py#L114
+        operations = mixed_precision_ops(quant_config=bnb_dtype, compute_dtype=_dtype, full_precision_mm=_full, disabled=disabled)
 
     if operations is None:
         if bnb_dtype in [torch.float8_e4m3fn] and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):

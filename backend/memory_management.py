@@ -1278,12 +1278,23 @@ def supports_fp8_compute(device: torch.device = None) -> bool:
     if props.minor < 9:
         return False
 
+    if torch_version_numeric < (2, 3):
+        return False
+
     if WINDOWS:
         if torch_version_numeric < (2, 4):
             return False
-    else:
-        if torch_version_numeric < (2, 3):
-            return False
+
+    return True
+
+
+def supports_nvfp4_compute(device: torch.device = None) -> bool:
+    if not is_nvidia():
+        return False
+
+    props = torch.cuda.get_device_properties(device)
+    if props.major < 10:
+        return False
 
     return True
 
