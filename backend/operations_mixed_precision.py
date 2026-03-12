@@ -1,19 +1,23 @@
-from .quant_ops import (
-    QuantizedTensor,
-    QUANT_ALGOS,
-    TensorCoreFP8Layout,
-    get_layout_class,
-)
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L713
+
+import json
+
+import torch
+
+from backend.memory_management import cast_to_device, logger
+
+from .operations import ForgeOperations, main_stream_worker, weights_manual_cast
+from .quant_ops import QUANT_ALGOS, QuantizedTensor, get_layout_class
 
 
 def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_precision_mm=False, disabled=[]):
-    class MixedPrecisionOps(manual_cast):
+    class MixedPrecisionOps(ForgeOperations):
         _quant_config = quant_config
         _compute_dtype = compute_dtype
         _full_precision_mm = full_precision_mm
         _disabled = disabled
 
-        class Linear(torch.nn.Module, CastWeightBiasOp):
+        class Linear(torch.nn.Module):
             def __init__(
                 self,
                 in_features: int,
@@ -25,7 +29,6 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 super().__init__()
 
                 self.factory_kwargs = {"device": device, "dtype": MixedPrecisionOps._compute_dtype}
-                # self.factory_kwargs = {"device": device, "dtype": dtype}
 
                 self.in_features = in_features
                 self.out_features = out_features
@@ -58,7 +61,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 weight_key = f"{prefix}weight"
                 weight = state_dict.pop(weight_key, None)
                 if weight is None:
-                    logging.warning(f"Missing weight for layer {layer_name}")
+                    logger.warning(f"Missing weight for layer {layer_name}")
                     return
 
                 manually_loaded_keys = [weight_key]
@@ -85,9 +88,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                     self.layout_type = qconfig["comfy_tensor_layout"]
                     layout_cls = get_layout_class(self.layout_type)
 
-                    # Load format-specific parameters
                     if self.quant_format in ["float8_e4m3fn", "float8_e5m2"]:
-                        # FP8: single tensor scale
                         scale = self._load_scale_param(state_dict, prefix, "weight_scale", device, manually_loaded_keys)
 
                         params = layout_cls.Params(
@@ -97,7 +98,6 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                         )
 
                     elif self.quant_format == "nvfp4":
-                        # NVFP4: tensor_scale (weight_scale_2) + block_scale (weight_scale)
                         tensor_scale = self._load_scale_param(state_dict, prefix, "weight_scale_2", device, manually_loaded_keys)
                         block_scale = self._load_scale_param(state_dict, prefix, "weight_scale", device, manually_loaded_keys, dtype=torch.float8_e4m3fn)
 
@@ -117,7 +117,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
 
                     for param_name in qconfig["parameters"]:
                         if param_name in {"weight_scale", "weight_scale_2"}:
-                            continue  # Already handled above
+                            continue
 
                         param_key = f"{prefix}{param_name}"
                         _v = state_dict.pop(param_key, None)
@@ -139,7 +139,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                     sd = {}
 
                 if not hasattr(self, "weight"):
-                    logging.warning("Warning: state dict on uninitialized op {}".format(prefix))
+                    logger.warning("Warning: state dict on uninitialized op {}".format(prefix))
                     return sd
 
                 if self.bias is not None:
@@ -162,40 +162,25 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                     sd["{}weight".format(prefix)] = self.weight
                 return sd
 
-            def _forward(self, input, weight, bias):
-                return torch.nn.functional.linear(input, weight, bias)
-
-            def forward_comfy_cast_weights(self, input, compute_dtype=None, want_requant=False):
-                weight, bias, offload_stream = cast_bias_weight(self, input, offloadable=True, compute_dtype=compute_dtype, want_requant=want_requant)
-                x = self._forward(input, weight, bias)
-                uncast_bias_weight(self, weight, bias, offload_stream)
-                return x
-
             def forward(self, input, *args, **kwargs):
-                run_every_op()
-
                 input_shape = input.shape
                 reshaped_3d = False
-                # If cast needs to apply lora, it should be done in the compute dtype
                 compute_dtype = input.dtype
 
-                if getattr(self, "layout_type", None) is not None and not isinstance(input, QuantizedTensor) and not self._full_precision_mm and not getattr(self, "comfy_force_cast_weights", False) and len(self.weight_function) == 0 and len(self.bias_function) == 0:
-
-                    # Reshape 3D tensors to 2D for quantization (needed for NVFP4 and others)
+                if getattr(self, "layout_type", None) is not None and not isinstance(input, QuantizedTensor) and not self._full_precision_mm:
                     input_reshaped = input.reshape(-1, input_shape[2]) if input.ndim == 3 else input
 
-                    # Fall back to non-quantized for non-2D tensors
                     if input_reshaped.ndim == 2:
                         reshaped_3d = input.ndim == 3
-                        # dtype is now implicit in the layout class
                         scale = getattr(self, "input_scale", None)
                         if scale is not None:
-                            scale = comfy.model_management.cast_to_device(scale, input.device, None)
+                            scale = cast_to_device(scale, input.device, None)
                         input = QuantizedTensor.from_float(input_reshaped, self.layout_type, scale=scale)
 
-                output = self.forward_comfy_cast_weights(input, compute_dtype, want_requant=isinstance(input, QuantizedTensor))
+                weight, bias, signal = weights_manual_cast(self, input, dtype=compute_dtype, _scale=not isinstance(input, QuantizedTensor))
+                with main_stream_worker(weight, bias, signal):
+                    output = torch.nn.functional.linear(input, weight, bias)
 
-                # Reshape output back to 3D if input was 3D
                 if reshaped_3d:
                     output = output.reshape((input_shape[0], input_shape[1], self.weight.shape[0]))
 
@@ -209,17 +194,16 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
 
             def set_weight(self, weight, inplace_update=False, seed=None, return_weight=False, **kwargs):
                 if getattr(self, "layout_type", None) is not None:
-                    # dtype is now implicit in the layout class
                     weight = QuantizedTensor.from_float(weight, self.layout_type, scale="recalculate", stochastic_rounding=seed, inplace_ops=True).to(self.weight.dtype)
                 else:
                     weight = weight.to(self.weight.dtype)
                 if return_weight:
                     return weight
 
-                assert inplace_update is False  # TODO: eventually remove the inplace_update stuff
+                assert inplace_update is False
                 self.weight = torch.nn.Parameter(weight, requires_grad=False)
 
-            def _apply(self, fn, recurse=True):  # This is to get torch.compile + moving weights to another device working
+            def _apply(self, fn, recurse=True):
                 if recurse:
                     for module in self.children():
                         module._apply(fn)
