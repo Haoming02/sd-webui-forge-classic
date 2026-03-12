@@ -237,6 +237,13 @@ except Exception:
 else:
     BNB_IS_AVAILABLE = True
 
+try:
+    import comfy_kitchen  # noqa: F401
+except Exception:
+    CK_IS_AVAILABLE = False
+else:
+    CK_IS_AVAILABLE = True
+
 
 def amd_min_version(device: torch.device = None, min_rdna_version: int = 0) -> bool:
     if not is_amd():
@@ -1053,6 +1060,10 @@ def flash_enabled() -> bool:
 
 def bnb_enabled() -> bool:
     return BNB_IS_AVAILABLE
+
+
+def ck_enabled() -> bool:
+    return CK_IS_AVAILABLE
 
 
 def pytorch_attention_enabled() -> bool:
