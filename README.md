@@ -292,6 +292,35 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
+<details>
+<summary>Intel XPU on Linux (Ubuntu 24 / Ubuntu 25 / Arch)</summary>
+
+- Install the Intel GPU/XPU runtime first
+    - **Ubuntu 24 / Ubuntu 25:** follow Intel's official client GPU driver guide:
+      [dgpu-docs.intel.com/driver/client/overview.html#ubuntu-latest](https://dgpu-docs.intel.com/driver/client/overview.html#ubuntu-latest)
+    - **Arch Linux:** install [`intel-xpu-smi-bin`](https://aur.archlinux.org/packages/intel-xpu-smi-bin)
+- Set up **venv**
+    ```bash
+    cd sd-webui-forge-neo
+    uv venv venv --python 3.13 --seed
+    source venv/bin/activate
+    ```
+- Install the XPU PyTorch wheels
+    ```bash
+    uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/xpu
+    ```
+- Then launch normally
+    ```bash
+    python launch.py
+    ```
+
+> [!Note]
+> This is a community-tested setup path for Intel XPU on Linux. It is not part of the officially supported platforms for this fork.
+
+</details>
+
+<br>
+
 3. **(Optional)** Configure [Commandline](#commandline)
 4. Launch the WebUI via `webui-user.bat`
 5. During the first launch, it will automatically install all the requirements
