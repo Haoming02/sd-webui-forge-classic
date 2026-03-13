@@ -40,7 +40,10 @@ class State:
         self.server_start = time.time()
         self.vae_stream = None
         if stream.should_use_stream():
-            self.vae_stream = torch.cuda.Stream(device=devices.device, priority=1)
+            if devices.device.type == "xpu":
+                self.vae_stream = torch.xpu.Stream(device=devices.device, priority=1)
+            else:
+                self.vae_stream = torch.cuda.Stream(device=devices.device, priority=1)
 
     @property
     def need_restart(self) -> bool:

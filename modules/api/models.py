@@ -291,7 +291,7 @@ class EmbeddingsResponse(BaseModel):
 
 class MemoryResponse(BaseModel):
     ram: dict = Field(title="RAM", description="System memory stats")
-    cuda: dict = Field(title="CUDA", description="nVidia CUDA memory stats")
+    cuda: dict = Field(title="Accelerator", description="GPU accelerator memory stats (CUDA or XPU)")
 
 
 class ScriptsList(BaseModel):
