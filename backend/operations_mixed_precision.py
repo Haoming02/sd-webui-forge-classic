@@ -186,7 +186,8 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
 
                 return output
 
-            def convert_weight(self, weight, inplace=False, **kwargs):
+            @staticmethod
+            def convert_weight(weight, **kwargs):
                 if isinstance(weight, QuantizedTensor):
                     return weight.dequantize()
                 else:

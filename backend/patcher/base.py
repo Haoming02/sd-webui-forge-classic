@@ -29,24 +29,10 @@ import torch
 
 from backend import memory_management, utils
 from backend.logging import setup_logger
-from backend.patcher.lora import LoraLoader, merge_lora_to_weight
+from backend.patcher.lora import LoraLoader, merge_lora_to_weight, string_to_seed
 
 logger = logging.getLogger("model_patcher")
 setup_logger(logger)
-
-
-def string_to_seed(data):
-    crc = 0xFFFFFFFF
-    for byte in data:
-        if isinstance(byte, str):
-            byte = ord(byte)
-        crc ^= byte
-        for _ in range(8):
-            if crc & 1:
-                crc = (crc >> 1) ^ 0xEDB88320
-            else:
-                crc >>= 1
-    return crc ^ 0xFFFFFFFF
 
 
 def set_model_options_patch_replace(model_options, patch, name, block_name, number, transformer_index=None):
