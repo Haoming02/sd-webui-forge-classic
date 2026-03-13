@@ -165,58 +165,17 @@ current_bnb_dtype: str = None
 
 
 class ForgeOperations:
-    class Linear(torch.nn.Module):
-        def __init__(self, in_features: int, out_features: int, *args, **kwargs):
-            super().__init__()
-            self.in_features = in_features
-            self.out_features = out_features
-            self.dummy = {"device": current_device, "dtype": current_dtype}
-            self.weight = None
-            self.bias = None
-            self.scale_weight = None
-            self.scale_input = None
+    class Linear(torch.nn.Linear):
+        def __init__(self, *args, **kwargs):
+            kwargs["device"] = current_device
+            kwargs["dtype"] = current_dtype
+            super().__init__(*args, **kwargs)
             self.parameters_manual_cast = current_manual_cast_enabled
-
-        def _load_from_state_dict(self, state_dict: dict[str, torch.Tensor], prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
-            state_dict.pop(prefix + "comfy_quant", None)  # TODO
-
-            if self.scale_weight is None:
-                if prefix + "scale_weight" in state_dict:
-                    self.scale_weight = torch.nn.Parameter(state_dict.pop(prefix + "scale_weight"))
-                elif prefix + "weight_scale" in state_dict:
-                    self.scale_weight = torch.nn.Parameter(state_dict.pop(prefix + "weight_scale"))
-            else:
-                if prefix + "weight_scale" in state_dict:
-                    state_dict[prefix + "scale_weight"] = state_dict.pop(prefix + "weight_scale")
-                elif prefix + "scale_weight" not in state_dict:
-                    self.scale_weight = None
-
-            if self.scale_input is None:
-                if prefix + "scale_input" in state_dict:
-                    self.scale_input = torch.nn.Parameter(state_dict.pop(prefix + "scale_input"))
-                elif prefix + "input_scale" in state_dict:
-                    self.scale_input = torch.nn.Parameter(state_dict.pop(prefix + "input_scale"))
-            else:
-                if prefix + "input_scale" in state_dict:
-                    state_dict[prefix + "scale_input"] = state_dict.pop(prefix + "input_scale")
-                elif prefix + "scale_input" not in state_dict:
-                    self.scale_input = None
-
-            if hasattr(self, "dummy"):
-                if prefix + "weight" in state_dict:
-                    self.weight = torch.nn.Parameter(state_dict[prefix + "weight"].to(**self.dummy))
-                if prefix + "bias" in state_dict:
-                    self.bias = torch.nn.Parameter(state_dict[prefix + "bias"].to(**self.dummy))
-                del self.dummy
-            else:
-                super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
 
         def reset_parameters(self):
             return None
 
         def forward(self, x):
-            # if self.scale_input is not None:  # TODO ?
-            #     x = (x * self.scale_input.to(x)).contiguous()
             if self.parameters_manual_cast:
                 weight, bias, signal = weights_manual_cast(self, x)
                 with main_stream_worker(weight, bias, signal):
@@ -695,27 +654,6 @@ class ForgeOperationsGGUF(ForgeOperations):
                 return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
-# region Nunchaku
-
-
-class ForgeOperationsNunchaku(ForgeOperations):
-    class Linear(torch.nn.Linear):
-        def __init__(self, *args, **kwargs):
-            kwargs["device"] = current_device
-            kwargs["dtype"] = current_dtype
-            super().__init__(*args, **kwargs)
-            self.parameters_manual_cast = current_manual_cast_enabled
-
-        def forward(self, x):
-            if self.parameters_manual_cast:
-                weight, bias, signal = weights_manual_cast(self, x)
-                with main_stream_worker(weight, bias, signal):
-                    return torch.nn.functional.linear(x, weight, bias)
-            else:
-                weight, bias = get_weight_and_bias(self)
-                return torch.nn.functional.linear(x, weight, bias)
-
-
 # region Pick OPs
 
 
@@ -729,9 +667,7 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
 
     current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype = device, dtype, manual_cast_enabled, bnb_dtype
 
-    if operations is False:
-        operations = ForgeOperationsNunchaku
-    elif isinstance(bnb_dtype, str):
+    if isinstance(bnb_dtype, str):
         # https://github.com/BobJohnson24/ComfyUI-Flux2-INT8/blob/main/int8_unet_loader.py
         ForgeOperationsInt8._is_prequantized = None
 

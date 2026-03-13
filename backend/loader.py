@@ -367,16 +367,14 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=computation_dtype)
                 need_manual_cast = False
                 to_args = dict(device=initial_device, dtype=computation_dtype)
-                ops = None
 
                 with no_init_weights():
-                    with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=storage_dtype):
+                    with using_forge_operations(**to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=storage_dtype):
                         model = model_loader(unet_config)
             else:
                 initial_device = memory_management.unet_initial_load_device(parameters=state_dict_parameters, dtype=storage_dtype)
                 need_manual_cast = storage_dtype != computation_dtype
                 to_args = dict(device=initial_device, dtype=storage_dtype)
-                ops = False if guess.nunchaku else None
 
                 if try_int8:  # int8 matmul
                     extra_dtype = str(guess.__class__.__name__)
@@ -386,7 +384,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     extra_dtype = None
 
                 with no_init_weights():
-                    with using_forge_operations(operations=ops, **to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=extra_dtype):
+                    with using_forge_operations(**to_args, manual_cast_enabled=need_manual_cast, bnb_dtype=extra_dtype):
                         model = model_loader(unet_config).to(**to_args)
 
             model = pre_func(model)
