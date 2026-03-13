@@ -177,7 +177,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                             scale = cast_to_device(scale, input.device, None)
                         input = QuantizedTensor.from_float(input_reshaped, self.layout_type, scale=scale)
 
-                weight, bias, signal = weights_manual_cast(self, input, dtype=compute_dtype, _scale=not isinstance(input, QuantizedTensor))
+                weight, bias, signal = weights_manual_cast(self, input, dtype=compute_dtype)
                 with main_stream_worker(weight, bias, signal):
                     output = torch.nn.functional.linear(input, weight, bias)
 

@@ -1004,14 +1004,18 @@ def device_supports_non_blocking(device: torch.device) -> bool:
     return True
 
 
-def cast_to(weight: torch.Tensor, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, context=nullcontext()):
+def cast_to(weight: torch.nn.Parameter, dtype: torch.dtype = None, device: torch.device = None, non_blocking: bool = False, copy: bool = False, *, context=None):
     if device is None or weight.device == device:
         if not copy and (dtype is None or weight.dtype == dtype):
             return weight
-        with context:
+        with context or nullcontext():
             return weight.to(dtype=dtype, copy=copy)
 
-    with context:
+    if type(weight) not in (torch.Tensor, torch.nn.Parameter):  # GGUF / BnB
+        with context or nullcontext():
+            return weight.to(dtype=dtype, device=device, non_blocking=non_blocking, copy=copy)
+
+    with context or nullcontext():
         r = torch.empty_like(weight, dtype=dtype, device=device)
         r.copy_(weight, non_blocking=non_blocking)
         return r
