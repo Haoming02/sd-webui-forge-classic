@@ -292,6 +292,7 @@ def prepare_environment():
     torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.10.0+cu130 torchvision==0.25.0+cu130 --extra-index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.34 --extra-index-url {torch_index_url}")
     bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.1")
+    ck_package = os.environ.get("CK_PACKAGE", "comfy-kitchen==0.2.8")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.0")
     gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_rangeslider==0.0.8")
@@ -409,6 +410,14 @@ def prepare_environment():
             print("Failed to install bitsandbytes; Please manually install it")
         else:
             startup_timer.record("install bitsandbytes")
+
+    if args.ck and not is_installed("comfy_kitchen"):
+        try:
+            run_pip(f"install {ck_package}", "comfy-kitchen")
+        except RuntimeError:
+            print("Failed to install comfy-kitchen; Please manually install it")
+        else:
+            startup_timer.record("install comfy-kitchen")
 
     if not is_installed("ngrok") and args.ngrok:
         run_pip("install ngrok", "ngrok")
