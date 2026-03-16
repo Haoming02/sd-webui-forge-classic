@@ -32,13 +32,9 @@ else:
     if cuda_version < (13,):
         ck.registry.disable("cuda")
 
-try:
-    import triton  # noqa
-except Exception:
-    ck.registry.disable("triton")
-else:
-    if should_disable_triton_backend():
-        ck.registry.disable("triton")
+
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/quant_ops.py#L24
+ck.registry.disable("triton")
 
 
 # region FP8 Layouts
