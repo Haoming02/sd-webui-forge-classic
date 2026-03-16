@@ -661,8 +661,7 @@ class ForgeOperationsGGUF(ForgeOperations):
 # region Pick OPs
 
 
-if memory_management.ck_enabled():
-    from backend.operations_mixed_precision import mixed_precision_ops
+from backend.operations_mixed_precision import mixed_precision_ops
 
 
 @contextlib.contextmanager
@@ -693,7 +692,6 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
                 operations = ForgeOperationsInt8
     elif isinstance(bnb_dtype, dict):
         # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L950
-        assert memory_management.ck_enabled()
 
         _device = memory_management.get_torch_device()
         _dtype = torch.bfloat16 if memory_management.should_use_bf16(_device) else torch.float32

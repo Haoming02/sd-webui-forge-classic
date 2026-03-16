@@ -225,8 +225,6 @@ class LoraLoader:
             mixed_layer = None
 
             if hasattr(weight, "_layout_cls"):
-                assert memory_management.ck_enabled()
-
                 mixed_layer = parent_layer
                 convert_func = getattr(mixed_layer, f"convert_{child_key}")
                 set_func = getattr(mixed_layer, f"set_{child_key}")
