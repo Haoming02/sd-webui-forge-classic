@@ -768,7 +768,7 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
         if bnb_dtype in ["gguf"]:
             operations = ForgeOperationsGGUF
         elif bnb_dtype in ["nf4", "fp4"]:
-            assert memory_management.bnb_enabled()
+            assert memory_management.bnb_enabled(), 'Install the "bitsandbytes" package with --bnb'
             operations = ForgeOperationsBNB4bits
         elif dtype is torch.float8_e4m3fn and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):
             operations = ForgeOperationsFP8
