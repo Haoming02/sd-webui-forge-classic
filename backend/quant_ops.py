@@ -14,6 +14,17 @@ from comfy_kitchen.tensor import (  # noqa
 
 from . import float
 
+
+def should_disable_triton_backend() -> bool:
+    if not hasattr(torch, "xpu"):
+        return False
+
+    try:
+        return torch.xpu.is_available()
+    except Exception:
+        return False
+
+
 if torch.version.cuda is None:
     ck.registry.disable("cuda")
 else:
@@ -25,6 +36,9 @@ try:
     import triton  # noqa
 except Exception:
     ck.registry.disable("triton")
+else:
+    if should_disable_triton_backend():
+        ck.registry.disable("triton")
 
 
 # region FP8 Layouts
