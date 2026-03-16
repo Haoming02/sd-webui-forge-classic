@@ -109,18 +109,14 @@ if args.directml is not None:
     logger.info("Using directml with device: {}".format(torch_directml.device_name(device_index)))
     lowvram_available = False
 
-ipex = None
 try:
     import intel_extension_for_pytorch as ipex  # noqa: F401
 except Exception:
     ipex = None
 
 try:
-    if getattr(torch, "xpu", None) is not None:
-        _ = torch.xpu.device_count()
-        xpu_available = torch.xpu.is_available()
-    else:
-        xpu_available = False
+    _ = torch.xpu.device_count()
+    xpu_available = torch.xpu.is_available()
 except Exception:
     xpu_available = False
 
@@ -155,11 +151,11 @@ def get_torch_device() -> torch.device:
         return torch.device("mps")
     if cpu_state is CPUState.CPU:
         return torch.device("cpu")
-    if is_intel_xpu():
-        return torch.device("xpu", torch.xpu.current_device())
-    if torch.cuda.is_available():
-        return torch.device("cuda", torch.cuda.current_device())
-    return torch.device("cpu")
+    else:
+        if is_intel_xpu():
+            return torch.device("xpu", torch.xpu.current_device())
+        else:
+            return torch.device(torch.cuda.current_device())
 
 
 def get_total_memory(dev: torch.device = None, torch_total_too: bool = False):
