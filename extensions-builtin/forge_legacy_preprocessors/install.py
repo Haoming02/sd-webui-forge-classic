@@ -16,7 +16,7 @@ def install_requirements(req_file):
                 if not launch.is_installed(package):
                     launch.run_pip(
                         f"install {package}",
-                        f"Legacy Preprocessor Requirement: {package}",
+                        f"{package} (for Preprocessor)",
                     )
             except Exception as e:
                 display(e, "cnet req")
@@ -24,6 +24,12 @@ def install_requirements(req_file):
 
 
 install_requirements(main_req_file)
+
+if not launch.is_installed("insightface"):
+    try:
+        launch.run_pip("install insightface", "insightface (for Preprocessor)")
+    except Exception:
+        print("Failed to install insightface; Please manually install it")
 
 
 def try_install_from_wheel(pkg_name: str, wheel_url: str):
