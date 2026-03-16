@@ -21,7 +21,7 @@ class SpectrumForForge(scripts.Script):
                 w = gr.Slider(
                     minimum=0.0,
                     maximum=1.0,
-                    value=0.5,
+                    value=0.25,
                     step=0.05,
                     label="Prediction Weighting",
                     info="higher = long-term trend ; lower = short-term changes",
@@ -29,7 +29,7 @@ class SpectrumForForge(scripts.Script):
                 m = gr.Slider(
                     minimum=1,
                     maximum=8,
-                    value=4,
+                    value=6,
                     step=1,
                     label="Polynomial Degree",
                     info="higher = complex & subtle patterns ; lower = stable & faster",
@@ -38,7 +38,7 @@ class SpectrumForForge(scripts.Script):
                 lam = gr.Slider(
                     minimum=0.0,
                     maximum=2.0,
-                    value=0.1,
+                    value=0.5,
                     step=0.05,
                     label="Regularization",
                     info="higher = reduce overfitting ; lower = fit more data",
@@ -54,7 +54,7 @@ class SpectrumForForge(scripts.Script):
             flex_window = gr.Slider(
                 minimum=0.0,
                 maximum=2.0,
-                value=0.5,
+                value=0.0,
                 step=0.05,
                 label="Window Growth",
                 info="higher = more speed & less accurate ; lower = more consistent accuracy but less speed gain",
@@ -63,7 +63,7 @@ class SpectrumForForge(scripts.Script):
                 warmup_steps = gr.Slider(
                     minimum=0,
                     maximum=20,
-                    value=4,
+                    value=6,
                     step=1,
                     label="Warmup Steps",
                     info="Run the full model before caching starts",
@@ -71,7 +71,7 @@ class SpectrumForForge(scripts.Script):
                 stop_caching_step = gr.Slider(
                     minimum=0.0,
                     maximum=1.0,
-                    value=0.85,
+                    value=0.9,
                     step=0.05,
                     label="Stop Caching Step",
                     info="Run the full model for the last few steps",

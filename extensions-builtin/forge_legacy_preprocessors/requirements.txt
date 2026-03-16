@@ -1,4 +1,5 @@
 addict
+ftfy
 fvcore
 mediapipe
 onnx

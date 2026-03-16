@@ -18,6 +18,20 @@ logger = logging.getLogger("lora")
 setup_logger(logger)
 
 
+def string_to_seed(data):
+    crc = 0xFFFFFFFF
+    for byte in data:
+        if isinstance(byte, str):
+            byte = ord(byte)
+        crc ^= byte
+        for _ in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ 0xEDB88320
+            else:
+                crc >>= 1
+    return crc ^ 0xFFFFFFFF
+
+
 extra_weight_calculators = {}
 
 
@@ -208,6 +222,14 @@ class LoraLoader:
             if key not in self.backup:
                 self.backup[key] = weight.to(device=offload_device)
 
+            mixed_layer = None
+
+            if hasattr(weight, "_layout_cls"):
+                mixed_layer = parent_layer
+                convert_func = getattr(mixed_layer, f"convert_{child_key}")
+                set_func = getattr(mixed_layer, f"set_{child_key}")
+                weight = convert_func(weight)
+
             bnb_layer = None
 
             if hasattr(weight, "bnb_quantized"):
@@ -237,6 +259,10 @@ class LoraLoader:
                 set_parameter_devices(self.model, parameter_devices={k: offload_device for k in parameter_devices.keys()})
                 memory_management.soft_empty_cache()
                 weight = merge_lora_to_weight(current_patches, weight, key, computation_dtype=torch.float32)
+
+            if mixed_layer is not None:
+                set_func(weight, inplace_update=False, seed=string_to_seed(key))
+                continue
 
             if bnb_layer is not None:
                 bnb_layer.reload_weight(weight)

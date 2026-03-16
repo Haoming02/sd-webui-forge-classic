@@ -37,7 +37,7 @@ class ForgeRender:
         return output
 
 
-_DTYPE: list[str] = ["float16", "float32", "bfloat16", "float8_e4m3fn", "float8_e5m2", "int8", "gguf", "nf4", "fp4", "int4"]
+_DTYPE: list[str] = ["float16", "float32", "bfloat16", "float8_e4m3fn", "float8_e5m2", "int8", "gguf", "nf4", "fp4", "int4", "MixedPrecision"]
 _MODELS: list[str] = ["Gemma2", "Qwen2.5", "Qwen3", "T5XXL", "Model"]
 
 KEYWORDS: dict[str, list[str]] = {
