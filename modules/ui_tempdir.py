@@ -54,7 +54,8 @@ def save_pil_to_file(pil_image, cache_dir=None, format="png"):
         dir = shared.opts.temp_dir
     else:
         dir = cache_dir
-        os.makedirs(dir, exist_ok=True)
+
+    os.makedirs(dir, exist_ok=True)
 
     use_metadata = False
     metadata = PngImagePlugin.PngInfo()
