@@ -105,15 +105,6 @@ def _torch_version() -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
-def _torch_accelerator_check_snippet() -> str:
-    return """
-import torch
-cuda_ok = bool(getattr(torch, "cuda", None) and torch.cuda.is_available())
-xpu_ok = bool(getattr(torch, "xpu", None) and torch.xpu.is_available())
-assert cuda_ok or xpu_ok
-"""
-
-
 def is_installed(package):
     try:
         dist = importlib.metadata.distribution(package)
@@ -328,11 +319,18 @@ def prepare_environment():
         startup_timer.record("install torch")
 
     if not args.skip_torch_cuda_test:
-        success, err = check_run_python(_torch_accelerator_check_snippet(), return_error=True)
+        TORCH_CHECK: str = """
+import torch
+cuda = hasattr(torch, "cuda") and torch.cuda.is_available()
+xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
+assert cuda or xpu
+        """
+
+        success, err = check_run_python(TORCH_CHECK, return_error=True)
         if not success:
             if "older driver" in str(err).lower():
                 raise SystemError("Please update your GPU driver to support cu130 ; or manually install older PyTorch")
-            raise RuntimeError("PyTorch is not able to access a supported GPU backend (CUDA or XPU)")
+            raise RuntimeError("PyTorch is not able to access GPU")
         startup_timer.record("torch GPU test")
 
     if not is_installed("packaging"):
