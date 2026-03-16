@@ -766,15 +766,23 @@ class Api:
             import torch
 
             if torch.cuda.is_available():
-                s = torch.cuda.mem_get_info()
+                _backend = torch.cuda
+            elif torch.xpu.is_available():
+                _backend = torch.xpu
+            else:
+                _backend = None
+
+            if _backend is not None:
+                s = _backend.mem_get_info()
                 system = {"free": s[0], "used": s[1] - s[0], "total": s[1]}
-                s = dict(torch.cuda.memory_stats(shared.device))
+                s = dict(_backend.memory_stats(shared.device))
                 allocated = {"current": s["allocated_bytes.all.current"], "peak": s["allocated_bytes.all.peak"]}
                 reserved = {"current": s["reserved_bytes.all.current"], "peak": s["reserved_bytes.all.peak"]}
-                active = {"current": s["active_bytes.all.current"], "peak": s["active_bytes.all.peak"]}
+                active = {"current": s.get("active_bytes.all.current") or s.get("active.all.current") or 0, "peak": s.get("active_bytes.all.peak") or s.get("active.all.peak") or 0}
                 inactive = {"current": s["inactive_split_bytes.all.current"], "peak": s["inactive_split_bytes.all.peak"]}
                 warnings = {"retries": s["num_alloc_retries"], "oom": s["num_ooms"]}
                 cuda = {
+                    "device": str(shared.device),
                     "system": system,
                     "active": active,
                     "allocated": allocated,

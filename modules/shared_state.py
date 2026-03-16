@@ -38,9 +38,10 @@ class State:
 
     def __init__(self):
         self.server_start = time.time()
-        self.vae_stream = None
         if stream.should_use_stream():
-            self.vae_stream = torch.cuda.Stream(device=devices.device, priority=1)
+            self.vae_stream = stream.get_vae_stream()
+        else:
+            self.vae_stream = None
 
     @property
     def need_restart(self) -> bool:

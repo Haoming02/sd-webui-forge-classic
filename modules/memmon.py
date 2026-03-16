@@ -4,6 +4,8 @@ from collections import defaultdict
 
 import torch
 
+from backend import memory_management
+
 
 class MemUsageMonitor(threading.Thread):
     run_flag = None
@@ -22,16 +24,21 @@ class MemUsageMonitor(threading.Thread):
         self.run_flag = threading.Event()
         self.data = defaultdict(int)
 
+        if memory_management.is_intel_xpu():
+            self._backend = torch.xpu
+        else:
+            self._backend = torch.cuda
+
         try:
             self.cuda_mem_get_info()
-            torch.cuda.memory_stats(self.device)
+            self._backend.memory_stats(self.device)
         except Exception as e:  # AMD or whatever
-            print(f"Warning: caught exception '{e}', memory monitor disabled")
+            memory_management.logger.warning(f'Caught Exception "{e}"\nMemory Monitor Disabled...')
             self.disabled = True
 
     def cuda_mem_get_info(self):
-        index = self.device.index if self.device.index is not None else torch.cuda.current_device()
-        return torch.cuda.mem_get_info(index)
+        index = self.device.index if self.device.index is not None else self._backend.current_device()
+        return self._backend.mem_get_info(index)
 
     def run(self):
         if self.disabled:
@@ -40,7 +47,7 @@ class MemUsageMonitor(threading.Thread):
         while True:
             self.run_flag.wait()
 
-            torch.cuda.reset_peak_memory_stats()
+            self._backend.reset_peak_memory_stats()
             self.data.clear()
 
             if self.opts.memmon_poll_rate <= 0:
@@ -61,13 +68,13 @@ class MemUsageMonitor(threading.Thread):
             print(k, -(v // -(1024**2)))
 
         print(self, "raw torch memory stats:")
-        tm = torch.cuda.memory_stats(self.device)
+        tm = self._backend.memory_stats(self.device)
         for k, v in tm.items():
             if "bytes" not in k:
                 continue
             print("\t" if "peak" in k else "", k, -(v // -(1024**2)))
 
-        print(torch.cuda.memory_summary())
+        print(self._backend.memory_summary())
 
     def monitor(self):
         self.run_flag.set()
@@ -78,9 +85,9 @@ class MemUsageMonitor(threading.Thread):
             self.data["free"] = free
             self.data["total"] = total
 
-            torch_stats = torch.cuda.memory_stats(self.device)
-            self.data["active"] = torch_stats["active.all.current"]
-            self.data["active_peak"] = torch_stats["active_bytes.all.peak"]
+            torch_stats = self._backend.memory_stats(self.device)
+            self.data["active"] = torch_stats.get("active_bytes.all.current") or torch_stats.get("active.all.current") or 0
+            self.data["active_peak"] = torch_stats.get("active_bytes.all.peak") or torch_stats.get("active.all.peak") or 0
             self.data["reserved"] = torch_stats["reserved_bytes.all.current"]
             self.data["reserved_peak"] = torch_stats["reserved_bytes.all.peak"]
             self.data["system_peak"] = total - self.data["min_free"]

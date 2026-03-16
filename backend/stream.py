@@ -19,6 +19,13 @@ def get_new_stream():
     return memory_management.get_offload_stream(device)
 
 
+def get_vae_stream():
+    if torch.cuda.is_available():
+        return torch.cuda.Stream(device=device, priority=1)
+    if torch.xpu.is_available():
+        return torch.xpu.Stream(device=device, priority=1)
+
+
 def should_use_stream():
     return current_stream is not None and mover_stream is not None
 

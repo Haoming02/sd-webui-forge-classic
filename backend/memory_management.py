@@ -111,7 +111,10 @@ if args.directml is not None:
 
 try:
     import intel_extension_for_pytorch as ipex  # noqa: F401
+except Exception:
+    ipex = None
 
+try:
     _ = torch.xpu.device_count()
     xpu_available = torch.xpu.is_available()
 except Exception:
@@ -473,7 +476,7 @@ class LoadedModel:
 
         real_model = self.model.model
 
-        if is_intel_xpu() and not args.disable_ipex_optimize and "ipex" in globals() and real_model is not None:
+        if is_intel_xpu() and not args.disable_ipex_optimize and ipex is not None and real_model is not None:
             with torch.no_grad():
                 real_model = ipex.optimize(real_model.eval(), inplace=True, graph_mode=True, concat_linear=True)
 
