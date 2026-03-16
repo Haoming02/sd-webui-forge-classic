@@ -9,7 +9,7 @@ from typing import Callable
 import torch
 
 from backend import memory_management, stream, utils
-from backend.args import dynamic_args
+from backend.args import args, dynamic_args
 from backend.patcher.lora import merge_lora_to_weight
 
 
@@ -658,10 +658,66 @@ class ForgeOperationsGGUF(ForgeOperations):
                 return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
 
+# region fp8
+
+
+from backend.operations_mixed_precision import (
+    QuantizedTensor,
+    TensorCoreFP8Layout,
+    mixed_precision_ops,
+)
+
+
+def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
+    # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L615
+    dtype = self.weight.dtype
+    if dtype is not torch.float8_e4m3fn:
+        return None
+
+    input_dtype = input.dtype
+    input_shape = input.shape
+    tensor_3d = input.ndim == 3
+
+    if tensor_3d:
+        input = input.reshape(-1, input_shape[2])
+
+    if input.ndim != 2:
+        return None
+
+    scale_weight = torch.ones((), device=input.device, dtype=torch.float32)
+    scale_input = torch.ones((), device=input.device, dtype=torch.float32)
+
+    w, bias, signal = weights_manual_cast(self, input, dtype=dtype)
+
+    with main_stream_worker(w, bias, signal):
+        input = torch.clamp(input, min=-448, max=448, out=input)
+        input_fp8 = input.to(dtype).contiguous()
+        layout_params_input = TensorCoreFP8Layout.Params(scale=scale_input, orig_dtype=input_dtype, orig_shape=tuple(input_fp8.shape))
+        quantized_input = QuantizedTensor(input_fp8, "TensorCoreFP8Layout", layout_params_input)
+
+        layout_params_weight = TensorCoreFP8Layout.Params(scale=scale_weight, orig_dtype=input_dtype, orig_shape=tuple(w.shape))
+        quantized_weight = QuantizedTensor(w, "TensorCoreFP8Layout", layout_params_weight)
+        o = torch.nn.functional.linear(quantized_input, quantized_weight, bias)
+
+    if tensor_3d:
+        o = o.reshape((input_shape[0], input_shape[1], w.shape[0]))
+
+    return o
+
+
+class ForgeOperationsFP8(ForgeOperations):
+    class Linear(ForgeOperations.Linear):
+        def forward(self, x):
+            try:
+                if (out := fp8_linear(self, x)) is not None:
+                    return out
+            except Exception as e:
+                memory_management.logger.error(f"Error during fp8_fast: {e}")
+
+            return super().forward(x)
+
+
 # region Pick OPs
-
-
-from backend.operations_mixed_precision import mixed_precision_ops
 
 
 @contextlib.contextmanager
@@ -714,6 +770,8 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
         elif bnb_dtype in ["nf4", "fp4"]:
             assert memory_management.bnb_enabled()
             operations = ForgeOperationsBNB4bits
+        elif dtype is torch.float8_e4m3fn and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):
+            operations = ForgeOperationsFP8
         else:
             operations = ForgeOperations
 

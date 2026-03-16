@@ -7,7 +7,12 @@ import torch
 from backend.memory_management import cast_to_device, logger
 
 from .operations import ForgeOperations, main_stream_worker, weights_manual_cast
-from .quant_ops import QUANT_ALGOS, QuantizedTensor, get_layout_class
+from .quant_ops import (  # noqa
+    QUANT_ALGOS,
+    QuantizedTensor,
+    TensorCoreFP8Layout,
+    get_layout_class,
+)
 
 
 def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_precision_mm=False, disabled=[]):
