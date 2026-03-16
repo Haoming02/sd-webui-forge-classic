@@ -778,7 +778,7 @@ class Api:
                 s = dict(_backend.memory_stats(shared.device))
                 allocated = {"current": s["allocated_bytes.all.current"], "peak": s["allocated_bytes.all.peak"]}
                 reserved = {"current": s["reserved_bytes.all.current"], "peak": s["reserved_bytes.all.peak"]}
-                active = {"current": s["active_bytes.all.current"], "peak": s["active_bytes.all.peak"]}
+                active = {"current": s.get("active_bytes.all.current") or s.get("active.all.current") or 0, "peak": s.get("active_bytes.all.peak") or s.get("active.all.peak") or 0}
                 inactive = {"current": s["inactive_split_bytes.all.current"], "peak": s["inactive_split_bytes.all.peak"]}
                 warnings = {"retries": s["num_alloc_retries"], "oom": s["num_ooms"]}
                 cuda = {

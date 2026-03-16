@@ -40,12 +40,6 @@ class MemUsageMonitor(threading.Thread):
         index = self.device.index if self.device.index is not None else self._backend.current_device()
         return self._backend.mem_get_info(index)
 
-    def get_stat_value(self, stats, *keys):
-        for key in keys:
-            if key in stats:
-                return stats[key]
-        return 0
-
     def run(self):
         if self.disabled:
             return
@@ -92,10 +86,10 @@ class MemUsageMonitor(threading.Thread):
             self.data["total"] = total
 
             torch_stats = self._backend.memory_stats(self.device)
-            self.data["active"] = self.get_stat_value(torch_stats, "active.all.current", "active_bytes.all.current")
-            self.data["active_peak"] = self.get_stat_value(torch_stats, "active_bytes.all.peak", "active.all.peak")
-            self.data["reserved"] = self.get_stat_value(torch_stats, "reserved_bytes.all.current")
-            self.data["reserved_peak"] = self.get_stat_value(torch_stats, "reserved_bytes.all.peak")
+            self.data["active"] = torch_stats.get("active_bytes.all.current") or torch_stats.get("active.all.current") or 0
+            self.data["active_peak"] = torch_stats.get("active_bytes.all.peak") or torch_stats.get("active.all.peak") or 0
+            self.data["reserved"] = torch_stats["reserved_bytes.all.current"]
+            self.data["reserved_peak"] = torch_stats["reserved_bytes.all.peak"]
             self.data["system_peak"] = total - self.data["min_free"]
 
         return self.data
