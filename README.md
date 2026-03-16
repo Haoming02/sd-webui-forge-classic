@@ -59,6 +59,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > To be detected as a **Kontext** model, the model must include "`kontext`" in its path *(**e.g.** file name or folder name)*
 
 - [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
+    - via `ImageStitch Integrated`
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
     - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `z-image-turbo`
     - only `Flux` and `Qwen` support LoRA currently
@@ -66,6 +67,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
     - `Neta-Lumina` / `NetaYume-Lumina`
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
+- [X] Support **MixedPrecision** Models
+    - `fp4mixed` / `fp8mixed` / `nvfp4` / `fp8_scaled`
 
 <br>
 
@@ -179,6 +182,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable again in **Settings/Refiner**
 - [X] No longer install `bitsandbytes` by default
     - see [Commandline](#by-neo)
+- [X] Improved non-Nvidia support
 - [X] Lint & Format
 - [X] Update `Pillow`
     - faster image processing
