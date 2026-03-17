@@ -9,9 +9,10 @@ import math
 import os
 import re
 import string
-import subprocess
 from collections import namedtuple
 
+import av
+import av.container
 import numpy as np
 import piexif
 import piexif.helper
@@ -911,19 +912,21 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
     height, width, channels = frames[0].shape
     assert channels == 3, "Frames must be in (H, W, 3) RGB format"
 
-    namegen = FilenameGenerator(p, p.seeds[0], p.prompts[0], image=None, basename=basename)
-    file_decoration = opts.samples_filename_pattern or ("[seed]" if opts.save_to_dirs else "[seed]-[prompt_spaces]")
     folder = opts.outdir_samples or opts.outdir_videos
     extension = opts.video_container
-
     os.makedirs(folder, exist_ok=True)
 
-    file_decoration = namegen.apply(file_decoration)
-
-    add_number = opts.save_images_add_number or file_decoration == ""
-
-    if file_decoration != "" and add_number:
-        file_decoration = f"-{file_decoration}"
+    if isinstance(p, str):
+        add_number = True
+        basename = p
+        file_decoration = ""
+    else:
+        namegen = FilenameGenerator(p, p.seeds[0], p.prompts[0], image=None, basename=basename)
+        file_decoration = opts.samples_filename_pattern or ("[seed]" if opts.save_to_dirs else "[seed]-[prompt_spaces]")
+        file_decoration = namegen.apply(file_decoration)
+        add_number = opts.save_images_add_number or file_decoration == ""
+        if file_decoration != "" and add_number:
+            file_decoration = f"-{file_decoration}"
 
     if add_number:
         basecount = get_next_sequence_number(folder, basename)
@@ -936,50 +939,34 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
     else:
         fullfn = os.path.join(folder, f"{file_decoration}.{extension}")
 
-    crf = int(opts.video_crf)
+    crf = str(int(opts.video_crf))
     preset = str(opts.video_preset)
     profile = str(opts.video_profile)
 
-    cmd = [
-        "ffmpeg",
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-hwaccel",
-        "auto",
-        "-y",
-        "-f",
-        "rawvideo",
-        "-vcodec",
-        "rawvideo",
-        "-pix_fmt",
-        "rgb24",
-        "-s",
-        f"{width}x{height}",
-        "-r",
-        str(fps),
-        "-i",
-        "-",
-        "-vcodec",
-        "h264",
-        "-crf",
-        str(crf),
-        "-preset",
-        str(preset),
-        "-pix_fmt",
-        "yuv420p",
-        "-profile:v",
-        profile,
-        "-an",
-        "-metadata",
-        f"description={str(info)}",
-        fullfn,
-    ]
+    container = av.open(fullfn, mode="w")
 
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    vstream = container.add_stream("h264", rate=fps)
+    vstream.width = width
+    vstream.height = height
+    vstream.pix_fmt = "yuv420p"
+    vstream.options = {
+        "crf": crf,
+        "preset": preset,
+        "profile": profile,
+    }
+
+    if info:
+        container.metadata["description"] = str(info)
+
     for frame in frames:
-        proc.stdin.write(frame.tobytes())
-    proc.stdin.close()
-    proc.wait()
+        vf = av.VideoFrame.from_ndarray(frame, format="rgb24")
+        vf = vf.reformat(format="yuv420p")
 
+        for packet in vstream.encode(vf):
+            container.mux(packet)
+
+    for packet in vstream.encode():
+        container.mux(packet)
+
+    container.close()
     return fullfn
