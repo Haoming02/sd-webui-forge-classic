@@ -110,65 +110,6 @@ def run_postprocessing(extras_mode, image, image_folder, input_dir, output_dir, 
     return outputs, ui_common.plaintext_to_html(infotext), ""
 
 
-def run_postprocessing_video(_mode, _img, _folder, _in_dir, _out_dir, _show, video_input, *args, save_output: bool = True):
-    devices.torch_gc()
-
-    shared.state.begin(job="extras")
-
-    outputs: list[np.ndarray] = []
-
-    container = av.open(video_input)
-
-    video_stream = container.streams.best("video")
-    frames = video_stream.frames
-
-    def get_frames():
-        for frame in tqdm(container.decode(video=0), desc="Processing Video", total=frames, unit="frame"):
-            yield frame.to_image()
-
-    infotext = None
-
-    shared.state.job_count = frames
-
-    for i, image_data in enumerate(get_frames()):
-
-        shared.state.nextjob()
-        shared.state.textinfo = str(i)
-        shared.state.skipped = False
-
-        if shared.state.interrupted or shared.state.stopping_generation:
-            break
-
-        initial_pp = scripts_postprocessing.PostprocessedImage(image_data)
-
-        scripts.scripts_postproc.run(initial_pp, args)
-
-        if shared.state.skipped:
-            continue
-
-        if infotext is None:
-            infotext = ", ".join([k if k == v else f"{k}: {infotext_utils.quote(v)}" for k, v in initial_pp.info.items() if v is not None])
-
-        shared.state.assign_current_image(initial_pp.image)
-
-        outputs.append(np.array(initial_pp.image, dtype=np.uint8))
-
-    if not (shared.state.interrupted or shared.state.stopping_generation):
-        images.save_video(
-            os.path.splitext(os.path.basename(video_input))[0],
-            outputs,
-            fps=round(float(container.streams.video[0].average_rate)),
-            basename=None,
-            info=infotext,
-            audio_copy=video_input,
-        )
-
-    container.close()
-    devices.torch_gc()
-    shared.state.end()
-    return outputs[-1:], ui_common.plaintext_to_html(infotext), ""
-
-
 def run_postprocessing_webui(id_task, *args, **kwargs):
     if args[0] == 3:
         return run_postprocessing_video(*args, **kwargs)
