@@ -907,23 +907,25 @@ def fix_png_transparency(image: Image.Image):
     return image
 
 
-def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = "") -> str:
+def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = "", audio_copy: os.PathLike = None) -> str:
     height, width, channels = frames[0].shape
     assert channels == 3, "Frames must be in (H, W, 3) RGB format"
 
-    namegen = FilenameGenerator(p, p.seeds[0], p.prompts[0], image=None, basename=basename)
-    file_decoration = opts.samples_filename_pattern or ("[seed]" if opts.save_to_dirs else "[seed]-[prompt_spaces]")
     folder = opts.outdir_samples or opts.outdir_videos
     extension = opts.video_container
-
     os.makedirs(folder, exist_ok=True)
 
-    file_decoration = namegen.apply(file_decoration)
-
-    add_number = opts.save_images_add_number or file_decoration == ""
-
-    if file_decoration != "" and add_number:
-        file_decoration = f"-{file_decoration}"
+    if isinstance(p, str):
+        add_number = True
+        basename = p
+        file_decoration = ""
+    else:
+        namegen = FilenameGenerator(p, p.seeds[0], p.prompts[0], image=None, basename=basename)
+        file_decoration = opts.samples_filename_pattern or ("[seed]" if opts.save_to_dirs else "[seed]-[prompt_spaces]")
+        file_decoration = namegen.apply(file_decoration)
+        add_number = opts.save_images_add_number or file_decoration == ""
+        if file_decoration != "" and add_number:
+            file_decoration = f"-{file_decoration}"
 
     if add_number:
         basecount = get_next_sequence_number(folder, basename)
@@ -960,6 +962,21 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
         str(fps),
         "-i",
         "-",
+    ]
+
+    if audio_copy is not None:
+        cmd += [
+            "-i",
+            audio_copy,
+            "-map",
+            "0:v",
+            "-map",
+            "1:a?",
+            "-acodec",
+            "copy",
+        ]
+
+    cmd += [
         "-vcodec",
         "h264",
         "-crf",
@@ -970,7 +987,6 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
         "yuv420p",
         "-profile:v",
         profile,
-        "-an",
         "-metadata",
         f"description={str(info)}",
         fullfn,
