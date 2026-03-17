@@ -9,10 +9,9 @@ import math
 import os
 import re
 import string
+import subprocess
 from collections import namedtuple
 
-import av
-import av.container
 import numpy as np
 import piexif
 import piexif.helper
@@ -908,7 +907,7 @@ def fix_png_transparency(image: Image.Image):
     return image
 
 
-def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = "") -> str:
+def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = "", audio_copy: os.PathLike = None) -> str:
     height, width, channels = frames[0].shape
     assert channels == 3, "Frames must be in (H, W, 3) RGB format"
 
@@ -939,34 +938,64 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
     else:
         fullfn = os.path.join(folder, f"{file_decoration}.{extension}")
 
-    crf = str(int(opts.video_crf))
+    crf = int(opts.video_crf)
     preset = str(opts.video_preset)
     profile = str(opts.video_profile)
 
-    container = av.open(fullfn, mode="w")
+    cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-hwaccel",
+        "auto",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+    ]
 
-    vstream = container.add_stream("h264", rate=fps)
-    vstream.width = width
-    vstream.height = height
-    vstream.pix_fmt = "yuv420p"
-    vstream.options = {
-        "crf": crf,
-        "preset": preset,
-        "profile": profile,
-    }
+    if audio_copy is not None:
+        cmd += [
+            "-i",
+            audio_copy,
+            "-map",
+            "0:v",
+            "-map",
+            "1:a?",
+            "-acodec",
+            "copy",
+        ]
 
-    if info:
-        container.metadata["description"] = str(info)
+    cmd += [
+        "-vcodec",
+        "h264",
+        "-crf",
+        str(crf),
+        "-preset",
+        str(preset),
+        "-pix_fmt",
+        "yuv420p",
+        "-profile:v",
+        profile,
+        "-metadata",
+        f"description={str(info)}",
+        fullfn,
+    ]
 
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     for frame in frames:
-        vf = av.VideoFrame.from_ndarray(frame, format="rgb24")
-        vf = vf.reformat(format="yuv420p")
+        proc.stdin.write(frame.tobytes())
+    proc.stdin.close()
+    proc.wait()
 
-        for packet in vstream.encode(vf):
-            container.mux(packet)
-
-    for packet in vstream.encode():
-        container.mux(packet)
-
-    container.close()
     return fullfn

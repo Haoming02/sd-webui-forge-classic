@@ -160,6 +160,7 @@ def run_postprocessing_video(_mode, _img, _folder, _in_dir, _out_dir, _show, vid
             fps=round(float(container.streams.video[0].average_rate)),
             basename=None,
             info=infotext,
+            audio_copy=video_input,
         )
 
     container.close()
