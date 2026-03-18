@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import torch
 import os
+
+import torch
 
 from modules import (
     devices,
@@ -21,15 +22,12 @@ class FaceRestorerGFPGAN(face_restoration_utils.CommonFaceRestoration):
 
     def load_net(self) -> torch.nn.Module:
         os.makedirs(self.model_path, exist_ok=True)
-        for model_path in modelloader.load_models(
-            model_path=self.model_path,
-            model_url="https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth",
-            command_path=self.model_path,
-            download_name="GFPGANv1.4.pth",
-            ext_filter=[".pth"],
-        ):
-            return modelloader.load_spandrel_model(model_path, device=devices.device_gfpgan).model
-        raise ValueError("No GFPGAN Model Found")
+        model_path = modelloader.load_file_from_url(
+            url="https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.4.pth",
+            model_dir=self.model_path,
+            file_name="GFPGANv1.4.pth",
+        )
+        return modelloader.load_spandrel_model(model_path, device=devices.device_gfpgan).model
 
     def restore(self, np_image):
         def restore_face(cropped_face_t):

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import torch
 import os
+
+import torch
 
 from modules import (
     devices,
@@ -21,15 +22,12 @@ class FaceRestorerCodeFormer(face_restoration_utils.CommonFaceRestoration):
 
     def load_net(self) -> torch.nn.Module:
         os.makedirs(self.model_path, exist_ok=True)
-        for model_path in modelloader.load_models(
-            model_path=self.model_path,
-            model_url="https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
-            command_path=self.model_path,
-            download_name="codeformer-v0.1.0.pth",
-            ext_filter=[".pth"],
-        ):
-            return modelloader.load_spandrel_model(model_path, device=devices.device_codeformer).model
-        raise ValueError("No CodeFormer Model Found")
+        model_path = modelloader.load_file_from_url(
+            url="https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/codeformer.pth",
+            model_dir=self.model_path,
+            file_name="codeformer-v0.1.0.pth",
+        )
+        return modelloader.load_spandrel_model(model_path, device=devices.device_codeformer).model
 
     def restore(self, np_image, w: float | None = None):
         if w is None:
