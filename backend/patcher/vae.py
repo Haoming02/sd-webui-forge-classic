@@ -214,8 +214,8 @@ class VAE:
             batch_number = max(1, batch_number)
 
             for x in range(0, samples_in.shape[0], batch_number):
-                samples = samples_in[x : x + batch_number].to(self.vae_dtype).to(self.device)
-                out = self.process_output(self.first_stage_model.decode(samples).to(self.output_device).float())
+                samples = samples_in[x : x + batch_number].to(device=self.device, dtype=self.vae_dtype)
+                out = self.process_output(self.first_stage_model.decode(samples).to(device=self.output_device, dtype=torch.float32, copy=True))
                 if pixel_samples is None:
                     pixel_samples = torch.empty((samples_in.shape[0],) + tuple(out.shape[1:]), device=self.output_device)
                 pixel_samples[x : x + batch_number] = out
@@ -303,8 +303,10 @@ class VAE:
         maximum = self.upscale_ratio[0](self.downscale_ratio[0](pixel_samples.shape[2]))
         return self.encode_tiled_3d(pixel_samples[:, :, :maximum], **args)
 
-    def process_input(self, image):
-        return image * 2.0 - 1.0
+    @staticmethod
+    def process_input(image: torch.Tensor):
+        return image.mul_(2.0).sub_(1.0)
 
-    def process_output(self, image):
-        return torch.clamp((image + 1.0) / 2.0, min=0.0, max=1.0)
+    @staticmethod
+    def process_output(image: torch.Tensor):
+        return image.add_(1.0).div_(2.0).clamp_(0.0, 1.0)
