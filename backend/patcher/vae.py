@@ -305,7 +305,7 @@ class VAE:
 
     @staticmethod
     def process_input(image: torch.Tensor):
-        return image.mul_(2.0).sub_(1.0)
+        return image * 2.0 - 1.0
 
     @staticmethod
     def process_output(image: torch.Tensor):
