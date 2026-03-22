@@ -10,6 +10,7 @@ import os
 import re
 import string
 import subprocess
+import time
 from collections import namedtuple
 
 import numpy as np
@@ -393,6 +394,9 @@ class FilenameGenerator:
         "seed_last": lambda self: NOTHING_AND_SKIP_PREVIOUS_TEXT if self.p.batch_size == 1 else self.p.all_seeds[-1],
         "steps": lambda self: self.p and self.p.steps,
         "cfg": lambda self: self.p and self.p.cfg_scale,
+        "dcfg": lambda self: self.p and self.p.distilled_cfg_scale,
+        "shift": lambda self: self.p and self.p.distilled_cfg_scale,
+        "elapsed_time": lambda self: int(time.time() - shared.state.time_start),
         "width": lambda self: self.image.width,
         "height": lambda self: self.image.height,
         "styles": lambda self: self.p and sanitize_filename_part(", ".join([style for style in self.p.styles if not style == "None"]) or "None", replace_spaces=False),
