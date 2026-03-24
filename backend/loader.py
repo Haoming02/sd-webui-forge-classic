@@ -33,6 +33,7 @@ from backend.utils import (
     load_torch_file,
     read_arbitrary_config,
 )
+from modules_forge.packages.comfy.utils import convert_diffusers_mmdit
 
 possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage, Anima]
 
@@ -317,6 +318,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
+
+            if (new_dict := convert_diffusers_mmdit(state_dict, "")) is not None:
+                del state_dict
+                state_dict = new_dict
 
             unet_config = guess.unet_config.copy()
             state_dict_parameters = utils.calculate_parameters(state_dict)
