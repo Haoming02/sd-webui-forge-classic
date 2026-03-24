@@ -24,7 +24,7 @@ def create_ui():
                     show_extras_results = gr.Checkbox(label="Show result images", value=True, elem_id="extras_show_extras_results")
 
                 with gr.Tab("Single Video", id="single_video", elem_id="extras_single_video") as tab_video:
-                    extras_video_input = gr.Textbox(label="Input Video", **shared.hide_dirs, placeholder="Path to a video file", elem_id="extras_video_input")
+                    extras_video_input = gr.Textbox(label="Input Clip", info='For video longer than 1 minute, please extract the frames and use "Batch from Directory" instead', **shared.hide_dirs, placeholder="Path to a video file", elem_id="extras_video_input")
 
             script_inputs = scripts.scripts_postproc.setup_ui()
 
