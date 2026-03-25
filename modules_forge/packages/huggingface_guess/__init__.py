@@ -20,14 +20,10 @@ from .detection import model_config_from_unet, unet_prefix_from_state_dict
 
 def guess(state_dict):
     unet_key_prefix = unet_prefix_from_state_dict(state_dict)
-    result = model_config_from_unet(
-        state_dict, unet_key_prefix, use_base_if_no_match=False
-    )
+    result = model_config_from_unet(state_dict, unet_key_prefix, use_base_if_no_match=False)
     result.unet_key_prefix = [unet_key_prefix]
-    if "image_model" in result.unet_config:
-        del result.unet_config["image_model"]
-    if "audio_model" in result.unet_config:
-        del result.unet_config["audio_model"]
+    result.unet_config.pop("image_model", None)
+    result.unet_config.pop("audio_model", None)
     return result
 
 

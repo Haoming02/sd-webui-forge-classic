@@ -37,10 +37,10 @@ def calculate_transformer_depth(prefix, state_dict_keys, state_dict):
     return None
 
 
-def detect_unet_config(state_dict: dict, key_prefix: str):
+def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
     state_dict_keys = list(state_dict.keys())
 
-    if "{}cap_embedder.1.weight".format(key_prefix) in state_dict_keys:  # Lumina 2
+    if "{}cap_embedder.1.weight".format(key_prefix) in state_dict_keys and "{}noise_refiner.0.attention.k_norm.weight".format(key_prefix) in state_dict_keys:  # Lumina 2
         dit_config = {}
         dit_config["image_model"] = "lumina2"
         dit_config["patch_size"] = 2
@@ -58,9 +58,6 @@ def detect_unet_config(state_dict: dict, key_prefix: str):
             dit_config["axes_lens"] = [300, 512, 512]
             dit_config["rope_theta"] = 10000.0
             dit_config["ffn_dim_multiplier"] = 4.0
-            ctd_weight = state_dict.get("{}clip_text_pooled_proj.0.weight".format(key_prefix), None)
-            if ctd_weight is not None:  # NewBie
-                dit_config["clip_text_dim"] = int(ctd_weight.shape[0])
         elif dit_config["dim"] == 3840:  # Z-image
             dit_config["nunchaku"] = "{}layers.0.attention.to_out.0.qweight".format(key_prefix) in state_dict_keys
             dit_config["n_heads"] = 30
@@ -395,24 +392,15 @@ def top_candidate(state_dict, candidates):
     return top, counts[top]
 
 
-def unet_prefix_from_state_dict(state_dict):
-    candidates = [
+def unet_prefix_from_state_dict(state_dict: dict) -> str:
+    candidates = (
         "model.diffusion_model.",  # ldm/sgm models
-        "model.model.",  # audio models
         "net.",  # cosmos
-    ]
-    counts = {k: 0 for k in candidates}
-    for k in state_dict:
-        for c in candidates:
-            if k.startswith(c):
-                counts[c] += 1
-                break
-
-    top = max(counts, key=counts.get)
-    if counts[top] > 5:
-        return top
-    else:
-        return "model."  # etc.
+    )
+    for prefix in candidates:
+        if sum(1 for k in state_dict if k.startswith(prefix)) > 5:
+            return prefix
+    return "model."  # etc.
 
 
 def convert_config(unet_config):

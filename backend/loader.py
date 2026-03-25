@@ -319,10 +319,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
 
-            if (new_dict := convert_diffusers_mmdit(state_dict, "")) is not None:
-                del state_dict
-                state_dict = new_dict
-
             unet_config = guess.unet_config.copy()
             state_dict_parameters = utils.calculate_parameters(state_dict)
             state_dict_dtype = utils.weight_dtype(state_dict)
@@ -665,13 +661,36 @@ def process_anima(dit: dict[str, torch.Tensor], enc: dict[str, torch.Tensor]):
             enc[k] = dit.pop(k)
 
 
-def split_state_dict(sd, additional_state_dicts: list = None):
+def _load_unet(path: os.PathLike):
     import huggingface_guess
 
-    sd, metadata = load_torch_file(sd, return_metadata=True)
+    sd, metadata = load_torch_file(path, return_metadata=True)
     sd, metadata = convert_quantization(sd, metadata)
     sd = preprocess_state_dict(sd)
     guess = huggingface_guess.guess(sd)
+
+    return sd, metadata, guess
+
+
+def _load_diffuser(path: os.PathLike):
+    import huggingface_guess
+
+    sd, metadata = load_torch_file(path, return_metadata=True)
+    sd, metadata = convert_quantization(sd, metadata)
+    sd = convert_diffusers_mmdit(sd, "")
+    sd = preprocess_state_dict(sd)
+    guess = huggingface_guess.guess(sd)
+
+    return sd, metadata, guess
+
+
+def split_state_dict(path: os.PathLike, additional_state_dicts: list[os.PathLike] = None):
+    try:
+        sd, metadata, guess = _load_unet(path)
+    except Exception:
+        sd, metadata, guess = _load_diffuser(path)
+    finally:
+        memory_management.soft_empty_cache()
 
     if getattr(guess, "nunchaku", False) and ("Z-Image" in guess.huggingface_repo or "Qwen" in guess.huggingface_repo):
         import json
@@ -723,11 +742,8 @@ def split_state_dict(sd, additional_state_dicts: list = None):
 def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = None):
     try:
         state_dicts, estimated_config = split_state_dict(sd, additional_state_dicts=additional_state_dicts)
-    except Exception as e:
-        from modules.errors import display
-
-        display(e, "forge_loader")
-        raise ValueError("Failed to recognize model type!")
+    except Exception:
+        raise ValueError("Failed to recognize model type!") from None
 
     repo_name = estimated_config.huggingface_repo
     if "xl" in repo_name and "rectified" in str(sd).lower():
