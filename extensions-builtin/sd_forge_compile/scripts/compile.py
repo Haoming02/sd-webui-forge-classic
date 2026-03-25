@@ -81,7 +81,7 @@ When combined with a mode-based preset (`max-autotune`, `max-autotune-no-cudagra
 the mode is first expanded to its exact base options and then your selections are merged on top —
 so no mode options are lost.
 
-- **dynamic shapes:** Allows any resolution/batch size at the cost of longer compile. Note: incompatible with `triton.cudagraphs` and CUDA-graph-based presets. Always enabled if using dynamic or max-autotune-no-cudagraphs preset despite box selection.
+- **dynamic shapes:** Allows any resolution/batch size at the cost of longer compile. Note: incompatible with `triton.cudagraphs` and CUDA-graph-based presets. Default Auto.
 - **max_autotune_pointwise:** Autotune pointwise/reduction kernels independently (subset of `max_autotune`)
 - **max_autotune_gemm:** Autotune GEMM kernels independently (subset of `max_autotune`)
 - **epilogue_fusion:** Fuse pointwise ops into the preceding kernel — requires `max_autotune` or `max_autotune_gemm`
@@ -91,7 +91,7 @@ so no mode options are lost.
 - **coordinate_descent_tuning:** Tune tile configs via coordinate descent — included in both max-autotune modes, expose here for other presets
                     """
                 )
-                dynamic                   = gr.Checkbox(label="dynamic shapes — support any resolution/batch size.", value=False)
+                dynamic = gr.Radio(label="dynamic shapes", value="Auto",choices=["Auto", "Enabled", "Disabled"], info="Override the preset's dynamic setting. Auto = use preset default.",)
                 max_autotune_pointwise    = gr.Checkbox(label="max_autotune_pointwise",    value=False)
                 max_autotune_gemm         = gr.Checkbox(label="max_autotune_gemm",         value=False)
                 epilogue_fusion           = gr.Checkbox(label="epilogue_fusion",           value=False)
@@ -170,8 +170,8 @@ so no mode options are lost.
             case _:
                 config: dict = kmodel._compile_config
  
-        if dynamic and config.get("backend") == "inductor":
-            config["dynamic"] = True
+        if dynamic != "Auto" and config.get("backend") == "inductor":
+            config["dynamic"] = (dynamic == "Enabled")
 
         if config.get("backend") == "inductor":
             extra_options = {}
