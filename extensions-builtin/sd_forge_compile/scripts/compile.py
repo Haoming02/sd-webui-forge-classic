@@ -92,13 +92,13 @@ so no mode options are lost.
                     """
                 )
                 dynamic                   = gr.Checkbox(label="dynamic shapes — support any resolution/batch size (overrides preset default)", value=False)
+                max_autotune_pointwise    = gr.Checkbox(label="max_autotune_pointwise",    value=False)
+                max_autotune_gemm         = gr.Checkbox(label="max_autotune_gemm",         value=False)
                 epilogue_fusion           = gr.Checkbox(label="epilogue_fusion",           value=False)
                 shape_padding             = gr.Checkbox(label="shape_padding",             value=False)
                 fallback_random           = gr.Checkbox(label="fallback_random",           value=False)
                 triton_cudagraphs         = gr.Checkbox(label="triton.cudagraphs",         value=False)
                 coordinate_descent_tuning = gr.Checkbox(label="coordinate_descent_tuning", value=False)
-                max_autotune_pointwise    = gr.Checkbox(label="max_autotune_pointwise",    value=False)
-                max_autotune_gemm         = gr.Checkbox(label="max_autotune_gemm",         value=False)
 
         return [
             preset,
