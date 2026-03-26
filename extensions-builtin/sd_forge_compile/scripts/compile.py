@@ -119,11 +119,9 @@ class TorchCompileForForge(scripts.Script):
                 config = dict(backend="inductor", dynamic=True, fullgraph=False, options={"coordinate_descent_tuning": True, "max_autotune": True})
             case "reduce-overhead":
                 config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False)
-            case _:
-                config: dict = kmodel._compile_config
 
         if compiled:
-            if kmodel._compile_config == config:
+            if kmodel._compile_config == preset or preset == "Automatic":
                 c_model = get_attr(kmodel, "_compiled_backup")
                 set_attr_raw(kmodel, "diffusion_model", c_model)
                 del kmodel._compiled_backup
@@ -140,6 +138,6 @@ class TorchCompileForForge(scripts.Script):
             torch.compile(model, **config),
         )
 
-        kmodel._compile_config = config
+        kmodel._compile_config = preset
 
         logger.info(f"Model Compiled ({preset})")
