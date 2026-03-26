@@ -1,3 +1,4 @@
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -6,8 +7,20 @@ if TYPE_CHECKING:
 import gradio as gr
 import torch
 
+from backend.args import args as cmd_args
+from backend.logging import setup_logger
 from backend.utils import get_attr, set_attr_raw
 from modules import scripts
+
+try:
+    import triton
+except ImportError:
+    TRITON_AVAILABLE = False
+else:
+    TRITON_AVAILABLE = True
+
+logger = logging.getLogger("compile")
+setup_logger(logger)
 
 
 def skip_torch_compile_dict(guard_entries):
@@ -16,32 +29,48 @@ def skip_torch_compile_dict(guard_entries):
 
 
 class TorchCompileForForge(scripts.Script):
-    sorting_priority = 67
+    sorting_priority = 99999
 
     def __init__(self):
         torch._dynamo.config.cache_size_limit = 256
+        torch._dynamo.config.suppress_errors = True
 
     def title(self):
         return "Torch Compile Integrated"
 
     def show(self, is_img2img):
-        return scripts.AlwaysVisible
+        return scripts.AlwaysVisible if TRITON_AVAILABLE else None
 
     def ui(self, *args, **kwargs):
         with gr.Accordion(open=False, label=self.title()):
-            gr.Markdown(
-                """
-**torch.compile** speeds up the Inference by compiling the model ahead of time
-- **guard_filter_fn:** Compile the Fastest ; Require recompilation if Resolution / Batch Size is changed
-- **dynamic:** Longer to Compile ; Support any Resolution / Batch Size
-- **cudagraphs:** Not Recommended
-                """
-            )
             preset = gr.Dropdown(
                 label="Preset",
                 value="Automatic",
-                choices=["Automatic", "Disable", "guard_filter_fn", "dynamic", "cudagraphs"],
+                choices=[
+                    "Automatic",
+                    "Disable",
+                    "guard_filter_fn",
+                    "dynamic",
+                    "max-autotune",
+                    "max-autotune-no-cudagraphs",
+                    "reduce-overhead",
+                ],
                 info='"Automatic" maintains the current compile status',
+            )
+
+            _dynamic = "Support any Resolution / Batch Size"
+            _indynamic = "Require recompilation if Resolution / Batch Size is changed"
+            _no_malloc = "Does not work with --cuda-malloc"
+
+            gr.Markdown(
+                rf"""
+**torch.compile** speeds up the inference by compiling the model ahead of time
+- **guard_filter_fn:** Compile the Fastest ; {_indynamic}
+- **dynamic:** {_dynamic} ; Slower to Compile
+- **max-autotune:** Best Runtime Speed ; {_indynamic} ; {_no_malloc}
+- **max-autotune-no-cudagraphs:** {_dynamic} ; Faster than **dynamic** ; Even Slower to Compile
+- **reduce-overhead:** Similar to **max-autotune** ; {_indynamic} ; {_no_malloc}
+                """
             )
 
         return [preset]
@@ -75,13 +104,21 @@ class TorchCompileForForge(scripts.Script):
                 self.restore(kmodel)
             return
 
+        if preset in ("max-autotune", "reduce-overhead") and cmd_args.cuda_malloc:
+            logger.error(f"{preset} does not support --cuda-malloc\nModel is not compiled...")
+            return
+
         match preset:
             case "guard_filter_fn":
                 config = dict(backend="inductor", dynamic=False, fullgraph=False, options={"guard_filter_fn": skip_torch_compile_dict})
             case "dynamic":
                 config = dict(backend="inductor", dynamic=True, fullgraph=False)
-            case "cudagraphs":
-                config = dict(backend="cudagraphs", dynamic=True, fullgraph=True)
+            case "max-autotune":
+                config = dict(backend="inductor", dynamic=False, fullgraph=False, options={"coordinate_descent_tuning": True, "max_autotune": True, "triton.cudagraphs": True})
+            case "max-autotune-no-cudagraphs":
+                config = dict(backend="inductor", dynamic=True, fullgraph=False, options={"coordinate_descent_tuning": True, "max_autotune": True})
+            case "reduce-overhead":
+                config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False)
             case _:
                 config: dict = kmodel._compile_config
 
@@ -104,3 +141,5 @@ class TorchCompileForForge(scripts.Script):
         )
 
         kmodel._compile_config = config
+
+        logger.info(f"Model Compiled ({preset})")
