@@ -117,6 +117,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable in **Settings/Upscaling**
 - [X] Support running tile composition on GPU
     - enable in **Settings/Upscaling**
+- [X] Support (short) videos in **Extras** tab
 - [X] Update `spandrel`
     - support new Upscaler architectures
 - [X] Add support for `.avif`, `.heif`, and `.jxl` image formats
@@ -162,6 +163,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - hotkeys
 - [X] Optimize upscaler logics
 - [X] Optimize certain operations in `Spandrel`
+- [X] Optimize certain operations for `VAE`
 - [X] Speed up model loading
 - [X] Improve memory management
 - [X] Improve color correction
