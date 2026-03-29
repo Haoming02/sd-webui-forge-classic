@@ -136,8 +136,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Some built-in Scripts
 - [X] Some Samplers
 - [X] Sampler in RadioGroup
-- [X] Unix `.sh` launch scripts
-    - You can still use this WebUI by simply copying a launch script from other working WebUI
 
 #### Optimizations
 
@@ -306,6 +304,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 > [!Tip]
+> For **Linux** and **macOS**, refer to [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Unix)
+
+<br>
+
+> [!Tip]
 > Check out [Extra Installations](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations) for how to install `git`, `uv`, and `FFmpeg`
 
 <br>
@@ -335,10 +338,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 ## Issues & Requests
 
 - **Issues** about removed features will simply be ignored
-- **Issues** regarding installation will be ignored if it's obviously user-error
-- **Issues** caused by [StabilityMatrix](https://github.com/LykosAI/StabilityMatrix) will also be ignored
-    - only open an Issue if you can reproduce it on a clean install following the official [Installation](#installation) guide
-- Linux, macOS, AMD, Intel will not be officially supported, as I cannot verify nor maintain them...
+- **Issues** that is obviously user-error will simply be ignored
+- **Issues** regarding **AMD** GPU will simply be ignored
+- **Issues** caused by [StabilityMatrix](https://github.com/LykosAI/StabilityMatrix) will simply be ignored
+    - only open an Issue if you can reproduce it on a clean install following the official [Installation](#installation) instruction
 
 <br>
 
