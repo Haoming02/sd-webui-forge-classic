@@ -323,7 +323,8 @@ def prepare_environment():
 import torch
 cuda = hasattr(torch, "cuda") and torch.cuda.is_available()
 xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
-assert cuda or xpu
+mps = hasattr(torch, "mps") and torch.mps.is_available()
+assert cuda or xpu or mps
         """
 
         success, err = check_run_python(TORCH_CHECK, return_error=True)
