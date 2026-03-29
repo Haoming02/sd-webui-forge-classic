@@ -97,7 +97,7 @@ def _torch_version() -> tuple[str, str]:
 
     if m is None:
         print("\n\nFailed to parse PyTorch version...")
-        ver = os.environ.get("PYTORCH_VERSION", "2.9.1+cu128")
+        ver = os.environ.get("PYTORCH_VERSION", "2.10.0+cu130")
         print("Assuming: ", ver)
         print('(you can change this with `export PYTORCH_VERSION="..."`)\n\n')
         m = re.search(r"(\d+\.\d+\.\d+)(?:[^+]+)?\+(.+)", ver)
