@@ -321,6 +321,6 @@ def join_dicts(base_dict: dict | None, update_dict: dict | None) -> dict:
 
 def hash_tensor(x: torch.Tensor) -> int:
     if hasattr(torch, "hash_tensor"):
-        return torch.hash_tensor(x).item()
+        return torch.hash_tensor(x.cpu()).item()
     else:
         return hash(tuple(x.reshape(-1).tolist()))
