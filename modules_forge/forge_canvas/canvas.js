@@ -288,6 +288,7 @@ class ForgeCanvas {
             self.drawing = false;
             drawingCanvas.style.cursor = "";
             scribbleIndicator.style.display = "none";
+            self.saveState();
         });
 
         container.addEventListener("pointerdown", (e) => {
