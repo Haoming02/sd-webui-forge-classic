@@ -57,7 +57,7 @@ class BASE:
         return {}
 
     def inpaint_model(self):
-        return self.unet_config.get("in_channels", -1) > 4
+        return False
 
     def __init__(self, unet_config):
         self.unet_config = unet_config.copy()
@@ -114,6 +114,9 @@ class SD15(BASE):
 
     latent_format = latent.SD15
     memory_usage_factor = 1.0
+
+    def inpaint_model(self):
+        return self.unet_config.get("in_channels", -1) > 4
 
     def process_clip_state_dict(self, state_dict):
         k = list(state_dict.keys())
@@ -188,6 +191,9 @@ class SDXL(BASE):
 
     latent_format = latent.SDXL
     memory_usage_factor = 0.8
+
+    def inpaint_model(self):
+        return self.unet_config.get("in_channels", -1) > 4
 
     def model_type(self, state_dict: dict):
         if "v_pred" in state_dict:
