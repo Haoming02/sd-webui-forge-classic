@@ -355,6 +355,8 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
         )
         self.bn.eval()
 
+        self.mugen = False  # 32 <-> 128
+
     def encode(self, x):
         z = super().encode(x)
 
@@ -373,9 +375,11 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
             eps=self.bn_eps,
         )
 
+        z = self.postprocess_encode(z)
         return z
 
     def decode(self, z):
+        z = self.preprocess_decode(z)
         s = torch.sqrt(memory_management.cast_to(self.bn.running_var.view(1, -1, 1, 1), dtype=z.dtype, device=z.device) + self.bn_eps)
         m = memory_management.cast_to(self.bn.running_mean.view(1, -1, 1, 1), dtype=z.dtype, device=z.device)
         z = z * s + m
@@ -392,4 +396,35 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
         return latent
 
     def process_out(self, latent):
+        return latent
+
+    def preprocess_decode(self, latent: torch.Tensor):
+        packed_channels: int = latent.size(1)
+        latent_channels: int = 128
+        scale_factor: int = 2
+
+        if self.mugen:
+            h = latent.shape[-2]
+            w = latent.shape[-1]
+            if h % scale_factor != 0 or w % scale_factor != 0:
+                pad_h = (scale_factor - (h % scale_factor)) % scale_factor
+                pad_w = (scale_factor - (w % scale_factor)) % scale_factor
+                latent = torch.nn.functional.pad(latent, (0, pad_w, 0, pad_h))
+                h = latent.shape[-2]
+                w = latent.shape[-1]
+            latent = latent.reshape(latent.shape[0], packed_channels, h // scale_factor, scale_factor, w // scale_factor, scale_factor)
+            latent = latent.permute(0, 1, 3, 5, 2, 4).reshape(latent.shape[0], latent_channels, h // scale_factor, w // scale_factor)
+
+        return latent
+
+    def postprocess_encode(self, latent: torch.Tensor):
+        packed_channels: int = 32
+        scale_factor: int = 2
+
+        if self.mugen:
+            h = latent.shape[-2]
+            w = latent.shape[-1]
+            latent = latent.reshape(latent.shape[0], packed_channels, scale_factor, scale_factor, h, w)
+            latent = latent.permute(0, 1, 4, 2, 5, 3).reshape(latent.shape[0], packed_channels, h * scale_factor, w * scale_factor)
+
         return latent

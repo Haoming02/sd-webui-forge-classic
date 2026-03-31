@@ -121,7 +121,7 @@ def tiled_scale(samples, function, tile_x=64, tile_y=64, overlap=8, upscale_amou
 
 
 class VAE:
-    def __init__(self, model=None, device=None, dtype=None, no_init=False, *, is_wan=False, is_flux2=False):
+    def __init__(self, model=None, device=None, dtype=None, no_init=False, *, is_wan=False, is_flux2=False, is_mugen=False):
         if no_init:
             return
 
@@ -135,10 +135,10 @@ class VAE:
             self.memory_used_encode = lambda shape, dtype: (1767 * shape[2] * shape[3]) * memory_management.dtype_size(dtype)
             self.memory_used_decode = lambda shape, dtype: (2178 * shape[2] * shape[3] * 64) * memory_management.dtype_size(dtype)
 
-            if is_flux2:
+            if is_flux2 or is_mugen:
                 self.upscale_ratio = 16
                 self.downscale_ratio = 16
-                self.latent_channels = 128
+                self.latent_channels = 32 if is_mugen else 128
                 self.memory_used_decode = lambda shape, dtype: (2178 * shape[2] * shape[3] * 64) * memory_management.dtype_size(dtype) * 4.0
 
         else:
@@ -153,6 +153,8 @@ class VAE:
 
         self.output_channels = 3
         self.first_stage_model = model.eval()
+        if is_mugen:
+            self.first_stage_model.mugen = True
 
         self.device = device or memory_management.vae_device()
         offload_device = memory_management.vae_offload_device()
