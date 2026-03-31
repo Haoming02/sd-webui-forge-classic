@@ -182,6 +182,8 @@ class SDXL(BASE):
 
     unet_config = {
         "model_channels": 320,
+        "in_channels": 4,
+        "out_channels": 4,
         "use_linear_in_transformer": True,
         "transformer_depth": [0, 0, 2, 2, 10, 10],
         "context_dim": 2048,
@@ -229,6 +231,23 @@ class SDXL(BASE):
 
     def clip_target(self, state_dict: dict):
         return {"clip_l": "text_encoder", "clip_g": "text_encoder_2"}
+
+
+class Mugen(SDXL):
+    huggingface_repo = "CabalResearch/Mugen"
+
+    unet_config = dict(SDXL.unet_config, in_channels=32, out_channels=32)
+
+    sampling_settings = {
+        "shift": 12.0,
+    }
+
+    latent_format = latent.SDXL_Flux2
+
+    vae_key_prefix = ["vae.", "first_stage_model."]
+
+    def inpaint_model(self):
+        return False
 
 
 class Flux(BASE):
@@ -543,6 +562,7 @@ class QwenImage(BASE):
 models = [
     SD15,
     SDXL,
+    Mugen,
     SDXLRefiner,
     Flux,
     FluxSchnell,
