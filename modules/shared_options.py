@@ -175,6 +175,7 @@ options_templates.update(
             "enable_upscale_progressbar": OptionInfo(True, "Show a progress bar in the console for tiled upscaling"),
             "list_hidden_files": OptionInfo(True, "List the models/files under hidden directories").info('directory is hidden if its name starts with "."'),
             "dump_stacks_on_signal": OptionInfo(False, "Print the stack trace before terminating the webui via Ctrl + C"),
+            "no_spellcheck": OptionInfo(False, "Disable auto-correct / spellcheck for prompt fields").needs_reload_ui(),
         },
     )
 )
