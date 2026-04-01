@@ -1,0 +1,123 @@
+import torch
+from huggingface_guess import model_list
+
+from backend import memory_management
+from backend.args import dynamic_args
+from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
+from backend.modules.k_prediction import PredictionDiscreteFlow
+from backend.nn.unet import Timestep
+from backend.patcher.clip import CLIP
+from backend.patcher.unet import UnetPatcher
+from backend.patcher.vae import VAE
+from backend.text_processing.classic_engine import ClassicTextProcessingEngine
+from modules.shared import opts
+
+
+class Mugen(ForgeDiffusionEngine):
+    matched_guesses = [model_list.Mugen]
+
+    def __init__(self, estimated_config, huggingface_components):
+        super().__init__(estimated_config, huggingface_components)
+
+        clip = CLIP(model_dict={"clip_l": huggingface_components["text_encoder"], "clip_g": huggingface_components["text_encoder_2"]}, tokenizer_dict={"clip_l": huggingface_components["tokenizer"], "clip_g": huggingface_components["tokenizer_2"]})
+
+        vae = VAE(model=huggingface_components["vae"], is_mugen=True)
+
+        k_predictor = PredictionDiscreteFlow(estimated_config)
+        unet = UnetPatcher.from_model(model=huggingface_components["unet"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
+
+        self.text_processing_engine_l = ClassicTextProcessingEngine(
+            text_encoder=clip.cond_stage_model.clip_l,
+            tokenizer=clip.tokenizer.clip_l,
+            embedding_dir=dynamic_args.embedding_dir,
+            embedding_key="clip_l",
+            embedding_expected_shape=2048,
+            text_projection=False,
+            minimal_clip_skip=2,
+            clip_skip=2,
+            return_pooled=False,
+            final_layer_norm=False,
+        )
+
+        self.text_processing_engine_g = ClassicTextProcessingEngine(
+            text_encoder=clip.cond_stage_model.clip_g,
+            tokenizer=clip.tokenizer.clip_g,
+            embedding_dir=dynamic_args.embedding_dir,
+            embedding_key="clip_g",
+            embedding_expected_shape=2048,
+            text_projection=True,
+            minimal_clip_skip=2,
+            clip_skip=2,
+            return_pooled=True,
+            final_layer_norm=False,
+        )
+
+        self.embedder = Timestep(256)
+
+        self.forge_objects = ForgeObjects(unet=unet, clip=clip, vae=vae, clipvision=None)
+        self.forge_objects_original = self.forge_objects.shallow_copy()
+        self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
+
+        # WebUI Legacy
+        self.is_sdxl = True
+
+    def set_clip_skip(self, clip_skip):
+        self.text_processing_engine_l.clip_skip = clip_skip
+        self.text_processing_engine_g.clip_skip = clip_skip
+
+    @torch.inference_mode()
+    def get_learned_conditioning(self, prompt: list[str]):
+        memory_management.load_model_gpu(self.forge_objects.clip.patcher)
+
+        shift = getattr(prompt, "distilled_cfg_scale", 3.0)
+        self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
+        memory_management.logger.debug(f"Shift: {shift}")
+
+        cond_l = self.text_processing_engine_l(prompt)
+        cond_g, clip_pooled = self.text_processing_engine_g(prompt)
+
+        width = getattr(prompt, "width", 1024) or 1024
+        height = getattr(prompt, "height", 1024) or 1024
+
+        crop_w = opts.sdxl_crop_left
+        crop_h = opts.sdxl_crop_top
+        target_width = width
+        target_height = height
+
+        out = [self.embedder(torch.Tensor([height])), self.embedder(torch.Tensor([width])), self.embedder(torch.Tensor([crop_h])), self.embedder(torch.Tensor([crop_w])), self.embedder(torch.Tensor([target_height])), self.embedder(torch.Tensor([target_width]))]
+
+        flat = torch.flatten(torch.cat(out)).unsqueeze(dim=0).repeat(clip_pooled.shape[0], 1).to(clip_pooled)
+
+        if opts.sdxl_zero_neg and getattr(prompt, "is_negative_prompt", False) and all(x == "" for x in prompt):
+            clip_pooled = torch.zeros_like(clip_pooled)
+            cond_l = torch.zeros_like(cond_l)
+            cond_g = torch.zeros_like(cond_g)
+
+        # ensure cond_l and cond_g have the same length
+        max_len = max(cond_l.shape[1], cond_g.shape[1])
+        cond_l = torch.cat([cond_l, cond_l.new_zeros(cond_l.size(0), max_len - cond_l.shape[1], cond_l.size(2))], dim=1)
+        cond_g = torch.cat([cond_g, cond_g.new_zeros(cond_g.size(0), max_len - cond_g.shape[1], cond_g.size(2))], dim=1)
+
+        cond = dict(
+            crossattn=torch.cat([cond_l, cond_g], dim=2),
+            vector=torch.cat([clip_pooled, flat], dim=1),
+        )
+
+        return cond
+
+    @torch.inference_mode()
+    def get_prompt_lengths_on_ui(self, prompt):
+        _, token_count = self.text_processing_engine_l.process_texts([prompt])
+        return token_count, self.text_processing_engine_l.get_target_prompt_token_count(token_count)
+
+    @torch.inference_mode()
+    def encode_first_stage(self, x):
+        sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
+        sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+        return sample.to(x)
+
+    @torch.inference_mode()
+    def decode_first_stage(self, x):
+        sample = self.forge_objects.vae.first_stage_model.process_out(x)
+        sample = self.forge_objects.vae.decode(sample).movedim(-1, 1) * 2.0 - 1.0
+        return sample.to(x)

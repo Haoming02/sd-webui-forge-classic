@@ -22,7 +22,6 @@ class Flux(ForgeDiffusionEngine):
 
     def __init__(self, estimated_config, huggingface_components):
         super().__init__(estimated_config, huggingface_components)
-        self.is_inpaint = False
 
         clip = CLIP(model_dict={"clip_l": huggingface_components["text_encoder"], "t5xxl": huggingface_components["text_encoder_2"]}, tokenizer_dict={"clip_l": huggingface_components["tokenizer"], "t5xxl": huggingface_components["tokenizer_2"]})
 

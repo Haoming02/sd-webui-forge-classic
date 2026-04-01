@@ -162,3 +162,10 @@ class Flux2(LatentFormat):
 
     def process_out(self, latent):
         return latent
+
+
+class SDXL_Flux2(Flux2):
+    def __init__(self):
+        super().__init__()
+        self.latent_rgb_factors_reshape = None
+        self.latent_channels = 32
