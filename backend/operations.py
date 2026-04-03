@@ -753,10 +753,13 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
         _dtype = torch.bfloat16 if memory_management.should_use_bf16(_device) else torch.float32
         fp8_compute = memory_management.supports_fp8_compute(_device)
         nvfp4_compute = memory_management.supports_nvfp4_compute(_device)
+        mxfp8_compute = memory_management.supports_mxfp8_compute(_device)
 
         disabled = set()
         if not nvfp4_compute:
             disabled.add("nvfp4")
+        if not mxfp8_compute:
+            disabled.add("mxfp8")
         if not fp8_compute:
             disabled.add("float8_e4m3fn")
             disabled.add("float8_e5m2")

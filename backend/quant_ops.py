@@ -6,6 +6,7 @@ from comfy_kitchen.tensor import (  # noqa
     QuantizedLayout,
     QuantizedTensor,
     TensorCoreFP8Layout,
+    TensorCoreMXFP8Layout,
     TensorCoreNVFP4Layout,
     get_layout_class,
     register_layout_class,
@@ -97,6 +98,31 @@ class TensorCoreNVFP4Layout(TensorCoreNVFP4Layout):
         return qdata, params
 
 
+class TensorCoreMXFP8Layout(TensorCoreMXFP8Layout):
+    @classmethod
+    def quantize(cls, tensor, scale=None, stochastic_rounding=0, inplace_ops=False):
+        if tensor.dim() != 2:
+            raise ValueError(f"MXFP8 requires 2D tensor, got {tensor.dim()}D")
+
+        orig_dtype = tensor.dtype
+        orig_shape = tuple(tensor.shape)
+
+        padded_shape = cls.get_padded_shape(orig_shape)
+        needs_padding = padded_shape != orig_shape
+
+        if stochastic_rounding > 0:
+            qdata, block_scale = float.stochastic_round_quantize_mxfp8_by_block(tensor, pad_32x=needs_padding, seed=stochastic_rounding)
+        else:
+            qdata, block_scale = ck.quantize_mxfp8(tensor, pad_32x=needs_padding)
+
+        params = cls.Params(
+            scale=block_scale,
+            orig_dtype=orig_dtype,
+            orig_shape=orig_shape,
+        )
+        return qdata, params
+
+
 class TensorCoreFP8E4M3Layout(_TensorCoreFP8LayoutBase):
     FP8_DTYPE = torch.float8_e4m3fn
 
@@ -115,6 +141,7 @@ register_layout_class("TensorCoreFP8Layout", TensorCoreFP8Layout)
 register_layout_class("TensorCoreFP8E4M3Layout", TensorCoreFP8E4M3Layout)
 register_layout_class("TensorCoreFP8E5M2Layout", TensorCoreFP8E5M2Layout)
 register_layout_class("TensorCoreNVFP4Layout", TensorCoreNVFP4Layout)
+register_layout_class("TensorCoreMXFP8Layout", TensorCoreMXFP8Layout)
 
 QUANT_ALGOS = {
     "float8_e4m3fn": {
@@ -132,5 +159,11 @@ QUANT_ALGOS = {
         "parameters": {"weight_scale", "weight_scale_2", "input_scale"},
         "comfy_tensor_layout": "TensorCoreNVFP4Layout",
         "group_size": 16,
+    },
+    "mxfp8": {
+        "storage_t": torch.float8_e4m3fn,
+        "parameters": {"weight_scale", "input_scale"},
+        "comfy_tensor_layout": "TensorCoreMXFP8Layout",
+        "group_size": 32,
     },
 }

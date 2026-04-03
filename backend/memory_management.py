@@ -1295,6 +1295,20 @@ def supports_nvfp4_compute(device: torch.device = None) -> bool:
     return True
 
 
+def supports_mxfp8_compute(device: torch.device = None) -> bool:
+    if not is_nvidia():
+        return False
+
+    if torch_version_numeric < (2, 10):
+        return False
+
+    props = torch.cuda.get_device_properties(device)
+    if props.major < 10:
+        return False
+
+    return True
+
+
 def extended_fp16_support() -> bool:
     return torch_version_numeric >= (2, 7)
 
