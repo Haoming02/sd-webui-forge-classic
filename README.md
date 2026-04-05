@@ -31,7 +31,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - [X] Support [Anima](https://huggingface.co/circlestone-labs/Anima)
 - [X] Support [Flux.2-Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B)
-    - `4B` / `9B` *(**not** `dev`)*
+    - `4B` / `9B` *(**not** `FLUX.2-Dev`)*
+    - does **not** support regular `img2img` *(**i.e.** will always edit)*
 - [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
     - `z-image` / `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
@@ -41,6 +42,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > To export a video, you need to have **[FFmpeg](https://ffmpeg.org/)** installed
 
+- [X] Support [Mugen](https://huggingface.co/CabalResearch/Mugen)
 - [X] Support advanced **SDXL** models
 
 > [!Note]
@@ -68,7 +70,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - `Neta-Lumina` / `NetaYume-Lumina`
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
 - [X] Support **MixedPrecision** Models
-    - `fp4mixed` / `fp8mixed` / `nvfp4` / `fp8_scaled`
+    - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled`
 
 <br>
 
@@ -96,8 +98,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - requires **manually** installing [SpargeAttn](https://github.com/thu-ml/SpargeAttn)
 - [X] Implement fast `state_dict` switching for Refiner
     - enable in **Settings/Refiner**
-- [X] Implement Seed Variance Enhancer
-    - improve seed-to-seed variance for distilled models
 - [X] Implement RescaleCFG
     - reduce burnt colors; mainly for `v-pred` checkpoints
     - enable in **Settings/UI Alternatives**
@@ -106,8 +106,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable in **Settings/UI Alternatives**
 - [X] Implement [Spectrum](https://github.com/hanjq17/Spectrum)
     - training-free acceleration for all models
-- [X] Implement [Modulation Guidance](https://github.com/quickjkee/modulation-guidance)
-    - quality improvement for `Anima`
 - [X] Implement [Epsilon Scaling](https://github.com/comfyanonymous/ComfyUI/pull/10132)
     - enable in **Settings/Stable Diffusion**
 - [X] Implement Torch.Compile
@@ -340,6 +338,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - **Issues** about removed features will simply be ignored
 - **Issues** that is obviously user-error will simply be ignored
 - **Issues** regarding **AMD** GPU will simply be ignored
+- **Issues** running non-official models will simply be ignored
+    - do not just randomly download every single finetune/quant you find
+    - check the uploader and download count first
 - **Issues** caused by [StabilityMatrix](https://github.com/LykosAI/StabilityMatrix) will simply be ignored
     - only open an Issue if you can reproduce it on a clean install following the official [Installation](#installation) instruction
 
@@ -359,6 +360,11 @@ for their invaluable efforts in the open-source image generation community
 <br>
 
 <p align="right">
-<sub><i>Buy me a <a href="https://ko-fi.com/Haoming">Coffee</a>~ ☕
+<sub><i>
+Buy me a <a href="https://ko-fi.com/Haoming">Coffee</a> ☕~
+</i></sub>
+<br>
+<sub><i>
+<a href="https://paypal.me/hmgamingdonation">PayPal</a> me 💳~
 </i></sub>
 </p>
