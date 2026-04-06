@@ -684,13 +684,21 @@ table.popup-table .link {
     height: 20px;
     background: #b4c0cc;
     border-radius: 3px !important;
-    top: -14px;
+    top: 0;
     left: 0px;
     width: 100%;
+    z-index: 320;
 }
 
 .progress-container {
     position: relative;
+}
+
+[id$="_results_panel"],
+[id$="_gallery_container"],
+[id$="_gallery_container"] > .gradio-gallery {
+    position: relative;
+    overflow: visible !important;
 }
 
 [id$="_results"].mobile {

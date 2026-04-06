@@ -3,6 +3,34 @@
 let txt2img_gallery,
     img2img_gallery,
     modal = undefined;
+
+function ensureModalObserverAttached() {
+    if (typeof ensureLightboxModal === "function") {
+        ensureLightboxModal();
+    }
+
+    const nextModal =
+        typeof getLightboxElement === "function"
+            ? getLightboxElement("lightboxModal")
+            : gradioApp().getElementById("lightboxModal");
+    if (!(nextModal instanceof Node)) {
+        return false;
+    }
+
+    if (modal === nextModal) {
+        return true;
+    }
+
+    modalObserver.disconnect();
+    modal = nextModal;
+    modalObserver.observe(modal, {
+        attributes: true,
+        attributeFilter: ["style"],
+    });
+
+    return true;
+}
+
 onAfterUiUpdate(function () {
     if (!txt2img_gallery) {
         txt2img_gallery = attachGalleryListeners("txt2img");
@@ -10,13 +38,7 @@ onAfterUiUpdate(function () {
     if (!img2img_gallery) {
         img2img_gallery = attachGalleryListeners("img2img");
     }
-    if (!modal) {
-        modal = gradioApp().getElementById("lightboxModal");
-        modalObserver.observe(modal, {
-            attributes: true,
-            attributeFilter: ["style"],
-        });
-    }
+    ensureModalObserverAttached();
 });
 
 let modalObserver = new MutationObserver(function (mutations) {

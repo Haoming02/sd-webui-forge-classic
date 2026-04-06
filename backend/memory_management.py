@@ -1307,13 +1307,21 @@ signal_empty_cache = False
 
 
 def soft_empty_cache(force=False):
-    if cpu_state is CPUState.MPS:
-        torch.mps.empty_cache()
-    elif is_intel_xpu():
-        torch.xpu.empty_cache()
-    elif torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+    try:
+        if cpu_state is CPUState.MPS:
+            torch.mps.empty_cache()
+        elif is_intel_xpu():
+            torch.xpu.empty_cache()
+        elif torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except RuntimeError as e:
+        # If the XPU runtime has already lost the device, cache eviction will fail too.
+        # Keep the original failure visible instead of crashing again in cleanup.
+        if is_intel_xpu() and "UR_RESULT_ERROR_DEVICE_LOST" in str(e):
+            logger.warning("Skipping XPU cache eviction after device loss: %s", e)
+        else:
+            raise
 
     global signal_empty_cache
     signal_empty_cache = False

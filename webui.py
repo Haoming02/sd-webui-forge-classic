@@ -125,10 +125,6 @@ def webui_worker():
 
         startup_timer.record("gradio launch")
 
-        # gradio uses a very open CORS policy via app.user_middleware, which makes it possible for
-        # an attacker to trick the user into opening a malicious HTML page, which makes a request to the
-        # running web ui and do whatever the attacker wants, including installing an extension and
-        # running its code. We disable this here. Suggested by RyotaK.
         app.user_middleware = [x for x in app.user_middleware if x.cls.__name__ != "CORSMiddleware"]
 
         initialize_util.setup_middleware(app)
@@ -163,11 +159,9 @@ def webui_worker():
 
         if server_command == "stop":
             print("Stopping server...")
-            # If we catch a keyboard interrupt, we want to stop the server and exit.
             shared.demo.close()
             break
 
-        # disable auto launch webui in browser for subsequent UI Reload
         os.environ.setdefault("SD_WEBUI_RESTARTING", "1")
 
         print("Restarting UI...")

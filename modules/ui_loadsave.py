@@ -11,6 +11,31 @@ def radio_choices(comp):  # gradio 3.41 changes choices from list of values to l
     return [x[0] if isinstance(x, tuple) else x for x in getattr(comp, "choices", [])]
 
 
+def read_ui_settings_file(filename):
+    with open(filename, "r", encoding="utf8") as file:
+        return json.load(file)
+
+
+def write_ui_settings_file(filename, current_ui_settings):
+    with open(filename, "w", encoding="utf8") as file:
+        json.dump(current_ui_settings, file, indent=4, ensure_ascii=False)
+
+
+def update_ui_settings_file(filename, updates):
+    current_ui_settings = {}
+
+    if filename and os.path.exists(filename):
+        try:
+            current_ui_settings = read_ui_settings_file(filename)
+        except Exception:
+            current_ui_settings = {}
+
+    current_ui_settings.update(updates)
+
+    os.makedirs(os.path.dirname(filename) or ".", exist_ok=True)
+    write_ui_settings_file(filename, current_ui_settings)
+
+
 class UiLoadsave:
     """allows saving and restoring default values for gradio components"""
 
@@ -145,12 +170,10 @@ class UiLoadsave:
             self.add_component(f"{path}/{x.value}", x)
 
     def read_from_file(self):
-        with open(self.filename, "r", encoding="utf8") as file:
-            return json.load(file)
+        return read_ui_settings_file(self.filename)
 
     def write_to_file(self, current_ui_settings):
-        with open(self.filename, "w", encoding="utf8") as file:
-            json.dump(current_ui_settings, file, indent=4, ensure_ascii=False)
+        write_ui_settings_file(self.filename, current_ui_settings)
 
     def dump_defaults(self):
         """saves default values to a file unless the file is present and there was an error loading default values at start"""

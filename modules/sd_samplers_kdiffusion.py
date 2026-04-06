@@ -11,6 +11,36 @@ from modules.script_callbacks import ExtraNoiseParams, extra_noise_callback
 from modules.sd_samplers_cfg_denoiser import CFGDenoiser  # noqa: F401
 from modules.shared import opts
 
+try:
+    ForgeScheduleLinker = k_diffusion.external.ForgeScheduleLinker
+except AttributeError:
+    from modules_forge.packages.k_diffusion.external import ForgeScheduleLinker
+
+try:
+    from modules_forge.packages.k_diffusion import sampling as forge_k_diffusion_sampling
+except ImportError:
+    forge_k_diffusion_sampling = None
+
+
+def has_k_diffusion_sampler(funcname):
+    return hasattr(k_diffusion.sampling, funcname) or (forge_k_diffusion_sampling is not None and hasattr(forge_k_diffusion_sampling, funcname))
+
+
+def get_k_diffusion_sampler(funcname):
+    # Prefer the bundled Forge implementation for DPM++ 2M SDE.
+    # The site-packages variant can hit an UnboundLocalError when img2img
+    # produces a degenerate final denoising-only sigma step.
+    if funcname == "sample_dpmpp_2m_sde" and forge_k_diffusion_sampling is not None and hasattr(forge_k_diffusion_sampling, funcname):
+        return getattr(forge_k_diffusion_sampling, funcname)
+
+    if hasattr(k_diffusion.sampling, funcname):
+        return getattr(k_diffusion.sampling, funcname)
+
+    if forge_k_diffusion_sampling is not None and hasattr(forge_k_diffusion_sampling, funcname):
+        return getattr(forge_k_diffusion_sampling, funcname)
+
+    raise AttributeError(f"k-diffusion sampler function '{funcname}' not found")
+
 samplers_k_diffusion = [
     ("DPM++ 2M", "sample_dpmpp_2m", ["k_dpmpp_2m"], {"scheduler": "karras"}),
     ("DPM++ SDE", "sample_dpmpp_sde", ["k_dpmpp_sde"], {"scheduler": "karras", "second_order": True, "brownian_noise": True}),
@@ -31,7 +61,7 @@ samplers_k_diffusion = [
 ]
 
 
-samplers_data_k_diffusion = [sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: KDiffusionSampler(funcname, model), aliases, options) for label, funcname, aliases, options in samplers_k_diffusion if callable(funcname) or hasattr(k_diffusion.sampling, funcname)]
+samplers_data_k_diffusion = [sd_samplers_common.SamplerData(label, lambda model, funcname=funcname: KDiffusionSampler(funcname, model), aliases, options) for label, funcname, aliases, options in samplers_k_diffusion if callable(funcname) or has_k_diffusion_sampler(funcname)]
 
 sampler_extra_params = {
     "sample_dpmpp_sde": ["eta", "s_noise", "r"],
@@ -48,13 +78,25 @@ k_diffusion_scheduler = {x.name: x.function for x in sd_schedulers.schedulers}
 
 
 class CFGDenoiserKDiffusion(sd_samplers_cfg_denoiser.CFGDenoiser):
+    def _get_or_create_model_wrap(self):
+        model_wrap = self.__dict__.get("model_wrap", None)
+
+        if model_wrap is None:
+            model_wrap = ForgeScheduleLinker(shared.sd_model.forge_objects.unet.model.predictor)
+            model_wrap.inner_model = shared.sd_model
+            self.model_wrap = model_wrap
+
+        return model_wrap
+
     @property
     def inner_model(self):
-        if self.model_wrap is None:
-            self.model_wrap = k_diffusion.external.ForgeScheduleLinker(shared.sd_model.forge_objects.unet.model.predictor)
-            self.model_wrap.inner_model = shared.sd_model
+        return self._get_or_create_model_wrap()
 
-        return self.model_wrap
+    def __getattr__(self, name):
+        if name == "inner_model":
+            return self._get_or_create_model_wrap()
+
+        return super().__getattr__(name)
 
 
 class KDiffusionSampler(sd_samplers_common.Sampler):
@@ -64,7 +106,7 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
         self.extra_params = sampler_extra_params.get(funcname, [])
 
         self.options = options or {}
-        self.func = funcname if callable(funcname) else getattr(k_diffusion.sampling, self.funcname)
+        self.func = funcname if callable(funcname) else get_k_diffusion_sampler(self.funcname)
 
         self.model_wrap_cfg = CFGDenoiserKDiffusion(self)
         self.model_wrap = self.model_wrap_cfg.inner_model
@@ -238,3 +280,4 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
         sampling_cleanup(unet_patcher)
 
         return samples
+

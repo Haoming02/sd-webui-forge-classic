@@ -232,10 +232,19 @@ class ControlNetUiGroup:
                     self.openpose_editor.render_upload()
 
                 with gr.Group(visible=False, elem_classes=["cnet-generated-image-group"]) as self.generated_image_group:
-                    self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], height=384, no_scribbles=True, no_upload=True, numpy=True)
+                    self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], height=384, no_upload=True, numpy=True, foreground_as_main=True)
 
                     with gr.Group(elem_classes=["cnet-generated-image-control-group"]):
+                        gr.HTML(
+                            value="Paint or erase directly on this preview before enabling Preview as Input.",
+                            visible=True,
+                            elem_classes=["cnet-preview-edit-hint"],
+                        )
                         self.openpose_editor.render_edit()
+                        self.clear_generated_edits = gr.Button(
+                            value="Clear edits",
+                            elem_classes=["cnet-clear-preview-edits"],
+                        )
                         preview_check_elem_id = f"{elem_id_tabname}_{tabname}_controlnet_preprocessor_preview_checkbox"
                         preview_close_button_js = f"document.querySelector('#{preview_check_elem_id} input[type=\\'checkbox\\']').click();"
                         gr.HTML(
@@ -454,6 +463,7 @@ class ControlNetUiGroup:
         unit_args = (
             self.use_preview_as_input,
             self.generated_image.background,
+            self.generated_image.foreground,
             self.mask_image.background,
             self.mask_image.foreground,
             self.hr_option,
@@ -618,6 +628,7 @@ class ControlNetUiGroup:
                 return (
                     gr.update(visible=True),
                     None,
+                    None,
                     gr.skip(),
                     *self.openpose_editor.update(""),
                 )
@@ -677,6 +688,7 @@ class ControlNetUiGroup:
             return (
                 gr.update(visible=True),
                 result,
+                None,
                 # preprocessor_preview
                 gr.update(value=True),
                 # openpose editor
@@ -700,6 +712,7 @@ class ControlNetUiGroup:
             outputs=[
                 self.generated_image.block,
                 self.generated_image.background,
+                self.generated_image.foreground,
                 self.preprocessor_preview,
                 *self.openpose_editor.outputs(),
             ],
@@ -710,12 +723,16 @@ class ControlNetUiGroup:
             return (
                 # generated_image
                 gr.skip() if is_on else gr.update(value=None),
+                # generated_image foreground
+                gr.skip() if is_on else gr.update(value=None),
                 # generated_image_group
                 gr.update(visible=is_on),
                 # use_preview_as_input,
                 gr.update(visible=False),  # Now this is automatically managed
                 # download_pose_link
-                gr.skip() if is_on else gr.update(value=None),
+                gr.update() if is_on else gr.update(value=None),
+                # modal edit button
+                gr.update() if is_on else gr.update(visible=False),
             )
 
         self.preprocessor_preview.change(
@@ -723,9 +740,11 @@ class ControlNetUiGroup:
             inputs=[self.preprocessor_preview],
             outputs=[
                 self.generated_image.background,
+                self.generated_image.foreground,
                 self.generated_image_group,
                 self.use_preview_as_input,
                 self.openpose_editor.download_link,
+                self.openpose_editor.modal,
             ],
             show_progress=False,
         )
@@ -838,7 +857,7 @@ class ControlNetUiGroup:
         def clear_preview(x):
             if x:
                 logger.info("Preview as input is cancelled.")
-            return gr.update(value=False), gr.update(value=None)
+            return gr.update(value=False), gr.update(value=None), gr.update(value=None)
 
         for comp in (
             self.pixel_perfect,
@@ -861,7 +880,15 @@ class ControlNetUiGroup:
             if hasattr(comp, "clear"):
                 event_subscribers.append(comp.clear)
             for event_subscriber in event_subscribers:
-                event_subscriber(fn=clear_preview, inputs=self.use_preview_as_input, outputs=[self.use_preview_as_input, self.generated_image.background], show_progress=False)
+                event_subscriber(fn=clear_preview, inputs=self.use_preview_as_input, outputs=[self.use_preview_as_input, self.generated_image.background, self.generated_image.foreground], show_progress=False)
+
+    def register_clear_preview_edits(self):
+        self.clear_generated_edits.click(
+            fn=lambda: gr.update(value=None),
+            inputs=None,
+            outputs=[self.generated_image.foreground],
+            show_progress=False,
+        )
 
     def register_core_callbacks(self):
         """Register core callbacks that only involves gradio components defined
@@ -871,9 +898,11 @@ class ControlNetUiGroup:
         self.register_shift_preview()
         self.register_create_canvas()
         self.register_clear_preview()
+        self.register_clear_preview_edits()
         self.openpose_editor.register_callbacks(
             self.generated_image,
             self.use_preview_as_input,
+            self.module,
             self.model,
         )
         assert self.type_filter is not None

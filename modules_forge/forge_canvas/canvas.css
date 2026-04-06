@@ -6,6 +6,14 @@
     user-select: none;
 }
 
+.forge-container.is-resizable-inpaint {
+    overflow: visible;
+}
+
+.forge-inpaint-root-resizable {
+    position: relative;
+}
+
 .forge-image-container:not(.plain) {
     background-color: #cccccc;
     background-image:
@@ -22,6 +30,55 @@
     height: calc(100% - 6px);
     position: relative;
     overflow: hidden;
+}
+
+.forge-inpaint-resize-handle {
+    position: absolute;
+    left: 50%;
+    bottom: 8px;
+    transform: translateX(-50%);
+    width: 110px;
+    height: 24px;
+    border: 1px solid rgba(110, 120, 135, 0.28);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(236,241,247,0.92));
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(8px);
+    cursor: ns-resize;
+    z-index: 18;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4d5b68;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    gap: 8px;
+}
+
+.forge-inpaint-resize-handle::before {
+    content: "Resize";
+}
+
+.forge-inpaint-resize-grip {
+    display: inline-block;
+    width: 18px;
+    height: 10px;
+    border-top: 2px solid rgba(77, 91, 104, 0.85);
+    border-bottom: 2px solid rgba(77, 91, 104, 0.85);
+    opacity: 0.95;
+}
+
+.forge-inpaint-resize-handle:hover {
+    background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(243,247,252,0.98));
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.22);
+}
+
+.forge-container.is-resizing-inpaint,
+.forge-inpaint-resizing,
+.forge-container.is-resizing-inpaint * {
+    cursor: ns-resize !important;
+    user-select: none !important;
 }
 
 .forge-image {

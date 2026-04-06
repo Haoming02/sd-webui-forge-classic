@@ -190,7 +190,10 @@ document.addEventListener("keydown", function (e) {
 
     if (isEsc) {
         const globalPopup = document.querySelector(".global-popup");
-        const lightboxModal = document.querySelector("#lightboxModal");
+        const lightboxModal =
+            typeof getLightboxElement === "function"
+                ? getLightboxElement("lightboxModal")
+                : document.querySelector("#lightboxModal");
         if (!globalPopup || globalPopup.style.display === "none") {
             if (document.activeElement === lightboxModal) return;
             if (interruptButton.style.display === "block") {

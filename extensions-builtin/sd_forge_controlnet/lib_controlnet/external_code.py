@@ -154,6 +154,7 @@ class GradioImageMaskPair(TypedDict):
 class ControlNetUnit:
     use_preview_as_input: bool = False
     generated_image: Optional[np.ndarray] = None
+    generated_image_fg: Optional[np.ndarray] = None
     mask_image: Optional[GradioImageMaskPair] = None
     mask_image_fg: Optional[GradioImageMaskPair] = None
     hr_option: HiResFixOption | int | str = HiResFixOption.BOTH

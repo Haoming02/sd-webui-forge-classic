@@ -3,10 +3,16 @@ from math import atan, pi
 from typing import Callable
 
 import k_diffusion
+import k_diffusion.sampling
 import numpy as np
 import torch
 from modules import shared
 from scipy import stats
+
+try:
+    from modules_forge.packages.k_diffusion import sampling as forge_k_diffusion_sampling
+except ImportError:
+    forge_k_diffusion_sampling = None
 
 
 def to_d(x: torch.Tensor, sigma: float, denoised: torch.Tensor):
@@ -15,6 +21,18 @@ def to_d(x: torch.Tensor, sigma: float, denoised: torch.Tensor):
 
 
 k_diffusion.sampling.to_d = to_d
+if forge_k_diffusion_sampling is not None:
+    forge_k_diffusion_sampling.to_d = to_d
+
+
+def get_k_diffusion_sigma_scheduler(funcname):
+    if hasattr(k_diffusion.sampling, funcname):
+        return getattr(k_diffusion.sampling, funcname)
+
+    if forge_k_diffusion_sampling is not None and hasattr(forge_k_diffusion_sampling, funcname):
+        return getattr(forge_k_diffusion_sampling, funcname)
+
+    raise AttributeError(f"k-diffusion sigma scheduler function '{funcname}' not found")
 
 
 @dataclasses.dataclass
@@ -227,9 +245,9 @@ def flow_match_euler_discrete_scheduler(n, sigma_min, sigma_max, inner_model, de
 
 schedulers = [
     Scheduler("automatic", "Automatic", None),
-    Scheduler("karras", "Karras", k_diffusion.sampling.get_sigmas_karras, default_rho=7.0),
-    Scheduler("exponential", "Exponential", k_diffusion.sampling.get_sigmas_exponential),
-    Scheduler("polyexponential", "Polyexponential", k_diffusion.sampling.get_sigmas_polyexponential, default_rho=1.0),
+    Scheduler("karras", "Karras", get_k_diffusion_sigma_scheduler("get_sigmas_karras"), default_rho=7.0),
+    Scheduler("exponential", "Exponential", get_k_diffusion_sigma_scheduler("get_sigmas_exponential")),
+    Scheduler("polyexponential", "Polyexponential", get_k_diffusion_sigma_scheduler("get_sigmas_polyexponential"), default_rho=1.0),
     Scheduler("normal", "Normal", normal_scheduler, need_inner_model=True),
     Scheduler("simple", "Simple", simple_scheduler, need_inner_model=True),
     Scheduler("uniform", "Uniform", uniform, need_inner_model=True),

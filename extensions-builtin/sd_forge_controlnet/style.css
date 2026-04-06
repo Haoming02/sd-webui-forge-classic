@@ -1,3 +1,117 @@
+.cnet-modal {
+    display: none;
+    position: fixed;
+    z-index: 2147483647;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.4);
+    max-width: none !important;
+}
+
+.cnet-modal-content {
+    position: relative;
+    background-color: var(--background-fill-primary);
+    margin: 5vh auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 95%;
+    height: 90vh;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+    animation-name: animatetop;
+    animation-duration: 0.4s;
+    max-width: none !important;
+}
+
+.cnet-modal-content iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    z-index: 1;
+}
+
+.cnet-openpose-modal-actions {
+    position: absolute;
+    top: 12px;
+    right: 72px;
+    z-index: 2;
+    display: flex;
+    gap: 8px;
+}
+
+.cnet-openpose-apply {
+    appearance: none;
+    border: 1px solid var(--button-secondary-border-color);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--background-fill-primary) 84%, transparent);
+    color: var(--body-text-color);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 8px 12px;
+    box-shadow: var(--shadow-drop);
+    backdrop-filter: blur(10px);
+}
+
+.cnet-openpose-seed {
+    appearance: none;
+    border: 1px solid var(--button-secondary-border-color);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--background-fill-primary) 84%, transparent);
+    color: var(--body-text-color);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 8px 12px;
+    box-shadow: var(--shadow-drop);
+    backdrop-filter: blur(10px);
+}
+
+.cnet-openpose-seed:hover,
+.cnet-openpose-apply:hover:not(.is-disabled):not(:disabled) {
+    background: color-mix(in srgb, var(--background-fill-primary) 92%, transparent);
+}
+
+.cnet-openpose-apply.is-disabled,
+.cnet-openpose-apply:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.cnet-modal-content.alert {
+    padding: var(--size-5);
+}
+
+.cnet-modal-content.alert ul {
+    list-style-type: none;
+}
+
+.cnet-modal-close {
+    color: white !important;
+    right: 0.25em;
+    top: 0;
+    cursor: pointer;
+    position: absolute;
+    font-size: 56px;
+    font-weight: bold;
+}
+
+@keyframes animatetop {
+    from {
+        top: -300px;
+        opacity: 0;
+    }
+
+    to {
+        top: 0;
+        opacity: 1;
+    }
+}
 .controlnet .tabitem .label-wrap>span:nth-child(1) {
     display: flex;
     flex-direction: row;
@@ -15,20 +129,18 @@
 }
 
 .cnet-generated-image-control-group,
-.cnet-upload-pose {
+.cnet-upload-pose,
+.cnet-openpose-persistent {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-
-    position: absolute;
-    right: var(--size-2);
-    bottom: var(--size-4);
 }
 
 .cnet-download-pose a,
 .cnet-close-preview,
 .cnet-edit-pose,
-.cnet-upload-pose {
+.cnet-upload-pose,
+.cnet-openpose-persistent {
     font-size: x-small !important;
     font-weight: bold !important;
     padding: 2px !important;
@@ -43,14 +155,80 @@
     cursor: pointer;
 }
 
+.cnet-generated-image-control-group,
+.cnet-upload-pose {
+    position: absolute;
+    right: var(--size-2);
+    bottom: var(--size-4);
+}
+
+.cnet-input-image-group {
+    position: relative;
+}
+
+.cnet-openpose-persistent {
+    position: absolute;
+    right: var(--size-2);
+    bottom: calc(var(--size-4) + var(--size-6));
+    z-index: 2;
+}
+
 .cnet-generated-image-control-group div.styler {
     margin-bottom: 16px;
+}
+
+.cnet-preview-edit-hint {
+    max-width: 220px;
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--button-secondary-border-color);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--background-fill-primary) 92%, transparent);
+    color: var(--body-text-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+    text-align: right;
+    box-shadow: var(--shadow-drop);
+}
+
+.cnet-clear-preview-edits button {
+    font-size: x-small !important;
+    font-weight: bold !important;
+    padding: 2px 6px !important;
+    box-shadow: var(--shadow-drop);
+    border: 1px solid var(--button-secondary-border-color) !important;
+    border-radius: var(--radius-sm) !important;
+    background: var(--background-fill-primary) !important;
+    min-height: var(--size-5) !important;
+    color: var(--block-label-text-color) !important;
+}
+
+.cnet-generated-image-group.cnet-preview-readonly .cnet-clear-preview-edits,
+.cnet-generated-image-group.cnet-preview-readonly button[id^="resetButton_"],
+.cnet-generated-image-group.cnet-preview-readonly button[id^="undoButton_"],
+.cnet-generated-image-group.cnet-preview-readonly button[id^="redoButton_"],
+.cnet-generated-image-group.cnet-preview-readonly button[id^="eraseButton_"],
+.cnet-generated-image-group.cnet-preview-readonly div[id^="scribbleColorBlock_"],
+.cnet-generated-image-group.cnet-preview-readonly div[id^="scribbleWidthBlock_"],
+.cnet-generated-image-group.cnet-preview-readonly div[id^="scribbleAlphaBlock_"],
+.cnet-generated-image-group.cnet-preview-readonly div[id^="scribbleSoftnessBlock_"] {
+    display: none !important;
+}
+
+.cnet-generated-image-group.cnet-preview-readonly .forge-drawing-canvas {
+    pointer-events: none;
+}
+
+.cnet-generated-image-group.cnet-preview-readonly .cnet-preview-edit-hint {
+    background: color-mix(in srgb, #d88f00 16%, var(--background-fill-primary));
 }
 
 .cnet-download-pose:hover a,
 .cnet-close-preview:hover a,
 .cnet-edit-pose:hover,
-.cnet-upload-pose:hover {
+.cnet-upload-pose:hover,
+.cnet-openpose-persistent:hover {
     color: var(--block-label-text-color) !important;
 }
 
@@ -111,3 +289,4 @@
     vertical-align: middle;
     margin: auto 0px auto var(--size-2);
 }
+

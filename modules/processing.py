@@ -1669,6 +1669,8 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     inpainting_fill: int = 0
     inpaint_full_res: bool = True
     inpaint_full_res_padding: int = 0
+    inpaint_full_res_bias_x: int = 0
+    inpaint_full_res_bias_y: int = 0
     inpainting_mask_invert: int = 0
     initial_noise_multiplier: float = None
     latent_mask: Image = None
@@ -1707,7 +1709,6 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
         self.image_cfg_scale: float = None
 
-        self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
         crop_region = None
 
         image_mask = self.image_mask
@@ -1732,15 +1733,28 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
             if self.inpaint_full_res:
                 self.mask_for_overlay = image_mask
                 mask = image_mask.convert("L")
+                mask_box = mask.getbbox()
                 crop_region = masking.get_crop_region_v2(mask, self.inpaint_full_res_padding)
                 if crop_region:
                     crop_region = masking.expand_crop_region(crop_region, self.width, self.height, mask.width, mask.height)
+                    crop_region, actual_bias_x, actual_bias_y = masking.bias_crop_region(
+                        crop_region,
+                        mask_box,
+                        self.inpaint_full_res_bias_x,
+                        self.inpaint_full_res_bias_y,
+                        mask.width,
+                        mask.height,
+                    )
                     x1, y1, x2, y2 = crop_region
                     mask = mask.crop(crop_region)
                     image_mask = images.resize_image(2, mask, self.width, self.height)
                     self.paste_to = (x1, y1, x2 - x1, y2 - y1)
                     self.extra_generation_params["Inpaint area"] = "Only masked"
                     self.extra_generation_params["Masked area padding"] = self.inpaint_full_res_padding
+                    if actual_bias_x != 0:
+                        self.extra_generation_params["Masked area bias X"] = actual_bias_x
+                    if actual_bias_y != 0:
+                        self.extra_generation_params["Masked area bias Y"] = actual_bias_y
                 else:
                     crop_region = None
                     image_mask = None
@@ -1762,7 +1776,8 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
         if self.scripts is not None:
             self.scripts.before_process_init_images(self, dict(crop_region=crop_region, image_mask=image_mask))
 
-        add_color_corrections = opts.img2img_color_correction and self.color_corrections is None
+        use_color_correction = opts.img2img_color_correction or (image_mask is not None and getattr(opts, "inpaint_color_correction", False))
+        add_color_corrections = use_color_correction and self.color_corrections is None
         if add_color_corrections:
             self.color_corrections = []
         imgs = []
@@ -1791,6 +1806,8 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
                 image = image.crop(crop_region)
                 image = images.resize_image(2, image, self.width, self.height)
 
+            image_for_color_correction = image
+
             if image_mask is not None:
                 if self.inpainting_fill != 1:
                     image = masking.fill(image, latent_mask)
@@ -1799,7 +1816,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
                         self.extra_generation_params["Masked content"] = "fill"
 
             if add_color_corrections:
-                self.color_corrections.append(setup_color_correction(image))
+                self.color_corrections.append(setup_color_correction(image_for_color_correction))
 
             image = np.array(image).astype(np.float32) / 255.0
             image = np.moveaxis(image, 2, 0)
@@ -1866,6 +1883,9 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
         self.image_conditioning = self.img2img_image_conditioning(image * 2 - 1, self.init_latent, image_mask, self.mask_round)
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
+        self.sd_model.forge_objects = self.sd_model.forge_objects_after_applying_lora.shallow_copy()
+        self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
+
         x = self.rng.next()
         if shared.sd_model.is_wan and args.dynamic_args["wan"]:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)
@@ -1874,7 +1894,6 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
             self.extra_generation_params["Noise multiplier"] = self.initial_noise_multiplier
             x *= self.initial_noise_multiplier
 
-        self.sd_model.forge_objects = self.sd_model.forge_objects_after_applying_lora.shallow_copy()
         apply_token_merging(self.sd_model, self.get_token_merging_ratio())
 
         if self.scripts is not None:
@@ -1903,3 +1922,4 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     def get_token_merging_ratio(self, for_hr=False):
         return self.token_merging_ratio or ("token_merging_ratio" in self.override_settings and opts.token_merging_ratio) or opts.token_merging_ratio_img2img or opts.token_merging_ratio
+

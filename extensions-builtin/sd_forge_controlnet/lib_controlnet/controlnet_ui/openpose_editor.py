@@ -1,13 +1,16 @@
 import base64
-import json
-
 import gradio as gr
+import json
+from typing import List, Dict, Any, Tuple
+
 from annotator.openpose import decode_json_as_poses, draw_poses
 from annotator.openpose.animalpose import draw_animalposes
+from lib_controlnet.controlnet_ui.modal import ModalInterface
+from modules import shared
 from lib_controlnet.logging import logger
 
 
-def parse_data_url(data_url: str) -> str:
+def parse_data_url(data_url: str):
     # Split the URL at the comma
     media_type, data = data_url.split(",", 1)
 
@@ -23,15 +26,18 @@ def encode_data_url(json_string: str) -> str:
     return f"data:application/json;base64,{base64_encoded_json}"
 
 
-class OpenposeEditor:
-    # Filename used when user click the download link
+class OpenposeEditor(object):
+    # Filename used when user click the download link.
     download_file = "pose.json"
+    # URL the openpose editor is mounted on.
+    editor_url = "/openpose_editor_index"
 
     def __init__(self) -> None:
         self.render_button = None
         self.pose_input = None
         self.download_link = None
         self.upload_link = None
+        self.modal = None
 
     def render_edit(self):
         """Renders the buttons in preview image control button group."""
@@ -40,9 +46,19 @@ class OpenposeEditor:
         # The hidden element that stores the pose json for backend retrieval.
         # The front-end javascript will write the edited JSON data to the element.
         self.pose_input = gr.Textbox(visible=False, elem_classes=["cnet-pose-json"])
-        # The button to download the pose json.
+
+        self.modal = ModalInterface(
+            # Use about:blank here as placeholder so that the iframe does not
+            # immediately navigate. Most of controlnet units do not need
+            # openpose editor active. Only navigate when the user first click
+            # 'Edit'. The navigation logic is in `openpose_editor.js`.
+            f'<iframe src="about:blank"></iframe>',
+            open_button_text="Edit",
+            open_button_classes=["cnet-edit-pose"],
+            open_button_extra_attrs=f'title="Send pose to {OpenposeEditor.editor_url} for edit."',
+        ).create_modal(visible=False)
         self.download_link = gr.HTML(
-            value=f'<a href="" download="{OpenposeEditor.download_file}">JSON</a>',
+            value=f"""<a href='' download='{OpenposeEditor.download_file}'>JSON</a>""",
             visible=False,
             elem_classes=["cnet-download-pose"],
         )
@@ -50,27 +66,29 @@ class OpenposeEditor:
     def render_upload(self):
         """Renders the button in input image control button group."""
         self.upload_link = gr.HTML(
-            value='<label>Upload JSON</label><input type="file" accept=".json"/>',
+            value="""
+            <label>Upload JSON</label>
+            <input type="file" accept=".json"/>
+            """,
             visible=False,
             elem_classes=["cnet-upload-pose"],
         )
 
     def register_callbacks(
         self,
-        generated_image: gr.Image,
+        generated_image: Any,
         use_preview_as_input: gr.Checkbox,
+        module: gr.Dropdown,
         model: gr.Dropdown,
     ):
-        def render_pose(pose_url: str) -> tuple[dict]:
+        def render_pose(pose_url: str) -> Tuple[Dict, Dict]:
             json_string = parse_data_url(pose_url).decode("utf-8")
-            pose = json.loads(json_string)
-            if isinstance(pose, list):
-                pose = pose[0]
-            assert isinstance(pose, dict)
-            poses, animals, height, width = decode_json_as_poses(pose)
+            poses, animals, height, width = decode_json_as_poses(
+                json.loads(json_string)
+            )
             logger.info("Preview as input is enabled.")
             return (
-                # Generated image
+                # Generated image.
                 gr.update(
                     value=(
                         draw_poses(
@@ -84,10 +102,11 @@ class OpenposeEditor:
                         if poses
                         else draw_animalposes(animals, height, width)
                     ),
+                    visible=True,
                 ),
-                # Use preview as input
+                # Use preview as input.
                 gr.update(value=True),
-                # Self content
+                # Self content.
                 *self.update(json_string),
             )
 
@@ -97,15 +116,23 @@ class OpenposeEditor:
             outputs=[generated_image.background, use_preview_as_input, *self.outputs()],
         )
 
-        def update_upload_link(model: str) -> dict:
-            return gr.update(visible=("openpose" in model.lower()))
+        def update_upload_link(module: str, model: str) -> Dict:
+            module_name = (module or "").lower()
+            model_name = (model or "").lower()
+            visible = "openpose" in module_name or "openpose" in model_name
+            return gr.update(visible=visible)
 
-        model.change(fn=update_upload_link, inputs=[model], outputs=[self.upload_link])
+        module.change(fn=update_upload_link, inputs=[module, model], outputs=[self.upload_link], show_progress=False)
+        model.change(fn=update_upload_link, inputs=[module, model], outputs=[self.upload_link], show_progress=False)
+        self.render_button.click(fn=update_upload_link, inputs=[module, model], outputs=[self.upload_link], show_progress=False)
 
-    def outputs(self) -> list[gr.components.Component]:
-        return [self.download_link]
+    def outputs(self) -> List[Any]:
+        return [
+            self.download_link,
+            self.modal,
+        ]
 
-    def update(self, json_string: str) -> list[dict]:
+    def update(self, json_string: str) -> List[Dict]:
         """
         Called when there is a new JSON pose value generated by running
         preprocessor.
@@ -116,11 +143,18 @@ class OpenposeEditor:
         Returns:
             An gr.update event.
         """
-
         hint = "Download the pose as .json file"
-        html = f'<a href="{encode_data_url(json_string)}" download="{OpenposeEditor.download_file}" title="{hint}">JSON</a>'
-        visible: bool = json_string != ""
+        html = f"""<a href='{encode_data_url(json_string)}' 
+                      download='{OpenposeEditor.download_file}' title="{hint}">
+                    JSON</a>"""
+
+        visible = json_string != ""
         return [
-            # Download link update
+            # Download link update.
             gr.update(value=html, visible=visible),
+            # Modal update.
+            gr.update(
+                visible=visible
+                and not shared.opts.data.get("controlnet_disable_openpose_edit", False)
+            ),
         ]

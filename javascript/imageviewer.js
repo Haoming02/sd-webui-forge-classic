@@ -1,8 +1,57 @@
 // A full size 'lightbox' preview modal shown when left clicking on gallery previews
 let modalWheelZoom = 1;
 
+function getAppRoot() {
+    return gradioApp();
+}
+
+function getLightboxElement(id) {
+    const appRoot = getAppRoot();
+    return appRoot.getElementById?.(id) || document.getElementById(id);
+}
+
+function mountLightboxModal(modal) {
+    const appRoot = getAppRoot();
+
+    if (modal.parentElement === appRoot) return;
+
+    if (appRoot && typeof appRoot.appendChild === "function") {
+        appRoot.appendChild(modal);
+        return;
+    }
+
+    document.body.appendChild(modal);
+}
+
+function getSelectedMainTabName() {
+    const selectedTab = gradioApp().querySelector(
+        '#tabs div button.selected, #tabs div button[aria-selected="true"]',
+    );
+    return selectedTab?.innerText?.trim()?.toLowerCase() || "";
+}
+
+function getGalleryImageFromNode(node) {
+    if (!node) {
+        return null;
+    }
+
+    if (node.tagName === "IMG") {
+        return node;
+    }
+
+    return node.querySelector?.("img[src]") || null;
+}
+
+function getVisibleLivePreviewImage() {
+    return Array.from(
+        gradioApp().querySelectorAll('div[id$="_results"] .livePreview img[src]'),
+    )
+        .filter((img) => img.offsetParent !== null)
+        .at(-1);
+}
+
 function applyModalWheelZoom() {
-    const modalImage = gradioApp().getElementById("modalImage");
+    const modalImage = getLightboxElement("modalImage");
     if (!modalImage) return;
 
     modalImage.style.transform = `scale(${modalWheelZoom})`;
@@ -10,7 +59,7 @@ function applyModalWheelZoom() {
 
 function resetModalWheelZoom() {
     modalWheelZoom = 1;
-    const modalImage = gradioApp().getElementById("modalImage");
+    const modalImage = getLightboxElement("modalImage");
     if (!modalImage) return;
 
     modalImage.style.transform = "";
@@ -18,7 +67,7 @@ function resetModalWheelZoom() {
 }
 
 function modalWheelZoomHandler(event) {
-    const modalImage = gradioApp().getElementById("modalImage");
+    const modalImage = getLightboxElement("modalImage");
     if (!modalImage || modalImage.style.display === "none") return;
 
     event.preventDefault();
@@ -43,226 +92,17 @@ function modalWheelZoomHandler(event) {
 
 function closeModal() {
     resetModalWheelZoom();
-    gradioApp().getElementById("lightboxModal").style.display = "none";
+    const modal = getLightboxElement("lightboxModal");
+    if (modal) modal.style.display = "none";
 }
 
-function showModal(event) {
-    const source = event.target || event.srcElement;
-    const modalImage = gradioApp().getElementById("modalImage");
-    const modalToggleLivePreviewBtn = gradioApp().getElementById(
-        "modal_toggle_live_preview",
-    );
-    modalToggleLivePreviewBtn.innerHTML = opts.js_live_preview_in_modal_lightbox
-        ? "&#x1F5C7;"
-        : "&#x1F5C6;";
-    const lb = gradioApp().getElementById("lightboxModal");
-    resetModalWheelZoom();
-    modalImage.src = source.src;
-    if (modalImage.style.display === "none") {
-        lb.style.setProperty("background-image", "url(" + source.src + ")");
-    }
-    lb.style.display = "flex";
-    lb.focus();
-
-    const tabTxt2Img = gradioApp().getElementById("tab_txt2img");
-    const tabImg2Img = gradioApp().getElementById("tab_img2img");
-    // show the save button in modal only on txt2img or img2img tabs
-    if (
-        tabTxt2Img.style.display != "none" ||
-        tabImg2Img.style.display != "none"
-    ) {
-        gradioApp().getElementById("modal_save").style.display = "inline";
-    } else {
-        gradioApp().getElementById("modal_save").style.display = "none";
-    }
-    event.stopPropagation();
-}
-
-function negmod(n, m) {
-    return ((n % m) + m) % m;
-}
-
-function updateOnBackgroundChange() {
-    const modalImage = gradioApp().getElementById("modalImage");
-    if (modalImage && modalImage.offsetParent) {
-        let currentButton = selected_gallery_button();
-        let preview = gradioApp().querySelectorAll(".livePreview > img");
-        if (opts.js_live_preview_in_modal_lightbox && preview.length > 0) {
-            // show preview image if available
-            modalImage.src = preview[preview.length - 1].src;
-        } else if (
-            currentButton?.children?.length > 0 &&
-            modalImage.src != currentButton.children[0].src
-        ) {
-            modalImage.src = currentButton.children[0].src;
-            if (modalImage.style.display === "none") {
-                const modal = gradioApp().getElementById("lightboxModal");
-                modal.style.setProperty("background-image", `url(${modalImage.src})`);
-            }
-        }
-    }
-}
-
-function modalImageSwitch(offset) {
-    let galleryButtons = all_gallery_buttons();
-
-    if (galleryButtons.length > 1) {
-        let result = selected_gallery_index();
-
-        if (result != -1) {
-            let nextButton =
-                galleryButtons[negmod(result + offset, galleryButtons.length)];
-            nextButton.click();
-            const modalImage = gradioApp().getElementById("modalImage");
-            const modal = gradioApp().getElementById("lightboxModal");
-            resetModalWheelZoom();
-            modalImage.src = nextButton.children[0].src;
-            if (modalImage.style.display === "none") {
-                modal.style.setProperty("background-image", `url(${modalImage.src})`);
-            }
-            setTimeout(function () {
-                modal.focus();
-            }, 10);
-        }
-    }
-}
-
-function saveImage() {
-    const tabTxt2Img = gradioApp().getElementById("tab_txt2img");
-    const tabImg2Img = gradioApp().getElementById("tab_img2img");
-    const saveTxt2Img = "save_txt2img";
-    const saveImg2Img = "save_img2img";
-    if (tabTxt2Img.style.display != "none") {
-        gradioApp().getElementById(saveTxt2Img).click();
-    } else if (tabImg2Img.style.display != "none") {
-        gradioApp().getElementById(saveImg2Img).click();
-    } else {
-        console.error("missing implementation for saving modal of this type");
-    }
-}
-
-function modalSaveImage(event) {
-    saveImage();
-    event.stopPropagation();
-}
-
-function modalNextImage(event) {
-    modalImageSwitch(1);
-    event.stopPropagation();
-}
-
-function modalPrevImage(event) {
-    modalImageSwitch(-1);
-    event.stopPropagation();
-}
-
-function modalKeyHandler(event) {
-    switch (event.key) {
-        case "s":
-            saveImage();
-            break;
-        case "ArrowLeft":
-            modalPrevImage(event);
-            break;
-        case "ArrowRight":
-            modalNextImage(event);
-            break;
-        case "Escape":
-            closeModal();
-            break;
-    }
-}
-
-function setupImageForLightbox(e) {
-    if (e.dataset.modded) {
+function ensureLightboxModal() {
+    const existingModal = getLightboxElement("lightboxModal");
+    if (existingModal) {
+        mountLightboxModal(existingModal);
         return;
     }
 
-    e.dataset.modded = true;
-    e.style.cursor = "pointer";
-    e.style.userSelect = "none";
-
-    e.addEventListener(
-        "mousedown",
-        function (evt) {
-            if (evt.button == 1) {
-                open(evt.target.src);
-                evt.preventDefault();
-                return;
-            }
-        },
-        true,
-    );
-
-    e.addEventListener(
-        "click",
-        function (evt) {
-            if (!opts.js_modal_lightbox || evt.button != 0) return;
-
-            modalZoomSet(
-                gradioApp().getElementById("modalImage"),
-                opts.js_modal_lightbox_initially_zoomed,
-            );
-            evt.preventDefault();
-            showModal(evt);
-        },
-        true,
-    );
-}
-
-function modalZoomSet(modalImage, enable) {
-    if (modalImage) modalImage.classList.toggle("modalImageFullscreen", !!enable);
-}
-
-function modalZoomToggle(event) {
-    let modalImage = gradioApp().getElementById("modalImage");
-    modalZoomSet(
-        modalImage,
-        !modalImage.classList.contains("modalImageFullscreen"),
-    );
-    event.stopPropagation();
-}
-
-function modalLivePreviewToggle(event) {
-    const modalToggleLivePreview = gradioApp().getElementById(
-        "modal_toggle_live_preview",
-    );
-    opts.js_live_preview_in_modal_lightbox =
-        !opts.js_live_preview_in_modal_lightbox;
-    modalToggleLivePreview.innerHTML = opts.js_live_preview_in_modal_lightbox
-        ? "&#x1F5C7;"
-        : "&#x1F5C6;";
-    event.stopPropagation();
-}
-
-function modalTileImageToggle(event) {
-    const modalImage = gradioApp().getElementById("modalImage");
-    const modal = gradioApp().getElementById("lightboxModal");
-    const isTiling = modalImage.style.display === "none";
-    if (isTiling) {
-        modalImage.style.display = "block";
-        modal.style.setProperty("background-image", "none");
-        resetModalWheelZoom();
-    } else {
-        modalImage.style.display = "none";
-        modal.style.setProperty("background-image", `url(${modalImage.src})`);
-    }
-
-    event.stopPropagation();
-}
-
-onAfterUiUpdate(function () {
-    let fullImg_preview = gradioApp().querySelectorAll(
-        ".gradio-gallery > button > button > img, .gradio-gallery > .livePreview",
-    );
-    if (fullImg_preview != null) {
-        fullImg_preview.forEach(setupImageForLightbox);
-    }
-    updateOnBackgroundChange();
-});
-
-document.addEventListener("DOMContentLoaded", function () {
-    //const modalFragment = document.createDocumentFragment();
     const modal = document.createElement("div");
     modal.onclick = closeModal;
     modal.id = "lightboxModal";
@@ -335,14 +175,302 @@ document.addEventListener("DOMContentLoaded", function () {
     modalNext.tabIndex = 0;
     modalNext.addEventListener("click", modalNextImage, true);
     modalNext.addEventListener("keydown", modalKeyHandler, true);
-
     modal.appendChild(modalNext);
 
-    try {
-        gradioApp().appendChild(modal);
-    } catch (e) {
-        gradioApp().body.appendChild(modal);
+    mountLightboxModal(modal);
+}
+
+function showModal(event) {
+    ensureLightboxModal();
+    const source = event.target || event.srcElement;
+    const modalImage = getLightboxElement("modalImage");
+    const modalToggleLivePreviewBtn = getLightboxElement(
+        "modal_toggle_live_preview",
+    );
+    const lb = getLightboxElement("lightboxModal");
+    if (!source?.src || !modalImage || !lb || !modalToggleLivePreviewBtn) return;
+    modalToggleLivePreviewBtn.innerHTML = opts.js_live_preview_in_modal_lightbox
+        ? "&#x1F5C7;"
+        : "&#x1F5C6;";
+    resetModalWheelZoom();
+    modalImage.src = source.src;
+    if (modalImage.style.display === "none") {
+        lb.style.setProperty("background-image", "url(" + source.src + ")");
+    }
+    lb.style.display = "flex";
+    lb.focus();
+
+    const selectedTab = getSelectedMainTabName();
+    if (selectedTab === "txt2img" || selectedTab === "img2img") {
+        getLightboxElement("modal_save").style.display = "inline";
+    } else {
+        getLightboxElement("modal_save").style.display = "none";
+    }
+    event.stopPropagation();
+}
+
+function negmod(n, m) {
+    return ((n % m) + m) % m;
+}
+
+function updateOnBackgroundChange() {
+    const modalImage = getLightboxElement("modalImage");
+    if (modalImage && modalImage.offsetParent) {
+        let currentButton = selected_gallery_button();
+        let preview = getVisibleLivePreviewImage();
+        if (opts.js_live_preview_in_modal_lightbox && preview?.src) {
+            modalImage.src = preview.src;
+        } else if (
+            getGalleryImageFromNode(currentButton)?.src &&
+            modalImage.src != getGalleryImageFromNode(currentButton).src
+        ) {
+            modalImage.src = getGalleryImageFromNode(currentButton).src;
+            if (modalImage.style.display === "none") {
+                const modal = getLightboxElement("lightboxModal");
+                modal.style.setProperty("background-image", `url(${modalImage.src})`);
+            }
+        }
+    }
+}
+
+function modalImageSwitch(offset) {
+    let galleryButtons = all_gallery_buttons();
+
+    if (galleryButtons.length > 1) {
+        let result = selected_gallery_index();
+
+        if (result != -1) {
+            let nextButton =
+                galleryButtons[negmod(result + offset, galleryButtons.length)];
+            const nextImage = getGalleryImageFromNode(nextButton);
+            if (!nextImage?.src) {
+                return;
+            }
+            nextButton.click();
+            const modalImage = getLightboxElement("modalImage");
+            const modal = getLightboxElement("lightboxModal");
+            resetModalWheelZoom();
+            modalImage.src = nextImage.src;
+            if (modalImage.style.display === "none") {
+                modal.style.setProperty("background-image", `url(${modalImage.src})`);
+            }
+            setTimeout(function () {
+                modal.focus();
+            }, 10);
+        }
+    }
+}
+
+function saveImage() {
+    const saveTxt2Img = "save_txt2img";
+    const saveImg2Img = "save_img2img";
+    const selectedTab = getSelectedMainTabName();
+    if (selectedTab === "txt2img") {
+        gradioApp().getElementById(saveTxt2Img).click();
+    } else if (selectedTab === "img2img") {
+        gradioApp().getElementById(saveImg2Img).click();
+    } else {
+        console.error("missing implementation for saving modal of this type");
+    }
+}
+
+function modalSaveImage(event) {
+    saveImage();
+    event.stopPropagation();
+}
+
+function modalNextImage(event) {
+    modalImageSwitch(1);
+    event.stopPropagation();
+}
+
+function modalPrevImage(event) {
+    modalImageSwitch(-1);
+    event.stopPropagation();
+}
+
+const LIGHTBOX_PREVIEW_SELECTOR =
+    'div[id$="_gallery"] button.preview, div[id$="_gallery"] .thumbnail-item, div[id$="_gallery"] .thumbnail-item img, div[id$="_results"] .livePreview, div[id$="_results"] .livePreview img';
+
+let delegatedLightboxHandlersInstalled = false;
+
+function modalKeyHandler(event) {
+    switch (event.key) {
+        case "s":
+            saveImage();
+            break;
+        case "ArrowLeft":
+            modalPrevImage(event);
+            break;
+        case "ArrowRight":
+            modalNextImage(event);
+            break;
+        case "Escape":
+            closeModal();
+            break;
+    }
+}
+
+function openSourceInLightbox(source, evt) {
+    if (!source?.src || !opts.js_modal_lightbox) {
+        return;
     }
 
-    document.body.appendChild(modal);
+    modalZoomSet(
+        getLightboxElement("modalImage"),
+        opts.js_modal_lightbox_initially_zoomed,
+    );
+
+    if (evt) {
+        evt.preventDefault();
+    }
+
+    showModal({ target: source, stopPropagation: () => {} });
+}
+
+function resolveSourceFromNode(node, evt) {
+    return (
+        evt.target?.closest?.("img[src]") ||
+        getGalleryImageFromNode(node) ||
+        node
+    );
+}
+
+function findLightboxPreviewNode(evt) {
+    const path = evt.composedPath?.() || [];
+
+    for (const node of path) {
+        if (node?.matches?.(LIGHTBOX_PREVIEW_SELECTOR)) {
+            return node;
+        }
+    }
+
+    return evt.target?.closest?.(LIGHTBOX_PREVIEW_SELECTOR) || null;
+}
+
+function handleDelegatedLightboxMouseDown(evt) {
+    const previewNode = findLightboxPreviewNode(evt);
+    if (!previewNode) return;
+
+    const source = resolveSourceFromNode(previewNode, evt);
+    if (!source?.src || evt.button != 1) return;
+
+    open(source.src);
+    evt.preventDefault();
+}
+
+function handleDelegatedLightboxClick(evt) {
+    if (evt.lightboxHandled) return;
+    const previewNode = findLightboxPreviewNode(evt);
+    if (!previewNode || !opts.js_modal_lightbox || evt.button != 0) return;
+
+    const source = resolveSourceFromNode(previewNode, evt);
+    if (!source?.src) return;
+
+    evt.lightboxHandled = true;
+    openSourceInLightbox(source, evt);
+}
+
+function installDelegatedLightboxHandlers() {
+    if (delegatedLightboxHandlersInstalled) return;
+
+    const appRoot = getAppRoot();
+    if (!appRoot?.addEventListener) return;
+
+    appRoot.addEventListener("mousedown", handleDelegatedLightboxMouseDown, true);
+    appRoot.addEventListener("click", handleDelegatedLightboxClick, true);
+    delegatedLightboxHandlersInstalled = true;
+}
+
+function setupImageForLightbox(e) {
+    if (e.dataset.modded) {
+        return;
+    }
+
+    e.dataset.modded = true;
+    e.style.cursor = "pointer";
+    e.style.userSelect = "none";
+
+    e.addEventListener(
+        "mousedown",
+        function (evt) {
+            const source = resolveSourceFromNode(e, evt);
+            if (!source?.src || evt.button != 1) return;
+
+            evt.lightboxHandled = true;
+            open(source.src);
+            evt.preventDefault();
+            evt.stopPropagation();
+        },
+        true,
+    );
+
+    e.addEventListener(
+        "click",
+        function (evt) {
+            const source = resolveSourceFromNode(e, evt);
+            if (!source?.src || evt.button != 0) return;
+
+            evt.lightboxHandled = true;
+            openSourceInLightbox(source, evt);
+        },
+        true,
+    );
+}
+
+function modalZoomSet(modalImage, enable) {
+    if (modalImage) modalImage.classList.toggle("modalImageFullscreen", !!enable);
+}
+
+function modalZoomToggle(event) {
+    let modalImage = getLightboxElement("modalImage");
+    modalZoomSet(
+        modalImage,
+        !modalImage.classList.contains("modalImageFullscreen"),
+    );
+    event.stopPropagation();
+}
+
+function modalLivePreviewToggle(event) {
+    const modalToggleLivePreview = getLightboxElement(
+        "modal_toggle_live_preview",
+    );
+    opts.js_live_preview_in_modal_lightbox =
+        !opts.js_live_preview_in_modal_lightbox;
+    modalToggleLivePreview.innerHTML = opts.js_live_preview_in_modal_lightbox
+        ? "&#x1F5C7;"
+        : "&#x1F5C6;";
+    event.stopPropagation();
+}
+
+function modalTileImageToggle(event) {
+    const modalImage = getLightboxElement("modalImage");
+    const modal = getLightboxElement("lightboxModal");
+    const isTiling = modalImage.style.display === "none";
+    if (isTiling) {
+        modalImage.style.display = "block";
+        modal.style.setProperty("background-image", "none");
+        resetModalWheelZoom();
+    } else {
+        modalImage.style.display = "none";
+        modal.style.setProperty("background-image", `url(${modalImage.src})`);
+    }
+
+    event.stopPropagation();
+}
+
+onAfterUiUpdate(function () {
+    ensureLightboxModal();
+    installDelegatedLightboxHandlers();
+    let fullImg_preview = gradioApp().querySelectorAll(
+        [
+            LIGHTBOX_PREVIEW_SELECTOR,
+            ".gradio-gallery > button > button > img",
+            ".gradio-gallery > .livePreview",
+        ].join(", "),
+    );
+    if (fullImg_preview != null) {
+        fullImg_preview.forEach(setupImageForLightbox);
+    }
+    updateOnBackgroundChange();
 });

@@ -25,6 +25,10 @@ load_lora_state_dict = functools.partial(load_torch_file, safe_load=True)
 
 
 def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, torch.Tensor], strength_model: float, strength_clip: float, filename: str = "default", online_mode: bool = False):
+    if not lora:
+        logger.warning(f"[LORA] Empty LoRA state dict: {filename}")
+        return model, clip
+
     if dynamic_args.get("nunchaku", False):
         model.model.diffusion_model.loras.append((filename, strength_model))
         return model, clip
@@ -45,8 +49,8 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
 
     _unmatches = len(lora_unmatch)
 
-    if _unmatches / len(lora) > 0.5:
-        logger.warning(f"[LORA] LoRA mismatch for {model_flag}: {filename}")
+    if len(lora_unet) == 0 and len(lora_clip) == 0:
+        logger.warning(f"[LORA] No compatible keys for {model_flag}: {filename}")
         return model, clip
 
     if _unmatches > 0:
@@ -58,9 +62,10 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
         skipped_keys = [item for item in lora_unet if item not in loaded_keys]
         if len(skipped_keys) / len(lora_unet) > 0.25:
             logger.warning(f"[LORA] Mismatch {filename} for {model_flag}-UNet with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
-        else:
-            logger.info(f"[LORA] Loaded {os.path.basename(filename)} for {model_flag}-UNet with {len(loaded_keys)} keys at weight {strength_model} (skipped {len(skipped_keys)} keys) with on_the_fly = {online_mode}")
+
+        if len(loaded_keys) > 0:
             model = new_model
+            logger.info(f"[LORA] Loaded {os.path.basename(filename)} for {model_flag}-UNet with {len(loaded_keys)} keys at weight {strength_model} (skipped {len(skipped_keys)} keys) with on_the_fly = {online_mode}")
 
     if clip is not None and len(lora_clip) > 0:
         new_clip = clip.clone()
@@ -68,9 +73,10 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
         skipped_keys = [item for item in lora_clip if item not in loaded_keys]
         if len(skipped_keys) / len(lora_clip) > 0.25:
             logger.warning(f"[LORA] Mismatch {filename} for {model_flag}-CLIP with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
-        else:
-            logger.info(f"[LORA] Loaded {os.path.basename(filename)} for {model_flag}-CLIP with {len(loaded_keys)} keys at weight {strength_clip} (skipped {len(skipped_keys)} keys) with on_the_fly = {online_mode}")
+
+        if len(loaded_keys) > 0:
             clip = new_clip
+            logger.info(f"[LORA] Loaded {os.path.basename(filename)} for {model_flag}-CLIP with {len(loaded_keys)} keys at weight {strength_clip} (skipped {len(skipped_keys)} keys) with on_the_fly = {online_mode}")
 
     return model, clip
 
@@ -104,6 +110,10 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
         networks_on_disk = [available_networks.get(name, None) if name.lower() in forbidden_network_aliases else available_network_aliases.get(name, None) for name in names]
 
     for network_on_disk, name in zip(networks_on_disk, names):
+        if network_on_disk is None:
+            logger.warning(f'Failed to resolve LoRA name or alias: "{name}"')
+            continue
+
         try:
             net = load_network(name, network_on_disk)
             net.mentioned_name = name

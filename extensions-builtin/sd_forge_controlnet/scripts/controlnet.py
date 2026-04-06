@@ -133,6 +133,7 @@ class ControlNetForForgeOfficial(scripts.Script):
             unit_image = unit.image
             unit_mask_image = unit.mask_image
 
+        unit_generated_image_fg = unit.generated_image_fg
         unit_image_fg = unit.image_fg[:, :, 3] if unit.image_fg is not None else None
         unit_mask_image_fg = unit.mask_image_fg[:, :, 3] if unit.mask_image_fg is not None else None
 
@@ -180,7 +181,9 @@ class ControlNetForForgeOfficial(scripts.Script):
 
         # ---------------- Original Logics (if no batch dir) ----------------
         if image is None:
-            if unit.use_preview_as_input and unit.generated_image is not None:
+            if unit.use_preview_as_input and unit_generated_image_fg is not None and unit_generated_image_fg.ndim == 3 and unit_generated_image_fg.shape[2] == 4 and (unit_generated_image_fg[:, :, 3] > 5).any():
+                image = unit_generated_image_fg
+            elif unit.use_preview_as_input and unit.generated_image is not None:
                 image = unit.generated_image
             elif unit.image is None:
                 resize_mode = external_code.resize_mode_from_value(p.resize_mode)

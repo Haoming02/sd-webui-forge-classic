@@ -1,9 +1,10 @@
 /* alt+left/right moves text in prompt */
 
 function keyupEditOrder(event) {
-    if (!opts.keyedit_move) return;
+    if (typeof opts === "undefined" || !opts?.keyedit_move) return;
 
-    let target = event.originalTarget || event.composedPath()[0];
+    let target = event.originalTarget || event.composedPath?.()[0];
+    if (!target?.matches) return;
     if (
         !target.matches("*:is([id*='_toprow'] [id*='_prompt'], .prompt) textarea")
     )

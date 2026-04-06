@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import gradio as gr
 
 from modules import errors, extensions, paths, script_callbacks, script_loading, scripts_postprocessing, shared, timer, util
+from modules.ui_schema import controls_to_specs
 
 topological_sort = util.topological_sort
 
@@ -102,6 +103,9 @@ class Script:
     controls = None
     """A list of controls returned by the ui()."""
 
+    control_specs = None
+    """A UI-framework-neutral description of controls derived from ui() or returned by ui_spec()."""
+
     sorting_priority = 0
     """Larger number will appear downwards in the UI."""
 
@@ -117,6 +121,15 @@ class Script:
         """
 
         pass
+
+    def ui_spec(self, is_img2img):
+        """Optional future-facing UI contract for non-Gradio frontends.
+
+        Implementations may return a framework-neutral control definition. Existing scripts
+        can continue using ui() until a compatibility layer is complete.
+        """
+
+        return None
 
     def show(self, is_img2img):
         """
@@ -661,6 +674,7 @@ class ScriptRunner:
 
         controls = wrap_call(script.ui, script.filename, "ui", script.is_img2img)
         script.controls = controls
+        script.control_specs = controls_to_specs(controls)
 
         if controls is None:
             return
@@ -669,19 +683,18 @@ class ScriptRunner:
 
         api_args = []
 
-        for control in controls:
+        for control, control_spec in zip(controls, script.control_specs):
             control.custom_script_source = os.path.basename(script.filename)
 
-            arg_info = api_models.ScriptArg(label=control.label or "")
+            arg_info = api_models.ScriptArg(label=control_spec.label)
 
             for field in ("value", "minimum", "maximum", "step"):
-                v = getattr(control, field, None)
+                v = getattr(control_spec, field, None)
                 if v is not None:
                     setattr(arg_info, field, v)
 
-            choices = getattr(control, "choices", None)  # as of gradio 3.41, some items in choices are strings, and some are tuples where the first elem is the string
-            if choices is not None:
-                arg_info.choices = [x[0] if isinstance(x, tuple) else x for x in choices]
+            if control_spec.choices:
+                arg_info.choices = control_spec.choices
 
             api_args.append(arg_info)
 

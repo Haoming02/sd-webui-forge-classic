@@ -7,41 +7,73 @@ function set_theme(theme) {
     }
 }
 
+function galleryElementIsVisible(elem) {
+    if (!elem) {
+        return false;
+    }
+
+    const computedStyle = getComputedStyle(elem);
+    if (computedStyle.display === "none" || computedStyle.visibility === "hidden") {
+        return false;
+    }
+
+    if (elem.getClientRects().length === 0 && elem.offsetParent === null) {
+        return false;
+    }
+
+    const hiddenParent = elem.closest('[style*="display: none"], [hidden], .hidden');
+    return hiddenParent === null;
+}
+
+function galleryButtonsFromContainer(container) {
+    if (!container) {
+        return [];
+    }
+
+    return Array.from(
+        container.querySelectorAll(
+            ".thumbnails > .thumbnail-item, .thumbnails > button.thumbnail-item",
+        ),
+    ).filter(galleryElementIsVisible);
+}
+
 function all_gallery_buttons() {
-    let allGalleryButtons = gradioApp().querySelectorAll(
-        '[style="display: block;"].tabitem div[id$=_gallery].gradio-gallery .thumbnails > .thumbnail-item.thumbnail-small',
-    );
-    let visibleGalleryButtons = [];
-    allGalleryButtons.forEach(function (elem) {
-        if (elem.parentElement.offsetParent) {
-            visibleGalleryButtons.push(elem);
-        }
-    });
-    return visibleGalleryButtons;
+    return Array.from(
+        gradioApp().querySelectorAll('div[id$="_gallery"].gradio-gallery'),
+    )
+        .filter(galleryElementIsVisible)
+        .flatMap(galleryButtonsFromContainer);
 }
 
 function selected_gallery_button() {
     return (
-        all_gallery_buttons().find((elem) => elem.classList.contains("selected")) ??
+        all_gallery_buttons().find(
+            (elem) =>
+                elem.classList.contains("selected") ||
+                elem.getAttribute("aria-selected") === "true",
+        ) ??
         null
     );
 }
 
 function selected_gallery_index() {
     return all_gallery_buttons().findIndex((elem) =>
-        elem.classList.contains("selected"),
+        elem.classList.contains("selected") ||
+        elem.getAttribute("aria-selected") === "true",
     );
 }
 
 function gallery_container_buttons(gallery_container) {
     return gradioApp().querySelectorAll(
-        `#${gallery_container} .thumbnail-item.thumbnail-small`,
+        `#${gallery_container} .thumbnails > .thumbnail-item, #${gallery_container} .thumbnails > button.thumbnail-item`,
     );
 }
 
 function selected_gallery_index_id(gallery_container) {
     return Array.from(gallery_container_buttons(gallery_container)).findIndex(
-        (elem) => elem.classList.contains("selected"),
+        (elem) =>
+            elem.classList.contains("selected") ||
+            elem.getAttribute("aria-selected") === "true",
     );
 }
 

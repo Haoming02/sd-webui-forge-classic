@@ -77,6 +77,44 @@ def expand_crop_region(crop_region, processing_width, processing_height, image_w
     return x1, y1, x2, y2
 
 
+def bias_crop_region(crop_region, mask_box, bias_x=0, bias_y=0, image_width=None, image_height=None):
+    """Shifts a crop window around a required mask box while keeping the mask fully inside the crop."""
+
+    if crop_region is None or mask_box is None:
+        return crop_region, 0, 0
+
+    x1, y1, x2, y2 = crop_region
+    mx1, my1, mx2, my2 = mask_box
+
+    try:
+        bias_x = int(round(float(bias_x or 0)))
+    except Exception:
+        bias_x = 0
+
+    try:
+        bias_y = int(round(float(bias_y or 0)))
+    except Exception:
+        bias_y = 0
+
+    min_dx = mx2 - x2
+    max_dx = mx1 - x1
+    min_dy = my2 - y2
+    max_dy = my1 - y1
+
+    if image_width is not None:
+        min_dx = max(min_dx, -x1)
+        max_dx = min(max_dx, image_width - x2)
+
+    if image_height is not None:
+        min_dy = max(min_dy, -y1)
+        max_dy = min(max_dy, image_height - y2)
+
+    actual_dx = min(max(bias_x, min_dx), max_dx)
+    actual_dy = min(max(bias_y, min_dy), max_dy)
+
+    return (x1 + actual_dx, y1 + actual_dy, x2 + actual_dx, y2 + actual_dy), actual_dx, actual_dy
+
+
 def fill(image, mask):
     """fills masked regions with colors from image using blur. Not extremely effective."""
 

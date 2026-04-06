@@ -170,6 +170,68 @@ def apply_setting(key, value):
     return getattr(opts, key)
 
 
+def persist_last_generation_ui_values(tabname, *, steps=None, sampler_name=None, scheduler=None, cfg_scale=None):
+    ui_config_file = getattr(cmd_opts, "ui_config_file", None)
+
+    if not ui_config_file:
+        return
+
+    updates = {}
+
+    if steps is not None:
+        updates[f"customscript/sampler.py/{tabname}/Sampling Steps/value"] = int(steps)
+
+    if sampler_name is not None:
+        updates[f"customscript/sampler.py/{tabname}/Sampling Method/value"] = sampler_name
+
+    if scheduler is not None:
+        updates[f"customscript/sampler.py/{tabname}/Schedule Type/value"] = scheduler
+
+    if cfg_scale is not None:
+        updates[f"{tabname}/CFG Scale/value"] = float(cfg_scale)
+
+    if updates:
+        ui_loadsave.update_ui_settings_file(ui_config_file, updates)
+
+
+def bind_last_generation_ui_values(tabname, *, steps, sampler_name, scheduler, cfg_scale):
+    event_kwargs = dict(queue=False, show_progress=False)
+
+    steps.release(
+        fn=lambda value: persist_last_generation_ui_values(tabname, steps=value),
+        inputs=[steps],
+        **event_kwargs,
+    )
+    steps.change(
+        fn=lambda value: persist_last_generation_ui_values(tabname, steps=value),
+        inputs=[steps],
+        **event_kwargs,
+    )
+
+    sampler_name.change(
+        fn=lambda value: persist_last_generation_ui_values(tabname, sampler_name=value),
+        inputs=[sampler_name],
+        **event_kwargs,
+    )
+
+    scheduler.change(
+        fn=lambda value: persist_last_generation_ui_values(tabname, scheduler=value),
+        inputs=[scheduler],
+        **event_kwargs,
+    )
+
+    cfg_scale.release(
+        fn=lambda value: persist_last_generation_ui_values(tabname, cfg_scale=value),
+        inputs=[cfg_scale],
+        **event_kwargs,
+    )
+    cfg_scale.change(
+        fn=lambda value: persist_last_generation_ui_values(tabname, cfg_scale=value),
+        inputs=[cfg_scale],
+        **event_kwargs,
+    )
+
+
 def create_output_panel(tabname, outdir, toprow=None):
     return ui_common.create_output_panel(tabname, outdir, toprow)
 
@@ -465,7 +527,15 @@ def create_ui():
                 )
             )
 
-            steps = scripts.scripts_txt2img.script("Sampler").steps
+            txt2img_sampler_script = scripts.scripts_txt2img.script("Sampler")
+            steps = txt2img_sampler_script.steps
+            bind_last_generation_ui_values(
+                "txt2img",
+                steps=steps,
+                sampler_name=txt2img_sampler_script.sampler_name,
+                scheduler=txt2img_sampler_script.scheduler,
+                cfg_scale=cfg_scale,
+            )
 
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
@@ -691,6 +761,12 @@ def create_ui():
                                 with gr.Column(scale=4):
                                     inpaint_full_res_padding = gr.Slider(label="Only masked padding, pixels", minimum=0, maximum=256, step=8, value=32, elem_id="img2img_inpaint_full_res_padding")
 
+                            with FormRow():
+                                with gr.Column():
+                                    inpaint_full_res_bias_x = gr.Slider(label="Masked area bias X", minimum=-1024, maximum=1024, step=1, value=0, elem_id="img2img_inpaint_full_res_bias_x")
+                                with gr.Column():
+                                    inpaint_full_res_bias_y = gr.Slider(label="Masked area bias Y", minimum=-1024, maximum=1024, step=1, value=0, elem_id="img2img_inpaint_full_res_bias_y")
+
                     if category not in {"accordions", "cfg"}:
                         scripts.scripts_img2img.setup_ui_for_section(category)
 
@@ -740,6 +816,8 @@ def create_ui():
                 resize_mode,
                 inpaint_full_res,
                 inpaint_full_res_padding,
+                inpaint_full_res_bias_x,
+                inpaint_full_res_bias_y,
                 inpainting_mask_invert,
                 img2img_batch_input_dir,
                 img2img_batch_output_dir,
@@ -792,14 +870,22 @@ def create_ui():
                 show_progress=False,
             )
 
-            steps = scripts.scripts_img2img.script("Sampler").steps
+            img2img_sampler_script = scripts.scripts_img2img.script("Sampler")
+            steps = img2img_sampler_script.steps
+            bind_last_generation_ui_values(
+                "img2img",
+                steps=steps,
+                sampler_name=img2img_sampler_script.sampler_name,
+                scheduler=img2img_sampler_script.scheduler,
+                cfg_scale=cfg_scale,
+            )
 
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
             toprow.token_button.click(fn=update_token_counter, inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.negative_token_button.click(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
 
-            img2img_paste_fields = [(toprow.prompt, "Prompt"), (toprow.negative_prompt, "Negative prompt"), (cfg_scale, "CFG scale"), (distilled_cfg_scale, "Distilled CFG Scale"), (image_cfg_scale, "Image CFG scale"), (width, "Size-1"), (height, "Size-2"), (batch_size, "Batch size"), (toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.skip()), (denoising_strength, "Denoising strength"), (mask_blur, "Mask blur"), (inpainting_mask_invert, "Mask mode"), (inpainting_fill, "Masked content"), (inpaint_full_res, "Inpaint area"), (inpaint_full_res_padding, "Masked area padding"), *scripts.scripts_img2img.infotext_fields]
+            img2img_paste_fields = [(toprow.prompt, "Prompt"), (toprow.negative_prompt, "Negative prompt"), (cfg_scale, "CFG scale"), (distilled_cfg_scale, "Distilled CFG Scale"), (image_cfg_scale, "Image CFG scale"), (width, "Size-1"), (height, "Size-2"), (batch_size, "Batch size"), (toprow.ui_styles.dropdown, lambda d: d["Styles array"] if isinstance(d.get("Styles array"), list) else gr.skip()), (denoising_strength, "Denoising strength"), (mask_blur, "Mask blur"), (inpainting_mask_invert, "Mask mode"), (inpainting_fill, "Masked content"), (inpaint_full_res, "Inpaint area"), (inpaint_full_res_padding, "Masked area padding"), (inpaint_full_res_bias_x, "Masked area bias X"), (inpaint_full_res_bias_y, "Masked area bias Y"), *scripts.scripts_img2img.infotext_fields]
             parameters_copypaste.add_paste_fields("img2img", init_img.background, img2img_paste_fields, override_settings)
             parameters_copypaste.add_paste_fields("inpaint", init_img_with_mask.background, img2img_paste_fields, override_settings)
             parameters_copypaste.register_paste_params_button(
