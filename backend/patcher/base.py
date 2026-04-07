@@ -499,14 +499,6 @@ class ModelPatcher:
         if key not in self.backup:
             self.backup[key] = collections.namedtuple("Dimension", ["weight", "inplace_update"])(weight.to(device=self.offload_device, copy=inplace_update), inplace_update)
 
-        mixed_layer = None
-
-        if hasattr(weight, "_layout_cls"):
-            mixed_layer, child_key, _ = utils.get_attr_with_parent(self.model, key)
-            convert_func = getattr(mixed_layer, f"convert_{child_key}")
-            set_func = getattr(mixed_layer, f"set_{child_key}")
-            weight = convert_func(weight)
-
         bnb_layer = None
         if hasattr(weight, "bnb_quantized"):
             assert memory_management.bnb_enabled()
@@ -531,10 +523,6 @@ class ModelPatcher:
             temp_weight = convert_func(temp_weight, inplace=True)
 
         out_weight = merge_lora_to_weight(self.patches[key], temp_weight, key)
-
-        if mixed_layer is not None:
-            set_func(weight, inplace_update=False, seed=string_to_seed(key))
-            return
 
         if bnb_layer is not None:
             bnb_layer.reload_weight(out_weight)

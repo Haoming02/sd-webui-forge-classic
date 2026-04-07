@@ -119,17 +119,15 @@ def weights_manual_cast(
     weight_a = weight
     bias_a = bias
 
-    if weight is not None and (weight_has_function or weight.dtype != target_dtype):
+    if weight_has_function:
         if weight_fn is not None:
             weight = weight_fn(weight)
         if not skip_weight_dtype:
             weight = weight.to(dtype=target_dtype)
-        if isinstance(weight, QuantizedTensor):
-            weight = weight.dequantize()
         for f in layer.weight_function:
             weight = f(weight)
 
-    if bias is not None and bias_has_function:
+    if bias_has_function:
         if bias_fn is not None:
             bias = bias_fn(bias)
         if not skip_bias_dtype:
