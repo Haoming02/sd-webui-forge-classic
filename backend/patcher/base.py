@@ -1,4 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.7.0/comfy/model_patcher.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.11.1/comfy/model_patcher.py
 
 """
 This file is part of ComfyUI.
@@ -28,8 +28,10 @@ import uuid
 import torch
 
 from backend import memory_management, utils
+from backend.float import stochastic_rounding
 from backend.logging import setup_logger
-from backend.patcher.lora import LoraLoader, merge_lora_to_weight, string_to_seed
+from backend.patcher.lora import merge_lora_to_weight, string_to_seed
+from backend.quant_ops import QuantizedTensor
 
 logger = logging.getLogger("model_patcher")
 setup_logger(logger)
@@ -155,7 +157,6 @@ def get_key_weight(model, key):
 class ModelPatcher:
     def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.model = model
-        self.parent = None
 
         self.current_device = current_device or offload_device
         self.load_device = load_device
@@ -165,13 +166,8 @@ class ModelPatcher:
         self.model_size()
 
         self.patches = {}
-        self.lora_patches = {}
+        self.online_patches = {}
         self.backup = {}
-
-        if not hasattr(model, "lora_loader"):
-            model.lora_loader = LoraLoader(model)
-
-        self.lora_loader: LoraLoader = model.lora_loader
 
         self.object_patches = {}
         self.object_patches_backup = {}
@@ -199,10 +195,10 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = 0
 
     def has_online_lora(self) -> bool:
-        return any(online_mode for (*_, online_mode) in self.lora_patches.keys())
+        raise NotImplementedError
 
     def refresh_loras(self):
-        self.lora_loader.refresh(lora_patches=self.lora_patches, offload_device=self.offload_device)
+        raise NotImplementedError
 
     def model_size(self) -> int:
         if self.size > 0:
@@ -221,8 +217,15 @@ class ModelPatcher:
 
     def clone(self):
         n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), self.current_device, weight_inplace_update=self.weight_inplace_update)
-        n.patches = copy.copy(self.patches)
-        n.lora_patches = copy.copy(self.lora_patches)
+
+        n.patches = {}
+        for k in self.patches:
+            n.patches[k] = self.patches[k][:]
+
+        n.online_patches = {}
+        for k in self.online_patches:
+            n.online_patches[k] = self.online_patches[k][:]
+
         n.patches_uuid = self.patches_uuid
         n.backup = self.backup
 
@@ -230,7 +233,6 @@ class ModelPatcher:
         n.object_patches_backup = self.object_patches_backup
         n.model_options = copy.deepcopy(self.model_options)
 
-        n.parent = self
         n.pinned = self.pinned
         n.force_cast_weights = self.force_cast_weights
 
@@ -397,16 +399,10 @@ class ModelPatcher:
         if hasattr(self.model, "get_dtype"):
             return self.model.get_dtype()
 
-    def add_patches(self, patches: list[dict], strength_patch: float = 1.0, strength_model: float = 1.0, *, filename: str = None, online_mode: bool = None):
-        lora: bool = filename is not None and online_mode is not None
-
-        if lora:
-            lora_identifier = (filename, strength_patch, strength_model, online_mode)
-            lora_patches = {}
-
+    def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
+        raise NotImplementedError
         p = set()
         model_sd = self.model.state_dict()
-
         for k in patches:
             offset = None
             function = None
@@ -422,16 +418,9 @@ class ModelPatcher:
                 p.add(k)
                 current_patches = self.patches.get(key, [])
                 current_patches.append((strength_patch, patches[k], strength_model, offset, function))
-                if lora:
-                    lora_patches[key] = current_patches
-                else:
-                    self.patches[key] = current_patches
+                self.patches[key] = current_patches
 
-        if lora:
-            self.lora_patches[lora_identifier] = lora_patches
-        else:
-            self.patches_uuid = uuid.uuid4()
-
+        self.patches_uuid = uuid.uuid4()
         return list(p)
 
     def get_key_patches(self, filter_prefix=None):
@@ -483,7 +472,7 @@ class ModelPatcher:
 
         out_weight = merge_lora_to_weight(self.patches[key], temp_weight, key)
         if set_func is None:
-            out_weight = out_weight.to(weight.dtype)
+            out_weight = stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
             if inplace_update:
                 utils.copy_to_param(self.model, key, out_weight)
             else:
@@ -529,7 +518,7 @@ class ModelPatcher:
                         weight, _, _ = get_key_weight(self.model, key)
                         if model_dtype is None or weight is None:
                             return 0
-                        if weight.dtype != model_dtype:
+                        if weight.dtype != model_dtype or isinstance(weight, QuantizedTensor):
                             return weight.numel() * model_dtype.itemsize
                         return 0
 
@@ -570,6 +559,7 @@ class ModelPatcher:
                         continue
 
             cast_weight = self.force_cast_weights
+            m.forge_force_cast_weights = self.force_cast_weights
             if lowvram_weight:
                 if hasattr(m, "parameters_manual_cast"):
                     m.weight_function = []
@@ -638,11 +628,12 @@ class ModelPatcher:
             for param in params:
                 self.pin_weight_to_device("{}.{}".format(n, param))
 
+        usable_stat = "{:.2f} MB usable, ".format(lowvram_model_memory / (1024 * 1024)) if lowvram_model_memory < 1e32 else ""
         if lowvram_counter > 0:
-            logger.info("loaded partially; {:.2f} MB usable, {:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(lowvram_model_memory / (1024 * 1024), mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
+            logger.info("loaded partially; {}{:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(usable_stat, mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
             self.model.model_lowvram = True
         else:
-            logger.info("loaded completely; {:.2f} MB usable, {:.2f} MB loaded, full load: {}".format(lowvram_model_memory / (1024 * 1024), mem_counter / (1024 * 1024), full_load))
+            logger.info("loaded completely; {}{:.2f} MB loaded, full load: {}".format(usable_stat, mem_counter / (1024 * 1024), full_load))
             self.model.model_lowvram = False
             if full_load:
                 self.model.to(device_to)
