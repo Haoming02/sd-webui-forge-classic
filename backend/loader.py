@@ -44,6 +44,33 @@ setup_logger(logger)
 HF = os.path.join(os.path.dirname(__file__), "huggingface")
 
 
+def _download_hf_state_dict(repo_id, subfolder=None):
+    """Download model state dict from HuggingFace Hub when not included in checkpoint."""
+    try:
+        from huggingface_hub import snapshot_download
+        from safetensors.torch import load_file
+
+        patterns = [f"{subfolder}/*.safetensors"] if subfolder else ["*.safetensors"]
+        local_dir = snapshot_download(repo_id, allow_patterns=patterns)
+
+        target_dir = os.path.join(local_dir, subfolder) if subfolder else local_dir
+        state_dict = {}
+        for f in sorted(os.listdir(target_dir)):
+            if f.endswith(".safetensors"):
+                state_dict.update(load_file(os.path.join(target_dir, f), device="cpu"))
+
+        if len(state_dict) == 0:
+            raise FileNotFoundError(f"No safetensors files found in {repo_id}/{subfolder or ''}")
+
+        return state_dict
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to download model from HuggingFace repo '{repo_id}'. "
+            f"Please download the required component manually and add it as an additional module. "
+            f"Error: {e}"
+        ) from e
+
+
 def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_path, state_dict):
     config_path = os.path.join(repo_path, component_name)
 
@@ -60,7 +87,15 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             comp._eventual_warn_about_too_long_sequence = lambda *args, **kwargs: None
             return comp
         if cls_name == "AutoencoderKL":
-            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
+            if not (isinstance(state_dict, dict) and len(state_dict) > 16):
+                from backend.nn.vae import IntegratedAutoencoderKL as _IAEKL
+
+                _vae_config = _IAEKL.load_config(config_path)
+                if _vae_config.get("latent_channels", 4) == 16:
+                    logger.info("VAE not found in checkpoint. Downloading Flux VAE from HuggingFace...")
+                    state_dict = _download_hf_state_dict("black-forest-labs/FLUX.1-schnell", subfolder="vae")
+                else:
+                    raise AssertionError("You do not have VAE state dict! Please provide a VAE as an additional module.")
             from backend.nn.vae import IntegratedAutoencoderKL
 
             config = IntegratedAutoencoderKL.load_config(config_path)
@@ -180,9 +215,15 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
             return model
         if cls_name in ["Qwen3Model", "Qwen3ForCausalLM"]:
-            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen3 state dict!"
-
             config = read_arbitrary_config(config_path)
+
+            if not (isinstance(state_dict, dict) and len(state_dict) > 16):
+                qwen3_repos = {1024: "Qwen/Qwen3-0.6B", 2560: "Qwen/Qwen3-4B", 4096: "Qwen/Qwen3-8B"}
+                repo = qwen3_repos.get(config.get("hidden_size"))
+                if repo is None:
+                    raise AssertionError("You do not have Qwen3 state dict! Please provide a Qwen3 text encoder as an additional module.")
+                logger.info(f"Qwen3 text encoder not found in checkpoint. Downloading from {repo}...")
+                state_dict = _download_hf_state_dict(repo)
 
             if config["hidden_size"] == 4096:
                 from backend.nn.llm.llama import Qwen3_8B as QTE
