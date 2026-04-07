@@ -195,10 +195,17 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = 0
 
     def has_online_lora(self) -> bool:
-        raise NotImplementedError
+        return len(self.online_patches) > 0
 
     def refresh_loras(self):
-        raise NotImplementedError
+        device_to = self.current_device
+
+        self._process_online_loras()
+
+        for key in self.patches:
+            self.patch_weight_to_device(key, device_to=device_to)
+
+        self.model.current_weight_patches_uuid = self.patches_uuid
 
     def model_size(self) -> int:
         if self.size > 0:
@@ -399,10 +406,15 @@ class ModelPatcher:
         if hasattr(self.model, "get_dtype"):
             return self.model.get_dtype()
 
-    def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
-        raise NotImplementedError
+    def add_patches(self, patches: list[dict], strength_patch: float = 1.0, strength_model: float = 1.0, *, filename: str = None, online_mode: bool = None):
         p = set()
         model_sd = self.model.state_dict()
+
+        if online_mode:
+            patch_destination = self.online_patches
+        else:
+            patch_destination = self.patches
+
         for k in patches:
             offset = None
             function = None
@@ -416,12 +428,37 @@ class ModelPatcher:
 
             if key in model_sd:
                 p.add(k)
-                current_patches = self.patches.get(key, [])
+                current_patches = patch_destination.get(key, [])
                 current_patches.append((strength_patch, patches[k], strength_model, offset, function))
-                self.patches[key] = current_patches
+                patch_destination[key] = current_patches
 
         self.patches_uuid = uuid.uuid4()
         return list(p)
+
+    def _process_online_loras(self):
+        if hasattr(self, "online_lora_layers"):
+            for layer in self.online_lora_layers:
+                if hasattr(layer, "forge_online_loras"):
+                    del layer.forge_online_loras
+
+        self.online_lora_layers = set()
+
+        for key, current_patches in self.online_patches.items():
+            try:
+                parent_layer, child_key, weight = utils.get_attr_with_parent(self.model, key)
+                assert isinstance(weight, torch.nn.Parameter)
+            except Exception:
+                logger.error(f"Invalid LoRA Key: {key}")
+                continue
+
+            if not hasattr(parent_layer, "forge_online_loras"):
+                parent_layer.forge_online_loras = {}
+
+            if child_key not in parent_layer.forge_online_loras:
+                parent_layer.forge_online_loras[child_key] = []
+
+            parent_layer.forge_online_loras[child_key].extend(current_patches)
+            self.online_lora_layers.add(parent_layer)
 
     def get_key_patches(self, filter_prefix=None):
         model_sd = self.model_state_dict()
@@ -462,6 +499,29 @@ class ModelPatcher:
         if key not in self.backup:
             self.backup[key] = collections.namedtuple("Dimension", ["weight", "inplace_update"])(weight.to(device=self.offload_device, copy=inplace_update), inplace_update)
 
+        mixed_layer = None
+
+        if hasattr(weight, "_layout_cls"):
+            mixed_layer, child_key, _ = utils.get_attr_with_parent(self.model, key)
+            convert_func = getattr(mixed_layer, f"convert_{child_key}")
+            set_func = getattr(mixed_layer, f"set_{child_key}")
+            weight = convert_func(weight)
+
+        bnb_layer = None
+        if hasattr(weight, "bnb_quantized"):
+            assert memory_management.bnb_enabled()
+            from backend.operations_bnb import functional_dequantize_4bit
+
+            bnb_layer, _, _ = utils.get_attr_with_parent(self.model, key)
+            weight = functional_dequantize_4bit(weight)
+
+        gguf_cls = getattr(weight, "gguf_cls", None)
+        if gguf_cls is not None:
+            gguf_parameter = weight
+            from backend.operations_gguf import dequantize_tensor
+
+            weight = dequantize_tensor(weight)
+
         temp_dtype = memory_management.lora_compute_dtype(device_to)
         if device_to is not None:
             temp_weight = memory_management.cast_to_device(weight, device_to, temp_dtype, copy=True)
@@ -471,6 +531,19 @@ class ModelPatcher:
             temp_weight = convert_func(temp_weight, inplace=True)
 
         out_weight = merge_lora_to_weight(self.patches[key], temp_weight, key)
+
+        if mixed_layer is not None:
+            set_func(weight, inplace_update=False, seed=string_to_seed(key))
+            return
+
+        if bnb_layer is not None:
+            bnb_layer.reload_weight(out_weight)
+            return
+
+        if gguf_cls is not None:
+            gguf_cls.quantize_pytorch(out_weight, gguf_parameter)
+            return
+
         if set_func is None:
             out_weight = stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
             if inplace_update:
@@ -650,6 +723,8 @@ class ModelPatcher:
             old = utils.set_attr(self.model, k, self.object_patches[k])
             if k not in self.object_patches_backup:
                 self.object_patches_backup[k] = old
+
+        self._process_online_loras()
 
         if lowvram_model_memory == 0:
             full_load = True
