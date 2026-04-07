@@ -281,7 +281,7 @@ def apply_refiner(cfg_denoiser, x, sigma):
         # 1. reset the current_lora_hash so networks.py/load_networks() parse the LoRA again
         sd_model.current_lora_hash = str([])
 
-        # 2. parse the LoRA to save to ModelPatcher.lora_patches
+        # 2. parse the LoRA to save to ModelPatcher.online_patches
         if not cfg_denoiser.p.disable_extra_networks:
             loras = cfg_denoiser.p.extra_network_data.pop("lora", None)
             cfg_denoiser.p.extra_network_data["lora"] = apply_lora_for_refiner(loras)
