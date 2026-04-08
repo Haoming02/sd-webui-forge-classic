@@ -199,12 +199,10 @@ class ModelPatcher:
         return len(self.online_patches) > 0
 
     def refresh_loras(self):
-        device_to = self.current_device
-
         self._process_online_loras()
 
         for key in self.patches:
-            self.patch_weight_to_device(key, device_to=device_to)
+            self.patch_weight_to_device(key)
 
         self.model.current_weight_patches_uuid = self.patches_uuid
 
