@@ -36,6 +36,7 @@ import torch
 
 from backend.args import args
 from backend.logging import setup_logger
+from backend.quant_ops import QuantizedTensor
 
 if TYPE_CHECKING:
     from backend.patcher.base import ModelPatcher
@@ -432,9 +433,18 @@ class LoadedModel:
         self.real_model = None
         self.currently_used = True
         self.model_finalizer = None
+        self._patcher_finalizer = None
 
     def _set_model(self, model):
         self._model = weakref.ref(model)
+        if model.parent is not None:
+            self._parent_model = weakref.ref(model.parent)
+            self._patcher_finalizer = weakref.finalize(model, self._switch_parent)
+
+    def _switch_parent(self):
+        model = self._parent_model()
+        if model is not None:
+            self._set_model(model)
 
     @property
     def model(self) -> "ModelPatcher":
@@ -502,6 +512,10 @@ class LoadedModel:
 
     def __eq__(self, other):
         return self.model is other.model
+
+    def __del__(self):
+        if self._patcher_finalizer is not None:
+            self._patcher_finalizer.detach()
 
     def is_dead(self):
         return self.real_model() is not None and self.model is None
@@ -589,19 +603,17 @@ def free_memory(memory_required: float, device: torch.device, keep_loaded: list[
 
     if len(unloaded_model) > 0:
         soft_empty_cache()
-        gc.collect()
-    elif vram_state is not VRAMState.HIGH_VRAM:
-        mem_free_total, mem_free_torch = get_free_memory(device, torch_free_too=True)
-        if mem_free_torch > mem_free_total * 0.25:
-            soft_empty_cache()
-            gc.collect()
-
+    else:
+        if vram_state is not VRAMState.HIGH_VRAM:
+            mem_free_total, mem_free_torch = get_free_memory(device, torch_free_too=True)
+            if mem_free_torch > mem_free_total * 0.25:
+                soft_empty_cache()
     return unloaded_models
 
 
 def load_models_gpu(models: list["ModelPatcher"], memory_required: float = 0, force_patch_weights: bool = False, minimum_memory_required: float = None, force_full_load: bool = False):
     execution_start_time = time.perf_counter()
-    cleanup_models_gc()
+    cleanup_models_gc(target=models)
 
     inference_memory = minimum_inference_memory()
     extra_mem = max(inference_memory, memory_required + extra_reserved_memory())
@@ -702,20 +714,34 @@ def loaded_models(only_currently_used: bool = False) -> list["LoadedModel"]:
     return output
 
 
-def cleanup_models_gc():
+def cleanup_models_gc(*, target: list["ModelPatcher"] = []):
+    _gc: bool = False
     _del: list[int] = []
 
     for i in range(len(current_loaded_models)):
         cur = current_loaded_models[i]
-        if cur.is_dead():
+        if not cur.is_dead():
+            continue
+        if any(mdl.model is cur.real_model() for mdl in target):
             _del.append(i)
+            break
 
-    if len(_del) == 0:
+        logger.info("Potential memory leak detected with model {}...".format(cur.real_model().__class__.__name__))
+        _gc = True
+
+    if not _gc and len(_del) == 0:
         return
 
     for i in reversed(_del):
         m = current_loaded_models.pop(i)
         del m
+
+    gc.collect()
+    soft_empty_cache()
+
+    for mdl in current_loaded_models:
+        if mdl.is_dead():
+            logger.warning("Memory Leak with model {} !".format(mdl.real_model().__class__.__name__))
 
 
 def cleanup_models():
@@ -980,7 +1006,7 @@ def cast_to(weight: torch.nn.Parameter, dtype: torch.dtype = None, device: torch
         with context or nullcontext():
             return weight.to(dtype=dtype, copy=copy)
 
-    if type(weight) not in (torch.Tensor, torch.nn.Parameter):  # GGUF / BnB
+    if type(weight) not in (torch.Tensor, torch.nn.Parameter, QuantizedTensor):  # GGUF / BnB
         with context or nullcontext():
             return weight.to(dtype=dtype, device=device, non_blocking=non_blocking, copy=copy)
 

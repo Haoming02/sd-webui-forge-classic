@@ -157,6 +157,7 @@ def get_key_weight(model, key):
 class ModelPatcher:
     def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.model = model
+        self.parent = None
 
         self.current_device = current_device or offload_device
         self.load_device = load_device
@@ -240,6 +241,7 @@ class ModelPatcher:
         n.object_patches_backup = self.object_patches_backup
         n.model_options = copy.deepcopy(self.model_options)
 
+        n.parent = self
         n.pinned = self.pinned
         n.force_cast_weights = self.force_cast_weights
 
