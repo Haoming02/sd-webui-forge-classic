@@ -84,29 +84,44 @@ class TorchCompileForForge(scripts.Script):
         del kmodel._model_backup
 
     def before_process_batch(self, p, *args, **kwargs):
+        # temporarily restores the original model so LoRA can apply
+        # (otherwise "keys mismatched")
+
         kmodel: "KModel" = p.sd_model.forge_objects.unet.model
         if not hasattr(kmodel, "_compile_config"):
             return
 
         c_model = get_attr(kmodel, "diffusion_model")
         set_attr_raw(kmodel, "_compiled_backup", c_model)
-        # temporarily restores the original model so LoRA can apply
         model = get_attr(kmodel, "_model_backup")
         set_attr_raw(kmodel, "diffusion_model", model)
 
     def process_batch(self, p, preset: str, **kwargs):
         kmodel: "KModel" = p.sd_model.forge_objects.unet.model
-        compiled: bool = hasattr(kmodel, "_compile_config")
-        enable: bool = compiled if preset == "Automatic" else (preset != "Disable")
+        compiled: tuple[str, str] = getattr(kmodel, "_compile_config", None)
+        enable: bool = (compiled is not None) if preset == "Automatic" else (preset != "Disable")
 
         if not enable:
-            if compiled:
+            if compiled is not None:
                 self.restore(kmodel)
             return
 
         if preset in ("max-autotune", "reduce-overhead") and cmd_args.cuda_malloc:
             logger.error(f"{preset} does not support --cuda-malloc\nModel is not compiled...")
             return
+
+        _config: tuple[str, str] = (preset, p.sd_model.current_lora_hash)
+
+        if compiled is not None:
+            if preset in (compiled[0], "Automatic") and _config[1] == compiled[1]:
+                _model = get_attr(kmodel, "_compiled_backup")
+                set_attr_raw(kmodel, "diffusion_model", _model)
+                del kmodel._compiled_backup
+                return
+
+            self.restore(kmodel)
+
+        kmodel._compile_config = _config
 
         match preset:
             case "guard_filter_fn":
@@ -120,24 +135,17 @@ class TorchCompileForForge(scripts.Script):
             case "reduce-overhead":
                 config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False)
 
-        if compiled:
-            if kmodel._compile_config == preset or preset == "Automatic":
-                c_model = get_attr(kmodel, "_compiled_backup")
-                set_attr_raw(kmodel, "diffusion_model", c_model)
-                del kmodel._compiled_backup
-                return
-
-            self.restore(kmodel)
-
+        kmodel: "KModel" = p.sd_model.forge_objects.unet.detach()
         model = get_attr(kmodel, "diffusion_model")
         set_attr_raw(kmodel, "_model_backup", model)
+
+        # patch LoRA ahead-of-time
+        p.sd_model.forge_objects.unet.refresh_loras()
 
         set_attr_raw(
             kmodel,
             "diffusion_model",
             torch.compile(model, **config),
         )
-
-        kmodel._compile_config = preset
 
         logger.info(f"Model Compiled ({preset})")
