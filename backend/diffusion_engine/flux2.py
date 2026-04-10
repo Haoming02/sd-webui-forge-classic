@@ -14,6 +14,7 @@ from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
 from backend.text_processing.klein_engine import KleinTextProcessingEngine
+from modules.shared import opts
 
 
 class Flux2(ForgeDiffusionEngine):
@@ -61,6 +62,9 @@ class Flux2(ForgeDiffusionEngine):
     def encode_first_stage(self, x):
         sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+
+        if opts.klein_no_reference:
+            return sample.to(x)
 
         if dynamic_args.is_referencing:
             self.ref_latents.append(sample.cpu())
