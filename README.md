@@ -2,8 +2,6 @@
 
 <p align="center"><sup>
 [ <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/classic#stable-diffusion-webui-forge---classic">Classic</a> | Neo ]
-<br>
-<a href="https://ko-fi.com/Haoming"><img src="https://img.shields.io/badge/Kofi-0D1117.svg?logo=ko-fi&logoColor=white"></a>
 </sup></p>
 
 <p align="center"><img src="html\ui.webp" width=512 alt="UI"></p>
@@ -24,7 +22,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Mar.]
+## Features [Apr.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -32,7 +30,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support [Anima](https://huggingface.co/circlestone-labs/Anima)
 - [X] Support [Flux.2-Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B)
     - `4B` / `9B` *(**not** `FLUX.2-Dev`)*
-    - does **not** support regular `img2img` *(**i.e.** will always edit)*
+
+> [!Important]
+> To use `Flux.2-Klein` for regular `img2img`, toggle the functionality in **Settings/Stable Diffusion**
+
 - [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
     - `z-image` / `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
@@ -43,6 +44,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > To export a video, you need to have **[FFmpeg](https://ffmpeg.org/)** installed
 
 - [X] Support [Mugen](https://huggingface.co/CabalResearch/Mugen)
+    - display the `Shift` slider for `xl` preset in **Settings/Presets/XL**
 - [X] Support advanced **SDXL** models
 
 > [!Note]
@@ -85,8 +87,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Rewrite Preset System
     - now remembers the checkpoint/module selection and parameters for each preset
 - [X] Support [uv](https://github.com/astral-sh/uv) package manager
-    - requires **manually** installing [uv](https://github.com/astral-sh/uv/releases)
     - drastically speed up installation
+    - requires **manually** installing [uv](https://github.com/astral-sh/uv/releases)
     - see [Commandline](#by-neo)
 - [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), `fp16_accumulation`, `torch._scaled_mm`
     - see [Commandline](#by-neo)
@@ -139,6 +141,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - [X] **[Comfy]** Rewrite the Backend *(`memory_management.py`, `ModelPatcher`, `attention.py`, etc.)*
 - [X] No longer `git` `clone` any repository on fresh install
+- [X] No longer install `open-clip`
 - [X] Fix memory leak when switching checkpoints
 - [X] Speed up launch time
 - [X] Improve timer logs
@@ -192,7 +195,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Note]
 > If your GPU does not support the latest PyTorch, manually [install](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations#older-pytorch) older version of PyTorch
 
-- [X] No longer install `open-clip` twice
 - [X] Update some packages to newer versions
 - [X] Update recommended Python to `3.13.12`
 - [X] many more... :tm:
@@ -200,12 +202,16 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 ## Commandline
-> These flags can be added after the `set COMMANDLINE_ARGS=` line in the `webui-user.bat` *(separate each flag with space)*
+> These flags can be added after the `set COMMANDLINE_ARGS=` line in the `webui-user.bat` *(in the same line ; separate each flag with space)*
 
 > [!Tip]
 > Use `python launch.py --help` to see all available flags
 
 - `--xformers`: Install the `xformers` package to speed up generation
+
+> [!Warning]
+> `xformers` does **not** support `RTX 50s`
+
 - `--port`: Specify a server port to use
     - defaults to `7860`
 - `--api`: Enable [API](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/API) access
@@ -223,13 +229,13 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - significantly reduces installation size (`~7 GB` to `~100 MB`)
 
 > [!Important]
-> Using `symlink` means it will directly access the packages from the cache folders; refrain from clearing the cache when setting this option
+> Using `symlink` means it will directly access the packages from the cache folders; refrain from clearing the cache if using this option
 
 - `--model-ref`: Points to a central `models` folder that contains all your models
     - said folder should contain subfolders like `Stable-diffusion`, `Lora`, `VAE`, `ESRGAN`, etc.
 
 > [!Important]
-> This simply **replaces** the `models` folder, rather than adding on top of it
+> This simply **replaces** the `models` folder rather than adding on top of it
 
 - `--forge-ref-a1111-home`: Point to an Automatic1111 installation to load its `models` folders
     - **i.e.** `Stable-diffusion`, `text_encoder`, etc.
