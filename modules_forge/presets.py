@@ -70,9 +70,11 @@ DISTILL = {
 }
 
 SHIFT = {
+    PresetArch.xl: 9.0,
     PresetArch.lumina: 6.0,
     PresetArch.zit: 9.0,
     PresetArch.wan: 5.0,
+    PresetArch.anima: 3.0,
 }
 
 
@@ -162,6 +164,16 @@ def register(options_templates: dict):
                         f"{name}_t2i_hr_dcfg": OptionInfo(distill, "txt2img Hires. Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
                         f"{name}_i2i_dcfg": OptionInfo(distill, "img2img Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
                         f"{name}_dcfg0": OptionRow(),
+                    },
+                )
+            )
+
+        if name == "xl":
+            options_templates.update(
+                options_section(
+                    (f"ui_{name}", name.upper(), "presets"),
+                    {
+                        f"{name}_show_shift": OptionInfo(False, "Display Shift Slider"),
                     },
                 )
             )

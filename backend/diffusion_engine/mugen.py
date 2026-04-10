@@ -60,6 +60,7 @@ class Mugen(ForgeDiffusionEngine):
 
         # WebUI Legacy
         self.is_sdxl = True
+        self.use_shift = True
 
     def set_clip_skip(self, clip_skip):
         self.text_processing_engine_l.clip_skip = clip_skip
@@ -69,7 +70,7 @@ class Mugen(ForgeDiffusionEngine):
     def get_learned_conditioning(self, prompt: list[str]):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
 
-        shift = getattr(prompt, "distilled_cfg_scale", 3.0)
+        shift = getattr(prompt, "distilled_cfg_scale", 9.0)
         self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
         memory_management.logger.debug(f"Shift: {shift}")
 
