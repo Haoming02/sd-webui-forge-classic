@@ -1,7 +1,6 @@
 # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/lora.py
 
 import logging
-import weakref
 
 import torch
 
@@ -30,9 +29,6 @@ def string_to_seed(data):
             else:
                 crc >>= 1
     return crc ^ 0xFFFFFFFF
-
-
-extra_weight_calculators = {}
 
 
 @torch.inference_mode()
@@ -150,131 +146,3 @@ def set_parameter_devices(model, parameter_devices):
             p = utils.tensor2parameter(p.to(device=device))
             utils.set_attr_raw(model, key, p)
     return model
-
-
-class LoraLoader:
-    def __init__(self, model):
-        self._model = weakref.ref(model)
-        self.backup = {}
-        self.online_backup = []
-        self.loaded_hash = str([])
-
-    @property
-    def model(self):
-        return self._model()
-
-    @torch.inference_mode()
-    def refresh(self, lora_patches, offload_device=torch.device("cpu"), force_refresh=False):
-        hashes = str(list(lora_patches.keys()))
-
-        if hashes == self.loaded_hash and not force_refresh:
-            return
-
-        # Merge Patches
-
-        all_patches = {}
-
-        for (_, _, _, online_mode), patches in lora_patches.items():
-            for key, current_patches in patches.items():
-                all_patches[(key, online_mode)] = all_patches.get((key, online_mode), []) + current_patches
-
-        # Initialize
-
-        memory_management.signal_empty_cache = True
-
-        parameter_devices = get_parameter_devices(self.model)
-
-        # Restore
-
-        for m in set(self.online_backup):
-            del m.forge_online_loras
-
-        self.online_backup = []
-
-        for k, w in self.backup.items():
-            if not isinstance(w, torch.nn.Parameter):
-                # In very few cases
-                w = torch.nn.Parameter(w, requires_grad=False)
-
-            utils.set_attr_raw(self.model, k, w)
-
-        self.backup = {}
-
-        set_parameter_devices(self.model, parameter_devices=parameter_devices)
-
-        # Patch
-
-        for (key, online_mode), current_patches in all_patches.items():
-            try:
-                parent_layer, child_key, weight = utils.get_attr_with_parent(self.model, key)
-                assert isinstance(weight, torch.nn.Parameter)
-            except:
-                raise ValueError(f"Wrong LoRA Key: {key}")
-
-            if online_mode:
-                if not hasattr(parent_layer, "forge_online_loras"):
-                    parent_layer.forge_online_loras = {}
-
-                parent_layer.forge_online_loras[child_key] = current_patches
-                self.online_backup.append(parent_layer)
-                continue
-
-            if key not in self.backup:
-                self.backup[key] = weight.to(device=offload_device)
-
-            mixed_layer = None
-
-            if hasattr(weight, "_layout_cls"):
-                mixed_layer = parent_layer
-                convert_func = getattr(mixed_layer, f"convert_{child_key}")
-                set_func = getattr(mixed_layer, f"set_{child_key}")
-                weight = convert_func(weight)
-
-            bnb_layer = None
-
-            if hasattr(weight, "bnb_quantized"):
-                assert memory_management.bnb_enabled()
-                from backend.operations_bnb import functional_dequantize_4bit
-
-                bnb_layer = parent_layer
-                weight = functional_dequantize_4bit(weight)
-
-            gguf_cls = getattr(weight, "gguf_cls", None)
-            gguf_parameter = None
-
-            if gguf_cls is not None:
-                gguf_parameter = weight
-                from backend.operations_gguf import dequantize_tensor
-
-                weight = dequantize_tensor(weight)
-
-            try:
-                weight = merge_lora_to_weight(current_patches, weight, key, computation_dtype=torch.float32)
-                _offload = False
-            except memory_management.OOM_EXCEPTION:
-                logger.warning("Encountered Out of Memory during LoRA Patching; Retrying with Offloading...")
-                _offload = True
-
-            if _offload:
-                set_parameter_devices(self.model, parameter_devices={k: offload_device for k in parameter_devices.keys()})
-                memory_management.soft_empty_cache()
-                weight = merge_lora_to_weight(current_patches, weight, key, computation_dtype=torch.float32)
-
-            if mixed_layer is not None:
-                set_func(weight, inplace_update=False, seed=string_to_seed(key))
-                continue
-
-            if bnb_layer is not None:
-                bnb_layer.reload_weight(weight)
-                continue
-
-            if gguf_cls is not None:
-                gguf_cls.quantize_pytorch(weight, gguf_parameter)
-                continue
-
-            utils.set_attr(self.model, key, weight)
-
-        # End
-
-        set_parameter_devices(self.model, parameter_devices=parameter_devices)
-        self.loaded_hash = hashes

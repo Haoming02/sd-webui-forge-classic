@@ -36,6 +36,7 @@ import torch
 
 from backend.args import args
 from backend.logging import setup_logger
+from backend.quant_ops import QuantizedTensor
 
 if TYPE_CHECKING:
     from backend.patcher.base import ModelPatcher
@@ -484,8 +485,6 @@ class LoadedModel:
             signal_empty_cache = True
 
         bake_gguf_model(real_model)
-
-        self.model.refresh_loras()
 
         self.real_model = weakref.ref(real_model)
         self.model_finalizer = weakref.finalize(real_model, cleanup_models)
@@ -1007,7 +1006,7 @@ def cast_to(weight: torch.nn.Parameter, dtype: torch.dtype = None, device: torch
         with context or nullcontext():
             return weight.to(dtype=dtype, copy=copy)
 
-    if type(weight) not in (torch.Tensor, torch.nn.Parameter):  # GGUF / BnB
+    if type(weight) not in (torch.Tensor, torch.nn.Parameter, QuantizedTensor):  # GGUF / BnB
         with context or nullcontext():
             return weight.to(dtype=dtype, device=device, non_blocking=non_blocking, copy=copy)
 

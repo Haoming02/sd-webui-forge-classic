@@ -278,24 +278,20 @@ def apply_refiner(cfg_denoiser, x, sigma):
             sd_model.forge_objects.unet.model.gguf_baked = False
             sd_model.forge_objects.unet.model = bake_gguf_model(sd_model.forge_objects.unet.model)
 
-        # 1. reset the current_lora_hash so networks.py/load_networks() parse the LoRA again
+        # 1. reset the current_lora_hash so networks.py load_networks() parse the LoRA again
         sd_model.current_lora_hash = str([])
 
-        # 2. parse the LoRA to save to ModelPatcher.lora_patches
+        # 2. parse the LoRA to update ModelPatcher patches / online_patches
         if not cfg_denoiser.p.disable_extra_networks:
             loras = cfg_denoiser.p.extra_network_data.pop("lora", None)
             cfg_denoiser.p.extra_network_data["lora"] = apply_lora_for_refiner(loras)
             extra_networks.activate(cfg_denoiser.p, cfg_denoiser.p.extra_network_data)
 
-        # 3. reset the loaded_hash so LoraLoader load the LoRA again
-        sd_model.forge_objects.unet.lora_loader.loaded_hash = str([])
-
-        # 4. actually load the LoRA
+        # 3. load the new LoRA
         sd_model.forge_objects.unet.refresh_loras()
 
-        # 5. reset the hashes again for the non-refiner pass
+        # 4. reset the current_lora_hash again for the non-refiner pass
         sd_model.current_lora_hash = str([])
-        sd_model.forge_objects.unet.lora_loader.loaded_hash = str([])
 
         return True
 
