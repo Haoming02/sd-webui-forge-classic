@@ -19,7 +19,7 @@ samplers_k_diffusion = [
     ("Flux Realistic" if opts.forbidden_knowledge else "DPM++ 2s a RF", "sample_dpmpp_2s_ancestral_RF", ["sample_dpmpp_2s_ancestral_RF"], {}),
     ("Euler a", "sample_euler_ancestral", ["k_euler_a", "k_euler_ancestral"], {"uses_ensd": True}),
     ("Euler", "sample_euler", ["k_euler"], {}),
-    ("ER SDE", "sample_er_sde", ["er_side"], {}),
+    ("ER SDE", "sample_er_sde", ["er_sde"], {}),
     ("LCM", "sample_lcm", ["k_lcm"], {}),
     ("LMS", "sample_lms", ["k_lms"], {}),
     ("Heun", "sample_heun", ["k_heun"], {"second_order": True}),
