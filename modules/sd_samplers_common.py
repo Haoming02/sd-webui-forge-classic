@@ -395,7 +395,12 @@ class Sampler:
 
         from k_diffusion.sampling import BrownianTreeNoiseSampler
 
-        sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+        # Boolean indexing (masked select) on XPU can exhaust Level Zero resources
+        # when many ControlNet model buffers are active. Do the min/max on CPU.
+        sigmas_cpu = sigmas.cpu()
+        sigma_min, sigma_max = sigmas_cpu[sigmas_cpu > 0].min(), sigmas_cpu.max()
+        sigma_min = sigma_min.to(sigmas.device)
+        sigma_max = sigma_max.to(sigmas.device)
         current_iter_seeds = p.all_seeds[p.iteration * p.batch_size : (p.iteration + 1) * p.batch_size]
         return BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=current_iter_seeds)
 

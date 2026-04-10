@@ -44,6 +44,11 @@ class ClipVisionModel:
         self.load_device = memory_management.text_encoder_device()
         self.offload_device = memory_management.text_encoder_offload_device()
 
+        # If the text encoder is forced to CPU, keep the model on CPU at rest too.
+        # Otherwise offload_device would be XPU (from --gpu-only), wasting Level Zero resources.
+        if self.load_device == memory_management.cpu:
+            self.offload_device = memory_management.cpu
+
         if memory_management.should_use_fp16(self.load_device, prioritize_performance=False):
             self.dtype = torch.float16
         else:

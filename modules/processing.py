@@ -1809,11 +1809,11 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
             image_for_color_correction = image
 
             if image_mask is not None:
-                if self.inpainting_fill != 1:
+                if self.inpainting_fill == 0:
                     image = masking.fill(image, latent_mask)
-
-                    if self.inpainting_fill == 0:
-                        self.extra_generation_params["Masked content"] = "fill"
+                    self.extra_generation_params["Masked content"] = "fill"
+                elif self.inpainting_fill == 1:
+                    self.extra_generation_params["Masked content"] = "original"
 
             if add_color_corrections:
                 self.color_corrections.append(setup_color_correction(image_for_color_correction))

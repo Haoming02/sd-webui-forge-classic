@@ -12,6 +12,7 @@ def unload_midas_model():
     global model
     if model is not None:
         model = model.cpu()
+    devices.torch_gc()
 
 def apply_midas(input_image, a=np.pi * 2.0, bg_th=0.1):
     global model

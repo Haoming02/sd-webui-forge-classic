@@ -18,6 +18,7 @@ def unload_uniformer_model():
     global model
     if model is not None:
         model = model.cpu()
+    devices.torch_gc()
 
 def apply_uniformer(img):
     global model

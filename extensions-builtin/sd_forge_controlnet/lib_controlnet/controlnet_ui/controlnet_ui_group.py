@@ -684,6 +684,11 @@ class ControlNetUiGroup:
             if not is_image:
                 result = img
 
+            # Unload the preprocessor model from XPU after preview so it doesn't
+            # consume Level Zero resources during the subsequent generation.
+            if hasattr(preprocessor, 'unload_model'):
+                preprocessor.unload_model()
+
             result = external_code.visualize_inpaint_mask(result)
             return (
                 gr.update(visible=True),

@@ -42,6 +42,23 @@ function getGalleryImageFromNode(node) {
     return node.querySelector?.("img[src]") || null;
 }
 
+function getImageSourceUrl(image) {
+    return image?.currentSrc || image?.src || "";
+}
+
+function getSelectedGalleryImageFromNode(node) {
+    const gallery = node?.closest?.('div[id$="_gallery"]');
+    if (!gallery) {
+        return null;
+    }
+
+    const selectedButton = gallery.querySelector(
+        '.thumbnails > .thumbnail-item.selected, .thumbnails > button.thumbnail-item.selected, .thumbnails > .thumbnail-item[aria-selected="true"], .thumbnails > button.thumbnail-item[aria-selected="true"]',
+    );
+
+    return getGalleryImageFromNode(selectedButton);
+}
+
 function getVisibleLivePreviewImage() {
     return Array.from(
         gradioApp().querySelectorAll('div[id$="_results"] .livePreview img[src]'),
@@ -183,19 +200,20 @@ function ensureLightboxModal() {
 function showModal(event) {
     ensureLightboxModal();
     const source = event.target || event.srcElement;
+    const sourceUrl = getImageSourceUrl(source);
     const modalImage = getLightboxElement("modalImage");
     const modalToggleLivePreviewBtn = getLightboxElement(
         "modal_toggle_live_preview",
     );
     const lb = getLightboxElement("lightboxModal");
-    if (!source?.src || !modalImage || !lb || !modalToggleLivePreviewBtn) return;
+    if (!sourceUrl || !modalImage || !lb || !modalToggleLivePreviewBtn) return;
     modalToggleLivePreviewBtn.innerHTML = opts.js_live_preview_in_modal_lightbox
         ? "&#x1F5C7;"
         : "&#x1F5C6;";
     resetModalWheelZoom();
-    modalImage.src = source.src;
+    modalImage.src = sourceUrl;
     if (modalImage.style.display === "none") {
-        lb.style.setProperty("background-image", "url(" + source.src + ")");
+        lb.style.setProperty("background-image", "url(" + sourceUrl + ")");
     }
     lb.style.display = "flex";
     lb.focus();
@@ -219,12 +237,14 @@ function updateOnBackgroundChange() {
         let currentButton = selected_gallery_button();
         let preview = getVisibleLivePreviewImage();
         if (opts.js_live_preview_in_modal_lightbox && preview?.src) {
-            modalImage.src = preview.src;
+            modalImage.src = getImageSourceUrl(preview);
         } else if (
-            getGalleryImageFromNode(currentButton)?.src &&
-            modalImage.src != getGalleryImageFromNode(currentButton).src
+            getImageSourceUrl(getGalleryImageFromNode(currentButton)) &&
+            modalImage.src != getImageSourceUrl(getGalleryImageFromNode(currentButton))
         ) {
-            modalImage.src = getGalleryImageFromNode(currentButton).src;
+            modalImage.src = getImageSourceUrl(
+                getGalleryImageFromNode(currentButton),
+            );
             if (modalImage.style.display === "none") {
                 const modal = getLightboxElement("lightboxModal");
                 modal.style.setProperty("background-image", `url(${modalImage.src})`);
@@ -312,7 +332,7 @@ function modalKeyHandler(event) {
 }
 
 function openSourceInLightbox(source, evt) {
-    if (!source?.src || !opts.js_modal_lightbox) {
+    if (!getImageSourceUrl(source) || !opts.js_modal_lightbox) {
         return;
     }
 
@@ -330,10 +350,29 @@ function openSourceInLightbox(source, evt) {
 
 function resolveSourceFromNode(node, evt) {
     return (
-        evt.target?.closest?.("img[src]") ||
+        evt.target?.closest?.("img") ||
         getGalleryImageFromNode(node) ||
+        getSelectedGalleryImageFromNode(node) ||
+        getVisibleLivePreviewImage() ||
         node
     );
+}
+
+function queueLightboxOpen(previewNode, evt, attempt = 0) {
+    const source = resolveSourceFromNode(previewNode, evt);
+    if (getImageSourceUrl(source)) {
+        evt.lightboxHandled = true;
+        openSourceInLightbox(source, evt);
+        return;
+    }
+
+    if (attempt >= 4) {
+        return;
+    }
+
+    requestAnimationFrame(() => {
+        queueLightboxOpen(previewNode, evt, attempt + 1);
+    });
 }
 
 function findLightboxPreviewNode(evt) {
@@ -364,11 +403,7 @@ function handleDelegatedLightboxClick(evt) {
     const previewNode = findLightboxPreviewNode(evt);
     if (!previewNode || !opts.js_modal_lightbox || evt.button != 0) return;
 
-    const source = resolveSourceFromNode(previewNode, evt);
-    if (!source?.src) return;
-
-    evt.lightboxHandled = true;
-    openSourceInLightbox(source, evt);
+    queueLightboxOpen(previewNode, evt);
 }
 
 function installDelegatedLightboxHandlers() {
@@ -408,11 +443,9 @@ function setupImageForLightbox(e) {
     e.addEventListener(
         "click",
         function (evt) {
-            const source = resolveSourceFromNode(e, evt);
-            if (!source?.src || evt.button != 0) return;
+            if (evt.button != 0) return;
 
-            evt.lightboxHandled = true;
-            openSourceInLightbox(source, evt);
+            queueLightboxOpen(e, evt);
         },
         true,
     );

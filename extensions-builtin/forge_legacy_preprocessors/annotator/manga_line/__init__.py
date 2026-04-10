@@ -231,6 +231,7 @@ class MangaLineExtration:
     def unload_model(self):
         if self.model is not None:
             self.model.cpu()
+            devices.torch_gc()
 
     def __call__(self, input_image):
         if self.model is None:

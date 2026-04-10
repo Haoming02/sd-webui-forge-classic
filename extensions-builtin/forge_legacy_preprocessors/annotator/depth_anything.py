@@ -2,6 +2,7 @@ import os
 import torch
 import cv2
 import numpy as np
+from modules import devices
 import torch.nn.functional as F
 from torchvision.transforms import Compose
 
@@ -77,3 +78,4 @@ class DepthAnythingDetector:
 
     def unload_model(self):
         self.model.to("cpu")
+        devices.torch_gc()

@@ -105,10 +105,18 @@ class ControlNetForForgeOfficial(scripts.Script):
 
             mask = prepare_mask(a1111_mask_image, p)
 
-            crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
-            crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
-
+            # Normalize control image to original image dimensions so crop coordinates are valid.
             input_image = [images.resize_image(resize_mode.int_value(), i, mask.width, mask.height) for i in input_image]
+
+            # Use p.paste_to if available — authoritative crop region set during processing.init(),
+            # includes bias_crop_region adjustment. Fall back to recomputing if not set.
+            paste_to = getattr(p, "paste_to", None)
+            if paste_to is not None:
+                x1, y1, w_crop, h_crop = paste_to
+                crop_region = (x1, y1, x1 + w_crop, y1 + h_crop)
+            else:
+                crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
+                crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
 
             input_image = [x.crop(crop_region) for x in input_image]
             input_image = [images.resize_image(external_code.ResizeMode.OUTER_FIT.int_value(), x, p.width, p.height) for x in input_image]

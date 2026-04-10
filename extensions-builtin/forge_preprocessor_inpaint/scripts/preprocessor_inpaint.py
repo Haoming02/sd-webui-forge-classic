@@ -7,6 +7,7 @@ import torch
 import yaml
 from omegaconf import OmegaConf
 
+from modules import devices
 from modules.modelloader import load_file_from_url
 from modules_forge.shared import add_supported_preprocessor, preprocessor_dir
 from modules_forge.supported_preprocessor import Preprocessor, PreprocessorParameter
@@ -24,8 +25,10 @@ class PreprocessorInpaint(Preprocessor):
         self.expand_mask_when_resize_and_fill = True
 
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
+        if mask is None:
+            return cond, None
         mask = mask.round()
-        mixed_cond = cond * (1.0 - mask) - mask
+        mixed_cond = cond * (1.0 - mask)
         return mixed_cond, None
 
 
@@ -37,8 +40,19 @@ class PreprocessorInpaintOnly(PreprocessorInpaint):
         self.mask = None
         self.latent = None
 
+    def process_after_running_preprocessors(self, process, params, *args, **kwargs):
+        # Free any GPU tensors left over from a previous run (e.g. after a crash or cancel).
+        # This runs before setup_conds() encodes prompts, so freeing here prevents OOM during CLIP encoding.
+        self.image = None
+        self.mask = None
+        self.latent = None
+        devices.torch_gc()
+
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
+        if mask is None:
+            return cond, None
         mask = mask.round()
+
         self.image = cond
         self.mask = mask
 
@@ -73,7 +87,7 @@ class PreprocessorInpaintOnly(PreprocessorInpaint):
 
         self.latent = latent_image
 
-        mixed_cond = cond * (1.0 - mask) - mask
+        mixed_cond = cond * (1.0 - mask)
 
         return mixed_cond, None
 
@@ -92,6 +106,12 @@ class PreprocessorInpaintOnly(PreprocessorInpaint):
             new_results.append(raw * (1.0 - mask) + img * mask)
 
         a1111_batch_result.images = new_results
+
+        # Free GPU tensors now that sampling is complete
+        self.image = None
+        self.mask = None
+        self.latent = None
+        devices.torch_gc()
         return
 
 

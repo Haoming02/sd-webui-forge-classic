@@ -19,6 +19,8 @@ def unload_mlsd_model():
     global mlsdmodel
     if mlsdmodel is not None:
         mlsdmodel = mlsdmodel.cpu()
+        from modules import devices
+        devices.torch_gc()
 
 def apply_mlsd(input_image, thr_v, thr_d):
     global modelpath, mlsdmodel

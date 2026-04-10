@@ -30,6 +30,7 @@ def unload_leres_model():
         model = model.cpu()
     if pix2pixmodel is not None:
         pix2pixmodel = pix2pixmodel.unload_network('G')
+    devices.torch_gc()
 
 
 def apply_leres(input_image, thr_a, thr_b, boost=False):

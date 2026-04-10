@@ -96,3 +96,5 @@ def unload_hed_model():
     global netNetwork
     if netNetwork is not None:
         netNetwork.cpu()
+        from modules import devices
+        devices.torch_gc()

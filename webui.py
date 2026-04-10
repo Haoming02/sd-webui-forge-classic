@@ -75,6 +75,7 @@ def webui_worker():
         shared,
         ui,
         ui_extra_networks,
+        ui_rewrite,
         ui_tempdir,
     )
 
@@ -131,6 +132,7 @@ def webui_worker():
 
         progress.setup_progress_api(app)
         ui.setup_ui_api(app)
+        ui_rewrite.setup_ui_rewrite(app)
 
         if launch_api:
             create_api(app)

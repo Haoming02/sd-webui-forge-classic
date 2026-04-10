@@ -36,6 +36,7 @@ class OneformerDetector:
     def unload_model(self):
         if self.model is not None:
             self.model.model.cpu()
+            devices.torch_gc()
 
     def __call__(self, img):
         if self.model is None:

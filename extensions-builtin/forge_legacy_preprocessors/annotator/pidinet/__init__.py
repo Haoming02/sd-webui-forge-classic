@@ -49,3 +49,4 @@ def unload_pid_model():
     global netNetwork
     if netNetwork is not None:
         netNetwork.cpu()
+    devices.torch_gc()

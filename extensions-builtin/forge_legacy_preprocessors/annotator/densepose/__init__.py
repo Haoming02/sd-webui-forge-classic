@@ -55,3 +55,5 @@ def unload_model():
     global torchscript_model
     if torchscript_model is not None:
         torchscript_model.cpu()
+        from modules import devices
+        devices.torch_gc()

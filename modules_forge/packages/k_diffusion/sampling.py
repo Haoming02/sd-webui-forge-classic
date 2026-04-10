@@ -443,7 +443,8 @@ def sample_dpmpp_sde(model, x, sigmas, extra_args=None, callback=None, disable=N
         return x
 
     extra_args = {} if extra_args is None else extra_args
-    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+    _sigmas_cpu = sigmas.cpu()
+    sigma_min, sigma_max = _sigmas_cpu[_sigmas_cpu > 0].min().to(sigmas.device), sigmas.max()
     seed = extra_args.get("seed", None)
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     s_in = x.new_ones([x.shape[0]])
@@ -530,7 +531,8 @@ def sample_dpmpp_2m_sde(model, x, sigmas, extra_args=None, callback=None, disabl
 
     extra_args = {} if extra_args is None else extra_args
     seed = extra_args.get("seed", None)
-    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+    _sigmas_cpu = sigmas.cpu()
+    sigma_min, sigma_max = _sigmas_cpu[_sigmas_cpu > 0].min().to(sigmas.device), sigmas.max()
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     s_in = x.new_ones([x.shape[0]])
 
@@ -582,7 +584,8 @@ def sample_dpmpp_3m_sde(model, x, sigmas, extra_args=None, callback=None, disabl
 
     extra_args = {} if extra_args is None else extra_args
     seed = extra_args.get("seed", None)
-    sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()
+    _sigmas_cpu = sigmas.cpu()
+    sigma_min, sigma_max = _sigmas_cpu[_sigmas_cpu > 0].min().to(sigmas.device), sigmas.max()
     noise_sampler = BrownianTreeNoiseSampler(x, sigma_min, sigma_max, seed=seed, cpu=True) if noise_sampler is None else noise_sampler
     s_in = x.new_ones([x.shape[0]])
 

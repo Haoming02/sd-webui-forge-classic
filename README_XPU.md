@@ -31,7 +31,7 @@ python -m pip install --upgrade pip
 ### Install PyTorch XPU
 
 ```bat
-pip install torch==2.10.0+xpu torchvision==0.25.0+xpu --index-url https://download.pytorch.org/whl/xpu
+pip install torch==2.11.0+xpu torchvision==0.26.0+xpu --index-url https://download.pytorch.org/whl/xpu
 ```
 
 ### Verify XPU is available
@@ -84,7 +84,7 @@ python3.11 -m venv venv
 source venv/bin/activate
 python -m pip install --upgrade pip
 
-pip install torch==2.10.0+xpu torchvision==0.25.0+xpu --index-url https://download.pytorch.org/whl/xpu
+pip install torch==2.11.0+xpu torchvision==0.26.0+xpu --index-url https://download.pytorch.org/whl/xpu
 ```
 
 Optional (Linux only, if wheels are available for your distro):
