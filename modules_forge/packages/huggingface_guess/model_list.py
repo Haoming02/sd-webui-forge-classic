@@ -182,7 +182,6 @@ class SDXL(BASE):
 
     unet_config = {
         "model_channels": 320,
-        "in_channels": 4,
         "out_channels": 4,
         "use_linear_in_transformer": True,
         "transformer_depth": [0, 0, 2, 2, 10, 10],
@@ -236,7 +235,7 @@ class SDXL(BASE):
 class Mugen(SDXL):
     huggingface_repo = "CabalResearch/Mugen"
 
-    unet_config = dict(SDXL.unet_config, in_channels=32, out_channels=32)
+    unet_config = dict(SDXL.unet_config, out_channels=32)
 
     sampling_settings = {
         "shift": 12.0,
