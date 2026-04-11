@@ -1,7 +1,7 @@
 <h1 align="center">Stable Diffusion WebUI Forge - Classic</h1>
 
 <p align="center"><sup>
-[ Classic | <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/neo#stable-diffusion-webui-forge---neo">Neo</a> ]
+[ <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/neo#stable-diffusion-webui-forge---neo">Neo</a> | <b>Classic</b> ]
 </sup></p>
 
 <p align="center"><img src="html\ui.webp" width=512 alt="UI"></p>
@@ -17,12 +17,17 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 "**Classic**" mainly serves as an archive for the "`previous`" version of Forge, which was built on [Gradio](https://github.com/gradio-app/gradio) `3.41.2` before the major changes *(see the original [announcement](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/801))* were introduced. Additionally, this fork is focused exclusively on **SD1** and **SDXL** checkpoints, having various optimizations implemented, with the main goal of being the lightest WebUI without any bloatwares.
 
+<br>
+
+> [!Warning]
+> **Classic** will no longer receive updates other than critical bug fixes ; Users are recommended to use **Neo** instead
+
 > [!Tip]
 > [How to Install](#installation)
 
 <br>
 
-## Features [Dec.]
+## Features [Final.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -178,8 +183,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update `protobuf`
     - faster `insightface` loading
 - [X] Update to latest PyTorch
-    - `torch==2.9.1+cu130`
-    - `xformers==0.0.33`
+    - `torch==2.10.0+cu130`
+    - `xformers==0.0.34`
 
 > [!Note]
 > If your GPU does not support the latest PyTorch, manually [install](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations#older-pytorch) older version of PyTorch
@@ -269,7 +274,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 0. Install **[git](https://git-scm.com/downloads)**
 1. Clone the Repo
     ```bash
-    git clone https://github.com/Haoming02/sd-webui-forge-classic
+    git clone https://github.com/Haoming02/sd-webui-forge-classic --branch classic
     ```
 
 2. Setup Python
@@ -306,6 +311,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 5. During the first launch, it will automatically install all the requirements
 6. Once the installation is finished, the WebUI will start in a browser automatically
 
+> [!Tip]
+> Check out [Extra Installations](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations) for how to install `git` and `uv`
+
 <br>
 
 ## Attention Functions
@@ -336,20 +344,9 @@ In my experience, the speed of each attention function for SDXL is ranked in the
 
 <br>
 
-> [!Tip]
-> Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki)~
-
-<br>
-
 ## Issues & Requests
 
-- **Issues** about removed features will simply be ignored
-- **Issues** regarding installation will be ignored if it's obviously user-error
-- **Feature Request** not related to performance or optimization will simply be ignored
-    - For cutting edge features, check out the [Neo](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo) branch instead
-    - Non-Windows platforms will not be officially supported, as I cannot verify nor maintain them
-
-</details>
+- **Issues** and **Feature Request** will simply be ignored
 
 <hr>
 
@@ -357,4 +354,16 @@ In my experience, the speed of each attention function for SDXL is ranked in the
 Special thanks to <b>AUTOMATIC1111</b>, <b>lllyasviel</b>, and <b>comfyanonymous</b>, <b>kijai</b>, <br>
 along with the rest of the contributors, <br>
 for their invaluable efforts in the open-source image generation community
+</p>
+
+<br>
+
+<p align="right">
+<sub><i>
+Buy me a <a href="https://ko-fi.com/Haoming">Coffee</a> ☕~
+</i></sub>
+<br>
+<sub><i>
+<a href="https://paypal.me/hmgamingdonation">PayPal</a> me 💳~
+</i></sub>
 </p>
