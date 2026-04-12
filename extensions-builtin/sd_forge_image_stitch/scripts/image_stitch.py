@@ -9,7 +9,7 @@ from modules.api import api
 from modules.processing import StableDiffusionProcessing
 from modules.sd_samplers_common import images_tensor_to_samples
 from modules.shared import device, opts
-from modules.ui_components import InputAccordion
+from modules.ui_components import FormRow, InputAccordion
 
 t2i_info = """
 For <b>Flux-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b><br>
@@ -47,7 +47,7 @@ class ImageStitch(scripts.Script):
                 container=False,
                 show_download_button=False,
                 show_share_button=False,
-                label="Reference Latents",
+                label="Reference Images",
                 min_width=384,
                 height=384,
                 columns=3,
@@ -57,7 +57,41 @@ class ImageStitch(scripts.Script):
                 elem_id=self.elem_id("ref_latent"),
             )
 
-        return [enable, references]
+            with FormRow():
+                upload = gr.Image(
+                    height=256,
+                    width=256,
+                    sources="upload",
+                    type="pil",
+                    label="Paste Image",
+                    show_download_button=False,
+                    show_share_button=False,
+                )
+                with gr.Column():
+                    btn_upload = gr.Button("Upload Pasted Image")
+                    btn_clear = gr.Button("Clear All References")
+                    max_dim = gr.Slider(
+                        minimum=0,
+                        maximum=2048,
+                        value=1024,
+                        step=256,
+                        label="Maximum Side Length",
+                        info="reduce VRAM usage during encoding ; set to 0 for no limit",
+                    )
+
+        def _upload(gallery: list[tuple[Image.Image, str]], image: Image.Image):
+            if image is None:
+                return [gr.skip(), gr.skip()]
+            elif gallery is None:
+                gallery = [(image, None)]
+            else:
+                gallery.append((image, None))
+            return [gr.update(value=gallery), gr.update(value=None)]
+
+        btn_upload.click(fn=_upload, inputs=[references, upload], outputs=[references, upload], queue=False, show_progress=False)
+        btn_clear.click(fn=lambda: [], outputs=[references], queue=False, show_progress=False)
+
+        return [enable, references, max_dim]
 
     @staticmethod
     def reset_references(p: StableDiffusionProcessing):
@@ -65,7 +99,7 @@ class ImageStitch(scripts.Script):
         p.clear_prompt_cache()
         p.sd_model.clear_references()
 
-    def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]]):
+    def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int):
         if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein"))):
             if self.cached_parameters is None:
                 return
@@ -88,7 +122,7 @@ class ImageStitch(scripts.Script):
         dynamic_args.is_referencing = True
 
         for reference in references:
-            reference = self.preprocess(reference)
+            reference = self.preprocess(reference, max_dim)
             image = images.flatten(reference, opts.img2img_background_color)
             image = np.array(image, dtype=np.float32) / 255.0
             image = np.moveaxis(image, 2, 0)
@@ -105,12 +139,23 @@ class ImageStitch(scripts.Script):
         return [img for (img, _) in gallery]
 
     @staticmethod
-    def preprocess(img: Image.Image) -> Image.Image:
+    def preprocess(img: Image.Image, limit: int) -> Image.Image:
         w, h = img.size
-        if w % 64 == 0 and h % 64 == 0:
-            return img
 
-        return images.resize_image(1, img, round(w / 64) * 64, round(h / 64) * 64)
+        if limit > 0 and max(w, h) > limit:
+            ratio = limit / max(w, h)
+            _w, _h = int(w * ratio), int(h * ratio)
+        else:
+            _w, _h = w, h
+
+        if _w % 64 != 0 or _h % 64 != 0:
+            _w = round(_w / 64) * 64
+            _h = round(_h / 64) * 64
+
+        if w != _w or h != _h:
+            return images.resize_image(1, img, _w, _h)
+        else:
+            return img
 
     @staticmethod
     def hash_image(img: Image.Image) -> int:
