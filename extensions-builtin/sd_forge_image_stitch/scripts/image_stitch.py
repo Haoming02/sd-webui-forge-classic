@@ -4,7 +4,7 @@ import torch
 from PIL import Image
 
 from backend.args import dynamic_args
-from modules import images, scripts, sd_models
+from modules import images, scripts, sd_models, script_callbacks, shared
 from modules.api import api
 from modules.processing import StableDiffusionProcessing
 from modules.sd_samplers_common import images_tensor_to_samples
@@ -107,6 +107,18 @@ class ImageStitch(scripts.Script):
     @staticmethod
     def preprocess(img: Image.Image) -> Image.Image:
         w, h = img.size
+
+        max_size = getattr(opts, "image_stitch_large_border_size", -1)
+        if max_size > 0 and max(w, h) > max_size:
+            if w > h:
+                new_w = int(max_size)
+                new_h = int(h * (max_size / w))
+            else:
+                new_h = int(max_size)
+                new_w = int(w * (max_size / h))
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            w, h = img.size
+
         if w % 64 == 0 and h % 64 == 0:
             return img
 
@@ -117,3 +129,20 @@ class ImageStitch(scripts.Script):
         img = img.resize((64, 64), Image.Resampling.LANCZOS)
         img = img.convert("L")
         return hash(str(list(img.getdata())))
+
+def on_ui_settings():
+    section = ("image_stitch", "Image Stitch")
+    shared.opts.add_option(
+        "image_stitch_large_border_size",
+        shared.OptionInfo(
+            -1,
+            "ImageStitch Integrated large border size (-1 to disable)",
+            gr.Number,
+            {"precision": 0},
+            section=section,
+            category_id="sd",
+        ),
+    )
+
+script_callbacks.on_ui_settings(on_ui_settings)
+
