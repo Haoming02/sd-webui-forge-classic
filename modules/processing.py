@@ -41,6 +41,10 @@ opt_C = 4
 opt_f = 8
 
 
+def floor_to_multiple(value: int, multiple: int) -> int:
+    return value if multiple <= 0 else max(multiple, (value // multiple) * multiple)
+
+
 def setup_color_correction(image: Image.Image) -> np.ndarray:
     correction_target = cv2.cvtColor(np.asarray(image.copy(), dtype=np.uint8), cv2.COLOR_RGB2LAB)
     return correction_target
@@ -1705,6 +1709,10 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     def init(self, all_prompts, all_seeds, all_subseeds):
         self.extra_generation_params["Denoising strength"] = self.denoising_strength
 
+        model_opt_f = getattr(self.sd_model, "opt_f", opt_f)
+        self.width = floor_to_multiple(self.width, model_opt_f)
+        self.height = floor_to_multiple(self.height, model_opt_f)
+        
         if (args.dynamic_args.kontext or args.dynamic_args.edit) and self.denoising_strength < 0.9:
             logger.warning("Edit Models require High Denoising Strength")
 
