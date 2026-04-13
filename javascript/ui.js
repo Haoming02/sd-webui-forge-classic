@@ -468,9 +468,10 @@ function currentImg2imgSourceResolution(w, h, r) {
     let img = gradioApp().querySelector(
         '#mode_img2img > div[style="display: block;"] :is(img, canvas)',
     );
-    return img
-        ? [img.naturalWidth || img.width, img.naturalHeight || img.height, r]
-        : [0, 0, r];
+    if (!img) return [0, 0, r];
+    const width = img.naturalWidth || img.width;
+    const height = img.naturalHeight || img.height;
+    return [Math.round(width / 64.0) * 64, Math.round(height / 64.0) * 64, r];
 }
 
 function updateImg2imgResizeToTextAfterChangingImage() {
