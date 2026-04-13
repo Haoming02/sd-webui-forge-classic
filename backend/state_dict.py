@@ -17,7 +17,6 @@ def load_state_dict(model, sd, ignore_errors=[], log_name=None, ignore_start=Non
         print(f"{log_name} Missing: {missing}")
     if len(unexpected) > 0:
         print(f"{log_name} Unexpected: {unexpected}")
-    return
 
 
 def state_dict_has(sd, prefix):
@@ -103,21 +102,21 @@ def state_dict_prefix_replace(state_dict, replace_prefix, filter_keys=False):
     return out
 
 
-def detect_quantization(state_dict, *, is_unet=False):
+def detect_quantization(state_dict: dict[str, torch.Tensor], *, is_unet: bool = False) -> dict | None:
     if any(k.endswith(".comfy_quant") for k in state_dict):
         return {"mixed_ops": True, "TE": not is_unet}
     return None
 
 
-def convert_quantization(state_dict, metadata):
-    # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/utils.py#L1342
+def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict, model_prefix: str = "") -> dict[str, torch.Tensor]:
+    # https://github.com/Comfy-Org/ComfyUI/blob/v0.19.0/comfy/utils.py#L1358
     if metadata is None:
         metadata = {}
 
     if "_quantization_metadata" in metadata:
         quant_metadata = json.loads(metadata["_quantization_metadata"]) or {}
     else:
-        scaled_fp8_key = "scaled_fp8"
+        scaled_fp8_key = "{}scaled_fp8".format(model_prefix)
         if scaled_fp8_key not in state_dict:
             return state_dict, metadata
 
@@ -135,6 +134,9 @@ def convert_quantization(state_dict, metadata):
         layers = {}
         for k in list(state_dict.keys()):
             if k == scaled_fp8_key:
+                continue
+            if not k.startswith(model_prefix):
+                out_sd[k] = state_dict[k]
                 continue
             k_out = k
             w = state_dict.pop(k)
