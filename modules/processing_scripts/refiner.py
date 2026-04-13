@@ -30,9 +30,17 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
         self.refresh_checkpoints()
         with InputAccordion(False, label="Refiner", elem_id=self.elem_id("enable")) as enable_refiner:
             with gr.Row():
-                refiner_checkpoint = gr.Dropdown(value="None", label="Checkpoint", info="(use model of same architecture)", elem_id=self.elem_id("checkpoint"), choices=self.ckpts)
+                refiner_checkpoint = gr.Dropdown(value="None", label="Checkpoint", info="(use model of same architecture and quantization)", elem_id=self.elem_id("checkpoint"), choices=self.ckpts)
                 create_refresh_button(refiner_checkpoint, self.refresh_checkpoints, lambda: {"choices": self.ckpts}, self.elem_id("checkpoint_refresh"))
-                refiner_switch_at = gr.Slider(value=0.875, label="Switch at", info="(in sigmas)", minimum=0.1, maximum=1.0, step=0.025, elem_id=self.elem_id("switch_at"), tooltip="Wan 2.2 T2V: 0.875 ; Wan 2.2 I2V: 0.9")
+                refiner_switch_at = gr.Slider(
+                    value=0.875,
+                    label="Switch at",
+                    minimum=0.0,
+                    maximum=1.0,
+                    step=0.025,
+                    elem_id=self.elem_id("switch_at"),
+                    **({"info": "(in steps)", "tooltip": "based on percentage of steps"} if opts.refiner_use_steps else {"info": "(in sigmas)", "tooltip": "Wan 2.2 T2V: 0.875 ; Wan 2.2 I2V: 0.9"}),
+                )
 
         def lookup_checkpoint(title):
             info = sd_models.get_closet_checkpoint_match(title)
