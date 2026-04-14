@@ -294,7 +294,7 @@ class UiSettings:
         self.interface = settings_interface
 
     def add_quicksettings(self):
-        with gr.Accordion(label="Quicksettings", open=not getattr(opts, "quicksettings_accordion_starts_closed", False)) if opts.quicksettings_accordion else nullcontext():
+        with gr.Accordion(label="Quicksettings", open=not opts.quicksettings_accordion_starts_closed) if opts.quicksettings_accordion else nullcontext():
             with gr.Row(elem_id="quicksettings", variant="compact") as quicksettings_row:
                 main_entry.make_checkpoint_manager_ui()
                 for _i, k, _item in sorted(self.quicksettings_list, key=lambda x: self.quicksettings_names.get(x[1], x[0])):

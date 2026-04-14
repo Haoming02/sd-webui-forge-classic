@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 import gradio as gr
 
 import modules.images
@@ -31,28 +33,29 @@ class Toprow:
 
     submit_box = None
 
-    def __init__(self, is_img2img, is_compact=False, id_part=None):
+    def __init__(self, is_img2img, *, is_compact=None, id_part=None):
+        self.is_img2img = is_img2img
+
         if id_part is None:
             id_part = "img2img" if is_img2img else "txt2img"
-
         self.id_part = id_part
-        self.is_img2img = is_img2img
+
+        if is_compact is None:
+            is_compact = shared.opts.prompt_box_style == "Compact"
         self.is_compact = is_compact
 
-        if not is_compact:
+        if is_compact:
+            self.create_submit_box()
+        else:
             with gr.Row(elem_id=f"{id_part}_toprow", variant="compact"):
                 self.create_classic_toprow()
-        else:
-            self.create_submit_box()
 
     def create_classic_toprow(self):
         self.create_prompts()
 
         with gr.Column(scale=1, elem_id=f"{self.id_part}_actions_column"):
             self.create_submit_box()
-
             self.create_tools_row()
-
             self.create_styles_ui()
 
     def create_inline_toprow_prompts(self):
@@ -73,22 +76,29 @@ class Toprow:
 
         self.submit_box.render()
 
-    def _container_class(self) -> list[str]:
-        if self.is_compact:
-            return ["prompt-container-compact"]
-        elif shared.opts.scrollable_prompt_box:
-            return ["prompt-container-scroll"]
-        else:
-            return []
+    @staticmethod
+    def _container_class() -> str:
+        match shared.opts.prompt_box_style:
+            case "Compact":
+                return "prompt-container-compact"
+            case "Scrollable":
+                return "prompt-container-scroll"
+            case _:
+                return None
 
     def create_prompts(self):
         with gr.Column(elem_id=f"{self.id_part}_prompt_container", elem_classes=self._container_class(), scale=6):
+            _container = gr.Accordion(label="Prompts", open=False) if shared.opts.prompt_box_style == "Accordion" else nullcontext()
+            _container.__enter__()
+
             with gr.Row(elem_id=f"{self.id_part}_prompt_row", elem_classes=["prompt-row"]):
                 self.prompt = gr.Textbox(label="Prompt", elem_id=f"{self.id_part}_prompt", show_label=False, lines=3, placeholder="Prompt\n(Ctrl+Enter to Generate ; Alt+Enter to Skip ; Esc to Interrupt)", elem_classes=["prompt"])
                 self.prompt_img = gr.File(elem_id=f"{self.id_part}_prompt_image", file_count="single", type="binary", visible=False)
 
             with gr.Row(elem_id=f"{self.id_part}_neg_prompt_row", elem_classes=["prompt-row"]):
                 self.negative_prompt = gr.Textbox(label="Negative Prompt", elem_id=f"{self.id_part}_neg_prompt", show_label=False, lines=3, placeholder="Negative Prompt\n(Ctrl+Enter to Generate ; Alt+Enter to Skip ; Esc to Interrupt)", elem_classes=["prompt"])
+
+            _container.__exit__()
 
         self.prompt_img.change(
             fn=modules.images.image_data,

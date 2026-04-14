@@ -1807,13 +1807,10 @@ body.resizing .resize-handle {
     margin: auto 2em;
 }
 
-#txt2img_prompt_container.prompt-container-scroll,
-#img2img_prompt_container.prompt-container-scroll {
-    display: flex;
-    flex-direction: row;
-    overflow: auto;
-    height: 185px;
-    padding: 1em;
+#txt2img_prompt_container.prompt-container-scroll div.gradio-textbox.prompt,
+#img2img_prompt_container.prompt-container-scroll div.gradio-textbox.prompt {
+    height: 6em;
+    overflow-y: auto !important;
 }
 
 div.xyz_entries {

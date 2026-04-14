@@ -438,10 +438,21 @@ options_templates.update(
             "ctrl_enter_interrupt": OptionInfo(False, "Revert [Ctrl + Enter] to only interrupt the generation").info('the current "intended" behavior is to interrupt the current generation then immediately start a new one'),
             "quicksettings_accordion": OptionInfo(False, "Place the Quicksettings under an Accordion").needs_reload_ui(),
             "quicksettings_accordion_starts_closed": OptionInfo(False, "Close the Accordion on startup").info("for the above option").needs_reload_ui(),
-            "forbidden_knowledge": OptionInfo(False, "Forbidden Knowledge").needs_restart(),
+            "forbidden_knowledge": OptionInfo(False, "Forbidden Knowledge").info('replace "<b>DPM++ 2s a RF</b>" with "<b>Flux Realistic</b>"').needs_restart(),
+            "div_prompt": OptionDiv(),
+            "prompt_box_style": OptionInfo("Default", "Prompt Layout", gr.Radio, {"choices": ("Default", "Compact", "Scrollable", "Accordion")})
+            .html(
+                f"""
+<ul style='margin-left: 1.5em'>
+<li><b>Default:</b> the original Automatic1111 layout</li>
+<li><b>Compact:</b> put Prompts inside the Generate tab, leaving more space for the Gallery</li>
+<li><b>Scrollable:</b> put Prompts inside fixed-height containers with a scrollbar</li>
+<li><b>Accordion:</b> put Prompts inside an accordion that can be collapsed</li>
+</ul>
+                """
+            )
+            .needs_reload_ui(),
             "div_classic": OptionDiv(),
-            "scrollable_prompt_box": OptionInfo(False, "Scrollable Prompt Layout").info("put prompts inside a fixed-height container with a scrollbar").needs_reload_ui(),
-            "compact_prompt_box": OptionInfo(False, "Compact Prompt Layout").info("put prompts inside the Generate tab, leaving more space for the gallery").info("override scrollable").needs_reload_ui(),
             "dimensions_and_batch_together": OptionInfo(True, "Show Width/Height and Batch sliders in same row").needs_reload_ui(),
             "sd_checkpoint_dropdown_use_short": OptionInfo(False, "Show filenames without folder in the Checkpoint dropdown").info("if disabled, models under subdirectories will be listed like sdxl/anime.safetensors"),
             "hires_fix_show_sampler": OptionInfo(False, "[Hires. fix]: Show checkpoint, sampler, scheduler, and cfg options").needs_reload_ui(),
