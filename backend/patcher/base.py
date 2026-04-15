@@ -436,12 +436,14 @@ class ModelPatcher:
         return list(p)
 
     def _process_online_loras(self):
-        if hasattr(self, "online_lora_layers"):
-            for layer in self.online_lora_layers:
-                if hasattr(layer, "forge_online_loras"):
-                    del layer.forge_online_loras
+        if not hasattr(self.model, "online_lora_layers"):
+            utils.set_attr_raw(self.model, "online_lora_layers", set())
 
-        self.online_lora_layers = set()
+        for layer in self.model.online_lora_layers:
+            if hasattr(layer, "forge_online_loras"):
+                del layer.forge_online_loras
+
+        self.model.online_lora_layers.clear()
 
         for key, current_patches in self.online_patches.items():
             try:
@@ -458,7 +460,7 @@ class ModelPatcher:
                 parent_layer.forge_online_loras[child_key] = []
 
             parent_layer.forge_online_loras[child_key].extend(current_patches)
-            self.online_lora_layers.add(parent_layer)
+            self.model.online_lora_layers.add(parent_layer)
 
     def get_key_patches(self, filter_prefix=None):
         model_sd = self.model_state_dict()
