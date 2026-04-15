@@ -12,15 +12,13 @@ from modules.shared import device, opts
 from modules.ui_components import FormRow, InputAccordion
 
 t2i_info = """
-For <b>Flux-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b><br>
-Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution<br>
-<b>NOTE:</b> This doesn't actually stitch the images
+For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b> ; Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution<br>
+<b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
 i2i_info = """
-For <b>Flux-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b><br>
-Use in <b>img2img</b> to achieve the effect of multiple input images<br>
-<b>NOTE:</b> This doesn't actually stitch the images
+For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b> ; Use in <b>img2img</b> to achieve the effect of multiple input images<br>
+<b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
 
@@ -47,8 +45,8 @@ class ImageStitch(scripts.Script):
                 container=False,
                 show_download_button=False,
                 show_share_button=False,
-                label="Reference Images",
-                min_width=384,
+                label="Reference Image(s)",
+                min_width=512,
                 height=384,
                 columns=3,
                 rows=1,
@@ -57,39 +55,94 @@ class ImageStitch(scripts.Script):
                 elem_id=self.elem_id("ref_latent"),
             )
 
+            select_index = gr.State(-1)
+
+            def on_select(evt: gr.SelectData) -> int:
+                return evt.index
+
+            references.select(
+                fn=on_select,
+                outputs=[select_index],
+                queue=False,
+                show_progress=False,
+            )
+
             with FormRow():
                 upload = gr.Image(
-                    height=256,
-                    width=256,
+                    height=225,
+                    width=225,
                     sources="upload",
                     type="pil",
-                    label="Paste Image",
+                    label="Image to Upload",
                     show_download_button=False,
                     show_share_button=False,
                 )
                 with gr.Column():
-                    btn_upload = gr.Button("Upload Pasted Image")
-                    btn_clear = gr.Button("Clear All References")
-                    max_dim = gr.Slider(
-                        minimum=0,
-                        maximum=2048,
-                        value=1024,
-                        step=256,
-                        label="Maximum Side Length",
-                        info="reduce VRAM usage during encoding ; set to 0 for no limit",
-                    )
+                    btn_upload = gr.Button("Append Pasted Image")
+                    btn_replace = gr.Button("Replace Selected Image")
+                    btn_delete = gr.Button("Delete Selected Image", variant="stop")
+                    btn_clear = gr.Button("Clear All References", variant="stop")
+
+            max_dim = gr.Slider(
+                minimum=0,
+                maximum=2048,
+                value=1024,
+                step=256,
+                label="Maximum Side Length",
+                info="reduce VRAM usage during encoding ; apply to all reference images ; set to 0 for no limit",
+            )
 
         def _upload(gallery: list[tuple[Image.Image, str]], image: Image.Image):
-            if image is None:
+            if not image:
                 return [gr.skip(), gr.skip()]
-            elif gallery is None:
+            elif not gallery:
                 gallery = [(image, None)]
             else:
                 gallery.append((image, None))
             return [gr.update(value=gallery), gr.update(value=None)]
 
-        btn_upload.click(fn=_upload, inputs=[references, upload], outputs=[references, upload], queue=False, show_progress=False)
-        btn_clear.click(fn=lambda: [], outputs=[references], queue=False, show_progress=False)
+        def _replace(index: int, gallery: list[tuple[Image.Image, str]], image: Image.Image):
+            if not image or not gallery or index < 0 or index >= len(gallery):
+                return [-1, gr.skip(), gr.skip()]
+            gallery[index] = (image, None)
+            return [-1, gr.update(value=gallery), gr.update(value=None)]
+
+        def _delete(index: int, gallery: list[tuple[Image.Image, str]]):
+            if not gallery or index < 0 or index >= len(gallery):
+                return [-1, gr.skip()]
+            gallery.pop(index)
+            return [-1, gr.update(value=gallery)]
+
+        btn_upload.click(
+            fn=_upload,
+            inputs=[references, upload],
+            outputs=[references, upload],
+            queue=False,
+            show_progress=False,
+        )
+
+        btn_replace.click(
+            fn=_replace,
+            inputs=[select_index, references, upload],
+            outputs=[select_index, references, upload],
+            queue=False,
+            show_progress=False,
+        )
+
+        btn_delete.click(
+            fn=_delete,
+            inputs=[select_index, references],
+            outputs=[select_index, references],
+            queue=False,
+            show_progress=False,
+        )
+
+        btn_clear.click(
+            fn=lambda: [-1, gr.update(value=[])],
+            outputs=[select_index, references],
+            queue=False,
+            show_progress=False,
+        )
 
         return [enable, references, max_dim]
 
