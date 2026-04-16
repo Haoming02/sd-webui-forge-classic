@@ -5,21 +5,13 @@
     "diffusers",
     "FlowMatchEulerDiscreteScheduler"
   ],
-  "pe": [
-    "transformers",
-    "Ministral3ForCausalLM"
-  ],
-  "pe_tokenizer": [
-    "transformers",
-	"TokenizersBackend"
-  ],
   "text_encoder": [
     "transformers",
     "Mistral3Model"
   ],
   "tokenizer": [
     "transformers",
-    "TokenizersBackend"
+    "PixtralProcessor"
   ],
   "transformer": [
     "diffusers",
