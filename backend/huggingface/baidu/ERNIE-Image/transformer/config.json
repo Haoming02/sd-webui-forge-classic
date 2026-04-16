@@ -1,0 +1,20 @@
+{
+  "_class_name": "ErnieImageTransformer2DModel",
+  "_diffusers_version": "0.36.0",
+  "eps": 1e-06,
+  "ffn_hidden_size": 12288,
+  "hidden_size": 4096,
+  "in_channels": 128,
+  "num_attention_heads": 32,
+  "num_layers": 36,
+  "out_channels": 128,
+  "patch_size": 1,
+  "qk_layernorm": true,
+  "rope_axes_dim": [
+    32,
+    48,
+    48
+  ],
+  "rope_theta": 256,
+  "text_in_dim": 3072
+}

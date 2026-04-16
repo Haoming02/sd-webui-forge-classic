@@ -1,0 +1,32 @@
+{
+  "_class_name": "ErnieImagePipeline",
+  "_diffusers_version": "0.36.0",
+  "scheduler": [
+    "diffusers",
+    "FlowMatchEulerDiscreteScheduler"
+  ],
+  "pe": [
+    "transformers",
+    "Ministral3ForCausalLM"
+  ],
+  "pe_tokenizer": [
+    "transformers",
+	"TokenizersBackend"
+  ],
+  "text_encoder": [
+    "transformers",
+    "Mistral3Model"
+  ],
+  "tokenizer": [
+    "transformers",
+    "TokenizersBackend"
+  ],
+  "transformer": [
+    "diffusers",
+    "ErnieImageTransformer2DModel"
+  ],
+  "vae": [
+    "diffusers",
+    "AutoencoderKLFlux2"
+  ]
+}
