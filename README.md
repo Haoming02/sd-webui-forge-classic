@@ -34,6 +34,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Important]
 > To use `Flux.2-Klein` for regular `img2img`, toggle the functionality in **Settings/Stable Diffusion**
 
+- [X] Support [Ernie-Image](https://huggingface.co/baidu/ERNIE-Image)
+    - `ernie-image` / `ernie-image-turbo`
 - [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
     - `z-image` / `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
@@ -110,7 +112,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - training-free acceleration for all models
 - [X] Implement [Epsilon Scaling](https://github.com/comfyanonymous/ComfyUI/pull/10132)
     - enable in **Settings/Stable Diffusion**
-- [X] Implement Torch.Compile
+- [X] Implement `torch.compile`
+    - speed up inference after compilation
+- [X] Implement alternative Prompt Box layouts
 - [X] Support TAESD live preview for all models
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
@@ -190,7 +194,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update `protobuf`
     - faster `insightface` loading
 - [X] Update to latest PyTorch
-    - `torch==2.10.0+cu130`
+    - `torch==2.11.0+cu130`
 
 > [!Note]
 > If your GPU does not support the latest PyTorch, manually [install](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations#older-pytorch) older version of PyTorch
