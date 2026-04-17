@@ -36,7 +36,8 @@ class Ministral3TextProcessingEngine:
         return self.text_encoder(input_ids=tokens)
 
     def tokenize_line(self, line: str):
-        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
+        # https://github.com/Comfy-Org/ComfyUI/blob/v0.19.1/comfy/text_encoders/ernie.py#L14
+        parsed = parsing.parse_prompt_attention(line, "None")
         tokenized = self.tokenize([text for text, _ in parsed])
 
         chunks = []
