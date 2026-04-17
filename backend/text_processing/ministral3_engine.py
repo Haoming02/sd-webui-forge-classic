@@ -27,7 +27,7 @@ class Ministral3TextProcessingEngine:
         self.layer_norm_hidden_state = False
 
     def tokenize(self, texts):
-        tokenized = self.tokenizer(images=None, text=texts, truncation=False, add_special_tokens=False)["input_ids"]
+        tokenized = self.tokenizer(images=None, text=texts)["input_ids"]
         return tokenized
 
     def encode_with_transformers(self, tokens):
@@ -104,6 +104,7 @@ class Ministral3TextProcessingEngine:
                 attention_mask.append(0 if eos else 1)
                 tokens_temp += [token]
                 if not eos and token == self.id_pad:
+                    attention_mask[-1] = 0
                     eos = True
                 index += 1
 
