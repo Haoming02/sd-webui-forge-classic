@@ -279,7 +279,7 @@ def on_preset_change(preset: str):
     shared.opts.save(shared.config_filename)
 
     if use_shift(preset):
-        d_args = {"visible": getattr(shared.opts, "xl_show_shift", False) if preset == "xl" else True, "label": "Shift"}
+        d_args = {"visible": getattr(shared.opts, f"{preset}_show_shift", True), "label": "Shift"}
     elif use_distill(preset):
         d_args = {"visible": True, "label": "Distilled CFG Scale"}
     else:
