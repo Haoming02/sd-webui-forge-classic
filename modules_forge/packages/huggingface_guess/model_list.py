@@ -558,6 +558,34 @@ class QwenImage(BASE):
             return {"qwen25_7b": "text_encoder"}
 
 
+class ErnieImage(BASE):
+    huggingface_repo = "baidu/ERNIE-Image"
+
+    unet_config = {
+        "image_model": "ernie",
+    }
+
+    sampling_settings = {
+        "multiplier": 1000.0,
+        "shift": 3.0,
+    }
+
+    memory_usage_factor = 10.0
+
+    unet_extra_config = {}
+    latent_format = latent.Flux2
+
+    supported_inference_dtypes = [torch.bfloat16, torch.float32]
+
+    vae_key_prefix = ["vae."]
+    text_encoder_key_prefix = ["text_encoders."]
+
+    unet_target = "transformer"
+
+    def clip_target(self, state_dict={}):
+        return {"ministral3_3b.transformer": "text_encoder"}
+
+
 models = [
     SD15,
     SDXL,
@@ -574,4 +602,5 @@ models = [
     WAN21_T2V,
     WAN21_I2V,
     QwenImage,
+    ErnieImage,
 ]

@@ -1308,6 +1308,19 @@ def supports_mxfp8_compute(device: torch.device = None) -> bool:
     return True
 
 
+def supports_fp64(device: torch.device = None) -> bool:
+    if is_device_mps(device):
+        return False
+
+    if is_intel_xpu():
+        return False
+
+    if is_directml_enabled():
+        return False
+
+    return True
+
+
 def extended_fp16_support() -> bool:
     return torch_version_numeric >= (2, 7)
 

@@ -11,6 +11,7 @@ class PresetArch(Enum):
     zit = 7  # Z-Image-Turbo
     wan = 8  # Wan2.2
     anima = 9  # Anima
+    ernie = 10  # Ernie-Image
 
     @staticmethod
     def choices() -> list[str]:
@@ -27,6 +28,7 @@ SAMPLERS = {
     PresetArch.zit: "Euler",
     PresetArch.wan: "Euler",
     PresetArch.anima: "ER SDE",
+    PresetArch.ernie: "Euler",
 }
 
 SCHEDULERS = {
@@ -39,6 +41,7 @@ SCHEDULERS = {
     PresetArch.zit: "Beta",
     PresetArch.wan: "Simple",
     PresetArch.anima: "Beta",
+    PresetArch.ernie: "Simple",
 }
 
 STEPS = {
@@ -51,6 +54,7 @@ STEPS = {
     PresetArch.zit: 9,
     PresetArch.wan: 4,
     PresetArch.anima: 32,
+    PresetArch.ernie: 8,
 }
 
 CFG = {
@@ -63,6 +67,7 @@ CFG = {
     PresetArch.zit: 1.0,
     PresetArch.wan: 1.0,
     PresetArch.anima: 4.0,
+    PresetArch.ernie: 1.0,
 }
 
 DISTILL = {
@@ -70,11 +75,12 @@ DISTILL = {
 }
 
 SHIFT = {
-    PresetArch.xl: 9.0,
+    PresetArch.xl: -9.0,
     PresetArch.lumina: 6.0,
     PresetArch.zit: 9.0,
     PresetArch.wan: 5.0,
     PresetArch.anima: 3.0,
+    PresetArch.ernie: 3.0,
 }
 
 
@@ -168,25 +174,16 @@ def register(options_templates: dict):
                 )
             )
 
-        if name == "xl":
-            options_templates.update(
-                options_section(
-                    (f"ui_{name}", name.upper(), "presets"),
-                    {
-                        f"{name}_show_shift": OptionInfo(False, "Display Shift Slider"),
-                    },
-                )
-            )
-
         if (shift := SHIFT.get(arch, None)) is not None:
             options_templates.update(
                 options_section(
                     (f"ui_{name}", name.upper(), "presets"),
                     {
+                        f"{name}_show_shift": OptionInfo((shift > 0.0), "Display Shift Slider"),
                         f"{name}_dcfg1": OptionRow(),
-                        f"{name}_t2i_dcfg": OptionInfo(shift, "txt2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_t2i_hr_dcfg": OptionInfo(shift, "txt2img Hires. Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_i2i_dcfg": OptionInfo(shift, "img2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
+                        f"{name}_t2i_dcfg": OptionInfo(abs(shift), "txt2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
+                        f"{name}_t2i_hr_dcfg": OptionInfo(abs(shift), "txt2img Hires. Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
+                        f"{name}_i2i_dcfg": OptionInfo(abs(shift), "img2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
                         f"{name}_dcfg0": OptionRow(),
                     },
                 )

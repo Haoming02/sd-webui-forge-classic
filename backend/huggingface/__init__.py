@@ -19,6 +19,9 @@ class Token:
 
     anima = os.path.join(folder, "circlestone-labs", "Anima", "tokenizer", "tokenizer.json")
 
+    ernie_compress = os.path.join(folder, "ernie.tokenizer.json.xz")
+    ernie = os.path.join(folder, "baidu", "ERNIE-Image", "tokenizer", "tokenizer.json")
+
 
 class sha256:
     wan = "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
@@ -32,6 +35,9 @@ class sha256:
 
     f2 = "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
     # https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/blob/main/tokenizer/tokenizer.json
+
+    ernie = "577575622324b2e099e2648be26bdeb5e5815ffe66d7004e9e3ddbf421db6bf1"
+    # https://huggingface.co/baidu/ERNIE-Image/blob/main/tokenizer/tokenizer.json
 
 
 def decompress(source: str, target: str):
@@ -71,6 +77,10 @@ def process():
         compare_sha256(Token.f2_9b, sha256.f2)
     if not os.path.isfile(Token.anima):
         decompress(Token.z_compress, Token.anima)
+        compare_sha256(Token.anima, sha256.f2)
+    if not os.path.isfile(Token.ernie):
+        decompress(Token.ernie_compress, Token.ernie)
+        compare_sha256(Token.ernie, sha256.ernie)
 
     # if not os.path.isfile(Token.wan_compress):
     #     compress(Token.wan_t2v, Token.wan_compress)
@@ -79,6 +89,8 @@ def process():
     #     compress(Token.neta_lumina, Token.neta_compress)
     # if not os.path.isfile(Token.z_compress):
     #     compress(Token.z_image, Token.z_compress)
+    # if not os.path.isfile(Token.ernie_compress):
+    #     compress(Token.ernie, Token.ernie_compress)
 
 
 def compare_sha256(path: str, target: str):

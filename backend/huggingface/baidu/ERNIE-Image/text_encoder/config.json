@@ -1,0 +1,67 @@
+{
+  "architectures": [
+    "Mistral3Model"
+  ],
+  "dtype": "bfloat16",
+  "image_token_index": 10,
+  "model_type": "mistral3",
+  "multimodal_projector_bias": false,
+  "projector_hidden_act": "gelu",
+  "spatial_merge_size": 2,
+  "text_config": {
+    "attention_dropout": 0.0,
+    "bos_token_id": 1,
+    "dtype": "bfloat16",
+    "eos_token_id": 2,
+    "head_dim": 128,
+    "hidden_act": "silu",
+    "hidden_size": 3072,
+    "initializer_range": 0.02,
+    "intermediate_size": 9216,
+    "max_position_embeddings": 262144,
+    "model_type": "ministral3",
+    "num_attention_heads": 32,
+    "num_hidden_layers": 26,
+    "num_key_value_heads": 8,
+    "pad_token_id": 11,
+    "rms_norm_eps": 1e-05,
+    "rope_parameters": {
+      "beta_fast": 32.0,
+      "beta_slow": 1.0,
+      "factor": 16.0,
+      "llama_4_scaling_beta": 0.1,
+      "mscale": 1.0,
+      "mscale_all_dim": 1.0,
+      "original_max_position_embeddings": 16384,
+      "rope_theta": 1000000.0,
+      "rope_type": "yarn",
+      "type": "yarn"
+    },
+    "sliding_window": null,
+    "tie_word_embeddings": true,
+    "use_cache": true,
+    "vocab_size": 131072
+  },
+  "tie_word_embeddings": true,
+  "transformers_version": "5.2.0",
+  "vision_config": {
+    "attention_dropout": 0.0,
+    "dtype": "bfloat16",
+    "head_dim": 64,
+    "hidden_act": "silu",
+    "hidden_size": 1024,
+    "image_size": 1540,
+    "initializer_range": 0.02,
+    "intermediate_size": 4096,
+    "model_type": "pixtral",
+    "num_attention_heads": 16,
+    "num_channels": 3,
+    "num_hidden_layers": 24,
+    "patch_size": 14,
+    "rope_parameters": {
+      "rope_theta": 10000.0,
+      "rope_type": "default"
+    }
+  },
+  "vision_feature_layer": -1
+}
