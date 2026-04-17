@@ -99,9 +99,9 @@ def check_versions():
 
     from modules import shared
 
-    expected_torch = "2.10.0"
-    expected_xformers = "0.0.34"
-    expected_gradio = "4.39.0"
+    expected_torch = "2.11.0"
+    expected_xformers = "0.0.35"
+    expected_gradio = "4.40.0"
 
     _outdated = False
 
