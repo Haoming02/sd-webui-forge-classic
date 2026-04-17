@@ -354,7 +354,7 @@ def forge_model_reload():
     shared.opts.data["sd_checkpoint_hash"] = checkpoint_info.sha256
     model_data.set_sd_model(sd_model)
 
-    processing.opt_f = 16 if sd_model.__class__.__name__ == "Flux2" else 8
+    processing.opt_f = 8 if callable(sd_model.forge_objects.vae.upscale_ratio) else sd_model.forge_objects.vae.upscale_ratio
     script_callbacks.model_loaded_callback(sd_model)
     timer.record("scripts callbacks")
 
