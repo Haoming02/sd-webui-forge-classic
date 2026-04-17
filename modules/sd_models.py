@@ -354,7 +354,7 @@ def forge_model_reload():
     shared.opts.data["sd_checkpoint_hash"] = checkpoint_info.sha256
     model_data.set_sd_model(sd_model)
 
-    processing.opt_f = 8 if callable(sd_model.forge_objects.vae.upscale_ratio) else sd_model.forge_objects.vae.upscale_ratio
+    processing.opt_f = sd_model.forge_objects.vae.upscale_ratio if isinstance(sd_model.forge_objects.vae.upscale_ratio, int) else 8
     script_callbacks.model_loaded_callback(sd_model)
     timer.record("scripts callbacks")
 
