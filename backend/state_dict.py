@@ -108,7 +108,7 @@ def detect_quantization(state_dict: dict[str, torch.Tensor], *, is_unet: bool = 
     return None
 
 
-def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict, model_prefix: str = "") -> dict[str, torch.Tensor]:
+def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict) -> dict[str, torch.Tensor]:
     # https://github.com/Comfy-Org/ComfyUI/blob/v0.19.0/comfy/utils.py#L1358
     if metadata is None:
         metadata = {}
@@ -116,10 +116,17 @@ def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict, mo
     if "_quantization_metadata" in metadata:
         quant_metadata = json.loads(metadata["_quantization_metadata"]) or {}
     else:
-        scaled_fp8_key = "{}scaled_fp8".format(model_prefix)
-        if scaled_fp8_key not in state_dict:
+        model_prefix = None
+
+        for key in state_dict.keys():
+            if key.endswith("scaled_fp8"):
+                model_prefix = key.replace("scaled_fp8", "")
+                break
+
+        if model_prefix is None:
             return state_dict, metadata
 
+        scaled_fp8_key = "{}scaled_fp8".format(model_prefix)
         scaled_fp8_weight = state_dict[scaled_fp8_key]
         scaled_fp8_dtype = scaled_fp8_weight.dtype
         if scaled_fp8_dtype is torch.float32:
