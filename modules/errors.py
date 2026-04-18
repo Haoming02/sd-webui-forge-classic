@@ -103,38 +103,26 @@ def check_versions():
     expected_xformers = "0.0.35"
     expected_gradio = "4.40.0"
 
-    _outdated = False
+    outdated: list[str] = []
 
     if version.parse(torch.__version__) < version.parse(expected_torch):
-        _outdated = True
-        print_error_explanation(
-            f"""
-            You are running torch {torch.__version__}, which is outdated.
-            To install the latest version, run with commandline flag --reinstall-torch.
-            """.strip()
-        )
+        outdated.append(f"You are running PyTorch {torch.__version__}, which is outdated.")
 
     if shared.xformers_available:
         import xformers
 
         if version.parse(xformers.__version__) < version.parse(expected_xformers):
-            _outdated = True
-            print_error_explanation(
-                f"""
-                You are running xformers {xformers.__version__}, which is outdated.
-                To install the latest version, run with commandline flag --reinstall-xformers.
-                """.strip()
-            )
+            outdated.append(f"You are running xformers {xformers.__version__}, which is outdated.")
 
-    if version.parse(gradio.__version__) < version.parse(expected_gradio):
-        _outdated = True
-        print_error_explanation(
-            f"""
-            You are running gradio {gradio.__version__}.
-            This program was built on gradio {expected_gradio}.
-            Using a different version of gradio is likely to break the program.
-            """.strip()
-        )
+    if version.parse(gradio.__version__) != version.parse(expected_gradio):
+        outdated.append(f"You are running Gradio {gradio.__version__}. This program was built on Gradio {expected_gradio}.")
+        outdated.append("Using a different version of Gradio is likely to break some functionalities.")
 
-    if _outdated:
-        print("\nUse --skip-version-check commandline argument to disable the version check(s).\n")
+    if not outdated:
+        return
+
+    outdated.append("")
+    outdated.append("Delete the venv folder to do a reinstall is recommended.")
+    outdated.append("Use --skip-version-check commandline argument to disable the version checks.")
+
+    print_error_explanation("\n".join(outdated))
