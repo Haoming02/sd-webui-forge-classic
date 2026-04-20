@@ -1,8 +1,10 @@
+import logging
 import math
 
 import torch
 
 from backend import memory_management, state_dict, utils
+from backend.logging import setup_logger
 from backend.misc import image_resize
 from backend.nn.cnets import cldm, t2i_adapter
 from backend.operations import (
@@ -13,6 +15,8 @@ from backend.operations import (
 )
 from backend.patcher.base import ModelPatcher
 
+logger = logging.getLogger("ControlNet")
+setup_logger(logger)
 
 def apply_controlnet_advanced(unet, controlnet, image_bchw, strength, start_percent, end_percent, positive_advanced_weighting=None, negative_advanced_weighting=None, advanced_frame_weighting=None, advanced_sigma_weighting=None, advanced_mask_weighting=None):
     """
