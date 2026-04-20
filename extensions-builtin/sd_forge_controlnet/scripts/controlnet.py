@@ -1,4 +1,3 @@
-import functools
 import os.path
 from typing import Optional
 
@@ -36,11 +35,6 @@ from modules_forge.supported_controlnet import ControlModelPatcher
 from modules_forge.utils import HWC3, numpy_to_pytorch
 
 global_state.update_controlnet_filenames()
-
-
-@functools.lru_cache(maxsize=shared.opts.data.get("control_net_model_cache_size", 1))
-def cached_controlnet_loader(filename):
-    return try_load_supported_control_model(filename)
 
 
 class ControlNetCachedParameters:
@@ -381,7 +375,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         else:
             assert unit.model != "None", "You have not selected any control model!"
             model_filename = global_state.get_controlnet_filename(unit.model)
-            params.model = cached_controlnet_loader(model_filename)
+            params.model = try_load_supported_control_model(model_filename)
             assert params.model is not None, logger.error(f"Recognizing Control Model failed: {model_filename}")
 
         params.preprocessor = preprocessor

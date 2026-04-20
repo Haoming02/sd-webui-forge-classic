@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 
 import torch
 
@@ -19,6 +20,28 @@ from modules_forge.packages.huggingface_guess.detection import (
     unet_config_from_diffusers_unet,
 )
 from modules_forge.shared import add_supported_control_model
+
+
+class ModelCache:
+    def __init__(self):
+        self.cache = OrderedDict()
+
+    def get(self, key):
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            return self.cache[key]
+        return None
+
+    def put(self, key, model):
+        self.cache[key] = model
+        self.cache.move_to_end(key)
+
+        max_size = max(1, shared.opts.data.get("control_net_model_cache_size", 3))
+        while len(self.cache) > max_size:
+            self.cache.popitem(last=False)
+
+
+_CONTROL_MODEL_CACHE = ModelCache()
 
 
 class ControlModelPatcher:
@@ -138,27 +161,36 @@ class ControlNetPatcher(ControlModelPatcher):
         controlnet_config["hint_channels"] = controlnet_data["{}input_hint_block.0.weight".format(prefix)].shape[1]
         controlnet_config["hint_width"] = controlnet_data["{}input_hint_block.0.weight".format(prefix)].shape[0]
 
-        with using_forge_operations(dtype=unet_dtype, manual_cast_enabled=computation_dtype != unet_dtype):
-            control_model = cldm.ControlNet(**controlnet_config).to(dtype=unet_dtype)
+        global _CONTROL_MODEL_CACHE
+        control_model = _CONTROL_MODEL_CACHE.get(ckpt_path)
 
-        if pth:
-            if "difference" in controlnet_data:
-                logger.warning("Please use an official Control model for better performance...")
-
-            class WeightsLoader(torch.nn.Module):
-                pass
-
-            w = WeightsLoader()
-            w.control_model = control_model
-            missing, unexpected = w.load_state_dict(controlnet_data, strict=False)
+        if control_model is not None:
+            logger.info("Reusing ControlNet Model...")
         else:
-            missing, unexpected = control_model.load_state_dict(controlnet_data, strict=False)
+            logger.info("Creating ControlNet Model...")
+            with using_forge_operations(dtype=unet_dtype, manual_cast_enabled=computation_dtype != unet_dtype):
+                control_model = cldm.ControlNet(**controlnet_config).to(dtype=unet_dtype)
 
-        if len(missing) > 0:
-            logger.warning("Missing ControlNet Keys: {}".format(missing))
+            if pth:
+                if "difference" in controlnet_data:
+                    logger.warning("Please use an official Control model for better performance...")
 
-        if len(unexpected) > 0:
-            logger.debug("Unexpected ControlNet Keys: {}".format(unexpected))
+                class WeightsLoader(torch.nn.Module):
+                    pass
+
+                w = WeightsLoader()
+                w.control_model = control_model
+                missing, unexpected = w.load_state_dict(controlnet_data, strict=False)
+            else:
+                missing, unexpected = control_model.load_state_dict(controlnet_data, strict=False)
+
+            if len(missing) > 0:
+                logger.warning("Missing ControlNet Keys: {}".format(missing))
+
+            if len(unexpected) > 0:
+                logger.debug("Unexpected ControlNet Keys: {}".format(unexpected))
+
+            _CONTROL_MODEL_CACHE.put(ckpt_path, control_model)
 
         global_average_pooling = False
         filename = os.path.splitext(ckpt_path)[0]
