@@ -169,7 +169,7 @@ class ControlNetPatcher(ControlModelPatcher):
         control = ControlNet(control_model, global_average_pooling=global_average_pooling, load_device=load_device, manual_cast_dtype=computation_dtype)
         return ControlNetPatcher(control)
 
-    def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
+    def process_before_every_sampling(self, process, cond, mask, *args, control_type=None, **kwargs):
         unet = process.sd_model.forge_objects.unet
         unet = apply_controlnet_advanced(
             unet=unet,
@@ -183,6 +183,7 @@ class ControlNetPatcher(ControlModelPatcher):
             advanced_frame_weighting=self.advanced_frame_weighting,
             advanced_sigma_weighting=self.advanced_sigma_weighting,
             advanced_mask_weighting=self.advanced_mask_weighting,
+            control_type=control_type,
         )
         process.sd_model.forge_objects.unet = unet
 

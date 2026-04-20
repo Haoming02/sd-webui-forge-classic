@@ -18,7 +18,8 @@ from backend.patcher.base import ModelPatcher
 logger = logging.getLogger("ControlNet")
 setup_logger(logger)
 
-def apply_controlnet_advanced(unet, controlnet, image_bchw, strength, start_percent, end_percent, positive_advanced_weighting=None, negative_advanced_weighting=None, advanced_frame_weighting=None, advanced_sigma_weighting=None, advanced_mask_weighting=None):
+
+def apply_controlnet_advanced(unet, controlnet, image_bchw, strength, start_percent, end_percent, positive_advanced_weighting=None, negative_advanced_weighting=None, advanced_frame_weighting=None, advanced_sigma_weighting=None, advanced_mask_weighting=None, control_type=None):
     """
 
     # positive_advanced_weighting or negative_advanced_weighting
@@ -63,7 +64,7 @@ def apply_controlnet_advanced(unet, controlnet, image_bchw, strength, start_perc
 
     """
 
-    cnet = controlnet.copy().set_cond_hint(image_bchw, strength, (start_percent, end_percent))
+    cnet = controlnet.copy().set_cond_hint(image_bchw, strength, (start_percent, end_percent)).set_control_type(control_type)
     cnet.positive_advanced_weighting = positive_advanced_weighting
     cnet.negative_advanced_weighting = negative_advanced_weighting
     cnet.advanced_frame_weighting = advanced_frame_weighting
@@ -176,6 +177,7 @@ class ControlBase:
         self.global_average_pooling = False
         self.timestep_range = None
         self.transformer_options = {}
+        self.control_type = None
 
         if device is None:
             device = memory_management.get_torch_device()
@@ -186,6 +188,10 @@ class ControlBase:
         self.cond_hint_original = cond_hint
         self.strength = strength
         self.timestep_percent_range = timestep_percent_range
+        return self
+
+    def set_control_type(self, control_type):
+        self.control_type = [control_type]
         return self
 
     def pre_run(self, model, percent_to_timestep_function):
@@ -324,12 +330,12 @@ class ControlNet(ControlBase):
         controlnet_model_function_wrapper = to.get("controlnet_model_function_wrapper", None)
 
         if controlnet_model_function_wrapper is not None:
-            wrapper_args = dict(x=x_noisy.to(dtype), hint=self.cond_hint, timesteps=timestep.float(), context=context.to(dtype), y=y)
+            wrapper_args = dict(x=x_noisy.to(dtype), hint=self.cond_hint, timesteps=timestep.float(), context=context.to(dtype), y=y, control_type=self.control_type)
             wrapper_args["model"] = self
             wrapper_args["inner_model"] = self.control_model
             control = controlnet_model_function_wrapper(**wrapper_args)
         else:
-            control = self.control_model(x=x_noisy.to(dtype), hint=self.cond_hint.to(self.device), timesteps=timestep.float(), context=context.to(dtype), y=y)
+            control = self.control_model(x=x_noisy.to(dtype), hint=self.cond_hint.to(self.device), timesteps=timestep.float(), context=context.to(dtype), y=y, control_type=self.control_type)
         return self.control_merge(None, control, control_prev, output_dtype)
 
     def copy(self):

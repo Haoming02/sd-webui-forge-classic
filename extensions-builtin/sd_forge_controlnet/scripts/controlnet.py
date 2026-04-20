@@ -24,6 +24,7 @@ from PIL import Image
 
 import modules.scripts as scripts
 import modules.util as util
+from backend.nn.cnets.control_types import convert_control_type
 from modules import images, masking, script_callbacks, shared
 from modules.processing import (
     StableDiffusionProcessing,
@@ -37,7 +38,7 @@ from modules_forge.utils import HWC3, numpy_to_pytorch
 global_state.update_controlnet_filenames()
 
 
-@functools.lru_cache(maxsize=shared.opts.data.get("control_net_model_cache_size", 5))
+@functools.lru_cache(maxsize=shared.opts.data.get("control_net_model_cache_size", 1))
 def cached_controlnet_loader(filename):
     return try_load_supported_control_model(filename)
 
@@ -455,7 +456,7 @@ class ControlNetForForgeOfficial(scripts.Script):
 
         params.model.advanced_mask_weighting = mask
 
-        params.model.process_before_every_sampling(p, cond, mask, *args, **kwargs)
+        params.model.process_before_every_sampling(p, cond, mask, *args, **kwargs, control_type=convert_control_type(unit.type_filter))
 
         logger.info(f"ControlNet Method {params.preprocessor.name} patched.")
         return
@@ -547,7 +548,7 @@ def on_ui_settings():
     shared.opts.add_option(
         "control_net_model_cache_size",
         shared.OptionInfo(
-            3,
+            1,
             "Number of Models to Cache in Memory",
             gr.Slider,
             {"minimum": 0, "maximum": 10, "step": 1},
