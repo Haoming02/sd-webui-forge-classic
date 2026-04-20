@@ -191,7 +191,10 @@ class ControlBase:
         return self
 
     def set_control_type(self, control_type):
-        self.control_type = [control_type]
+        if control_type is None:
+            self.control_type = None
+        else:
+            self.control_type = [control_type]
         return self
 
     def pre_run(self, model, percent_to_timestep_function):
