@@ -128,6 +128,7 @@ class ControlNetPatcher(ControlModelPatcher):
         computation_dtype = shared.sd_model.forge_objects.unet.model.computation_dtype
         controlnet_config.pop("out_channels")
         controlnet_config["hint_channels"] = controlnet_data["{}input_hint_block.0.weight".format(prefix)].shape[1]
+        controlnet_config["hint_width"] = controlnet_data["{}input_hint_block.0.weight".format(prefix)].shape[0]
 
         with using_forge_operations(dtype=unet_dtype, manual_cast_enabled=computation_dtype != unet_dtype):
             control_model = cldm.ControlNet(**controlnet_config).to(dtype=unet_dtype)

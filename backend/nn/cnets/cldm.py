@@ -17,6 +17,7 @@ class ControlNet(nn.Module):
         in_channels,
         model_channels,
         hint_channels,
+        hint_width,
         num_res_blocks,
         dropout=0,
         channel_mult=(1, 2, 4, 8),
@@ -118,7 +119,12 @@ class ControlNet(nn.Module):
         self.input_blocks = nn.ModuleList([TimestepEmbedSequential(nn.Conv2d(in_channels, model_channels, 3, padding=1))])
         self.zero_convs = nn.ModuleList([self.make_zero_conv(model_channels)])
 
-        self.input_hint_block = TimestepEmbedSequential(conv_nd(dims, hint_channels, 16, 3, padding=1), nn.SiLU(), conv_nd(dims, 16, 16, 3, padding=1), nn.SiLU(), conv_nd(dims, 16, 32, 3, padding=1, stride=2), nn.SiLU(), conv_nd(dims, 32, 32, 3, padding=1), nn.SiLU(), conv_nd(dims, 32, 96, 3, padding=1, stride=2), nn.SiLU(), conv_nd(dims, 96, 96, 3, padding=1), nn.SiLU(), conv_nd(dims, 96, 256, 3, padding=1, stride=2), nn.SiLU(), conv_nd(dims, 256, model_channels, 3, padding=1))
+        if hint_width == 48:
+            c0, c1, c2, c3 = 48, 96, 192, 384
+        else:
+            c0, c1, c2, c3 = 16, 32, 96, 256
+
+        self.input_hint_block = TimestepEmbedSequential(conv_nd(dims, hint_channels, c0, 3, padding=1), nn.SiLU(), conv_nd(dims, c0, c0, 3, padding=1), nn.SiLU(), conv_nd(dims, c0, c1, 3, padding=1, stride=2), nn.SiLU(), conv_nd(dims, c1, c1, 3, padding=1), nn.SiLU(), conv_nd(dims, c1, c2, 3, padding=1, stride=2), nn.SiLU(), conv_nd(dims, c2, c2, 3, padding=1), nn.SiLU(), conv_nd(dims, c2, c3, 3, padding=1, stride=2), nn.SiLU(), conv_nd(dims, c3, model_channels, 3, padding=1))
 
         self._feature_size = model_channels
         input_block_chans = [model_channels]
