@@ -10,6 +10,7 @@ from backend.patcher.controlnet import (
     ControlNet,
     apply_controlnet_advanced,
     load_t2i_adapter,
+    logger,
 )
 from modules import shared
 from modules_forge.packages.comfy.utils import unet_to_diffusers
@@ -99,9 +100,15 @@ class ControlNetPatcher(ControlModelPatcher):
                 if k in controlnet_data:
                     new_sd[diffusers_keys[k]] = controlnet_data.pop(k)
 
+            if "control_add_embedding.linear_1.bias" in controlnet_data:  # Union Controlnet
+                controlnet_config["union_controlnet_num_control_type"] = controlnet_data["task_embedding"].shape[0]
+                for k in list(controlnet_data.keys()):
+                    new_k = k.replace(".attn.in_proj_", ".attn.in_proj.")
+                    new_sd[new_k] = controlnet_data.pop(k)
+
             leftover_keys = controlnet_data.keys()
             if len(leftover_keys) > 0:
-                print("leftover keys:", leftover_keys)
+                logger.warning("Leftover Keys: {}".format(leftover_keys))
             controlnet_data = new_sd
 
         pth_key = "control_model.zero_convs.0.0.weight"
@@ -116,6 +123,7 @@ class ControlNetPatcher(ControlModelPatcher):
         else:
             net = load_t2i_adapter(controlnet_data)
             if net is None:
+                logger.error("Could not detect Control model type...")
                 return None
             return ControlNetPatcher(net)
 
@@ -135,7 +143,7 @@ class ControlNetPatcher(ControlModelPatcher):
 
         if pth:
             if "difference" in controlnet_data:
-                print("WARNING: Your controlnet model is diff version rather than official float16 model. " "Please use an official float16/float32 model for robust performance.")
+                logger.warning("Please use an official Control model for better performance...")
 
             class WeightsLoader(torch.nn.Module):
                 pass
@@ -145,7 +153,12 @@ class ControlNetPatcher(ControlModelPatcher):
             missing, unexpected = w.load_state_dict(controlnet_data, strict=False)
         else:
             missing, unexpected = control_model.load_state_dict(controlnet_data, strict=False)
-        print(missing, unexpected)
+
+        if len(missing) > 0:
+            logger.warning("Missing ControlNet Keys: {}".format(missing))
+
+        if len(unexpected) > 0:
+            logger.debug("Unexpected ControlNet Keys: {}".format(unexpected))
 
         global_average_pooling = False
         filename = os.path.splitext(ckpt_path)[0]
