@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 
 import torch
 
@@ -10,6 +11,7 @@ from backend.patcher.controlnet import (
     ControlNet,
     apply_controlnet_advanced,
     load_t2i_adapter,
+    logger,
 )
 from modules import shared
 from modules_forge.packages.comfy.utils import unet_to_diffusers
@@ -18,6 +20,28 @@ from modules_forge.packages.huggingface_guess.detection import (
     unet_config_from_diffusers_unet,
 )
 from modules_forge.shared import add_supported_control_model
+
+
+class ModelCache:
+    def __init__(self):
+        self.cache = OrderedDict()
+
+    def get(self, key):
+        if key in self.cache:
+            self.cache.move_to_end(key)
+            return self.cache[key]
+        return None
+
+    def put(self, key, model):
+        self.cache[key] = model
+        self.cache.move_to_end(key)
+
+        max_size = max(1, shared.opts.data.get("control_net_model_cache_size", 3))
+        while len(self.cache) > max_size:
+            self.cache.popitem(last=False)
+
+
+_CONTROL_MODEL_CACHE = ModelCache()
 
 
 class ControlModelPatcher:
@@ -99,9 +123,15 @@ class ControlNetPatcher(ControlModelPatcher):
                 if k in controlnet_data:
                     new_sd[diffusers_keys[k]] = controlnet_data.pop(k)
 
+            if "control_add_embedding.linear_1.bias" in controlnet_data:  # Union Controlnet
+                controlnet_config["union_controlnet_num_control_type"] = controlnet_data["task_embedding"].shape[0]
+                for k in list(controlnet_data.keys()):
+                    new_k = k.replace(".attn.in_proj_", ".attn.in_proj.")
+                    new_sd[new_k] = controlnet_data.pop(k)
+
             leftover_keys = controlnet_data.keys()
             if len(leftover_keys) > 0:
-                print("leftover keys:", leftover_keys)
+                logger.warning("Leftover Keys: {}".format(leftover_keys))
             controlnet_data = new_sd
 
         pth_key = "control_model.zero_convs.0.0.weight"
@@ -116,6 +146,7 @@ class ControlNetPatcher(ControlModelPatcher):
         else:
             net = load_t2i_adapter(controlnet_data)
             if net is None:
+                logger.error("Could not detect Control model type...")
                 return None
             return ControlNetPatcher(net)
 
@@ -130,22 +161,36 @@ class ControlNetPatcher(ControlModelPatcher):
         controlnet_config["hint_channels"] = controlnet_data["{}input_hint_block.0.weight".format(prefix)].shape[1]
         controlnet_config["hint_width"] = controlnet_data["{}input_hint_block.0.weight".format(prefix)].shape[0]
 
-        with using_forge_operations(dtype=unet_dtype, manual_cast_enabled=computation_dtype != unet_dtype):
-            control_model = cldm.ControlNet(**controlnet_config).to(dtype=unet_dtype)
+        global _CONTROL_MODEL_CACHE
+        control_model = _CONTROL_MODEL_CACHE.get(ckpt_path)
 
-        if pth:
-            if "difference" in controlnet_data:
-                print("WARNING: Your controlnet model is diff version rather than official float16 model. " "Please use an official float16/float32 model for robust performance.")
-
-            class WeightsLoader(torch.nn.Module):
-                pass
-
-            w = WeightsLoader()
-            w.control_model = control_model
-            missing, unexpected = w.load_state_dict(controlnet_data, strict=False)
+        if control_model is not None:
+            logger.info("Reusing ControlNet Model...")
         else:
-            missing, unexpected = control_model.load_state_dict(controlnet_data, strict=False)
-        print(missing, unexpected)
+            logger.info("Creating ControlNet Model...")
+            with using_forge_operations(dtype=unet_dtype, manual_cast_enabled=computation_dtype != unet_dtype):
+                control_model = cldm.ControlNet(**controlnet_config).to(dtype=unet_dtype)
+
+            if pth:
+                if "difference" in controlnet_data:
+                    logger.warning("Please use an official Control model for better performance...")
+
+                class WeightsLoader(torch.nn.Module):
+                    pass
+
+                w = WeightsLoader()
+                w.control_model = control_model
+                missing, unexpected = w.load_state_dict(controlnet_data, strict=False)
+            else:
+                missing, unexpected = control_model.load_state_dict(controlnet_data, strict=False)
+
+            if len(missing) > 0:
+                logger.warning("Missing ControlNet Keys: {}".format(missing))
+
+            if len(unexpected) > 0:
+                logger.debug("Unexpected ControlNet Keys: {}".format(unexpected))
+
+            _CONTROL_MODEL_CACHE.put(ckpt_path, control_model)
 
         global_average_pooling = False
         filename = os.path.splitext(ckpt_path)[0]
@@ -156,7 +201,7 @@ class ControlNetPatcher(ControlModelPatcher):
         control = ControlNet(control_model, global_average_pooling=global_average_pooling, load_device=load_device, manual_cast_dtype=computation_dtype)
         return ControlNetPatcher(control)
 
-    def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
+    def process_before_every_sampling(self, process, cond, mask, *args, control_type=None, **kwargs):
         unet = process.sd_model.forge_objects.unet
         unet = apply_controlnet_advanced(
             unet=unet,
@@ -170,6 +215,7 @@ class ControlNetPatcher(ControlModelPatcher):
             advanced_frame_weighting=self.advanced_frame_weighting,
             advanced_sigma_weighting=self.advanced_sigma_weighting,
             advanced_mask_weighting=self.advanced_mask_weighting,
+            control_type=control_type,
         )
         process.sd_model.forge_objects.unet = unet
 
