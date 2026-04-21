@@ -743,8 +743,18 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
             "Size": f"{p.width}x{p.height}",
             "Model hash": p.sd_model_hash if opts.add_model_hash_to_info else None,
             "Model": p.sd_model_name if opts.add_model_name_to_info else None,
-            # "VAE hash": p.sd_vae_hash if opts.add_vae_hash_to_info else None,
-            # "VAE": p.sd_vae_name if opts.add_vae_name_to_info else None,
+        }
+    )
+
+    if isinstance(shared.opts.forge_additional_modules, list):
+        for i, m in enumerate(shared.opts.forge_additional_modules):
+            generation_params[f"Module {i+1}"] = os.path.splitext(os.path.basename(m))[0]
+
+    if shared.opts.forge_unet_storage_dtype != "Automatic":
+        generation_params["Diffusion in Low Bits"] = shared.opts.forge_unet_storage_dtype
+
+    generation_params.update(
+        {
             "Variation seed": (None if p.subseed_strength == 0 else (p.all_subseeds[0] if use_main_prompt else all_subseeds[index])),
             "Variation seed strength": (None if p.subseed_strength == 0 else p.subseed_strength),
             "Seed resize from": (None if p.seed_resize_from_w <= 0 or p.seed_resize_from_h <= 0 else f"{p.seed_resize_from_w}x{p.seed_resize_from_h}"),
@@ -763,13 +773,6 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
             "User": p.user if opts.add_user_name_to_info else None,
         }
     )
-
-    if shared.opts.forge_unet_storage_dtype != "Automatic":
-        generation_params["Diffusion in Low Bits"] = shared.opts.forge_unet_storage_dtype
-
-    if isinstance(shared.opts.forge_additional_modules, list) and len(shared.opts.forge_additional_modules) > 0:
-        for i, m in enumerate(shared.opts.forge_additional_modules):
-            generation_params[f"Module {i+1}"] = os.path.splitext(os.path.basename(m))[0]
 
     for key, value in generation_params.items():
         try:
@@ -1329,7 +1332,6 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             self.extra_generation_params["Hires negative prompt"] = get_hr_negative_prompt
 
             self.extra_generation_params["Hires CFG Scale"] = self.hr_cfg
-            self.extra_generation_params["Hires Distilled CFG Scale"] = None  # set after potential hires model load
 
             self.extra_generation_params["Hires schedule type"] = None  # to be set in sd_samplers_kdiffusion.py
 
@@ -1445,6 +1447,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
         if self.sd_model.use_distilled_cfg_scale:
             self.extra_generation_params["Hires Distilled CFG Scale"] = self.hr_distilled_cfg
+        if self.sd_model.use_shift:
+            self.extra_generation_params["Hires Shift"] = self.hr_distilled_cfg
 
         return self.sample_hr_pass(samples, decoded_samples, seeds, subseeds, subseed_strength, prompts)
 

@@ -401,6 +401,9 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     if "Shift" in res:
         res["Distilled CFG Scale"] = res.pop("Shift")
 
+    if "Hires Shift" in res:
+        res["Hires Distilled CFG Scale"] = res.pop("Hires Shift")
+
     infotext_versions.backcompat(res)
 
     for key in skip_fields:
