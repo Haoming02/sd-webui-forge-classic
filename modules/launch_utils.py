@@ -494,6 +494,7 @@ def configure_comfy_reference(comfy_home: Path):
         ModelRef(arg_name="--text-encoder-dirs", relative_path="text_encoders"),
         ModelRef(arg_name="--lora-dirs", relative_path="loras"),
         ModelRef(arg_name="--vae-dirs", relative_path="vae"),
+        ModelRef(arg_name="--controlnet-dirs", relative_path="controlnet"),
     )
 
     for ref in refs:
@@ -537,6 +538,7 @@ def configure_comfy_yaml(comfy_yaml: Path):
         _configure_yaml(base, config.get("text_encoders", None), "--text-encoder-dirs")
         _configure_yaml(base, config.get("loras", None), "--lora-dirs")
         _configure_yaml(base, config.get("vae", None), "--vae-dirs")
+        _configure_yaml(base, config.get("controlnet", None), "--controlnet-dirs")
 
 
 def start():

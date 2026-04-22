@@ -41,12 +41,13 @@ def update_controlnet_filenames():
     controlnet_filename_dict = {"None": None}
 
     ext_dirs = (
-        shared.opts.data.get("control_net_models_path", None),
+        getattr(shared.opts, "control_net_models_path", None),
         getattr(shared.cmd_opts, "controlnet_dir", None),
+        *getattr(shared.cmd_opts, "controlnet_dirs", []),
     )
-    extra_paths = (extra_path for extra_path in ext_dirs if extra_path is not None and os.path.exists(extra_path))
+    extra_paths = (extra_path for extra_path in ext_dirs if os.path.isdir(str(extra_path)))
 
-    for path in [controlnet_dir, *extra_paths]:
+    for path in set(extra_paths):
         found = get_all_models(path, "name")
         controlnet_filename_dict.update(found)
 

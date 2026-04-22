@@ -10,6 +10,13 @@ parser.add_argument(
     default=os.path.join(models_path, "ControlNet"),
 )
 parser.add_argument(
+    "--controlnet-dirs",
+    type=normalized_filepath,
+    action="append",
+    help="Directories for ControlNet model(s)",
+    default=[],
+)
+parser.add_argument(
     "--controlnet-preprocessor-models-dir",
     type=normalized_filepath,
     help="Path to directory with Annotator models",
