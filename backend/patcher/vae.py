@@ -136,8 +136,8 @@ class VAE:
             self.memory_used_decode = lambda shape, dtype: (2178 * shape[2] * shape[3] * 64) * memory_management.dtype_size(dtype)
 
             if is_flux2 or is_mugen:
-                self.upscale_ratio = 16
-                self.downscale_ratio = 16
+                self.upscale_ratio = 8 if is_mugen else 16
+                self.downscale_ratio = 8 if is_mugen else 16
                 self.latent_channels = 32 if is_mugen else 128
                 self.memory_used_decode = lambda shape, dtype: (2178 * shape[2] * shape[3] * 64) * memory_management.dtype_size(dtype) * 4.0
 
