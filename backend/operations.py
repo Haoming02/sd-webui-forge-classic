@@ -633,6 +633,49 @@ class ForgeOperationsGGUF(ForgeOperations):
             with main_stream_worker(weight, bias, signal):
                 return torch.nn.functional.linear(x, weight, bias)
 
+    class Conv2d(torch.nn.Conv2d, ForgeWeights):
+        def __init__(self, *args, **kwargs):
+            kwargs["device"] = current_device
+            kwargs["dtype"] = current_dtype
+            super().__init__(*args, **kwargs)
+            self.dummy = {"device": current_device, "dtype": current_dtype}
+            self.weight = None
+            self.bias = None
+
+        def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+            if hasattr(self, "dummy"):
+                if (computation_dtype := self.dummy["dtype"]) not in [torch.float16, torch.bfloat16]:
+                    computation_dtype = torch.float16
+
+                if prefix + "weight" in state_dict:
+                    self.weight = state_dict[prefix + "weight"].to(device=self.dummy["device"])
+                    self.weight.computation_dtype = computation_dtype
+                if prefix + "bias" in state_dict:
+                    self.bias = state_dict[prefix + "bias"].to(device=self.dummy["device"])
+                    self.bias.computation_dtype = computation_dtype
+
+                del self.dummy
+            else:
+                if prefix + "weight" in state_dict:
+                    self.weight = state_dict[prefix + "weight"]
+                if prefix + "bias" in state_dict:
+                    self.bias = state_dict[prefix + "bias"]
+
+        def _apply(self, fn, recurse=True):
+            for k, p in self.named_parameters(recurse=False, remove_duplicate=True):
+                setattr(self, k, utils.tensor2parameter(fn(p)))
+            return self
+
+        def forward(self, x):
+            if self.bias is not None and self.bias.dtype != x.dtype:
+                self.bias = utils.tensor2parameter(dequantize_tensor(self.bias).to(x.dtype))
+            if self.weight is not None and self.weight.dtype != x.dtype and getattr(self.weight, "gguf_cls", None) is None:
+                self.weight = utils.tensor2parameter(self.weight.to(x.dtype))
+
+            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, skip_bias_dtype=True)
+            with main_stream_worker(weight, bias, signal):
+                return super()._conv_forward(x, weight, bias)
+
     class Embedding(torch.nn.Embedding, ForgeWeights):
         def __init__(self, *args, **kwargs):
             kwargs["device"] = current_device
