@@ -154,15 +154,6 @@ if not args.always_normal_vram and not args.always_cpu:
         set_vram_to = VRAMState.LOW_VRAM
 
 
-if args.fast_fp16:
-    _ver = str(torch.version.__version__)
-    if int(_ver[0]) >= 2 and int(_ver[2]) >= 7:
-        torch.backends.cuda.allow_fp16_bf16_reduction_math_sdp(True)
-        torch.backends.cuda.matmul.allow_fp16_accumulation = True
-        print("allow_fp16_accumulation:", torch.backends.cuda.matmul.allow_fp16_accumulation)
-    else:
-        print("This version of pytorch does not support fp16_accumulation")
-
 XFORMERS_VERSION = ""
 XFORMERS_ENABLED_VAE = True
 if args.disable_xformers:
@@ -266,6 +257,13 @@ if ENABLE_PYTORCH_ATTENTION:
     torch.backends.cuda.enable_math_sdp(True)
     torch.backends.cuda.enable_flash_sdp(True)
     torch.backends.cuda.enable_mem_efficient_sdp(True)
+
+try:
+    if args.fast_fp16 and is_nvidia():
+        torch.backends.cuda.matmul.allow_fp16_accumulation = True
+        print("allow_fp16_accumulation:", torch.backends.cuda.matmul.allow_fp16_accumulation)
+except Exception:
+    pass
 
 if args.always_low_vram:
     set_vram_to = VRAMState.LOW_VRAM
