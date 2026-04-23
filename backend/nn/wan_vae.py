@@ -25,9 +25,6 @@ def torch_cat_if_needed(xl, dim):
 
 
 class CausalConv3d(ops.Conv3d):
-    """
-    Causal 3d convolusion.
-    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -80,17 +77,16 @@ class Resample(nn.Module):
         self.dim = dim
         self.mode = mode
 
-        # layers
         if mode == "upsample2d":
-            self.resample = nn.Sequential(nn.Upsample(scale_factor=(2.0, 2.0), mode="nearest-exact"), ops.Conv2d(dim, dim // 2, 3, padding=1))
+            self.resample = nn.Sequential(nn.Upsample(scale_factor=(2.0, 2.0), mode="nearest-exact"), nn.Conv2d(dim, dim // 2, 3, padding=1))
         elif mode == "upsample3d":
-            self.resample = nn.Sequential(nn.Upsample(scale_factor=(2.0, 2.0), mode="nearest-exact"), ops.Conv2d(dim, dim // 2, 3, padding=1))
+            self.resample = nn.Sequential(nn.Upsample(scale_factor=(2.0, 2.0), mode="nearest-exact"), nn.Conv2d(dim, dim // 2, 3, padding=1))
             self.time_conv = CausalConv3d(dim, dim * 2, (3, 1, 1), padding=(1, 0, 0))
 
         elif mode == "downsample2d":
-            self.resample = nn.Sequential(nn.ZeroPad2d((0, 1, 0, 1)), ops.Conv2d(dim, dim, 3, stride=(2, 2)))
+            self.resample = nn.Sequential(nn.ZeroPad2d((0, 1, 0, 1)), nn.Conv2d(dim, dim, 3, stride=(2, 2)))
         elif mode == "downsample3d":
-            self.resample = nn.Sequential(nn.ZeroPad2d((0, 1, 0, 1)), ops.Conv2d(dim, dim, 3, stride=(2, 2)))
+            self.resample = nn.Sequential(nn.ZeroPad2d((0, 1, 0, 1)), nn.Conv2d(dim, dim, 3, stride=(2, 2)))
             self.time_conv = CausalConv3d(dim, dim, (3, 1, 1), stride=(2, 1, 1), padding=(0, 0, 0))
 
         else:
@@ -153,7 +149,6 @@ class ResidualBlock(nn.Module):
         self.in_dim = in_dim
         self.out_dim = out_dim
 
-        # layers
         self.residual = nn.Sequential(RMS_norm(in_dim, images=False), nn.SiLU(), CausalConv3d(in_dim, out_dim, 3, padding=1), RMS_norm(out_dim, images=False), nn.SiLU(), nn.Dropout(dropout), CausalConv3d(out_dim, out_dim, 3, padding=1))
         self.shortcut = CausalConv3d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
@@ -172,30 +167,24 @@ class ResidualBlock(nn.Module):
 
 
 class AttentionBlock(nn.Module):
-    """
-    Causal self-attention with a single head.
-    """
 
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
 
-        # layers
         self.norm = RMS_norm(dim)
-        self.to_qkv = ops.Conv2d(dim, dim * 3, 1)
-        self.proj = ops.Conv2d(dim, dim, 1)
+        self.to_qkv = nn.Conv2d(dim, dim * 3, 1)
+        self.proj = nn.Conv2d(dim, dim, 1)
 
     def forward(self, x, feat_cache=None, feat_idx=[0], final=False):
         identity = x
         b, c, t, h, w = x.size()
         x = rearrange(x, "b c t h w -> (b t) c h w")
         x = self.norm(x)
-        # compute query, key, value
 
         q, k, v = self.to_qkv(x).chunk(3, dim=1)
         x = attention_function_vae(q, k, v)
 
-        # output
         x = self.proj(x)
         x = rearrange(x, "(b t) c h w-> b c t h w", t=t)
         return x + identity
@@ -212,34 +201,27 @@ class Encoder3d(nn.Module):
         self.attn_scales = attn_scales
         self.temporal_downsample = temporal_downsample
 
-        # dimensions
         dims = [dim * u for u in [1] + dim_mult]
         scale = 1.0
 
-        # init block
         self.conv1 = CausalConv3d(input_channels, dims[0], 3, padding=1)
 
-        # downsample blocks
         downsamples = []
         for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
-            # residual (+attention) blocks
             for _ in range(num_res_blocks):
                 downsamples.append(ResidualBlock(in_dim, out_dim, dropout))
                 if scale in attn_scales:
                     downsamples.append(AttentionBlock(out_dim))
                 in_dim = out_dim
 
-            # downsample block
             if i != len(dim_mult) - 1:
                 mode = "downsample3d" if temporal_downsample[i] else "downsample2d"
                 downsamples.append(Resample(out_dim, mode=mode))
                 scale /= 2.0
         self.downsamples = nn.Sequential(*downsamples)
 
-        # middle blocks
         self.middle = nn.Sequential(ResidualBlock(out_dim, out_dim, dropout), AttentionBlock(out_dim), ResidualBlock(out_dim, out_dim, dropout))
 
-        # output blocks
         self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, z_dim, 3, padding=1))
 
     def forward(self, x, feat_cache=None, feat_idx=[0], final=False):
@@ -252,7 +234,6 @@ class Encoder3d(nn.Module):
         else:
             x = self.conv1(x)
 
-        ## downsamples
         for layer in self.downsamples:
             if feat_cache is not None:
                 x = layer(x, feat_cache, feat_idx, final=final)
@@ -261,14 +242,12 @@ class Encoder3d(nn.Module):
             else:
                 x = layer(x)
 
-        ## middle
         for layer in self.middle:
             if feat_cache is not None:
                 x = layer(x, feat_cache, feat_idx, final=final)
             else:
                 x = layer(x)
 
-        ## head
         for layer in self.head:
             if isinstance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]
@@ -292,20 +271,15 @@ class Decoder3d(nn.Module):
         self.attn_scales = attn_scales
         self.temporal_upsample = temporal_upsample
 
-        # dimensions
         dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]
         scale = 1.0 / 2 ** (len(dim_mult) - 2)
 
-        # init block
         self.conv1 = CausalConv3d(z_dim, dims[0], 3, padding=1)
 
-        # middle blocks
         self.middle = nn.Sequential(ResidualBlock(dims[0], dims[0], dropout), AttentionBlock(dims[0]), ResidualBlock(dims[0], dims[0], dropout))
 
-        # upsample blocks
         upsamples = []
         for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
-            # residual (+attention) blocks
             if i == 1 or i == 2 or i == 3:
                 in_dim = in_dim // 2
             for _ in range(num_res_blocks + 1):
@@ -314,14 +288,12 @@ class Decoder3d(nn.Module):
                     upsamples.append(AttentionBlock(out_dim))
                 in_dim = out_dim
 
-            # upsample block
             if i != len(dim_mult) - 1:
                 mode = "upsample3d" if temporal_upsample[i] else "upsample2d"
                 upsamples.append(Resample(out_dim, mode=mode))
                 scale *= 2.0
         self.upsamples = nn.Sequential(*upsamples)
 
-        # output blocks
         self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, output_channels, 3, padding=1))
 
     def run_up(self, layer_idx, x_ref, feat_cache, feat_idx, out_chunks):
@@ -362,7 +334,6 @@ class Decoder3d(nn.Module):
         self.run_up(layer_idx + 1, next_x_ref, feat_cache, feat_idx, out_chunks)
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
-        ## conv1
         if feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :]
@@ -372,7 +343,6 @@ class Decoder3d(nn.Module):
         else:
             x = self.conv1(x)
 
-        ## middle
         for layer in self.middle:
             if feat_cache is not None:
                 x = layer(x, feat_cache, feat_idx)
@@ -407,7 +377,6 @@ class WanVAE(nn.Module, ConfigMixin):
         self.temporal_downsample = temporal_downsample
         self.temporal_upsample = temporal_downsample[::-1]
 
-        # modules
         self.encoder = Encoder3d(base_dim, z_dim * 2, image_channels, dim_mult, num_res_blocks, attn_scales, self.temporal_downsample, dropout)
         self.conv1 = CausalConv3d(z_dim * 2, z_dim * 2, 1)
         self.conv2 = CausalConv3d(z_dim, z_dim, 1)
