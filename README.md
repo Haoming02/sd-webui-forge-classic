@@ -115,6 +115,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Implement `torch.compile`
     - speed up inference after compilation
 - [X] Implement alternative Prompt Box layouts
+- [X] Implement tiled `Conv2d` for VAE
+    - reduce memory usage; reduce speed
+    - see [Commandline](#by-neo)
 - [X] Support TAESD live preview for all models
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
@@ -122,10 +125,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support running tile composition on GPU
     - enable in **Settings/Upscaling**
 - [X] Support (short) videos in **Extras** tab
-- [X] Update `spandrel`
-    - support new Upscaler architectures
 - [X] Add support for `.avif`, `.heif`, and `.jxl` image formats
 - [X] Automatically determine the optimal row count for `X/Y/Z Plot`
+- [X] Support **Union** ControlNet
+    - [SDXL](https://huggingface.co/xinsir/controlnet-union-sdxl-1.0) / [Chenkin](https://civitai.com/models/2527960/chenkin-unicontrol-xl)
 
 #### Removed Features
 
@@ -138,8 +141,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Textual Inversion Training
 - [X] Most built-in Extensions
 - [X] Some built-in Scripts
-- [X] Some Samplers
-- [X] Sampler in RadioGroup
+- [X] Some Samplers & Schedulers
+- [X] Stealth Infotext
 
 #### Optimizations
 
@@ -156,8 +159,16 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Fix some typos
 - [X] Fix automatic `Tiled VAE` fallback
 - [X] Pad conditioning for SDXL
-- [X] Remove redundant upscaler codes
-    - put every upscaler inside the `ESRGAN` folder
+- [X] Remove duplicated upscaler codes
+- [X] Update [spandrel](https://github.com/chaiNNer-org/spandrel)
+    - support new upscaler architectures
+
+> [!Important]
+> Put every upscaler (`.pth` / `.safetensors`) inside the `ESRGAN` folder
+
+> [!Tip]
+> Check out [OpenModelDB](https://openmodeldb.info/) for where to get upscalers
+
 - [X] Improve `ForgeCanvas`
     - brush adjustments
     - customization
@@ -264,6 +275,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - `--fast-fp16`: Enable the `allow_fp16_accumulation` option
 - `--autotune`: Enable the `torch.backends.cudnn.benchmark` option
     - this is slower in my experience...
+- `--tiled-conv2d`: Replace `Conv2d` ops with tiled variants
+    - has greater reduction for **SD1** and **SDXL** VAE; less for **Wan** VAE
+    - `64` / `128` / `256` / `512`
 
 <br>
 
@@ -354,12 +368,16 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - **Issues** caused by [StabilityMatrix](https://github.com/LykosAI/StabilityMatrix) will simply be ignored
     - only open an Issue if you can reproduce it on a clean install following the official [Installation](#installation) instruction
 
-<br>
+> [!Caution]
+> - If you post **NSFW** images/videos, you will immediately be banned
+>     - the sole discretion is on me ; if you are unsure, just generate `cats` and `dogs`...
+
+<hr>
 
 > [!Tip]
 > Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki)~
 
-<hr>
+<br>
 
 <p align="center">
 Special thanks to <b>AUTOMATIC1111</b>, <b>lllyasviel</b>, and <b>comfyanonymous</b>, <b>kijai</b>, <b>city96</b>, <br>
