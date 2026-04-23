@@ -1,9 +1,10 @@
 import math
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from diffusers.configuration_utils import ConfigMixin, register_to_config
 from einops import rearrange
-from torch import nn
 
 from backend import memory_management
 from backend.attention import attention_function_vae
@@ -46,14 +47,14 @@ class Upsample(nn.Module):
     @torch.inference_mode()
     def forward(self, x):
         try:
-            x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
+            x = F.interpolate(x, scale_factor=2.0, mode="nearest")
         except Exception as e:
             b, c, h, w = x.shape
             out = torch.empty((b, c, h * 2, w * 2), dtype=x.dtype, layout=x.layout, device=x.device)
             split = 8
             l = out.shape[1] // split
             for i in range(0, out.shape[1], l):
-                out[:, i : i + l] = torch.nn.functional.interpolate(x[:, i : i + l].to(torch.float32), scale_factor=2.0, mode="nearest").to(x.dtype)
+                out[:, i : i + l] = F.interpolate(x[:, i : i + l].to(torch.float32), scale_factor=2.0, mode="nearest").to(x.dtype)
             del x
             x = out
 
@@ -73,10 +74,10 @@ class Downsample(nn.Module):
     def forward(self, x):
         if self.with_conv:
             pad = (0, 1, 0, 1)
-            x = torch.nn.functional.pad(x, pad, mode="constant", value=0)
+            x = F.pad(x, pad, mode="constant", value=0)
             x = self.conv(x)
         else:
-            x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
+            x = F.avg_pool2d(x, kernel_size=2, stride=2)
         return x
 
 
@@ -88,13 +89,13 @@ class ResnetBlock(nn.Module):
         self.out_channels = out_channels
         self.use_conv_shortcut = conv_shortcut
 
-        self.swish = torch.nn.SiLU(inplace=True)
+        self.swish = nn.SiLU(inplace=True)
         self.norm1 = Normalize(in_channels)
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if temb_channels > 0:
             self.temb_proj = nn.Linear(temb_channels, out_channels)
         self.norm2 = Normalize(out_channels)
-        self.dropout = torch.nn.Dropout(dropout, inplace=True)
+        self.dropout = nn.Dropout(dropout, inplace=True)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
@@ -346,7 +347,7 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
         self.bn_eps = 1e-4
         self.bn_momentum = 0.1
         self.ps = [2, 2]
-        self.bn = torch.nn.BatchNorm2d(
+        self.bn = nn.BatchNorm2d(
             math.prod(self.ps) * latent_channels,
             eps=self.bn_eps,
             momentum=self.bn_momentum,
@@ -367,7 +368,7 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
             pj=self.ps[1],
         )
 
-        z = torch.nn.functional.batch_norm(
+        z = F.batch_norm(
             z,
             memory_management.cast_to(self.bn.running_mean, dtype=z.dtype, device=z.device),
             memory_management.cast_to(self.bn.running_var, dtype=z.dtype, device=z.device),
@@ -409,7 +410,7 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
             if h % scale_factor != 0 or w % scale_factor != 0:
                 pad_h = (scale_factor - (h % scale_factor)) % scale_factor
                 pad_w = (scale_factor - (w % scale_factor)) % scale_factor
-                latent = torch.nn.functional.pad(latent, (0, pad_w, 0, pad_h))
+                latent = F.pad(latent, (0, pad_w, 0, pad_h))
                 h = latent.shape[-2]
                 w = latent.shape[-1]
             latent = latent.reshape(latent.shape[0], packed_channels, h // scale_factor, scale_factor, w // scale_factor, scale_factor)
