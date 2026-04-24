@@ -295,6 +295,7 @@ options_templates.update(
             "overlay_inpaint": OptionInfo(True, "For inpainting, overlay the resulting image back onto the original image").info('when using the "Only masked" option'),
             "img2img_autosize": OptionInfo(False, "Automatically update the Width and Height when uploading image to img2img input"),
             "img2img_batch_use_original_name": OptionInfo(False, "In img2img Batch, use the input filenames when saving").info("<b>Warning:</b> may override existing files"),
+            "img2img_inpaint_precise_mask": OptionInfo(False, 'Process the "Mask blur" in fp32 instead of uint8 precision').info('improve inpainting blending result and reduce masking artifacts ; may break functionalities that access the "overlay_images"'),
         },
     )
 )
