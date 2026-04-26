@@ -3,7 +3,6 @@
 Docker image for [sd-webui-forge-classic (neo branch)](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo) by Haoming02.
 
 **Docker Hub:** `oromis95/sd-forge-neo`
-**GitHub:** https://github.com/Haoming02/sd-webui-forge-classic
 
 > ⚠ Requires an NVIDIA GPU. The application cannot run without one.
 > ⚠ Ensure NVIDIA drivers are up to date (550+ recommended for CUDA 12.4).
@@ -12,7 +11,6 @@ Docker image for [sd-webui-forge-classic (neo branch)](https://github.com/Haomin
 
 ## Unraid deployment
 
-Import `sd-forge-neo.xml` from this repo into Unraid's Docker template manager.
 
 | Container path | Purpose |
 |---|---|
@@ -49,7 +47,7 @@ Access the WebUI at `http://<host-ip>:7860`.
 ## Building locally
 
 ```bash
-git clone https://github.com/Haoming02/sd-webui-forge-classic
+git clone --branch neo https://github.com/Haoming02/sd-webui-forge-classic
 cd sd-webui-forge-classic/docker
 docker build -t forge-neo-local .
 ```
