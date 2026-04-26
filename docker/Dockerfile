@@ -13,7 +13,7 @@ ARG TORCH_INDEX=cu124
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    # Allow uv to fetch the Python 3.13 standalone runtime if not on the system.
+    # Allow uv to fetch the Python 3.12 standalone runtime if not on the system.
     UV_PYTHON_DOWNLOADS=automatic
 
 # ── uv binary (from the official image — no installer script, no PATH guessing)
@@ -48,9 +48,9 @@ RUN git clone --branch neo --depth 1 \
 
 USER forge
 
-# ── Python 3.13 virtual environment ──────────────────────────────────────────
+# ── Python 3.12 virtual environment ──────────────────────────────────────────
 # --seed pre-installs pip/setuptools/wheel for packages that expect them.
-# uv fetches the Python 3.13 standalone build automatically if needed.
+# uv fetches the Python 3.12 standalone build automatically if needed.
 RUN uv venv venv --python 3.12 --seed
 
 ENV VIRTUAL_ENV=/home/forge/sd-webui/venv \
