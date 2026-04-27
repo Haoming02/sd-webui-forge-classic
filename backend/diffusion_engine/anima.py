@@ -19,7 +19,6 @@ class Anima(ForgeDiffusionEngine):
         clip = CLIP(model_dict={"qwen3_06b": huggingface_components["text_encoder"]}, tokenizer_dict={"qwen3_06b": huggingface_components["tokenizer"], "t5xxl": huggingface_components["tokenizer_2"]})
 
         vae = VAE(model=huggingface_components["vae"], is_wan=True)
-        vae.first_stage_model.latent_format = self.model_config.latent_format
 
         k_predictor = PredictionDiscreteFlow(estimated_config)
 

@@ -27,7 +27,6 @@ class QwenImage(ForgeDiffusionEngine):
         clip = CLIP(model_dict={"qwen25_7b": huggingface_components["text_encoder"]}, tokenizer_dict={"qwen25_7b": huggingface_components["tokenizer"]})
 
         vae = VAE(model=huggingface_components["vae"], is_wan=True)
-        vae.first_stage_model.latent_format = self.model_config.latent_format
 
         k_predictor = PredictionDiscreteFlow(estimated_config)
 

@@ -25,6 +25,8 @@ class ForgeDiffusionEngine:
     matched_guesses = []
 
     def __init__(self, estimated_config, huggingface_components):
+        huggingface_components["vae"].latent_format = estimated_config.latent_format
+
         self.model_config = estimated_config
         self.is_inpaint = estimated_config.inpaint_model()
 

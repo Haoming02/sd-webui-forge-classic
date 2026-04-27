@@ -36,5 +36,6 @@
     "UpDecoderBlock2D"
   ],
   "use_post_quant_conv": true,
-  "use_quant_conv": true
+  "use_quant_conv": true,
+  "mugen": true
 }
