@@ -72,6 +72,8 @@ def samples_to_images_tensor(sample, approximation=None, model=None):
 
 def single_sample_to_image(sample, approximation=None):
     x_sample = samples_to_images_tensor(sample.unsqueeze(0), approximation)[0] * 0.5 + 0.5
+    if x_sample.ndim == 4:
+        x_sample = x_sample.squeeze(0)
 
     x_sample = x_sample.cpu()
     x_sample.mul_(255.0)
