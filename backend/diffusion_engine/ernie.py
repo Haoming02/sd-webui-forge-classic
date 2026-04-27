@@ -38,9 +38,6 @@ class ErnieImage(ForgeDiffusionEngine):
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
-        shift = getattr(prompt, "distilled_cfg_scale", 3.0)
-        self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
-        memory_management.logger.debug(f"Shift: {shift}")
         return self.text_processing_engine_ministral(prompt)
 
     @torch.inference_mode()

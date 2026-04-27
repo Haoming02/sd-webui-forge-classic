@@ -47,14 +47,14 @@ class Wan(ForgeDiffusionEngine):
             memory_management.logger.debug(f"Shift: {refiner_shift}")
             refiner_shift = None
 
+    def set_shift(self, shift):
+        global refiner_shift
+        super().set_shift(shift)
+        refiner_shift = shift
+
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
-        global refiner_shift
-        shift = getattr(prompt, "distilled_cfg_scale", 8.0)
-        self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
-        memory_management.logger.debug(f"Shift: {shift}")
-        refiner_shift = shift
         return self.text_processing_engine_t5(prompt)
 
     @torch.inference_mode()

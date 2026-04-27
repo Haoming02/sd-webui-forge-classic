@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -47,12 +48,15 @@ class ForgeDiffusionEngine:
     def get_first_stage_encoding(self, x):
         return x
 
+    @abstractmethod
     def get_learned_conditioning(self, prompt: list[str]):
         raise NotImplementedError
 
+    @abstractmethod
     def encode_first_stage(self, x):
         raise NotImplementedError
 
+    @abstractmethod
     def decode_first_stage(self, x):
         raise NotImplementedError
 
@@ -88,6 +92,12 @@ class ForgeDiffusionEngine:
         # called by ImageStitch
         self.ref_latents.clear()
         memory_management.soft_empty_cache()
+
+    def set_shift(self, shift: float):
+        if not self.use_shift:
+            return
+        self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
+        memory_management.logger.debug(f"Shift: {shift}")
 
     def save_unet(self, filename):
         import safetensors.torch as sf

@@ -314,24 +314,16 @@ class StableDiffusionProcessing:
 
     def txt2img_image_conditioning(self, x, width=None, height=None):
         self.is_using_inpainting_conditioning = self.sd_model.is_inpaint
-
         return txt2img_image_conditioning(self.sd_model, x, width or self.width, height or self.height)
 
-    def depth2img_image_conditioning(self, source_image):
-        raise NotImplementedError("NotImplementedError: depth2img_image_conditioning")
+    def depth2img_image_conditioning(self, *args, **kwargs):
+        raise NotImplementedError
 
-    def edit_image_conditioning(self, source_image):
-        conditioning_image = shared.sd_model.encode_first_stage(source_image).mode()
+    def edit_image_conditioning(self, *args, **kwargs):
+        raise NotImplementedError
 
-        return conditioning_image
-
-    def unclip_image_conditioning(self, source_image):
-        c_adm = self.sd_model.embedder(source_image)
-        if self.sd_model.noise_augmentor is not None:
-            noise_level = 0  # TODO: Allow other noise levels?
-            c_adm, noise_level_emb = self.sd_model.noise_augmentor(c_adm, noise_level=repeat(torch.tensor([noise_level]).to(c_adm.device), "1 -> b", b=c_adm.shape[0]))
-            c_adm = torch.cat((c_adm, noise_level_emb), 1)
-        return c_adm
+    def unclip_image_conditioning(self, *args, **kwargs):
+        raise NotImplementedError
 
     def inpainting_image_conditioning(self, source_image, latent_image, image_mask=None, round_image_mask=True):
         self.is_using_inpainting_conditioning = True
@@ -364,33 +356,22 @@ class StableDiffusionProcessing:
         conditioning_mask = torch.nn.functional.interpolate(conditioning_mask, size=latent_image.shape[-2:])
         conditioning_mask = conditioning_mask.expand(conditioning_image.shape[0], -1, -1, -1)
         image_conditioning = torch.cat([conditioning_mask, conditioning_image], dim=1)
-        # image_conditioning = image_conditioning.to(shared.device).type(self.sd_model.dtype)
 
         return image_conditioning
 
     def img2img_image_conditioning(self, source_image, latent_image, image_mask=None, round_image_mask=True):
         source_image = devices.cond_cast_float(source_image)
 
-        # if self.sd_model.cond_stage_key == "edit":
-        #     return self.edit_image_conditioning(source_image)
-
         if self.sd_model.is_inpaint:
             return self.inpainting_image_conditioning(source_image, latent_image, image_mask=image_mask, round_image_mask=round_image_mask)
 
-        # if self.sampler.conditioning_key == "crossattn-adm":
-        #     return self.unclip_image_conditioning(source_image)
-        #
-        # if self.sampler.model_wrap.inner_model.is_sdxl_inpaint:
-        #     return self.inpainting_image_conditioning(source_image, latent_image, image_mask=image_mask)
-
-        # Dummy zero conditioning if we're not using inpainting or depth model.
         return latent_image.new_zeros(latent_image.shape[0], 5, 1, 1)
 
     def init(self, all_prompts, all_seeds, all_subseeds):
         pass
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def close(self):
         self.sampler = None
@@ -821,9 +802,6 @@ def manage_model_and_prompt_cache(p: StableDiffusionProcessing):
 
     if need_global_unload and not just_reloaded:
         memory_management.unload_all_models()
-
-    # if need_global_unload:
-    #     p.clear_prompt_cache()
 
     need_global_unload = False
 
@@ -1316,15 +1294,23 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                 self.truncate_x = (self.hr_upscale_to_x - target_w) // opt_f
                 self.truncate_y = (self.hr_upscale_to_y - target_h) // opt_f
 
+    @staticmethod
+    def get_hr_prompt(p, index, prompt_text, **kwargs):
+        hr_prompt = p.all_hr_prompts[index]
+        return hr_prompt if hr_prompt != prompt_text else None
+
+    @staticmethod
+    def get_hr_negative_prompt(p, index, negative_prompt, **kwargs):
+        hr_negative_prompt = p.all_hr_negative_prompts[index]
+        return hr_negative_prompt if hr_negative_prompt != negative_prompt else None
+
     def init(self, all_prompts, all_seeds, all_subseeds):
         if self.enable_hr:
-            self.extra_generation_params["Denoising strength"] = self.denoising_strength
 
             if self.hr_checkpoint_name and self.hr_checkpoint_name != "Use same checkpoint":
                 self.hr_checkpoint_info = sd_models.get_closet_checkpoint_match(self.hr_checkpoint_name)
-
                 if self.hr_checkpoint_info is None:
-                    raise Exception(f"Could not find checkpoint with name {self.hr_checkpoint_name}")
+                    raise ValueError(f'Could not find checkpoint with name "{self.hr_checkpoint_name}"')
 
                 self.extra_generation_params["Hires checkpoint"] = self.hr_checkpoint_info.short_title
 
@@ -1337,31 +1323,13 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                     for i, m in enumerate(self.hr_additional_modules):
                         self.extra_generation_params[f"Hires Module {i+1}"] = os.path.splitext(os.path.basename(m))[0]
 
-            if self.hr_sampler_name is not None and self.hr_sampler_name != self.sampler_name:
-                self.extra_generation_params["Hires sampler"] = self.hr_sampler_name
-
-            def get_hr_prompt(p, index, prompt_text, **kwargs):
-                hr_prompt = p.all_hr_prompts[index]
-                return hr_prompt if hr_prompt != prompt_text else None
-
-            def get_hr_negative_prompt(p, index, negative_prompt, **kwargs):
-                hr_negative_prompt = p.all_hr_negative_prompts[index]
-                return hr_negative_prompt if hr_negative_prompt != negative_prompt else None
-
-            self.extra_generation_params["Hires prompt"] = get_hr_prompt
-            self.extra_generation_params["Hires negative prompt"] = get_hr_negative_prompt
-
-            self.extra_generation_params["Hires CFG Scale"] = self.hr_cfg
-
-            self.extra_generation_params["Hires schedule type"] = None  # to be set in sd_samplers_kdiffusion.py
-
             if self.hr_scheduler is None:
                 self.hr_scheduler = self.scheduler
 
             self.latent_scale_mode = shared.latent_upscale_modes.get(self.hr_upscaler, None) if self.hr_upscaler is not None else shared.latent_upscale_modes.get(shared.latent_upscale_default_mode, "nearest")
             if self.enable_hr and self.latent_scale_mode is None:
                 if not any(x.name == self.hr_upscaler for x in shared.sd_upscalers):
-                    raise Exception(f"could not find upscaler named {self.hr_upscaler}")
+                    raise ValueError(f'Could not find upscaler named "{self.hr_upscaler}"')
 
             self.calculate_target_resolution()
 
@@ -1376,14 +1344,9 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                 state.job_count = state.job_count * 2
                 state.processing_has_refined_job_count = True
 
-            if self.hr_second_pass_steps:
-                self.extra_generation_params["Hires steps"] = self.hr_second_pass_steps
-
-            if self.hr_upscaler is not None:
-                self.extra_generation_params["Hires upscaler"] = self.hr_upscaler
-
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
+        self.sd_model.set_shift(shift=self.distilled_cfg_scale)
 
         if self.firstpass_image is not None and self.enable_hr:
             # here we don't need to generate image, we just take self.firstpass_image and prepare it for hires fix
@@ -1465,16 +1428,34 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                 main_entry.checkpoint_change(fp_checkpoint, preset=None, save=False, refresh=False)
                 main_entry.refresh_model_loading_parameters()
 
-        if self.sd_model.use_distilled_cfg_scale:
-            self.extra_generation_params["Hires Distilled CFG Scale"] = self.hr_distilled_cfg
-        if self.sd_model.use_shift:
-            self.extra_generation_params["Hires Shift"] = self.hr_distilled_cfg
-
         return self.sample_hr_pass(samples, decoded_samples, seeds, subseeds, subseed_strength, prompts)
 
     def sample_hr_pass(self, samples, decoded_samples, seeds, subseeds, subseed_strength, prompts):
         if shared.state.interrupted:
             return samples
+
+        devices.torch_gc()
+        self.sd_model.set_shift(shift=self.hr_distilled_cfg)
+
+        if self.sd_model.use_distilled_cfg_scale:
+            self.extra_generation_params["Hires Distilled CFG Scale"] = self.hr_distilled_cfg
+        if self.sd_model.use_shift:
+            self.extra_generation_params["Hires Shift"] = self.hr_distilled_cfg
+
+        if self.hr_sampler_name is not None and self.hr_sampler_name != self.sampler_name:
+            self.extra_generation_params["Hires sampler"] = self.hr_sampler_name
+        if self.hr_scheduler is not None and self.hr_scheduler != self.scheduler:
+            self.extra_generation_params["Hires schedule type"] = self.hr_scheduler
+        if self.hr_upscaler is not None:
+            self.extra_generation_params["Hires upscaler"] = self.hr_upscaler
+        if self.hr_second_pass_steps:
+            self.extra_generation_params["Hires steps"] = self.hr_second_pass_steps
+
+        self.extra_generation_params["Denoising strength"] = self.denoising_strength
+        self.extra_generation_params["Hires CFG Scale"] = self.hr_cfg
+
+        self.extra_generation_params["Hires prompt"] = self.get_hr_prompt
+        self.extra_generation_params["Hires negative prompt"] = self.get_hr_negative_prompt
 
         self.is_hr_pass = True
         target_width = self.hr_upscale_to_x
@@ -1900,6 +1881,8 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         x = self.rng.next()
+        self.sd_model.set_shift(shift=self.distilled_cfg_scale)
+
         if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)
 
