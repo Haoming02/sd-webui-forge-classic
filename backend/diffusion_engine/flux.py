@@ -27,17 +27,8 @@ class Flux(ForgeDiffusionEngine):
 
         vae = VAE(model=huggingface_components["vae"])
 
-        if "schnell" in estimated_config.huggingface_repo.lower():
-            k_predictor = PredictionFlux(mu=1.0)
-        else:
-            k_predictor = PredictionFlux(
-                seq_len=4096,
-                base_seq_len=256,
-                max_seq_len=4096,
-                base_shift=0.5,
-                max_shift=1.15,
-            )
-            self.use_distilled_cfg_scale = True
+        self.use_distilled_cfg_scale = "schnell" not in estimated_config.huggingface_repo
+        k_predictor = PredictionFlux(mu=None if self.use_distilled_cfg_scale else 1.0)
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
@@ -74,7 +65,7 @@ class Flux(ForgeDiffusionEngine):
         cond = dict(crossattn=cond_t5, vector=pooled_l)
 
         if self.use_distilled_cfg_scale:
-            distilled_cfg_scale = getattr(prompt, "distilled_cfg_scale", 3.5) or 3.5
+            distilled_cfg_scale = getattr(prompt, "distilled_cfg_scale", 3.0) or 3.0
             cond["guidance"] = torch.FloatTensor([distilled_cfg_scale] * len(prompt))
             memory_management.logger.debug(f"Distilled CFG Scale: {distilled_cfg_scale}")
 
