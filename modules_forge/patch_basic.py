@@ -42,20 +42,21 @@ def build_loaded(module, loader_name):
                 warnings.simplefilter(action="ignore", category=FutureWarning)
                 return original_loader(*args, **kwargs)
         except Exception as e:
-            display(e, f"{module.__name__}.{loader_name}")
 
-            exc = "\n"
+            print("\n")
             for path in list(args) + list(kwargs.values()):
                 if isinstance(path, str) and os.path.isfile(path):
-                    exc += f'Failed to read file "{path}"\n'
-                    backup_file = f"{path}.corrupted"
+                    print('Failed to read file "{}"'.format(path))
+                    backup_file = "{}.corrupted".format(path)
                     if os.path.exists(backup_file):
                         os.remove(backup_file)
                     os.replace(path, backup_file)
-                    exc += f'Forge has moved the corrupted file to "{backup_file}"\n'
-                    exc += "Please try downloading the model again\n"
-            print(exc)
-            raise ValueError from None
+                    print(' - Forge has renamed the corrupted file to "{}"'.format(backup_file))
+                    print(" - Please try downloading the model again")
+            print("\n")
+
+            display(e, f"{module.__name__}.{loader_name}")
+            raise BufferError("Failed to load model...") from None
 
     setattr(module, loader_name, loader)
 
