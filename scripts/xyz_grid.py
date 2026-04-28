@@ -115,8 +115,8 @@ def apply_size(p: StableDiffusionProcessing, x: str, _):
         logger.error(f'Invalid Size "{x}" for X/Y/Z Plot')
 
 
-def apply_vae(p: StableDiffusionProcessing, x: str, _):
-    p.override_settings["sd_vae"] = find_vae(x)
+def apply_vae(p: StableDiffusionProcessing, x: str, xs: list[str]):
+    p.override_settings["sd_vae"] = (find_vae(x), xs)
 
 
 def apply_styles(p: StableDiffusionProcessing, x: str, _):
