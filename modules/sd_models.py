@@ -339,8 +339,20 @@ def forge_model_reload():
 
     dynamic_args.forge_unet_storage_dtype = model_data.forge_loading_parameters.get("unet_storage_dtype", None)
     dynamic_args.embedding_dir = cmd_opts.embeddings_dir
-    sd_model = forge_loader(state_dict, additional_state_dicts=additional_state_dicts)
-    timer.record("forge model load")
+
+    try:
+        sd_model = forge_loader(state_dict, additional_state_dicts=additional_state_dicts)
+    except Exception as e:
+        model_data.sd_model = FakeInitialModel()
+        model_data.forge_loading_parameters = {}
+        model_data.forge_hash = ""
+        errors.display(e, "forge_loader")
+        memory_management.logger.error("Failed to load diffusion model... (check README for supported models)")
+        raise BufferError("Failed to load diffusion model...") from None
+    else:
+        timer.record("forge model load")
+    finally:
+        memory_management.soft_empty_cache()
 
     sd_model.extra_generation_params = {}
     sd_model.comments = []
