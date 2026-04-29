@@ -470,7 +470,7 @@ options_templates.update(
         ("ui", "User Interface", "ui"),
         {
             "localization": OptionInfo("None", "Localization", gr.Dropdown, lambda: {"choices": ["None", *localization.localizations.keys()]}, refresh=lambda: localization.list_localizations(cmd_opts.localizations_dir)).needs_reload_ui(),
-            "quicksettings_list": OptionInfo([], "Quicksettings List", ui_components.DropdownMulti, lambda: {"choices": list(shared.opts.data_labels.keys())}).js("info", "settingsHintsShowQuicksettings").info("settings that appear at the top of the page <b>instead of</b> in the Settings tab").needs_reload_ui(),
+            "quicksettings_list": OptionInfo([], "Quicksettings List", ui_components.DropdownMulti, lambda: {"choices": sorted(key for (key, opt) in shared.opts.data_labels.items() if type(opt) is OptionInfo)}).js("info", "settingsHintsShowQuicksettings").info("settings that appear at the top of the page <b>instead of</b> in the Settings tab").needs_reload_ui(),
             "ui_tab_order": OptionInfo([], "UI Tab Order", ui_components.DropdownMulti, lambda: {"choices": list(shared.tab_names)}).needs_reload_ui(),
             "hidden_tabs": OptionInfo([], "Hide UI Tabs", ui_components.DropdownMulti, lambda: {"choices": list(shared.tab_names)}).needs_reload_ui(),
             "ui_reorder_list": OptionInfo([], "Parameter order for txt2img / img2img", ui_components.DropdownMulti, lambda: {"choices": list(shared_items.ui_reorder_categories())}).info("selected items appear first").needs_reload_ui(),
