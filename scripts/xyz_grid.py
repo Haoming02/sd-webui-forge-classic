@@ -197,9 +197,9 @@ def refresh_loading_params_for_xyz_grid():
 
 
 def find_vae(name: str) -> str:
-    if name is None or (name := name.strip().lower()) == "none":
+    if name is None or name.strip().lower() == "none":
         return "None"
-    elif name in ("auto", "automatic"):
+    elif name.strip().lower() in ("auto", "automatic"):
         return "Automatic"
     else:
         return sd_vae.vae_dict[name]
