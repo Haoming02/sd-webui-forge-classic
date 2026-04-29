@@ -24,9 +24,7 @@ For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b> ; Use i
 
 class ImageStitch(scripts.Script):
     sorting_priority = 529
-
-    def __init__(self):
-        self.cached_parameters: list[int] = None
+    cached_parameters: list[int] = None
 
     def title(self):
         return "ImageStitch Integrated"
@@ -154,11 +152,11 @@ class ImageStitch(scripts.Script):
 
     def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int):
         if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein"))):
-            if self.cached_parameters is None:
+            if ImageStitch.cached_parameters is None:
                 return
 
             # if previously enabled, clear out the ref_latents
-            self.cached_parameters = None
+            ImageStitch.cached_parameters = None
             self.reset_references(p)
             return
 
@@ -166,10 +164,10 @@ class ImageStitch(scripts.Script):
 
         # cache is based on reference inputs & model
         cache: list[str | int] = [str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references)]
-        if self.cached_parameters == cache:
+        if ImageStitch.cached_parameters == cache:
             return
 
-        self.cached_parameters = cache
+        ImageStitch.cached_parameters = cache
         self.reset_references(p)
 
         dynamic_args.is_referencing = True
