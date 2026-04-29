@@ -90,8 +90,10 @@ class Wan(ForgeDiffusionEngine):
         image = torch.ones((length, h, w, c), device=start_image.device, dtype=start_image.dtype) * 0.5
         mask = torch.ones((1, 1, latent_shape[2] * 4, latent_shape[-2], latent_shape[-1]))
 
-        image[: start_image.shape[0]] = start_image
-        mask[:, :, : start_image.shape[0] + 3] = 0.0
+        # only last frame mode(must have last frame)
+        if self.end_image is None or not getattr(dynamic_args, "wan_ignore_first_frame", False):
+            image[: start_image.shape[0]] = start_image
+            mask[:, :, : start_image.shape[0] + 3] = 0.0
 
         if self.end_image is not None:
             image[-end_image.shape[0] :] = end_image

@@ -82,6 +82,8 @@ class ImageStitch(scripts.Script):
                     btn_replace = gr.Button("Replace Selected Image")
                     btn_delete = gr.Button("Delete Selected Image", variant="stop")
                     btn_clear = gr.Button("Clear All References", variant="stop")
+                    # support only last frame mode
+                    wan_ignore_first_frame = gr.Checkbox(label="Wan ignore first frame(use only last frame)", value=False)
 
             max_dim = gr.Slider(
                 minimum=0,
@@ -144,7 +146,7 @@ class ImageStitch(scripts.Script):
             show_progress=False,
         )
 
-        return [enable, references, max_dim]
+        return [enable, references, max_dim, wan_ignore_first_frame]
 
     @staticmethod
     def reset_references(p: StableDiffusionProcessing):
@@ -152,7 +154,7 @@ class ImageStitch(scripts.Script):
         p.clear_prompt_cache()
         p.sd_model.clear_references()
 
-    def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int):
+    def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int, wan_ignore_first_frame: bool = False):
         if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein", "wan"))):
             if ImageStitch.cached_parameters is None:
                 return
@@ -162,11 +164,15 @@ class ImageStitch(scripts.Script):
             self.reset_references(p)
             return
 
+        # true = only last frame mode
+        dynamic_args.wan_ignore_first_frame = wan_ignore_first_frame
+
         references = self.extract_images(references)
 
         # cache is based on reference inputs & model
         cache: list[str | int] = [str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references)]
-        if ImageStitch.cached_parameters == cache:
+        # skip cache if wan
+        if ImageStitch.cached_parameters == cache and not getattr(dynamic_args, "wan", False):
             return
 
         ImageStitch.cached_parameters = cache
