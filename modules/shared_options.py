@@ -276,6 +276,18 @@ to create the resulting image after the sampling is finished. For img2img, VAE i
 
 options_templates.update(
     options_section(
+        ("txt2img", "txt2img", "sd"),
+        {
+            "txt2img_upscale_single_batch": OptionInfo(True, "When using the [✨] button, lock the Batch Count and Batch Size to 1 regardless of the UI values"),
+            "txt2img_upscale_same_seed": OptionInfo(True, "When using the [✨] button, pass the Seed of the input image instead of the UI value"),
+            "hires_button_gallery_insert": OptionInfo(False, "When using the [✨] button, insert the upscaled image to the gallery").info("otherwise replace the selected image in the gallery"),
+            "hires_insert_index": OptionInfo(True, "When the above option is enabled, automatically select the upscaled image").info("otherwise select the original image"),
+        },
+    )
+)
+
+options_templates.update(
+    options_section(
         ("img2img", "img2img", "sd"),
         {
             "inpainting_mask_weight": OptionInfo(1.0, "Inpainting Conditioning Mask Strength", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Conditional mask weight"),
@@ -423,8 +435,6 @@ options_templates.update(
             "sd_webui_modal_lightbox_icon_opacity": OptionInfo(1.0, "[Lightbox]: control icon unfocused opacity", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, onchange=shared.reload_gradio_theme).info("for mouse only").needs_reload_ui(),
             "sd_webui_modal_lightbox_toolbar_opacity": OptionInfo(0.9, "[Lightbox]: tool bar opacity", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, onchange=shared.reload_gradio_theme).info("for mouse only").needs_reload_ui(),
             "open_dir_button_choice": OptionInfo("Subdirectory", "What directory the [📂] button opens", gr.Radio, {"choices": ("Output Root", "Subdirectory", "Subdirectory (even temp dir)")}),
-            "hires_button_gallery_insert": OptionInfo(False, "When using the [✨] button, insert the upscaled image to the gallery").info("otherwise replace the selected image in the gallery"),
-            "hires_insert_index": OptionInfo(True, "When the above option is enabled, automatically select the upscaled image").info("otherwise select the original image"),
         },
     )
 )

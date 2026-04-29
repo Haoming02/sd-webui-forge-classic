@@ -78,17 +78,20 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery
         return gallery, generation_info, "Unable to upscale grid or control images.", ""
 
     p = txt2img_create_processing(id_task, request, *args, force_enable_hr=True)
-    p.batch_size = 1
-    p.n_iter = 1
+    if opts.txt2img_upscale_single_batch:
+        p.batch_size = 1
+        p.n_iter = 1
+
     # txt2img_upscale attribute that signifies this is called by txt2img_upscale
     p.txt2img_upscale = True
 
     image_info = gallery[gallery_index]
     p.firstpass_image = infotext_utils.image_from_url_text(image_info)
 
-    parameters = parse_generation_parameters(geninfo.get("infotexts")[gallery_index], [])
-    p.seed = parameters.get("Seed", -1)
-    p.subseed = parameters.get("Variation seed", -1)
+    if opts.txt2img_upscale_same_seed:
+        parameters = parse_generation_parameters(geninfo.get("infotexts")[gallery_index], [])
+        p.seed = parameters.get("Seed", -1)
+        p.subseed = parameters.get("Variation seed", -1)
 
     # update processing width/height based on actual dimensions of source image
     p.width = gallery[gallery_index][0].size[0]
