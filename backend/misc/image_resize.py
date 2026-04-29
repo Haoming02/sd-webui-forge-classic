@@ -3,9 +3,9 @@ import torch
 from PIL import Image
 
 
-def bislerp(samples, width, height):
+def bislerp(samples: torch.Tensor, width: int, height: int) -> torch.Tensor:
     def slerp(b1, b2, r):
-        """slerps batches b1, b2 according to ratio r, batches should be flat e.g. NxC"""
+        """slerps batches b1, b2 according to ratio r, batches should be flat (e.g. NxC)"""
 
         c = b1.shape[-1]
 
@@ -80,18 +80,26 @@ def bislerp(samples, width, height):
     return result.to(orig_dtype)
 
 
-def lanczos(samples, width, height):
-    images = [Image.fromarray(np.clip(255.0 * image.movedim(0, -1).cpu().numpy(), 0, 255).astype(np.uint8)) for image in samples]
+def lanczos(samples: torch.Tensor, width: int, height: int) -> torch.Tensor:
+    samples = samples.squeeze(1) if samples.shape[1] == 1 else samples.movedim(1, -1)
+    images = [Image.fromarray(np.clip(255.0 * image.cpu().numpy(), 0, 255).astype(np.uint8)) for image in samples]
     images = [image.resize((width, height), resample=Image.Resampling.LANCZOS) for image in images]
     images = [torch.from_numpy(np.array(image).astype(np.float32) / 255.0).movedim(-1, 0) for image in images]
     result = torch.stack(images)
     return result.to(samples.device, samples.dtype)
 
 
-def adaptive_resize(samples, width, height, upscale_method, crop):
+def adaptive_resize(samples: torch.Tensor, width: int, height: int, upscale_method: str, crop: str) -> torch.Tensor:
+    # https://github.com/Comfy-Org/ComfyUI/blob/v0.20.1/comfy/utils.py#L1030
+    orig_shape = tuple(samples.shape)
+
+    if len(orig_shape) > 4:
+        samples = samples.reshape(samples.shape[0], samples.shape[1], -1, samples.shape[-2], samples.shape[-1])
+        samples = samples.movedim(2, 1)
+        samples = samples.reshape(-1, orig_shape[1], orig_shape[-2], orig_shape[-1])
     if crop == "center":
-        old_width = samples.shape[3]
-        old_height = samples.shape[2]
+        old_width = samples.shape[-1]
+        old_height = samples.shape[-2]
         old_aspect = old_width / old_height
         new_aspect = width / height
         x = 0
@@ -100,13 +108,19 @@ def adaptive_resize(samples, width, height, upscale_method, crop):
             x = round((old_width - old_width * (new_aspect / old_aspect)) / 2)
         elif old_aspect < new_aspect:
             y = round((old_height - old_height * (old_aspect / new_aspect)) / 2)
-        s = samples[:, :, y : old_height - y, x : old_width - x]
+        s = samples.narrow(-2, y, old_height - y * 2).narrow(-1, x, old_width - x * 2)
     else:
         s = samples
 
     if upscale_method == "bislerp":
-        return bislerp(s, width, height)
+        out = bislerp(s, width, height)
     elif upscale_method == "lanczos":
-        return lanczos(s, width, height)
+        out = lanczos(s, width, height)
     else:
-        return torch.nn.functional.interpolate(s, size=(height, width), mode=upscale_method)
+        out = torch.nn.functional.interpolate(s, size=(height, width), mode=upscale_method)
+
+    if len(orig_shape) == 4:
+        return out
+
+    out = out.reshape((orig_shape[0], -1, orig_shape[1]) + (height, width))
+    return out.movedim(2, 1).reshape(orig_shape[:-2] + (height, width))
