@@ -12,12 +12,14 @@ from modules.shared import device, opts
 from modules.ui_components import FormRow, InputAccordion
 
 t2i_info = """
-For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b> ; Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution<br>
+For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b>: Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution<br>
+For <b>Wan 2.2</b>: This does nothing in <b>txt2img</b><br>
 <b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
 i2i_info = """
-For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b> ; Use in <b>img2img</b> to achieve the effect of multiple input images<br>
+For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b>: Use in <b>img2img</b> to achieve the effect of multiple input images<br>
+For <b>Wan 2.2</b>: Use in <b>img2img</b> to set as the Last Frame to achieve FLF2V<br>
 <b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
@@ -151,7 +153,7 @@ class ImageStitch(scripts.Script):
         p.sd_model.clear_references()
 
     def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int):
-        if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein"))):
+        if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein", "wan"))):
             if ImageStitch.cached_parameters is None:
                 return
 
