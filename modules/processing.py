@@ -647,14 +647,10 @@ def fix_seed(p):
     p.subseed = get_fixed_seed(p.subseed)
 
 
-def program_version():
-    import launch
+def program_version() -> str:
+    from modules_forge.forge_version import version, release
 
-    res = launch.git_tag()
-    if res == "<none>":
-        res = None
-
-    return res
+    return f"{version}-{release}"
 
 
 def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iteration=0, position_in_batch=0, use_main_prompt=False, index=None, all_negative_prompts=None):
