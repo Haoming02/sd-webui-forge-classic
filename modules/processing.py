@@ -12,7 +12,6 @@ from typing import Any
 import cv2
 import numpy as np
 import torch
-from einops import repeat
 from PIL import Image, ImageOps
 from skimage.exposure import match_histograms
 
@@ -26,7 +25,6 @@ from backend.logging import setup_logger
 from backend.modules.k_prediction import rescale_zero_terminal_snr_sigmas
 from backend.utils import hash_tensor
 from modules import devices, errors, extra_networks, images, infotext_utils, masking, profiling, prompt_parser, rng, scripts, sd_samplers, sd_samplers_common, sd_unet, sd_vae_approx
-from modules.rng import get_noise_source_type, slerp  # noqa: F401
 from modules.sd_models import apply_token_merging, forge_model_reload
 from modules.sd_samplers_common import approximation_indexes, decode_first_stage, images_tensor_to_samples
 from modules.shared import cmd_opts, opts, state
@@ -730,8 +728,6 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
     if p.sd_model.use_shift:
         generation_params["Shift"] = p.distilled_cfg_scale
 
-    noise_source_type = get_noise_source_type()
-
     generation_params.update(
         {
             "Image CFG scale": getattr(p, "image_cfg_scale", None),
@@ -763,7 +759,7 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
             "Token merging ratio": None if token_merging_ratio == 0 else token_merging_ratio,
             "Token merging ratio hr": None if not enable_hr or token_merging_ratio_hr == 0 else token_merging_ratio_hr,
             "Init image hash": getattr(p, "init_img_hash", None),
-            "RNG": noise_source_type if noise_source_type != "GPU" else None,
+            "RNG": shared.opts.randn_source,
             "Tiling": "True" if p.tiling else None,
             **p.extra_generation_params,
             "Version": program_version() if opts.add_version_to_infotext else None,

@@ -3,13 +3,6 @@ import torch
 from modules import devices, rng_philox, shared
 
 
-def get_noise_source_type():
-    if shared.opts.forge_try_reproduce in ["ComfyUI", "DrawThings"]:
-        return "CPU"
-
-    return shared.opts.randn_source
-
-
 def randn(seed, shape, generator=None):
     """
     Generate a tensor with random numbers from a normal distribution using seed.
@@ -21,10 +14,10 @@ def randn(seed, shape, generator=None):
     else:
         manual_seed(seed)
 
-    if get_noise_source_type() == "NV":
+    if shared.opts.randn_source == "NV":
         return torch.asarray((generator or nv_rng).randn(shape), device=devices.device)
 
-    if get_noise_source_type() == "CPU" or devices.device.type == "mps":
+    if shared.opts.randn_source == "CPU" or devices.device.type == "mps":
         return torch.randn(shape, device=devices.cpu, generator=generator).to(devices.device)
 
     return torch.randn(shape, device=devices.device, generator=generator)
@@ -36,11 +29,11 @@ def randn_local(seed, shape):
     Does not change the global random number generator. You can only generate the seed's first tensor using this function.
     """
 
-    if get_noise_source_type() == "NV":
+    if shared.opts.randn_source == "NV":
         rng = rng_philox.Generator(seed)
         return torch.asarray(rng.randn(shape), device=devices.device)
 
-    local_device = devices.cpu if get_noise_source_type() == "CPU" or devices.device.type == "mps" else devices.device
+    local_device = devices.cpu if shared.opts.randn_source == "CPU" or devices.device.type == "mps" else devices.device
     local_generator = torch.Generator(local_device).manual_seed(int(seed))
     return torch.randn(shape, device=local_device, generator=local_generator).to(devices.device)
 
@@ -51,10 +44,10 @@ def randn_like(x):
     Use either randn() or manual_seed() to initialize the generator.
     """
 
-    if get_noise_source_type() == "NV":
+    if shared.opts.randn_source == "NV":
         return torch.asarray(nv_rng.randn(x.shape), device=x.device, dtype=x.dtype)
 
-    if get_noise_source_type() == "CPU" or x.device.type == "mps":
+    if shared.opts.randn_source == "CPU" or x.device.type == "mps":
         return torch.randn_like(x, device=devices.cpu).to(x.device)
 
     return torch.randn_like(x)
@@ -66,10 +59,10 @@ def randn_without_seed(shape, generator=None):
     Use either randn() or manual_seed() to initialize the generator.
     """
 
-    if get_noise_source_type() == "NV":
+    if shared.opts.randn_source == "NV":
         return torch.asarray((generator or nv_rng).randn(shape), device=devices.device)
 
-    if get_noise_source_type() == "CPU" or devices.device.type == "mps":
+    if shared.opts.randn_source == "CPU" or devices.device.type == "mps":
         return torch.randn(shape, device=devices.cpu, generator=generator).to(devices.device)
 
     return torch.randn(shape, device=devices.device, generator=generator)
@@ -78,7 +71,7 @@ def randn_without_seed(shape, generator=None):
 def manual_seed(seed):
     """Set up a global random number generator using the specified seed"""
 
-    if get_noise_source_type() == "NV":
+    if shared.opts.randn_source == "NV":
         global nv_rng
         nv_rng = rng_philox.Generator(seed)
         return
@@ -87,10 +80,10 @@ def manual_seed(seed):
 
 
 def create_generator(seed):
-    if get_noise_source_type() == "NV":
+    if shared.opts.randn_source == "NV":
         return rng_philox.Generator(seed)
 
-    device = devices.cpu if get_noise_source_type() == "CPU" or devices.device.type == "mps" else devices.device
+    device = devices.cpu if shared.opts.randn_source == "CPU" or devices.device.type == "mps" else devices.device
     generator = torch.Generator(device).manual_seed(int(seed))
     return generator
 
