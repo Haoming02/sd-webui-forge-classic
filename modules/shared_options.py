@@ -86,12 +86,10 @@ options_templates.update(
             "video_save_frames": OptionInfo(False, "Save intermediate frames when generating video"),
             "video_player_auto": OptionInfo(True, "Play the generated video when done"),
             "video_player_loop": OptionInfo(False, "Make the video player loop the playback"),
-            "video_explanation": OptionHTML(
-                """
+            "video_explanation": OptionHTML("""
 Parameters for encoding videos in <b>H.264</b> using <b>FFmpeg</b><br>
 Refer to the <a href="https://trac.ffmpeg.org/wiki/Encode/H.264">Wiki</a> for what these parameters mean
-                """
-            ),
+                """),
             "video_crf": OptionInfo(16, "CRF", gr.Slider, {"minimum": 0, "maximum": 51, "step": 1}),
             "video_preset": OptionInfo("fast", "Preset", gr.Dropdown, {"choices": ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow")}),
             "video_profile": OptionInfo("main", "Profile", gr.Dropdown, {"choices": ("baseline", "main", "high")}),
@@ -184,15 +182,13 @@ options_templates.update(
     options_section(
         ("profiler", "Profiler", "system"),
         {
-            "profiling_explanation": OptionHTML(
-                """
+            "profiling_explanation": OptionHTML("""
 These settings allow you to enable PyTorch profiler during generation.<br>
 Profiling allows you to see which code uses how much of the computer's resources.
 Each generation writes its own profile to one file, overwriting previous ones.
 The file can be viewed in <a href="chrome:tracing">Chrome</a> or on the <a href="https://ui.perfetto.dev/">Perfetto</a> website.
 <br><b>Warning:</b> Writing profile can take up to 30 seconds, and the file itself can be around 500MB in size.
-                """
-            ),
+                """),
             "profiling_enable": OptionInfo(False, "Enable Profiling"),
             "profiling_activities": OptionInfo(["CPU"], "Activities", gr.CheckboxGroup, {"choices": ["CPU", "CUDA"]}),
             "profiling_record_shapes": OptionInfo(True, "Record Shapes"),
@@ -260,13 +256,11 @@ options_templates.update(
     options_section(
         ("vae", "VAE", "sd"),
         {
-            "sd_vae_explanation": OptionHTML(
-                """
+            "sd_vae_explanation": OptionHTML("""
 <abbr title='Variational AutoEncoder'>VAE</abbr> is a neural network that transforms a standard <abbr title='Red/Green/Blue'>RGB</abbr>
 image to and from latent space representation. Latent space is what Stable Diffusion works on during generation. For txt2img, VAE is used
 to create the resulting image after the sampling is finished. For img2img, VAE is additionally used to process user's input image before the sampling.
-                """
-            ),
+                """),
             "sd_vae": OptionInfo("Automatic", "SD VAE", gr.Dropdown, {"choices": ("Automatic",), "interactive": False}),
             "sd_vae_overrides_per_model_preferences": OptionInfo(True, '"SD VAE" option overrides per-model preference'),
             "sd_vae_encode_method": OptionInfo("Full", "VAE for Encoding", gr.Radio, {"choices": ("Full", "TAESD")}, infotext="VAE Encoder").info("method to encode image to latent (img2img / Hires. fix / inpaint)"),
@@ -325,13 +319,11 @@ options_templates.update(
             "s_min_uncond": OptionInfo(0.0, "Skip Negative Prompt during Later Steps", gr.Slider, {"minimum": 0.0, "maximum": 8.0, "step": 0.05}).info('in "sigma"; 0 = disable; higher = faster'),
             "s_min_uncond_all": OptionInfo(False, "For the above option, skip every step", infotext="NGMS all steps").info("otherwise, only skip every other step"),
             "div_tome": OptionDiv(),
-            "token_merging_explanation": OptionHTML(
-                """
+            "token_merging_explanation": OptionHTML("""
 <b>Token Merging</b> speeds up the diffusion process by fusing "redundant" tokens together, but also reduces quality as a result.
 [<a href="https://github.com/dbolya/tomesd">GitHub</a>] <br>
 <b>Note:</b> Has no effect on SDXL when Max Downsample is set to 1
-                """
-            ),
+                """),
             "token_merging_ratio": OptionInfo(0.0, "Token Merging Ratio", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}, infotext="Token merging ratio").info("0 = disable; higher = faster"),
             "token_merging_ratio_img2img": OptionInfo(0.0, "Token Merging Ratio for img2img", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}).info("overrides base ratio if non-zero"),
             "token_merging_ratio_hr": OptionInfo(0.0, "Token Merging Ratio for Hires. fix", gr.Slider, {"minimum": 0.0, "maximum": 0.9, "step": 0.05}, infotext="Token merging ratio hr").info("overrides base ratio if non-zero"),
@@ -382,12 +374,10 @@ options_templates.update(
                 gr.Textbox,
                 {"lines": 3, "max_lines": 12, "placeholder": "high_noise=low_noise"},
             ),
-            "refiner_lora_explanation": OptionHTML(
-                """
+            "refiner_lora_explanation": OptionHTML("""
 Use the "Lora Replacements" to load different LoRAs between the normal pass and the refiner pass.<br>
 Separate the original and the target with an equal sign; Place each entry in its own line.
-                """
-            ),
+                """),
         },
     )
 )
@@ -437,18 +427,14 @@ options_templates.update(
             "quicksettings_accordion_starts_closed": OptionInfo(False, "Close the Accordion on startup").info("for the above option").needs_reload_ui(),
             "forbidden_knowledge": OptionInfo(False, "Forbidden Knowledge").info('replace "<b>DPM++ 2s a RF</b>" with "<b>Flux Realistic</b>"').needs_restart(),
             "div_prompt": OptionDiv(),
-            "prompt_box_style": OptionInfo("Default", "Prompt Layout", gr.Radio, {"choices": ("Default", "Compact", "Scrollable", "Accordion")})
-            .html(
-                f"""
+            "prompt_box_style": OptionInfo("Default", "Prompt Layout", gr.Radio, {"choices": ("Default", "Compact", "Scrollable", "Accordion")}).html(f"""
 <ul style='margin-left: 1.5em'>
 <li><b>Default:</b> the original Automatic1111 layout</li>
 <li><b>Compact:</b> put Prompts inside the Generate tab, leaving more space for the Gallery</li>
 <li><b>Scrollable:</b> put Prompts inside fixed-height containers with a scrollbar</li>
 <li><b>Accordion:</b> put Prompts inside an accordion that can be collapsed</li>
 </ul>
-                """
-            )
-            .needs_reload_ui(),
+                """).needs_reload_ui(),
             "div_classic": OptionDiv(),
             "dimensions_and_batch_together": OptionInfo(True, "Show Width/Height and Batch sliders in same row").needs_reload_ui(),
             "sd_checkpoint_dropdown_use_short": OptionInfo(False, "Show filenames without folder in the Checkpoint dropdown").info("if disabled, models under subdirectories will be listed like sdxl/anime.safetensors"),
@@ -495,16 +481,14 @@ options_templates.update(
             "add_user_name_to_info": OptionInfo(False, "Add user name to infotext when authenticated"),
             "add_version_to_infotext": OptionInfo(True, "Add webui version to infotext"),
             "infotext_skip_pasting": OptionInfo([], "Ignore fields when reading infotext", ui_components.DropdownMulti, lambda: {"choices": shared_items.get_infotext_names()}),
-            "infotext_styles": OptionInfo("Apply if any", "Infer Styles when reading infotext", gr.Radio, {"choices": ("Ignore", "Apply", "Apply if any", "Discard")}).html(
-                """
+            "infotext_styles": OptionInfo("Apply if any", "Infer Styles when reading infotext", gr.Radio, {"choices": ("Ignore", "Apply", "Apply if any", "Discard")}).html("""
 <ul style='margin-left: 1.5em'>
 <li><b>Ignore:</b> keep prompt and styles dropdown as it is</li>
 <li><b>Apply:</b> remove style text from prompt; always replace styles dropdown value with found styles (even if none was found)</li>
 <li><b>Apply if any:</b> remove style text from prompt; if any styles are found in prompt, put them into styles dropdown, otherwise keep it as it is</li>
 <li><b>Discard:</b> remove style text from prompt, keep styles dropdown as it is</li>
 </ul>
-                """
-            ),
+                """),
         },
     )
 )
@@ -517,17 +501,13 @@ options_templates.update(
             "live_previews_enable": OptionInfo(True, "Show live previews of images during sampling"),
             "live_previews_image_format": OptionInfo("jpeg", "Live Preview Format", gr.Radio, {"choices": ("jpeg", "png", "webp")}),
             "show_progress_grid": OptionInfo(True, "Show previews of all images in a batch as a grid"),
-            "show_progress_type": OptionInfo("RGB", "Live Preview Method", gr.Radio, {"choices": ("Approx NN", "RGB", "TAESD")})
-            .info("<b>Approx NN</b> and <b>TAESD</b> will download additional model")
-            .html(
-                """
+            "show_progress_type": OptionInfo("RGB", "Live Preview Method", gr.Radio, {"choices": ("Approx NN", "RGB", "TAESD")}).info("<b>Approx NN</b> and <b>TAESD</b> will download additional model").html("""
 <ul style='margin-left: 1.5em'>
 <li><b>Approx NN</b>: legacy preview method</li>
 <li><b>RGB</b>: fast but low quality preview method</li>
 <li><b>TAESD</b>: high quality preview method</li>
 </ul>
-                """
-            ),
+                """),
             "live_preview_fast_interrupt": OptionInfo(False, "Return image with the selected preview method on interruption").info("speed up interruption"),
             "js_live_preview_in_modal_lightbox": OptionInfo(False, "Show the live previews in full page image viewer"),
             "show_progress_every_n_steps": OptionInfo(1, "Generate live preview every N step", gr.Slider, {"minimum": -1, "maximum": 32, "step": 1}).info("-1 = only after completion of a batch"),
