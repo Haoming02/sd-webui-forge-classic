@@ -53,7 +53,9 @@ class Wan(ForgeDiffusionEngine):
         del self.ref_latents
 
         self.start_image: torch.Tensor = None
+        """first frame; cleared automatically every generation"""
         self.end_image: torch.Tensor = None
+        """last frame; cleared manually by ImageStitch"""
 
     def set_shift(self, shift):
         global refiner_shift
@@ -80,18 +82,23 @@ class Wan(ForgeDiffusionEngine):
     def image_to_video(self, length: int, latent_shape: list[int]):
         # https://github.com/Comfy-Org/ComfyUI/blob/v0.20.1/comfy_extras/nodes_wan.py#L209
 
-        start_image = self.start_image.movedim(1, -1)
-        _, h, w, c = start_image.shape
-        assert c == 3
+        if self.start_image is not None:
+            start_image = self.start_image.movedim(1, -1)
+            _, h, w, _ = start_image.shape
 
         if self.end_image is not None:
-            end_image = adaptive_resize(self.end_image, w, h, "bilinear", "center").movedim(1, -1)
+            if self.start_image is not None:
+                end_image = adaptive_resize(self.end_image, w, h, "bilinear", "center").movedim(1, -1)
+            else:
+                end_image = self.end_image.movedim(1, -1)
+                _, h, w, _ = end_image.shape
 
-        image = torch.ones((length, h, w, c), device=start_image.device, dtype=start_image.dtype) * 0.5
+        image = torch.ones((length, h, w, 3), device="cpu", dtype=torch.float32).mul(0.5)
         mask = torch.ones((1, 1, latent_shape[2] * 4, latent_shape[-2], latent_shape[-1]))
 
-        image[: start_image.shape[0]] = start_image
-        mask[:, :, : start_image.shape[0] + 3] = 0.0
+        if self.start_image is not None:
+            image[: start_image.shape[0]] = start_image
+            mask[:, :, : start_image.shape[0] + 3] = 0.0
 
         if self.end_image is not None:
             image[-end_image.shape[0] :] = end_image
@@ -130,7 +137,6 @@ class Wan(ForgeDiffusionEngine):
         dynamic_args.concat_latent = z
 
         self.start_image = None
-        self.end_image = None
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
@@ -140,14 +146,23 @@ class Wan(ForgeDiffusionEngine):
         x = x.mul(0.5).add(0.5)
 
         if dynamic_args.is_referencing:
-            if self.end_image is None:
-                self.end_image = x.detach().clone()
+            if b == 1:
+                # FirstLastFrameToVideo
+                self.end_image = x.cpu()
+                return
             else:
-                memory_management.logger.error("LastFrame already exists...")
-            return
+                # LastFrameToVideo
+                self.end_image = x.cpu()
 
-        assert self.start_image is None
-        self.start_image = x.detach().clone()
+        else:
+            if b == 1:
+                # img2img
+                sample = self.forge_objects.vae.encode(x.movedim(1, -1))
+                sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+                return sample.to(x)
+            else:
+                # FirstFrameToVideo
+                self.start_image = x.cpu()
 
         latent = torch.zeros([1, 16, ((b - 1) // 4) + 1, h // 8, w // 8], device=self.forge_objects.vae.device)
         self.image_to_video(b, list(latent.shape))

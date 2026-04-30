@@ -6,20 +6,20 @@ from PIL import Image
 from backend.args import dynamic_args
 from modules import images, scripts, sd_models
 from modules.api import api
-from modules.processing import StableDiffusionProcessing
+from modules.processing import StableDiffusionProcessing, StableDiffusionProcessingTxt2Img, logger
 from modules.sd_samplers_common import images_tensor_to_samples
 from modules.shared import device, opts
 from modules.ui_components import FormRow, InputAccordion
 
 t2i_info = """
 For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b>: Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution<br>
-For <b>Wan 2.2</b>: This does nothing in <b>txt2img</b><br>
+For <b>Wan 2.2 I2V</b>: Use in <b>txt2img</b> to set as the Last Frame to achieve LF2V<br>
 <b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
 i2i_info = """
 For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b>: Use in <b>img2img</b> to achieve the effect of multiple input images<br>
-For <b>Wan 2.2</b>: Use in <b>img2img</b> to set as the Last Frame to achieve FLF2V<br>
+For <b>Wan 2.2 I2V</b>: Use in <b>img2img</b> to set as the Last Frame to achieve FLF2V<br>
 <b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
@@ -165,23 +165,42 @@ class ImageStitch(scripts.Script):
         references = self.extract_images(references)
 
         # cache is based on reference inputs & model
-        cache: list[str | int] = [str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references)]
+        cache: list[str | int | bool] = [str(sd_models.model_data.forge_loading_parameters), *(self.hash_image(ref) for ref in references), (dynamic_args.wan and isinstance(p, StableDiffusionProcessingTxt2Img))]
         if ImageStitch.cached_parameters == cache:
             return
 
         ImageStitch.cached_parameters = cache
         self.reset_references(p)
 
+        _batch_size: int = None
+
+        if dynamic_args.wan:
+            if isinstance(p, StableDiffusionProcessingTxt2Img):
+                _batch_size = p.batch_size
+                if _batch_size == 1:
+                    logger.error("Wan 2.2 T2V requires more than one frame...")
+                    return
+            if len(references) > 1:
+                logger.warning("Wan 2.2 only uses the first reference image...")
+                references = [references[0]]
+
         dynamic_args.is_referencing = True
 
         for reference in references:
             reference = self.preprocess(reference, max_dim)
+            if _batch_size:
+                reference = images.resize_image(1, reference, p.width, p.height)
             image = images.flatten(reference, opts.img2img_background_color)
             image = np.array(image, dtype=np.float32) / 255.0
             image = np.moveaxis(image, 2, 0)
-            image = torch.from_numpy(image).to(device=device, dtype=torch.float32)
+            image = torch.from_numpy(image).to(device=device).unsqueeze(0)
 
-            images_tensor_to_samples(image.unsqueeze(0), 0, p.sd_model)  # calls encode_first_stage
+            if _batch_size:
+                dim = [_batch_size - 1] + list(image.shape)[1:]
+                empty = torch.empty(dim, dtype=torch.float32, device=device)
+                image = torch.cat([image, empty], dim=0)
+
+            images_tensor_to_samples(image, 0, p.sd_model)  # calls encode_first_stage
 
         dynamic_args.is_referencing = False
 
