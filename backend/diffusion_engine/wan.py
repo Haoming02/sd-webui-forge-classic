@@ -45,8 +45,7 @@ class Wan(ForgeDiffusionEngine):
 
         global refiner_shift
         if refiner_shift is not None:
-            self.forge_objects.unet.model.predictor.set_parameters(shift=refiner_shift)
-            memory_management.logger.debug(f"Shift: {refiner_shift}")
+            super().set_shift(refiner_shift)
             refiner_shift = None
 
         del self.ini_latent
@@ -94,7 +93,7 @@ class Wan(ForgeDiffusionEngine):
                 _, h, w, _ = end_image.shape
 
         image = torch.ones((length, h, w, 3), device="cpu", dtype=torch.float32).mul(0.5)
-        mask = torch.ones((1, 1, latent_shape[2] * 4, latent_shape[-2], latent_shape[-1]))
+        mask = torch.ones((1, 1, latent_shape[2] * 4, latent_shape[-2], latent_shape[-1]), device="cpu", dtype=torch.float32)
 
         if self.start_image is not None:
             image[: start_image.shape[0]] = start_image
@@ -134,13 +133,13 @@ class Wan(ForgeDiffusionEngine):
 
         z = torch.cat((mask, image), dim=1)
 
-        dynamic_args.concat_latent = z
+        dynamic_args.concat_latent = z.cpu()
 
         self.start_image = None
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
-        b, c, h, w = x.shape
+        b, _, h, w = x.shape
         if x.size(0) > 1:
             x = x[0].unsqueeze(0)  # enforce batch_size of 1
         x = x.mul(0.5).add(0.5)

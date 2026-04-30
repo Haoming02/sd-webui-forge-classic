@@ -13,13 +13,13 @@ from modules.ui_components import FormRow, InputAccordion
 
 t2i_info = """
 For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b>: Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution<br>
-For <b>Wan 2.2 I2V</b>: Use in <b>txt2img</b> to set as the Last Frame to achieve LF2V<br>
+For <b>Wan 2.2 I2V</b>: Use in <b>txt2img</b> to set as the Last Frame to achieve LastFrameToVideo<br>
 <b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
 i2i_info = """
 For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b>: Use in <b>img2img</b> to achieve the effect of multiple input images<br>
-For <b>Wan 2.2 I2V</b>: Use in <b>img2img</b> to set as the Last Frame to achieve FLF2V<br>
+For <b>Wan 2.2 I2V</b>: Use in <b>img2img</b> to set as the Last Frame to achieve FirstLastFrameToVideo<br>
 <b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
@@ -178,7 +178,7 @@ class ImageStitch(scripts.Script):
             if isinstance(p, StableDiffusionProcessingTxt2Img):
                 _batch_size = p.batch_size
                 if _batch_size == 1:
-                    logger.error("Wan 2.2 T2V requires more than one frame...")
+                    logger.error("Wan 2.2 requires more than one frame...")
                     return
             if len(references) > 1:
                 logger.warning("Wan 2.2 only uses the first reference image...")
