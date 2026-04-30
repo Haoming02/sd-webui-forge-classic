@@ -235,6 +235,7 @@ options_templates.update(
             "sdxl_refiner_low_aesthetic_score": OptionInfo(2.5, "[SDXL] Low Aesthetic Score", gr.Number),
             "sdxl_refiner_high_aesthetic_score": OptionInfo(6.0, "[SDXL] High Aesthetic Score", gr.Number),
             "sdxl_10": OptionRow(),
+            "sdxl_zero_neg": OptionInfo(False, "[SDXL] Zero out the conditioning when negative prompt is empty").info("old behavior ; causes NaN when using SageAttention").needs_reload_ui(),
             "divlumina": OptionDiv(),
             "neta_template_positive": OptionInfo(
                 "You are an assistant designed to generate anime images with the highest degree of image-text alignment based on danbooru tags. <Prompt Start>",
@@ -282,6 +283,8 @@ options_templates.update(
             "txt2img_upscale_same_seed": OptionInfo(True, "When using the [✨] button, pass the Seed of the input image instead of the UI value"),
             "hires_button_gallery_insert": OptionInfo(False, "When using the [✨] button, insert the upscaled image to the gallery").info("otherwise replace the selected image in the gallery"),
             "hires_insert_index": OptionInfo(True, "When the above option is enabled, automatically select the upscaled image").info("otherwise select the original image"),
+            "use_old_hires_fix_width_height": OptionInfo(False, "For Hires. Fix, use Width/Height sliders to set the final resolution").info("disable <b>Upscale by</b> / <b>Resize to</b>"),
+            "hires_fix_use_firstpass_conds": OptionInfo(False, "For Hires. Fix, calculate conds of Hires. pass using Extra Networks of the normal pass").info("<b>i.e.</b> do not reload LoRA for the Hires. pass"),
         },
     )
 )
@@ -339,17 +342,6 @@ options_templates.update(
     )
 )
 
-options_templates.update(
-    options_section(
-        ("compatibility", "Compatibility", "sd"),
-        {
-            "compatibility_explanation": OptionHTML("Don't touch these unless you know what you are doing..."),
-            "use_old_hires_fix_width_height": OptionInfo(False, "For hires fix, use width/height sliders to set final resolution rather than first pass (disables Upscale by, Resize width/height to)."),
-            "hires_fix_use_firstpass_conds": OptionInfo(False, "For hires fix, calculate conds of second pass using extra networks of first pass."),
-            "sdxl_zero_neg": OptionInfo(False, "For SDXL, zero out the conditioning when negative prompt is empty").info("causes NaN when using SageAttention").needs_reload_ui(),
-        },
-    )
-)
 
 options_templates.update(
     options_section(
