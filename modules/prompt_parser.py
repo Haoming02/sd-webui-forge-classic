@@ -14,8 +14,7 @@ import torch
 # [75,  'fantasy landscape with a lake and an oak in background masterful']
 # [100, 'fantasy landscape with a lake and a christmas tree in background masterful']
 
-schedule_parser = lark.Lark(
-    r"""
+schedule_parser = lark.Lark(r"""
 !start: (prompt | /[][():]/+)*
 prompt: (emphasized | scheduled | alternate | plain | WHITESPACE)*
 !emphasized: "(" prompt ")"
@@ -26,11 +25,10 @@ alternate: "[" prompt ("|" [prompt])+ "]"
 WHITESPACE: /\s+/
 plain: /([^\\\[\]():|]|\\.)+/
 %import common.SIGNED_NUMBER -> NUMBER
-"""
-)
+""")
 
 
-def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=None, use_old_scheduling=False):
+def get_learned_conditioning_prompt_schedules(prompts: SdConditioning | list[str], base_steps: int, hires_steps: int = None):
     r"""
     >>> g = lambda p: get_learned_conditioning_prompt_schedules([p], 10)[0]
     >>> g("test")
@@ -68,7 +66,7 @@ def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=N
     [[5, 'a  c'], [10, 'a b c']]
     """
 
-    if hires_steps is None or use_old_scheduling:
+    if hires_steps is None:
         int_offset = 0
         flt_offset = 0
         steps = base_steps
@@ -84,13 +82,10 @@ def get_learned_conditioning_prompt_schedules(prompts, base_steps, hires_steps=N
             def scheduled(self, tree):
                 s = tree.children[-2]
                 v = float(s)
-                if use_old_scheduling:
-                    v = v * steps if v < 1 else v
+                if "." in s:
+                    v = (v - flt_offset) * steps
                 else:
-                    if "." in s:
-                        v = (v - flt_offset) * steps
-                    else:
-                        v = v - int_offset
+                    v = v - int_offset
                 tree.children[-2] = min(steps, int(v))
                 if tree.children[-2] >= 1:
                     res.append(tree.children[-2])
@@ -167,7 +162,7 @@ class SdConditioning(list):
         self.distilled_cfg_scale = distilled_cfg_scale or getattr(copy_from, "distilled_cfg_scale", None)
 
 
-def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps, hires_steps=None, use_old_scheduling=False):
+def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps: int, hires_steps: int = None):
     r"""
     converts a list of prompts into a list of prompt schedules - each schedule is a list of ScheduledPromptConditioning,
     specifying the condition (cond), and the sampling step at which this condition is to be replaced by the next one.
@@ -188,7 +183,7 @@ def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps, 
     """
     res = []
 
-    prompt_schedules = get_learned_conditioning_prompt_schedules(prompts, steps, hires_steps, use_old_scheduling)
+    prompt_schedules = get_learned_conditioning_prompt_schedules(prompts, steps, hires_steps)
     cache = {}
 
     for prompt, prompt_schedule in zip(prompts, prompt_schedules):
@@ -263,15 +258,15 @@ class MulticondLearnedConditioning:
         self.batch: list[list[ComposableScheduledPromptConditioning]] = batch
 
 
-def get_multicond_learned_conditioning(model, prompts, steps, hires_steps=None, use_old_scheduling=False) -> MulticondLearnedConditioning:
+def get_multicond_learned_conditioning(model, prompts: SdConditioning | list[str], steps: int, hires_steps: int = None) -> MulticondLearnedConditioning:
     """
     same as get_learned_conditioning, but returns a list of ScheduledPromptConditioning along with the weight objects for each prompt.
     For each prompt, the list is obtained by splitting the prompt using the AND separator.
     """
 
-    res_indexes, prompt_flat_list, prompt_indexes = get_multicond_prompt_list(prompts)
+    res_indexes, prompt_flat_list, _ = get_multicond_prompt_list(prompts)
 
-    learned_conditioning = get_learned_conditioning(model, prompt_flat_list, steps, hires_steps, use_old_scheduling)
+    learned_conditioning = get_learned_conditioning(model, prompt_flat_list, steps, hires_steps)
 
     res = []
     for indexes in res_indexes:
