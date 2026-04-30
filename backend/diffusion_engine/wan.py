@@ -1,8 +1,10 @@
 import torch
 from huggingface_guess import model_list
 
-from backend import args, memory_management
+from backend import memory_management
+from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
+from backend.misc.image_resize import adaptive_resize
 from backend.modules.k_prediction import PredictionDiscreteFlow
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
@@ -43,14 +45,27 @@ class Wan(ForgeDiffusionEngine):
 
         global refiner_shift
         if refiner_shift is not None:
-            self.forge_objects.unet.model.predictor.set_parameters(shift=refiner_shift)
-            memory_management.logger.debug(f"Shift: {refiner_shift}")
+            super().set_shift(refiner_shift)
             refiner_shift = None
+
+        del self.ini_latent
+        del self.ref_latents
+
+        self.start_image: torch.Tensor = None
+        """first frame; cleared automatically every generation"""
+        self.end_image: torch.Tensor = None
+        """last frame; cleared manually by ImageStitch"""
 
     def set_shift(self, shift):
         global refiner_shift
         super().set_shift(shift)
         refiner_shift = shift
+
+    def clear_references(self):
+        # called by ImageStitch
+        self.start_image = None
+        self.end_image = None
+        memory_management.soft_empty_cache()
 
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):
@@ -63,23 +78,45 @@ class Wan(ForgeDiffusionEngine):
         return token_count, max(510, token_count)
 
     @torch.inference_mode()
-    def image_to_video(self, length: int, start_image: torch.Tensor, noise: torch.Tensor):
-        _, h, w, c = start_image.shape
+    def image_to_video(self, length: int, latent_shape: list[int]):
+        # https://github.com/Comfy-Org/ComfyUI/blob/v0.20.1/comfy_extras/nodes_wan.py#L209
 
-        _image = torch.ones((length, h, w, c), device=start_image.device, dtype=start_image.dtype) * 0.5
-        _image[: start_image.shape[0]] = start_image
+        if self.start_image is not None:
+            start_image = self.start_image.movedim(1, -1)
+            _, h, w, _ = start_image.shape
 
-        concat_latent_image = self.forge_objects.vae.encode(_image[:, :, :, :3])
-        mask = torch.ones((1, 1, noise.shape[2], concat_latent_image.shape[-2], concat_latent_image.shape[-1]), device=start_image.device, dtype=start_image.dtype)
-        mask[:, :, : ((start_image.shape[0] - 1) // 4) + 1] = 0.0
+        if self.end_image is not None:
+            if self.start_image is not None:
+                end_image = adaptive_resize(self.end_image, w, h, "bilinear", "center").movedim(1, -1)
+            else:
+                end_image = self.end_image.movedim(1, -1)
+                _, h, w, _ = end_image.shape
 
-        image = concat_latent_image
+        image = torch.ones((length, h, w, 3), device="cpu", dtype=torch.float32).mul(0.5)
+        mask = torch.ones((1, 1, latent_shape[2] * 4, latent_shape[-2], latent_shape[-1]), device="cpu", dtype=torch.float32)
 
-        extra_channels = self.forge_objects.unet.model.diffusion_model.in_dim - 16  # 20
+        if self.start_image is not None:
+            image[: start_image.shape[0]] = start_image
+            mask[:, :, : start_image.shape[0] + 3] = 0.0
 
-        for i in range(0, image.shape[1], 16):
-            image[:, i : i + 16] = self.forge_objects.vae.first_stage_model.process_in(image[:, i : i + 16])
-        image = resize_to_batch_size(image, noise.shape[0])
+        if self.end_image is not None:
+            image[-end_image.shape[0] :] = end_image
+            mask[:, :, -end_image.shape[0] :] = 0.0
+
+        concat_latent_image = self.forge_objects.vae.encode(image[:, :, :, :3])
+        concat_mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
+
+        # https://github.com/Comfy-Org/ComfyUI/blob/v0.20.1/comfy/model_base.py#L1291
+
+        image: torch.Tensor = concat_latent_image
+        mask: torch.Tensor = concat_mask
+
+        extra_channels: int = 20
+        latent_dim: int = 16
+
+        for i in range(0, image.shape[1], latent_dim):
+            image[:, i : i + latent_dim] = self.forge_objects.vae.first_stage_model.process_in(image[:, i : i + latent_dim])
+        image = resize_to_batch_size(image, latent_shape[0])
 
         if image.shape[1] > (extra_channels - 4):
             image = image[:, : (extra_channels - 4)]
@@ -87,30 +124,47 @@ class Wan(ForgeDiffusionEngine):
         if mask.shape[1] != 4:
             mask = torch.mean(mask, dim=1, keepdim=True)
         mask = (1.0 - mask).to(image)
-        if mask.shape[-3] < noise.shape[-3]:
-            mask = torch.nn.functional.pad(mask, (0, 0, 0, 0, 0, noise.shape[-3] - mask.shape[-3]), mode="constant", value=0)
+        mask = adaptive_resize(mask, latent_shape[-1], latent_shape[-2], "bilinear", "center")
+        if mask.shape[-3] < latent_shape[-3]:
+            mask = torch.nn.functional.pad(mask, (0, 0, 0, 0, 0, latent_shape[-3] - mask.shape[-3]), mode="constant", value=0)
         if mask.shape[1] == 1:
             mask = mask.repeat(1, 4, 1, 1, 1)
-        mask = resize_to_batch_size(mask, noise.shape[0])
+        mask = resize_to_batch_size(mask, latent_shape[0])
 
-        _concat_mask_index = 0  # TODO
+        z = torch.cat((mask, image), dim=1)
 
-        if _concat_mask_index != 0:
-            z = torch.cat((image[:, :_concat_mask_index], mask, image[:, _concat_mask_index:]), dim=1)
-        else:
-            z = torch.cat((mask, image), dim=1)
+        dynamic_args.concat_latent = z.cpu()
 
-        args.dynamic_args.concat_latent = z
+        self.start_image = None
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
-        b, c, h, w = x.shape
+        b, _, h, w = x.shape
         if x.size(0) > 1:
             x = x[0].unsqueeze(0)  # enforce batch_size of 1
+        x = x.mul(0.5).add(0.5)
 
-        start_image = x.movedim(1, -1) * 0.5 + 0.5
+        if dynamic_args.is_referencing:
+            if b == 1:
+                # FirstLastFrameToVideo
+                self.end_image = x.cpu()
+                return
+            else:
+                # LastFrameToVideo
+                self.end_image = x.cpu()
+
+        else:
+            if b == 1:
+                # img2img
+                sample = self.forge_objects.vae.encode(x.movedim(1, -1))
+                sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+                return sample.to(x)
+            else:
+                # FirstFrameToVideo
+                self.start_image = x.cpu()
+
         latent = torch.zeros([1, 16, ((b - 1) // 4) + 1, h // 8, w // 8], device=self.forge_objects.vae.device)
-        self.image_to_video(b, start_image, latent)
+        self.image_to_video(b, list(latent.shape))
         sample = self.forge_objects.vae.first_stage_model.process_in(latent)
         return sample.to(x)
 
