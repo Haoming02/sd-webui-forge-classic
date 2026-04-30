@@ -90,9 +90,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             return model
         if cls_name in ["AutoencoderKLWan", "AutoencoderKLQwenImage"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
-            from backend.nn.wan_vae import WanVAE
 
-            config = WanVAE.load_config(config_path)
+            if "post_quant_conv.weight" in state_dict:  # 2D
+                from backend.nn.wan_vae_2d import Qwen2DVAE as WanVAE
+
+                config = {}
+
+            else:
+                from backend.nn.wan_vae import WanVAE
+
+                config = WanVAE.load_config(config_path)
 
             with no_init_weights():
                 with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype(), bnb_dtype="vae"):
