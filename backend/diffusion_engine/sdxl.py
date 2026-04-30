@@ -24,15 +24,15 @@ class StableDiffusionXL(ForgeDiffusionEngine):
         vae = VAE(model=huggingface_components["vae"])
 
         if estimated_config.sampling_settings.pop("RF", False):
-            memory_management.logger.info("Using Rectified-Flow Scheduler...")
+            memory_management.logger.info("Using Rectified-Flow Predictor...")
             from backend.modules.k_prediction import PredictionDiscreteFlow
 
             k_predictor = PredictionDiscreteFlow(estimated_config)
             unet = UnetPatcher.from_model(model=huggingface_components["unet"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
-            self._RF = True
+            self.use_shift = True
         else:
             unet = UnetPatcher.from_model(model=huggingface_components["unet"], diffusers_scheduler=huggingface_components["scheduler"], config=estimated_config)
-            self._RF = False
+            self.use_shift = False
 
         self.text_processing_engine_l = ClassicTextProcessingEngine(
             text_encoder=clip.cond_stage_model.clip_l,
@@ -76,11 +76,6 @@ class StableDiffusionXL(ForgeDiffusionEngine):
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
-
-        if self._RF:
-            shift = getattr(prompt, "distilled_cfg_scale", 3.0)
-            self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
-            memory_management.logger.debug(f"Shift: {shift}")
 
         cond_l = self.text_processing_engine_l(prompt)
         cond_g, clip_pooled = self.text_processing_engine_g(prompt)
