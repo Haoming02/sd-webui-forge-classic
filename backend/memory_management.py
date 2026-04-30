@@ -440,6 +440,7 @@ class LoadedModel:
         if model.parent is not None:
             self._parent_model = weakref.ref(model.parent)
             self._patcher_finalizer = weakref.finalize(model, self._switch_parent)
+            self._patcher_finalizer.atexit = False
 
     def _switch_parent(self):
         model = self._parent_model()
@@ -488,6 +489,7 @@ class LoadedModel:
 
         self.real_model = weakref.ref(real_model)
         self.model_finalizer = weakref.finalize(real_model, cleanup_models)
+        self.model_finalizer.atexit = False
         return real_model
 
     def should_reload_model(self, force_patch_weights=False):
