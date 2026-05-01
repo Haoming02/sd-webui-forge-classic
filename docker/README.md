@@ -16,6 +16,7 @@ Docker image for [sd-webui-forge-classic (neo branch)](https://github.com/Haomin
 | `/home/forge/sd-webui/models` | Checkpoints, VAEs, LoRAs, ControlNet weights |
 | `/home/forge/sd-webui/output` | Generated images |
 | `/home/forge/sd-webui/extensions` | User-installed extensions |
+| `/home/forge/sd-webui/config` | Settings (`config.json`, `ui-config.json`, `styles.csv`, etc.) |
 
 The container runs as UID 99 / GID 100 (`nobody:users`) to match Unraid's default share permissions.
 
@@ -30,6 +31,7 @@ docker run -d \
   -v /path/to/models:/home/forge/sd-webui/models \
   -v /path/to/outputs:/home/forge/sd-webui/output \
   -v /path/to/extensions:/home/forge/sd-webui/extensions \
+  -v /path/to/config:/home/forge/sd-webui/config \
   oromis995/sd-forge-neo:latest
 ```
 
@@ -58,7 +60,7 @@ docker build --build-arg TORCH_INDEX=cu124 -t forge-neo-local .
 
 | | |
 |---|---|
-| Base | `nvidia/cuda:12.6.1-cudnn-runtime-ubuntu22.04` |
+| Base | `nvidia/cuda:12.6.1-runtime-ubuntu22.04` |
 | Python | 3.13 via uv |
 | PyTorch | Latest stable from `download.pytorch.org/whl/cu126` |
 | User | `forge` (UID 99 / GID 100) |

@@ -3,7 +3,7 @@
 
 ARG CUDA_VERSION=12.6.1
 
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu22.04
 
 # Match the CUDA wheels PyTorch was compiled against.
 # Available variants: cu118, cu121, cu124, cu126 …
@@ -15,6 +15,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     # Allow uv to fetch the Python 3.13 standalone runtime if not on the system.
     UV_PYTHON_DOWNLOADS=automatic \
+    UV_NO_CACHE=1 \
     # Tells prepare_environment() which index to use for optional packages (e.g. xformers).
     TORCH_INDEX_URL=https://download.pytorch.org/whl/${TORCH_INDEX}
 
@@ -63,7 +64,7 @@ ENV VIRTUAL_ENV=/home/forge/sd-webui/venv \
 # Baked in at build time so the ~2 GB download does not happen on first start.
 # prepare_environment() checks is_installed("torch") and skips this step when
 # torch is already present, so the runtime install path is never hit.
-RUN uv pip install \
+RUN uv pip install --no-cache \
         torch \
         torchvision \
         --index-url "https://download.pytorch.org/whl/${TORCH_INDEX}"
@@ -79,6 +80,7 @@ RUN mkdir -p \
         models/ControlNet \
         extensions \
         output \
+        config \
     && ln -s /home/forge/sd-webui/output /home/forge/sd-webui/outputs
 
 # ── Runtime ───────────────────────────────────────────────────────────────────

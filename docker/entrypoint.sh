@@ -36,6 +36,12 @@ if [[ "$HAS_CUDA" == "false" ]]; then
     EXTRA_ARGS=("${FILTERED[@]}")
 fi
 
+# Symlink settings files into the config bind-mount so they persist across
+# container recreations. The app writes through the symlinks to the volume.
+for f in config.json ui-config.json styles.csv params.txt user.css; do
+    ln -sf /home/forge/sd-webui/config/$f /home/forge/sd-webui/$f
+done
+
 exec python /home/forge/sd-webui/launch.py \
     --listen \
     --port "${FORGE_PORT:-7860}" \
