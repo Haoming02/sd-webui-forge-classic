@@ -15,7 +15,6 @@ inflection==0.5.1
 joblib==1.5.3
 kornia==0.6.12
 lark==1.2.2
-lightning==2.5.6
 numpy==2.3.5
 omegaconf==2.2.3
 opencv-python==4.10.0.84
