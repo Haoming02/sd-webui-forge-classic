@@ -406,28 +406,27 @@ class StableDiffusionProcessing:
         self.main_prompt = self.all_prompts[0]
         self.main_negative_prompt = self.all_negative_prompts[0]
 
-    def cached_params(self, required_prompts, steps, extra_network_data, hires_steps, use_old_scheduling):
+    def cached_params(self, required_prompts: list[str], steps: int, extra_network_data: dict, hires_steps: int | None):
         """Returns parameters that invalidate the cond cache if changed"""
 
         return (
             required_prompts,
-            self.distilled_cfg_scale,
-            self.hr_distilled_cfg,
             steps,
             hires_steps,
-            use_old_scheduling,
-            opts.CLIP_stop_at_last_layers,
-            str(sd_models.model_data.forge_loading_parameters),
             extra_network_data,
-            opts.sdxl_crop_left,
-            opts.sdxl_crop_top,
             self.width,
             self.height,
+            self.distilled_cfg_scale,
+            getattr(self, "hr_distilled_cfg", None),
+            str(sd_models.model_data.forge_loading_parameters),
+            opts.CLIP_stop_at_last_layers,
+            opts.sdxl_crop_left,
+            opts.sdxl_crop_top,
             opts.emphasis,
             hash_tensor(self.init_latent) if isinstance(self, StableDiffusionProcessingImg2Img) else None,
         )
 
-    def get_conds_with_caching(self, function, required_prompts, steps, caches, extra_network_data, hires_steps=None):
+    def get_conds_with_caching(self, function: prompt_parser.get_learned_conditioning | prompt_parser.get_multicond_learned_conditioning, required_prompts, steps, caches, extra_network_data, hires_steps=None):
         """
         Returns the result of calling function(shared.sd_model, required_prompts, steps)
         using a cache to store the result if the same arguments have been used before.
@@ -440,13 +439,7 @@ class StableDiffusionProcessing:
         caches is a list with items described above.
         """
 
-        if shared.opts.use_old_scheduling:
-            old_schedules = prompt_parser.get_learned_conditioning_prompt_schedules(required_prompts, steps, hires_steps, False)
-            new_schedules = prompt_parser.get_learned_conditioning_prompt_schedules(required_prompts, steps, hires_steps, True)
-            if old_schedules != new_schedules:
-                self.extra_generation_params["Old prompt editing timelines"] = True
-
-        cached_params = self.cached_params(required_prompts, steps, extra_network_data, hires_steps, shared.opts.use_old_scheduling)
+        cached_params = self.cached_params(required_prompts, steps, extra_network_data, hires_steps)
 
         for cache in caches:
             if cache[0] is not None and cached_params == cache[0]:
@@ -459,7 +452,7 @@ class StableDiffusionProcessing:
         with devices.autocast():
             shared.sd_model.set_clip_skip(int(opts.CLIP_stop_at_last_layers))
 
-            cache[1] = function(shared.sd_model, required_prompts, steps, hires_steps, shared.opts.use_old_scheduling)
+            cache[1] = function(shared.sd_model, required_prompts, steps, hires_steps)
 
             import backend.text_processing.classic_engine
 
@@ -646,7 +639,7 @@ def fix_seed(p):
 
 
 def program_version() -> str:
-    from modules_forge.forge_version import version, release
+    from modules_forge.forge_version import release, version
 
     return f"{version}-{release}"
 
@@ -1686,8 +1679,6 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     initial_noise_multiplier: float = None
     latent_mask: Image = None
     force_task_id: str = None
-
-    hr_distilled_cfg: float = 3.5  #   needed here for cached_params
 
     image_mask: Any = field(default=None, init=False)
 
