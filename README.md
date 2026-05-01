@@ -64,8 +64,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Note]
 > To be detected as a **Kontext** model, the model must include "`kontext`" in its path *(**e.g.** file name or folder name)*
 
-- [X] Support Multi-Image Inputs for **Qwen-Image-Edit** and **Flux-Kontext**
-    - via `ImageStitch Integrated`
+- Implement `ImageStitch Integrated`
+    - [X] support Multi-Image Inputs for `flux.2-klein` / `flux-kontext` / `qwen-image-edit`
+    - [X] support FirstLastFrameToVideo for `wan 2.2`
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models
     - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `z-image-turbo`
     - only `Flux` and `Qwen` support LoRA currently
@@ -75,6 +76,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
 - [X] Support **MixedPrecision** Models
     - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled`
+- [X] Support [Flux.2-Small-Decoder](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/blob/main/full_encoder_small_decoder.safetensors) & [Qwen2D VAE](https://huggingface.co/Anzhc/Qwen2D-VAE/blob/main/Qwen2D_VAE.safetensors)
 
 <br>
 
@@ -118,6 +120,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Implement tiled `Conv2d` for VAE
     - reduce memory usage; reduce speed
     - see [Commandline](#by-neo)
+- [X] Implement full precision calculation for `Mask blur` blending
+    - enable in **Settings/img2img**
 - [X] Support TAESD live preview for all models
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
@@ -139,9 +143,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] CLIP Interrogator
 - [X] Deepbooru Interrogator
 - [X] Textual Inversion Training
-- [X] Most built-in Extensions
+- [X] Some built-in Extensions
 - [X] Some built-in Scripts
 - [X] Some Samplers & Schedulers
+- [X] Some Compatibility Settings
 - [X] Stealth Infotext
 
 #### Optimizations

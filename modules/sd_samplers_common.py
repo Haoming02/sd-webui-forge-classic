@@ -452,10 +452,7 @@ class Sampler:
         return extra_params_kwargs
 
     def create_noise_sampler(self, x, sigmas, p):
-        """For DPM++ SDE: manually create noise sampler to enable deterministic results across different batch sizes"""
-        if shared.opts.no_dpmpp_sde_batch_determinism:
-            return None
-
+        # manually create noise sampler to enable deterministic results across different batch sizes
         from k_diffusion.sampling import BrownianTreeNoiseSampler
 
         sigma_min, sigma_max = sigmas[sigmas > 0].min(), sigmas.max()

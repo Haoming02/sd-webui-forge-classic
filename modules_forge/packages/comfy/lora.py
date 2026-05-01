@@ -232,4 +232,10 @@ def model_lora_keys_unet(model, key_map={}):
                 key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = to
                 key_map[key_lora] = to
 
+    if "ernie" in _model_name:
+        for k in sdk:
+            if k.startswith("diffusion_model.") and k.endswith(".weight"):
+                key_lora = k[len("diffusion_model.") : -len(".weight")]
+                key_map["transformer.{}".format(key_lora)] = k
+
     return key_map

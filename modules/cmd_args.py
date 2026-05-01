@@ -49,8 +49,6 @@ parser.add_argument("--autolaunch", action="store_true", help="open the webui UR
 parser.add_argument("--theme", type=str, help="launches the UI with light or dark theme", default=None)
 parser.add_argument("--use-textbox-seed", action="store_true", help="use textbox for seeds in UI (no up/down, but possible to input long seeds)", default=False)
 parser.add_argument("--disable-console-progressbars", action="store_true", help="do not output progressbars to console", default=False)
-parser.add_argument("--enable-console-prompts", action="store_true", help="does not do anything", default=False)  # Legacy compatibility, use as default value shared.opts.enable_console_prompts
-parser.add_argument("--disable-safe-unpickle", action="store_true", help="disable checking pytorch models for malicious code", default=False)
 parser.add_argument("--api", action="store_true", help="use api=True to launch the API together with the webui (use --nowebui instead for only the API)")
 parser.add_argument("--api-auth", type=str, help='Set authentication for API like "username:password"; or comma-delimit multiple like "u1:p1,u2:p2,u3:p3"', default=None)
 parser.add_argument("--api-log", action="store_true", help="use api-log=True to enable logging of all API requests")
