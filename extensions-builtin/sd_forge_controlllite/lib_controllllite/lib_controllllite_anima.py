@@ -151,6 +151,13 @@ class LLLiteModuleDiT(nn.Module):
         self.layer_idx: int = -1
         self._depth_embeds_ref: List[nn.Parameter] = []
 
+        # Timestep range
+        self.num_steps: int = 0
+        self.start_step: int = 0
+        self.end_step: int = 0
+        self.current_step: int = 0
+        self.is_first: bool = False
+
     def apply_to(self):
         if self.org_forward is None:
             self.org_forward = self.org_module[0].forward
@@ -162,11 +169,24 @@ class LLLiteModuleDiT(nn.Module):
             self.org_forward = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.multiplier == 0.0 or self.cond_emb is None:
-            return self.org_forward(x)
-
         orig_shape = x.shape
         is_5d = x.dim() == 5
+
+        def _pass():
+            return self.org_forward(x.reshape(orig_shape) if is_5d else x)
+
+        if self.multiplier == 0.0 or self.cond_emb is None:
+            return _pass()
+
+        # Timestep range gating
+        if self.num_steps > 0:
+            step = self.current_step
+            self.current_step += 1
+            if self.current_step >= self.num_steps:
+                self.current_step = 0
+            if step < self.start_step or step >= self.end_step:
+                return _pass()
+
         if is_5d:
             B, T, H, W, D = orig_shape
             x = x.reshape(B, T * H * W, D)
@@ -204,6 +224,7 @@ class LLLiteModuleDiT(nn.Module):
             m = F.dropout(m, p=self.dropout)
 
         out = self.up(m) * self.multiplier
+
         if out.dtype != x.dtype:
             out = out.to(x.dtype)
 
@@ -308,6 +329,14 @@ class ControlNetLLLiteDiT(nn.Module):
         self.multiplier = multiplier
         for m in self.lllite_modules:
             m.multiplier = multiplier
+
+    def set_step_range(self, num_steps: int, start_step: int, end_step: int):
+        for i, m in enumerate(self.lllite_modules):
+            m.num_steps = num_steps
+            m.start_step = start_step
+            m.end_step = end_step
+            m.current_step = 0
+            m.is_first = (i == 0)
 
     def apply_to(self):
         for m in self.lllite_modules:

@@ -40,6 +40,13 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
         cond_image = cond * 2.0 - 1.0
         self._lllite_net.set_cond_image(cond_image.to(device=device, dtype=dtype))
         self._lllite_net.set_multiplier(self.strength)
+
+        # Timestep range
+        num_steps = process.steps
+        start_step = round(num_steps * self.start_percent)
+        end_step = round(num_steps * self.end_percent)
+        self._lllite_net.set_step_range(num_steps, start_step, end_step)
+
         self._lllite_net.apply_to()
 
         process.sd_model.forge_objects.unet = unet
