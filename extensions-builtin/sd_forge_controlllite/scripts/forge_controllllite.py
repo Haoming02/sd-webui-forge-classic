@@ -1,5 +1,3 @@
-from modules_forge.shared import add_supported_control_model
-from modules_forge.supported_controlnet import ControlModelPatcher
 from lib_controllllite.lib_controllllite import LLLiteLoader
 from lib_controllllite.lib_controllllite_anima import (
     ControlNetLLLiteDiT,
@@ -7,8 +5,8 @@ from lib_controllllite.lib_controllllite_anima import (
     load_lllite_weights_from_dict,
 )
 
-
-opLLLiteLoader = LLLiteLoader().load_lllite
+from modules_forge.shared import add_supported_control_model
+from modules_forge.supported_controlnet import ControlModelPatcher
 
 
 class ControlLLLiteAnimaPatcher(ControlModelPatcher):
@@ -60,34 +58,22 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
 class ControlLLLitePatcher(ControlModelPatcher):
     @staticmethod
     def try_build_from_state_dict(state_dict, ckpt_path):
-        if any("lllite_dit" in k for k in state_dict):
-            return None  # handled by ControlLLLiteAnimaPatcher
-        if not any("lllite" in k for k in state_dict):
+        if not any(k.startswith("lllite") for k in state_dict):
             return None
         return ControlLLLitePatcher(state_dict)
 
     def __init__(self, state_dict):
         super().__init__()
         self.state_dict = state_dict
-        return
 
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
         unet = process.sd_model.forge_objects.unet
 
-        unet = opLLLiteLoader(
-            model=unet,
-            state_dict=self.state_dict,
-            cond_image=cond.movedim(1, -1),
-            strength=self.strength,
-            steps=process.steps,
-            start_percent=self.start_percent,
-            end_percent=self.end_percent
-        )[0]
+        unet = LLLiteLoader.load_lllite(model=unet, state_dict=self.state_dict, cond_image=cond.movedim(1, -1), strength=self.strength, steps=process.steps, start_percent=self.start_percent, end_percent=self.end_percent)
 
         process.sd_model.forge_objects.unet = unet
-        return
 
 
-# Anima must be registered first so its try_build_from_state_dict is checked first
 add_supported_control_model(ControlLLLiteAnimaPatcher)
+
 add_supported_control_model(ControlLLLitePatcher)
