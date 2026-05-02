@@ -110,10 +110,6 @@ if args.directml is not None:
     logger.info("Using directml with device: {}".format(torch_directml.device_name(device_index)))
     lowvram_available = False
 
-try:
-    import intel_extension_for_pytorch as ipex  # noqa: F401
-except Exception:
-    ipex = None
 
 try:
     _ = torch.xpu.device_count()
@@ -477,13 +473,6 @@ class LoadedModel:
         self.model_use_more_vram(use_more_vram, force_patch_weights=force_patch_weights)
 
         real_model = self.model.model
-
-        if is_intel_xpu() and not args.disable_ipex_optimize and ipex is not None and real_model is not None:
-            with torch.no_grad():
-                real_model = ipex.optimize(real_model.eval(), inplace=True, graph_mode=True, concat_linear=True)
-
-            global signal_empty_cache
-            signal_empty_cache = True
 
         bake_gguf_model(real_model)
 
@@ -1175,10 +1164,7 @@ def should_use_fp16(device: torch.device = None, model_params: int = 0, prioriti
         return False
 
     if is_intel_xpu():
-        if torch_version_numeric < (2, 3):
-            return True
-        else:
-            return torch.xpu.get_device_properties(device).has_fp16
+        return torch.xpu.get_device_properties(device).has_fp16
 
     if torch.version.hip:
         return True
@@ -1233,10 +1219,7 @@ def should_use_bf16(device: torch.device = None, model_params: int = 0, prioriti
         return False
 
     if is_intel_xpu():
-        if torch_version_numeric < (2, 3):
-            return True
-        else:
-            return torch.xpu.is_bf16_supported()
+        return torch.xpu.is_bf16_supported()
 
     if is_amd():
         arch = torch.cuda.get_device_properties(device).gcnArchName
@@ -1350,8 +1333,10 @@ def soft_empty_cache(force=False):
     if cpu_state is CPUState.MPS:
         torch.mps.empty_cache()
     elif is_intel_xpu():
+        torch.xpu.synchronize()
         torch.xpu.empty_cache()
     elif torch.cuda.is_available():
+        torch.cuda.synchronize()
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
 
