@@ -1,49 +1,60 @@
-from __future__ import annotations
+# https://github.com/kohya-ss/ComfyUI-Anima-LLLite/blob/main/control_net_lllite_anima.py
 
 import logging
-from typing import List, Optional, Tuple
+import math
+from typing import Final, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-logger = logging.getLogger(__name__)
+from backend.state_dict import load_state_dict
 
-# Forge Anima uses SelfCrossAttention (not "Attention") with is_SelfAttn attribute
-TARGET_ATTENTION_CLASS = "SelfCrossAttention"
-TARGET_MLP_CLASS = "GPT2FeedForward"
+logger = logging.getLogger("ControlNet")
 
-ATOMIC_SPECIFIERS: Tuple[str, ...] = (
+
+# region Consts
+
+
+TARGET_ATTENTION_CLASS: Final[str] = "SelfCrossAttention"
+TARGET_MLP_CLASS: Final[str] = "GPT2FeedForward"
+
+ATOMIC_SPECIFIERS: Final[tuple[str]] = (
     "self_attn_q_pre",
     "self_attn_kv_pre",
     "cross_attn_q_pre",
     "mlp_fc1_pre",
 )
 
-PRESETS: dict = {
-    "self_attn_q":           ("self_attn_q_pre",),
-    "self_attn_qkv":         ("self_attn_q_pre", "self_attn_kv_pre"),
+PRESETS: Final[dict[str, tuple[str]]] = {
+    "self_attn_q": ("self_attn_q_pre",),
+    "self_attn_qkv": ("self_attn_q_pre", "self_attn_kv_pre"),
     "self_attn_qkv_cross_q": ("self_attn_q_pre", "self_attn_kv_pre", "cross_attn_q_pre"),
 }
 
-ASPP_DEFAULT_DILATIONS: Tuple[int, ...] = (1, 2, 4, 8)
+ASPP_DEFAULT_DILATIONS: Final[tuple[int]] = (1, 2, 4, 8)
 
 
-def parse_target_layers(spec: str) -> Tuple[str, ...]:
+_INTERNAL_MODULES_PREFIX = "lllite_modules."
+_INTERNAL_COND_PREFIX = "conditioning1."
+_INTERNAL_DEPTH_KEY = "depth_embeds"
+_SAVED_COND_PREFIX = "lllite_conditioning1."
+_SAVED_DEPTH_SUFFIX = ".depth_embed"
+
+
+def parse_target_layers(spec: str) -> tuple[str]:
     spec = spec.strip()
     if spec in PRESETS:
-        parts = list(PRESETS[spec])
-    else:
-        parts = [p.strip() for p in spec.split(",") if p.strip()]
-        bad = [p for p in parts if p not in ATOMIC_SPECIFIERS]
-        if bad:
-            raise ValueError(f"unknown target_layers specifier(s): {bad}")
+        return PRESETS[spec]
+
+    parts = [p.strip() for p in spec.split(",") if p.strip()]
+    assert not any([p not in ATOMIC_SPECIFIERS for p in parts])
+
     return tuple(a for a in ATOMIC_SPECIFIERS if a in parts)
 
 
-# ---------------------------------------------------------------------------
-# Conditioning trunk
-# ---------------------------------------------------------------------------
+# region Conditioning
+
 
 def _gn(channels: int) -> nn.GroupNorm:
     g = 8
@@ -67,12 +78,11 @@ class _ResBlock(nn.Module):
 
 
 class _ASPP(nn.Module):
-    def __init__(self, ch: int, dilations: Tuple[int, ...] = ASPP_DEFAULT_DILATIONS):
+    def __init__(self, ch: int, dilations: tuple[int] = ASPP_DEFAULT_DILATIONS):
         super().__init__()
         branches = []
         for d in dilations:
-            conv = nn.Conv2d(ch, ch, kernel_size=1) if d == 1 else \
-                   nn.Conv2d(ch, ch, kernel_size=3, padding=d, dilation=d)
+            conv = nn.Conv2d(ch, ch, kernel_size=1) if d == 1 else nn.Conv2d(ch, ch, kernel_size=3, padding=d, dilation=d)
             branches.append(nn.Sequential(conv, _gn(ch), nn.SiLU()))
         self.branches = nn.ModuleList(branches)
         self.global_pool = nn.AdaptiveAvgPool2d(1)
@@ -89,9 +99,8 @@ class _ASPP(nn.Module):
         return self.proj(torch.cat(outs, dim=1))
 
 
-class _Conditioning1(nn.Module):
-    def __init__(self, cond_dim: int, cond_emb_dim: int, n_resblocks: int,
-                 use_aspp: bool = False, aspp_dilations: Tuple[int, ...] = ASPP_DEFAULT_DILATIONS):
+class _Conditioning(nn.Module):
+    def __init__(self, cond_dim: int, cond_emb_dim: int, n_resblocks: int, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS):
         super().__init__()
         ch_half = cond_dim // 2
         self.conv1 = nn.Conv2d(3, ch_half, kernel_size=4, stride=4, padding=0)
@@ -116,20 +125,18 @@ class _Conditioning1(nn.Module):
         h = self.proj(h)
         b, c, hh, ww = h.shape
         h = h.view(b, c, hh * ww).permute(0, 2, 1).contiguous()
-        return self.out_norm(h)  # (B, S, cond_emb_dim)
+        return self.out_norm(h)
 
 
-# ---------------------------------------------------------------------------
-# Per-Linear LLLite module
-# ---------------------------------------------------------------------------
+# region Per-Linear LLLite Module
+
 
 class LLLiteModuleDiT(nn.Module):
-    def __init__(self, name: str, org_module: nn.Linear, cond_emb_dim: int, mlp_dim: int,
-                 dropout: Optional[float] = None, multiplier: float = 1.0):
+    def __init__(self, name: str, org_module: nn.Linear, cond_emb_dim: int, mlp_dim: int, dropout: Optional[float] = None, multiplier: float = 1.0):
         super().__init__()
         self.lllite_name = name
-        # Store as list so org_module weights are excluded from this module's state_dict
-        self.org_module: List[nn.Linear] = [org_module]
+
+        self.org_module: list[nn.Linear] = [org_module]
         self.multiplier = multiplier
         self.dropout = dropout
 
@@ -137,7 +144,6 @@ class LLLiteModuleDiT(nn.Module):
         self.down = nn.Linear(in_dim, mlp_dim)
         self.mid = nn.Linear(mlp_dim + cond_emb_dim, mlp_dim)
 
-        # FiLM: zero-init → identity at the start of training / inference
         self.cond_to_film = nn.Linear(cond_emb_dim, 2 * mlp_dim)
         nn.init.zeros_(self.cond_to_film.weight)
         nn.init.zeros_(self.cond_to_film.bias)
@@ -149,9 +155,8 @@ class LLLiteModuleDiT(nn.Module):
         self.cond_emb: Optional[torch.Tensor] = None
         self.org_forward = None
         self.layer_idx: int = -1
-        self._depth_embeds_ref: List[nn.Parameter] = []
+        self._depth_embeds_ref: list[nn.Parameter] = []
 
-        # Timestep range
         self.num_steps: int = 0
         self.start_step: int = 0
         self.end_step: int = 0
@@ -168,6 +173,7 @@ class LLLiteModuleDiT(nn.Module):
             self.org_module[0].forward = self.org_forward
             self.org_forward = None
 
+    @torch.inference_mode()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         orig_shape = x.shape
         is_5d = x.dim() == 5
@@ -178,7 +184,6 @@ class LLLiteModuleDiT(nn.Module):
         if self.multiplier == 0.0 or self.cond_emb is None:
             return _pass()
 
-        # Timestep range gating
         if self.num_steps > 0:
             step = self.current_step
             self.current_step += 1
@@ -191,15 +196,13 @@ class LLLiteModuleDiT(nn.Module):
             B, T, H, W, D = orig_shape
             x = x.reshape(B, T * H * W, D)
 
-        cx = self.cond_emb  # (B_c, S, cond_emb_dim)
+        cx = self.cond_emb
 
-        # CFG doubles batch; broadcast cond_emb to match
         if x.shape[0] != cx.shape[0]:
             if x.shape[0] % cx.shape[0] != 0:
                 return self.org_forward(x.reshape(orig_shape) if is_5d else x)
             cx = cx.repeat(x.shape[0] // cx.shape[0], 1, 1)
 
-        # Spatial token count mismatch (e.g. video T>1): fall back to identity
         if x.shape[1] != cx.shape[1]:
             return self.org_forward(x.reshape(orig_shape) if is_5d else x)
 
@@ -231,29 +234,29 @@ class LLLiteModuleDiT(nn.Module):
         y = self.org_forward(x + out)
         if is_5d:
             y = y.reshape(orig_shape[0], orig_shape[1], orig_shape[2], orig_shape[3], -1)
+
         return y
 
 
-# ---------------------------------------------------------------------------
-# ControlNetLLLiteDiT
-# ---------------------------------------------------------------------------
+# region ControlNetLLLiteDiT
+
 
 class ControlNetLLLiteDiT(nn.Module):
-    def __init__(self, dit: nn.Module, cond_emb_dim: int = 32, mlp_dim: int = 64,
-                 target_layers: str = "self_attn_q", dropout: Optional[float] = None,
-                 multiplier: float = 1.0, cond_dim: int = 64, cond_resblocks: int = 1,
-                 use_aspp: bool = False, aspp_dilations: Tuple[int, ...] = ASPP_DEFAULT_DILATIONS):
+    def __init__(self, dit: nn.Module, cond_emb_dim: int = 32, mlp_dim: int = 64, target_layers: str = "self_attn_q", dropout: Optional[float] = None, multiplier: float = 1.0, cond_dim: int = 64, cond_resblocks: int = 1, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS):
         super().__init__()
         atomics = parse_target_layers(target_layers)
         self.multiplier = multiplier
         self.target_atomics = atomics
 
-        self.conditioning1 = _Conditioning1(
-            cond_dim, cond_emb_dim, cond_resblocks,
-            use_aspp=use_aspp, aspp_dilations=aspp_dilations,
+        self.conditioning1 = _Conditioning(
+            cond_dim,
+            cond_emb_dim,
+            cond_resblocks,
+            use_aspp=use_aspp,
+            aspp_dilations=aspp_dilations,
         )
         modules = self._create_modules(dit, cond_emb_dim, mlp_dim, atomics, dropout, multiplier)
-        self.lllite_modules = nn.ModuleList(modules)
+        self.lllite_modules: list[LLLiteModuleDiT] = nn.ModuleList(modules)
 
         n = len(self.lllite_modules)
         self.depth_embeds = nn.Parameter(torch.zeros(n, cond_emb_dim))
@@ -261,11 +264,10 @@ class ControlNetLLLiteDiT(nn.Module):
             m.layer_idx = i
             m._depth_embeds_ref = [self.depth_embeds]
 
-        logger.info("ControlNet-LLLite (Anima): %d modules, target=%r, atomics=%s",
-                    n, target_layers, list(atomics))
+        logger.info(f"Loaded Control-LLLite (Anima) ({n} modules)")
 
     @staticmethod
-    def _attn_atomic_match(is_self_attn: bool, child_name: str, atomics: Tuple[str, ...]) -> bool:
+    def _attn_atomic_match(is_self_attn: bool, child_name: str, atomics: tuple[str]) -> bool:
         if "output_proj" in child_name:
             return False
         if is_self_attn:
@@ -287,7 +289,6 @@ class ControlNetLLLiteDiT(nn.Module):
             cls = module.__class__.__name__
 
             if any_attn and cls == TARGET_ATTENTION_CLASS:
-                # Forge Anima uses is_SelfAttn (kohya ref uses is_selfattn)
                 if not hasattr(module, "is_SelfAttn"):
                     continue
                 is_self_attn = bool(module.is_SelfAttn)
@@ -297,18 +298,14 @@ class ControlNetLLLiteDiT(nn.Module):
                     if not self._attn_atomic_match(is_self_attn, child_name, atomics):
                         continue
                     full_name = f"lllite_dit.{name}.{child_name}".replace(".", "_")
-                    modules.append(
-                        LLLiteModuleDiT(full_name, child, cond_emb_dim, mlp_dim, dropout, multiplier)
-                    )
+                    modules.append(LLLiteModuleDiT(full_name, child, cond_emb_dim, mlp_dim, dropout, multiplier))
 
             elif want_mlp and cls == TARGET_MLP_CLASS:
                 child = getattr(module, "layer1", None)
                 if not isinstance(child, nn.Linear):
                     continue
                 full_name = f"lllite_dit.{name}.layer1".replace(".", "_")
-                modules.append(
-                    LLLiteModuleDiT(full_name, child, cond_emb_dim, mlp_dim, dropout, multiplier)
-                )
+                modules.append(LLLiteModuleDiT(full_name, child, cond_emb_dim, mlp_dim, dropout, multiplier))
 
         return modules
 
@@ -318,25 +315,25 @@ class ControlNetLLLiteDiT(nn.Module):
             for m in self.lllite_modules:
                 m.cond_emb = None
             return
-        cx = self.conditioning1(cond_image)  # (B, S, cond_emb_dim)
+        cx = self.conditioning1(cond_image)
         for m in self.lllite_modules:
             m.cond_emb = cx
-
-    def clear_cond_image(self):
-        self.set_cond_image(None)
 
     def set_multiplier(self, multiplier: float):
         self.multiplier = multiplier
         for m in self.lllite_modules:
             m.multiplier = multiplier
 
-    def set_step_range(self, num_steps: int, start_step: int, end_step: int):
+    def set_step_range(self, num_steps: int, start_percent: float, end_percent: float):
+        start_step = math.floor(num_steps * start_percent) if start_percent > 0 else 0
+        end_step = math.floor(num_steps * end_percent) if end_percent > 0 else num_steps
+
         for i, m in enumerate(self.lllite_modules):
             m.num_steps = num_steps
             m.start_step = start_step
             m.end_step = end_step
             m.current_step = 0
-            m.is_first = (i == 0)
+            m.is_first = i == 0
 
     def apply_to(self):
         for m in self.lllite_modules:
@@ -345,20 +342,13 @@ class ControlNetLLLiteDiT(nn.Module):
     def restore(self):
         for m in self.lllite_modules:
             m.restore()
+        self.set_cond_image(None)
 
 
-# ---------------------------------------------------------------------------
-# Weight loading (v2 named-key format)
-# ---------------------------------------------------------------------------
-
-_INTERNAL_MODULES_PREFIX = "lllite_modules."
-_INTERNAL_COND_PREFIX = "conditioning1."
-_INTERNAL_DEPTH_KEY = "depth_embeds"
-_SAVED_COND_PREFIX = "lllite_conditioning1."
-_SAVED_DEPTH_SUFFIX = ".depth_embed"
+# region Weight Loading (v2)
 
 
-def _from_saved_state_dict(lllite: ControlNetLLLiteDiT, weights_sd: dict) -> dict:
+def _from_saved_state_dict(lllite: ControlNetLLLiteDiT, weights_sd: dict[str, torch.Tensor]) -> dict:
     name_to_idx = {m.lllite_name: i for i, m in enumerate(lllite.lllite_modules)}
     n_modules = len(name_to_idx)
     out: dict = {}
@@ -366,7 +356,7 @@ def _from_saved_state_dict(lllite: ControlNetLLLiteDiT, weights_sd: dict) -> dic
 
     for k, v in weights_sd.items():
         if k.startswith(_SAVED_COND_PREFIX):
-            out[_INTERNAL_COND_PREFIX + k[len(_SAVED_COND_PREFIX):]] = v
+            out[_INTERNAL_COND_PREFIX + k[len(_SAVED_COND_PREFIX) :]] = v
             continue
         if k.endswith(_SAVED_DEPTH_SUFFIX):
             name = k[: -len(_SAVED_DEPTH_SUFFIX)]
@@ -383,25 +373,17 @@ def _from_saved_state_dict(lllite: ControlNetLLLiteDiT, weights_sd: dict) -> dic
         missing = [i for i in range(n_modules) if i not in depth_slices]
         if missing:
             raise RuntimeError(f"depth_embed slices missing for module indices: {missing}")
-        out[_INTERNAL_DEPTH_KEY] = torch.stack(
-            [depth_slices[i] for i in range(n_modules)], dim=0
-        )
+        out[_INTERNAL_DEPTH_KEY] = torch.stack([depth_slices[i] for i in range(n_modules)], dim=0)
     return out
 
 
-def load_lllite_weights_from_dict(lllite: ControlNetLLLiteDiT, state_dict: dict, strict: bool = False):
-    if any(k.startswith(_INTERNAL_MODULES_PREFIX) for k in state_dict):
-        raise RuntimeError(
-            "Legacy weight format detected (keys start with 'lllite_modules.'). "
-            "Weights must use the v2 named-key format."
-        )
+def load_lllite_weights_from_dict(lllite: ControlNetLLLiteDiT, state_dict: dict[str, torch.Tensor]):
+    assert not any(k.startswith(_INTERNAL_MODULES_PREFIX) for k in state_dict)
     converted = _from_saved_state_dict(lllite, state_dict)
-    info = lllite.load_state_dict(converted, strict=strict)
-    logger.info("Loaded LLLite-Anima weights: %s", info)
-    return info
+    load_state_dict(lllite, converted)
 
 
-def infer_anima_config(state_dict: dict) -> dict:
+def infer_anima_config(state_dict: dict[str, torch.Tensor]) -> dict:
     """Reconstruct ControlNetLLLiteDiT constructor kwargs from a saved state dict."""
     cond_emb_dim = 32
     cond_dim = 64
@@ -421,7 +403,7 @@ def infer_anima_config(state_dict: dict) -> dict:
             mlp_dim = v.shape[0]
             break
 
-    rb_indices: set = set()
+    rb_indices = set()
     for k in state_dict:
         if "lllite_conditioning1.resblocks." in k:
             parts = k.split(".")
@@ -430,24 +412,26 @@ def infer_anima_config(state_dict: dict) -> dict:
                 rb_indices.add(int(parts[idx + 1]))
             except (ValueError, IndexError):
                 pass
+
     if rb_indices:
         cond_resblocks = max(rb_indices) + 1
 
     use_aspp = any("lllite_conditioning1.aspp" in k for k in state_dict)
 
-    has_self_q  = any("self_attn_q_proj.down.weight" in k for k in state_dict)
-    has_self_kv = any(
-        ("self_attn_k_proj" in k or "self_attn_v_proj" in k) and k.endswith(".down.weight")
-        for k in state_dict
-    )
+    has_self_q = any("self_attn_q_proj.down.weight" in k for k in state_dict)
+    has_self_kv = any(("self_attn_k_proj" in k or "self_attn_v_proj" in k) and k.endswith(".down.weight") for k in state_dict)
     has_cross_q = any("cross_attn_q_proj.down.weight" in k for k in state_dict)
-    has_mlp     = any("_mlp_layer1.down.weight" in k for k in state_dict)
+    has_mlp = any("_mlp_layer1.down.weight" in k for k in state_dict)
 
     parts = []
-    if has_self_q:  parts.append("self_attn_q_pre")
-    if has_self_kv: parts.append("self_attn_kv_pre")
-    if has_cross_q: parts.append("cross_attn_q_pre")
-    if has_mlp:     parts.append("mlp_fc1_pre")
+    if has_self_q:
+        parts.append("self_attn_q_pre")
+    if has_self_kv:
+        parts.append("self_attn_kv_pre")
+    if has_cross_q:
+        parts.append("cross_attn_q_pre")
+    if has_mlp:
+        parts.append("mlp_fc1_pre")
     target_layers = ",".join(parts) if parts else "self_attn_q"
 
     return dict(
