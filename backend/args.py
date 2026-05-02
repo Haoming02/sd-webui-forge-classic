@@ -93,6 +93,7 @@ parser.add_argument("--force-non-blocking", action="store_true", help="Use non-b
 parser.add_argument("--cuda-malloc", action="store_true", help="improve memory allocation")
 parser.add_argument("--cuda-stream", type=int, nargs="?", metavar="NUM_STREAMS", const=2, help="improve offloading")
 parser.add_argument("--pin-shared-memory", action="store_true", help="improve RAM utilization")
+parser.add_argument("--expandable-segments", action="store_true", help="improve memory allocation ; experimental")
 
 parser.add_argument("--fast-fp8", action="store_true", help="torch._scaled_mm")
 parser.add_argument("--fast-fp16", action="store_true", help="torch.backends.cuda.matmul.allow_fp16_accumulation")

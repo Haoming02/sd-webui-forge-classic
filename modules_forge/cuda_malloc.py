@@ -56,5 +56,16 @@ def try_cuda_malloc():
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = env_var
 
 
+def try_expandable_segments():
+    env_var = os.environ.get("PYTORCH_ALLOC_CONF", None)
+
+    if env_var is None:
+        env_var = "expandable_segments:True"
+    else:
+        env_var += ",expandable_segments:True"
+
+    os.environ["PYTORCH_ALLOC_CONF"] = env_var
+
+
 def get_torch_version() -> str:
     return str(version)
