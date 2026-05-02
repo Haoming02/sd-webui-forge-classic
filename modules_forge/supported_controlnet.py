@@ -77,7 +77,7 @@ class ControlNetPatcher(ControlModelPatcher):
         super().__init__(model_patcher)
 
     @staticmethod
-    def try_build_from_state_dict(controlnet_data, ckpt_path):
+    def try_build_from_state_dict(controlnet_data: dict[str, torch.Tensor], ckpt_path):
         if "lora_controlnet" in controlnet_data:
             return ControlNetPatcher(ControlLora(controlnet_data))
 
@@ -146,7 +146,8 @@ class ControlNetPatcher(ControlModelPatcher):
         else:
             net = load_t2i_adapter(controlnet_data)
             if net is None:
-                logger.error("Could not detect Control model type...")
+                if not any(k.startswith("lllite") for k in controlnet_data):  # LLLite
+                    logger.error("Could not detect Control model type...")
                 return None
             return ControlNetPatcher(net)
 
