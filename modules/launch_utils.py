@@ -322,27 +322,49 @@ def prepare_environment():
         # PyTorch's ROCm build exposes the AMD HIP runtime through the
         # `torch.cuda` namespace, so this single check covers NVIDIA (CUDA),
         # AMD (ROCm/HIP), Intel (XPU), and Apple Silicon (MPS) backends.
+        # We print backend-identifying info to stderr so failures are diagnosable.
         TORCH_CHECK: str = """
-import torch
+import sys, torch
+hip = getattr(torch.version, "hip", None)
+cu  = getattr(torch.version, "cuda", None)
+print(f"torch={torch.__version__}  cuda_build={cu}  hip_build={hip}", file=sys.stderr)
 cuda = hasattr(torch, "cuda") and torch.cuda.is_available()
 xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
 mps = hasattr(torch, "mps") and torch.mps.is_available()
+print(f"is_available: cuda/hip={cuda} xpu={xpu} mps={mps}", file=sys.stderr)
+if cuda:
+    try:
+        n = torch.cuda.device_count()
+        print(f"device_count={n}", file=sys.stderr)
+        for i in range(n):
+            print(f"  [{i}] {torch.cuda.get_device_name(i)}", file=sys.stderr)
+    except Exception as e:
+        print(f"device enumeration failed: {e!r}", file=sys.stderr)
 assert cuda or xpu or mps
         """
 
         success, err = check_run_python(TORCH_CHECK, return_error=True)
         if not success:
-            err_text = str(err).lower()
-            if "older driver" in err_text:
+            err_text = err.decode("utf-8", errors="ignore") if isinstance(err, (bytes, bytearray)) else str(err)
+            print("\n--- GPU detection output ---", file=sys.stderr)
+            print(err_text, file=sys.stderr)
+            print("--- end GPU detection output ---\n", file=sys.stderr)
+
+            low = err_text.lower()
+            if "older driver" in low:
                 raise SystemError(
                     "Please update your GPU driver to a version that supports the installed PyTorch build, "
                     "or override TORCH_COMMAND in webui-user.sh to install an older PyTorch."
                 )
             raise RuntimeError(
-                "PyTorch is not able to access GPU. "
-                "For AMD GPUs make sure ROCm is installed on the host and that your card's "
-                "gfx target is supported by the torch+rocm wheel; you may need to set "
-                "HSA_OVERRIDE_GFX_VERSION (see webui-user.sh)."
+                "PyTorch is not able to access GPU. For AMD GPUs verify the host setup:\n"
+                "  1. ROCm runtime is installed on the host (e.g. `rocminfo` succeeds and lists your GPU).\n"
+                "  2. Your user is in the `render` and `video` groups (`sudo usermod -aG render,video $USER` then re-login).\n"
+                "  3. /dev/kfd and /dev/dri/* exist and are accessible to your user.\n"
+                "  4. Your card's gfx target is supported by torch+rocm6.4. If unsupported, export\n"
+                "     HSA_OVERRIDE_GFX_VERSION in webui-user.sh to the closest supported arch\n"
+                "     (e.g. 11.0.0 for RDNA3, 10.3.0 for RDNA2).\n"
+                "See the `--- GPU detection output ---` block above for the underlying error."
             )
         startup_timer.record("torch GPU test")
 
