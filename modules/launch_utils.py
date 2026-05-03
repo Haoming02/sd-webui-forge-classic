@@ -89,7 +89,7 @@ def run(command, desc=None, errdesc=None, custom_env=None, live: bool = default_
 
 
 def _torch_version() -> tuple[str, str]:
-    """Given `2.10.0.dev20251111+cu130` ; Return `("2.10.0", "cu130")`"""
+    """Given `2.9.1+rocm6.4` ; Return `("2.9.1", "rocm6.4")`"""
     import importlib.metadata
 
     ver = importlib.metadata.version("torch")
@@ -97,7 +97,7 @@ def _torch_version() -> tuple[str, str]:
 
     if m is None:
         print("\n\nFailed to parse PyTorch version...")
-        ver = os.environ.get("PYTORCH_VERSION", "2.10.0+cu130")
+        ver = os.environ.get("PYTORCH_VERSION", "2.9.1+rocm6.4")
         print("Assuming: ", ver)
         print('(you can change this with `export PYTORCH_VERSION="..."`)\n\n')
         m = re.search(r"(\d+\.\d+\.\d+)(?:[^+]+)?\+(.+)", ver)
@@ -286,8 +286,10 @@ def requirements_met(requirements_file):
 
 
 def prepare_environment():
-    torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
+    # Defaults target AMD GPUs via ROCm 6.4. Override TORCH_INDEX_URL / TORCH_COMMAND
+    # in webui-user.sh to use a different backend (e.g. CUDA, CPU, or older ROCm).
+    torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/rocm6.4")
+    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.9.1+rocm6.4 torchvision==0.24.1+rocm6.4 --index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
     bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.2")
 
@@ -317,6 +319,9 @@ def prepare_environment():
         startup_timer.record("install torch")
 
     if not args.skip_torch_cuda_test:
+        # PyTorch's ROCm build exposes the AMD HIP runtime through the
+        # `torch.cuda` namespace, so this single check covers NVIDIA (CUDA),
+        # AMD (ROCm/HIP), Intel (XPU), and Apple Silicon (MPS) backends.
         TORCH_CHECK: str = """
 import torch
 cuda = hasattr(torch, "cuda") and torch.cuda.is_available()
@@ -327,9 +332,18 @@ assert cuda or xpu or mps
 
         success, err = check_run_python(TORCH_CHECK, return_error=True)
         if not success:
-            if "older driver" in str(err).lower():
-                raise SystemError("Please update your GPU driver to support cu130 ; or manually install older PyTorch")
-            raise RuntimeError("PyTorch is not able to access GPU")
+            err_text = str(err).lower()
+            if "older driver" in err_text:
+                raise SystemError(
+                    "Please update your GPU driver to a version that supports the installed PyTorch build, "
+                    "or override TORCH_COMMAND in webui-user.sh to install an older PyTorch."
+                )
+            raise RuntimeError(
+                "PyTorch is not able to access GPU. "
+                "For AMD GPUs make sure ROCm is installed on the host and that your card's "
+                "gfx target is supported by the torch+rocm wheel; you may need to set "
+                "HSA_OVERRIDE_GFX_VERSION (see webui-user.sh)."
+            )
         startup_timer.record("torch GPU test")
 
     if not is_installed("packaging"):
