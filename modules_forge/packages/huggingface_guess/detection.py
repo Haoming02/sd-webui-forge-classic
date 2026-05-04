@@ -106,7 +106,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
     if "{}single_transformer_blocks.0.mlp_fc1.qweight".format(key_prefix) in state_dict_keys:  # SVDQ Flux
         dit_config = {"nunchaku": True}
         dit_config["image_model"] = "flux"
-        dit_config["guidance_embed"] = True
+        dit_config["guidance_embed"] = "{}time_text_embed.guidance_embedder.linear_1.weight".format(key_prefix) in state_dict_keys
         return dit_config
 
     if "{}double_blocks.0.img_attn.proj.weight.quant_state.bitsandbytes__nf4".format(key_prefix) in state_dict_keys:  # flux1-dev-bnb-nf4
@@ -125,7 +125,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
         dit_config["theta"] = 10000
         dit_config["patch_size"] = 2
         dit_config["qkv_bias"] = True
-        dit_config["guidance_embed"] = True
+        dit_config["guidance_embed"] = "{}guidance_in.in_layer.weight".format(key_prefix) in state_dict_keys
         return dit_config
 
     if ("{}double_blocks.0.img_attn.norm.key_norm.scale".format(key_prefix) in state_dict_keys or "{}double_blocks.0.img_attn.norm.key_norm.weight".format(key_prefix) in state_dict_keys) and ("{}img_in.weight".format(key_prefix) in state_dict_keys or f"{key_prefix}distilled_guidance_layer.norms.0.scale" in state_dict_keys):  # Flux.1 / Flux.2
