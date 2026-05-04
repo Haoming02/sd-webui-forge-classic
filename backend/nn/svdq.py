@@ -14,14 +14,16 @@ from nunchaku import NunchakuFluxTransformer2dModel, NunchakuT5EncoderModel
 from nunchaku.caching.diffusers_adapters.flux import apply_cache_on_transformer
 from nunchaku.caching.fbcache import cache_context, create_cache_context
 from nunchaku.lora.flux.compose import compose_lora
+from nunchaku.models.embeddings import pack_rotemb
 from nunchaku.models.linear import AWQW4A16Linear, SVDQW4A4Linear
 from nunchaku.models.transformers.utils import patch_scale_key
 from nunchaku.models.utils import CPUOffloadManager
 from nunchaku.ops.fused import fused_gelu_mlp
-from nunchaku.utils import load_state_dict_in_safetensors
+from nunchaku.ops.gemm import svdq_gemm_w4a4_cuda
+from nunchaku.utils import load_state_dict_in_safetensors, pad_tensor
 
 from backend.args import dynamic_args
-from backend.memory_management import logger
+from backend.memory_management import logger, soft_empty_cache
 from backend.nn._qwen_lora import compose_loras_v2, reset_lora_v2
 from backend.utils import process_img
 from modules import shared
@@ -205,7 +207,7 @@ class SVDQFluxTransformer2DModel(nn.Module):
         return [], []
 
 
-# ========== T5 ========== #
+# region T5
 
 
 def _forward(self: "T5EncoderModel", input_ids: torch.LongTensor, *args, **kwargs):
@@ -226,7 +228,7 @@ class WrappedEmbedding(nn.Module):
         return self.embedding.weight
 
 
-class SVDQT5(torch.nn.Module):
+class SVDQT5(nn.Module):
     """https://github.com/nunchaku-tech/ComfyUI-nunchaku/blob/v1.0.0/nodes/models/text_encoder.py"""
 
     def __init__(self, path: str):
@@ -237,7 +239,7 @@ class SVDQT5(torch.nn.Module):
         transformer.shared = WrappedEmbedding(transformer.shared)
 
         self.transformer = transformer
-        self.logit_scale = torch.nn.Parameter(torch.tensor(4.6055))
+        self.logit_scale = nn.Parameter(torch.tensor(4.6055))
 
 
 # region Qwen
@@ -772,7 +774,7 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         else:
             self.offload_manager = None
             gc.collect()
-            torch.cuda.empty_cache()
+            soft_empty_cache()
 
     def load_state_dict(self, sd, *args, **kwargs):
         state_dict = self.state_dict()
@@ -811,6 +813,44 @@ def fuse_to_svdquant_linear(linear1: nn.Linear, linear2: nn.Linear, **kwargs) ->
     )
 
 
+def fused_qkv_norm_rotary(
+    x: torch.Tensor,
+    qkv: SVDQW4A4Linear,
+    q_norm_weight: nn.Parameter,
+    k_norm_weight: nn.Parameter,
+    freqs_cis: torch.Tensor,
+):
+    batch_size, seq_len, channels = x.shape
+    x_dtype = x.dtype
+    x = x.view(batch_size * seq_len, channels)
+    quantized_x, ascales, lora_act = qkv.quantize(x)
+    output = torch.empty(batch_size * seq_len, qkv.out_features, dtype=x.dtype, device=x.device)
+    if (q_norm_weight is not None) and (x_dtype != q_norm_weight.dtype):
+        assert x_dtype == torch.float16
+        assert q_norm_weight.dtype == torch.bfloat16
+        assert k_norm_weight.dtype == torch.bfloat16
+        q_norm_weight = torch.nan_to_num(q_norm_weight.to(dtype=torch.float16), nan=0.0, posinf=65504, neginf=-65504)
+        k_norm_weight = torch.nan_to_num(k_norm_weight.to(dtype=torch.float16), nan=0.0, posinf=65504, neginf=-65504)
+    svdq_gemm_w4a4_cuda(
+        act=quantized_x,
+        wgt=qkv.qweight,
+        out=output,
+        ascales=ascales,
+        wscales=qkv.wscales,
+        lora_act_in=lora_act,
+        lora_up=qkv.proj_up,
+        bias=qkv.bias,
+        fp4=qkv.precision == "nvfp4",
+        alpha=qkv.wtscale,
+        wcscales=qkv.wcscales,
+        norm_q=q_norm_weight if q_norm_weight is not None else None,
+        norm_k=k_norm_weight if k_norm_weight is not None else None,
+        rotary_emb=freqs_cis,
+    )
+    output = output.view(batch_size, seq_len, -1)
+    return output
+
+
 class NunchakuZImageAttention(JointAttention):
 
     def __init__(self, orig_attn: JointAttention, **kwargs):
@@ -834,7 +874,43 @@ class NunchakuZImageAttention(JointAttention):
         freqs_cis: torch.Tensor,
         transformer_options={},
     ) -> torch.Tensor:
-        return super().forward(x, x_mask, freqs_cis, transformer_options)
+        bsz, seqlen, _ = x.shape
+        qkv = fused_qkv_norm_rotary(
+            x,
+            self.qkv,
+            self.q_norm.weight,
+            self.k_norm.weight,
+            freqs_cis,
+        )
+
+        xq, xk, xv = torch.split(
+            qkv,
+            [
+                self.n_local_heads * self.head_dim,
+                self.n_local_kv_heads * self.head_dim,
+                self.n_local_kv_heads * self.head_dim,
+            ],
+            dim=-1,
+        )
+        xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
+        xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
+        xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
+
+        n_rep = self.n_local_heads // self.n_local_kv_heads
+        if n_rep >= 1:
+            xk = xk.unsqueeze(3).repeat(1, 1, 1, n_rep, 1).flatten(2, 3)
+            xv = xv.unsqueeze(3).repeat(1, 1, 1, n_rep, 1).flatten(2, 3)
+        output = attention_function(
+            xq.movedim(1, 2),
+            xk.movedim(1, 2),
+            xv.movedim(1, 2),
+            self.n_local_heads,
+            x_mask,
+            skip_reshape=True,
+            transformer_options=transformer_options,
+        )
+
+        return self.out(output)
 
 
 class NunchakuZImageFeedForward(nn.Module):
@@ -851,6 +927,63 @@ class NunchakuZImageFeedForward(nn.Module):
         x = self.w13(x)
         x3, x1 = x.chunk(2, dim=-1)
         return self.w2(self._forward_silu_gating(x1, x3))
+
+
+class RopeFuseAttentionHook:
+
+    def __init__(self):
+        self.packed_freqs_cis_cache = {}
+        self.hook_handles = []
+
+    def pre_forward(self, module: NunchakuZImageAttention, input_args: tuple, input_kwargs: dict):
+        new_input_args = list(input_args)
+        freqs_cis: torch.Tensor = new_input_args[2]
+        if freqs_cis is None:
+            return None
+        cache_key = (freqs_cis.data_ptr(), freqs_cis.shape)
+        packed_freqs_cis = self.packed_freqs_cis_cache.get(cache_key, None)
+        if packed_freqs_cis is None:
+            freqs_cis = freqs_cis[..., [1], :].squeeze(2).float()
+            packed_freqs_cis = pack_rotemb(pad_tensor(freqs_cis, 256, 1))
+            self.packed_freqs_cis_cache[cache_key] = packed_freqs_cis
+        new_input_args[2] = packed_freqs_cis
+        return tuple(new_input_args), input_kwargs
+
+    def hook(self, module: NunchakuZImageAttention):
+        assert isinstance(module, NunchakuZImageAttention)
+        self.hook_handles.append(module.register_forward_pre_hook(self.pre_forward, with_kwargs=True))
+
+    def unhook(self):
+        for h in self.hook_handles:
+            h.remove()
+        self.hook_handles.clear()
+        self.packed_freqs_cis_cache.clear()
+
+
+class RopeFuseTransformerHook:
+
+    def __init__(self, skip_refiners: bool):
+        self.skip_refiners = skip_refiners
+
+    def pre_forward(self, module: NextDiT, input_args: tuple):
+        self.attn_hook = RopeFuseAttentionHook()
+        for _, ly in enumerate(module.layers):
+            self.attn_hook.hook(ly.attention)
+        if not self.skip_refiners:
+            for _, nr in enumerate(module.noise_refiner):
+                self.attn_hook.hook(nr.attention)
+            for _, cr in enumerate(module.context_refiner):
+                self.attn_hook.hook(cr.attention)
+        return None
+
+    def post_forward(self, module: NextDiT, input_args: tuple, output: tuple):
+        self.attn_hook.unhook()
+        return None
+
+    def hook(self, model: NextDiT):
+        assert isinstance(model, NextDiT)
+        self.pre_handle = model.register_forward_pre_hook(self.pre_forward)
+        self.post_handle = model.register_forward_hook(self.post_forward, always_call=True)
 
 
 def patch_z_image_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
@@ -910,7 +1043,7 @@ def patch_z_image_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, t
 def patch_nunchaku_zimage(model: NextDiT, precision: str, rank: int):
     kwargs = {"precision": precision, "rank": rank}
 
-    def patch_transformer_block(block_list: list[torch.nn.Module]):
+    def patch_transformer_block(block_list: list[nn.Module]):
         for _, block in enumerate(block_list):
             block.attention = NunchakuZImageAttention(block.attention, **kwargs)
             block.feed_forward = NunchakuZImageFeedForward(block.feed_forward, **kwargs)
@@ -918,6 +1051,7 @@ def patch_nunchaku_zimage(model: NextDiT, precision: str, rank: int):
     patch_transformer_block(model.layers)
     patch_transformer_block(model.noise_refiner)
     patch_transformer_block(model.context_refiner)
+    RopeFuseTransformerHook(False).hook(model)
 
     _load_state_dict: Callable = model.load_state_dict
 
