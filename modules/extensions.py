@@ -3,24 +3,23 @@ from __future__ import annotations
 import configparser
 import dataclasses
 import os
-import threading
 import re
-import json
+import threading
 
-from modules import shared, errors, cache, scripts
+from modules import cache, errors, scripts, shared
 from modules.gitpython_hack import Repo
-from modules.paths_internal import extensions_dir, extensions_builtin_dir, script_path  # noqa: F401
+from modules.paths_internal import extensions_builtin_dir, extensions_dir, script_path  # noqa: F401
 from modules_forge.config import always_disabled_extensions
 
-extensions: list[Extension] = []
-extension_paths: dict[str, Extension] = {}
-loaded_extensions: dict[str, Exception] = {}
+extensions: list["Extension"] = []
+extension_paths: dict[str, "Extension"] = {}
+loaded_extensions: dict[str, "Extension"] = {}
 
 
 os.makedirs(extensions_dir, exist_ok=True)
 
 
-def active():
+def active() -> list["Extension"]:
     if shared.cmd_opts.disable_all_extensions or shared.opts.disable_all_extensions == "all":
         return []
     elif shared.cmd_opts.disable_extra_extensions or shared.opts.disable_all_extensions == "extra":
@@ -42,13 +41,13 @@ class ExtensionMetadata:
     canonical_name: str
     requires: list
 
-    def __init__(self, path, canonical_name):
+    def __init__(self, path: os.PathLike, canonical_name: str):
         self.config = configparser.ConfigParser()
 
         filepath = os.path.join(path, self.filename)
-        # `self.config.read()` will quietly swallow OSErrors (which FileNotFoundError is),
-        # so no need to check whether the file exists beforehand.
+
         try:
+            # `self.config.read()` will silently catch OSErrors (incl. FileNotFoundError)
             self.config.read(filepath)
         except Exception:
             errors.report(f"Error reading {self.filename} for extension {canonical_name}.", exc_info=True)
@@ -63,10 +62,10 @@ class ExtensionMetadata:
         like Requires or Before, and section is the name of the [section] in the ini file; additionally,
         reads more requirements from [extra_section] if specified."""
 
-        x = self.config.get(section, field, fallback='')
+        x = self.config.get(section, field, fallback="")
 
         if extra_section:
-            x = x + ', ' + self.config.get(extra_section, field, fallback='')
+            x = x + ", " + self.config.get(extra_section, field, fallback="")
 
         listed_requirements = self.parse_list(x.lower())
         res = []
@@ -79,7 +78,7 @@ class ExtensionMetadata:
         return res
 
     def parse_list(self, text):
-        """converts a line from config ("ext1 ext2, ext3  ") into a python list (["ext1", "ext2", "ext3"])"""
+        """converts a `str` from config ("ext1 ext2, ext3  ") into a `list` (["ext1", "ext2", "ext3"])"""
 
         if not text:
             return []
@@ -98,27 +97,27 @@ class ExtensionMetadata:
                 errors.report(f"Callback order section for extension {self.canonical_name} is referencing the wrong extension: {section}")
                 continue
 
-            before = self.parse_list(self.config.get(section, 'Before', fallback=''))
-            after = self.parse_list(self.config.get(section, 'After', fallback=''))
+            before = self.parse_list(self.config.get(section, "Before", fallback=""))
+            after = self.parse_list(self.config.get(section, "After", fallback=""))
 
             yield CallbackOrderInfo(callback_name, before, after)
 
 
 class Extension:
     lock = threading.Lock()
-    cached_fields = ['remote', 'commit_date', 'branch', 'commit_hash', 'version']
+    cached_fields = ["remote", "commit_date", "branch", "commit_hash", "version"]
     metadata: ExtensionMetadata
 
     def __init__(self, name, path, enabled=True, is_builtin=False, metadata=None):
         self.name = name
         self.path = path
         self.enabled = enabled
-        self.status = ''
+        self.status = ""
         self.can_update = False
         self.is_builtin = is_builtin
-        self.commit_hash = ''
+        self.commit_hash = ""
         self.commit_date = None
-        self.version = ''
+        self.version = ""
         self.branch = None
         self.remote = None
         self.have_info_from_repo = False
@@ -140,17 +139,16 @@ class Extension:
             with self.lock:
                 if self.have_info_from_repo:
                     return
-
                 self.do_read_info_from_repo()
-
                 return self.to_dict()
 
         try:
-            d = cache.cached_data_for_file('extensions-git', self.name, os.path.join(self.path, ".git"), read_from_repo)
+            d = cache.cached_data_for_file("extensions-git", self.name, os.path.join(self.path, ".git"), read_from_repo)
             self.from_dict(d)
         except FileNotFoundError:
             pass
-        self.status = 'unknown' if self.status == '' else self.status
+
+        self.status = "unknown" if self.status == "" else self.status
 
     def do_read_info_from_repo(self):
         repo = None
@@ -193,7 +191,7 @@ class Extension:
 
     def check_updates(self):
         repo = Repo(self.path)
-        branch_name = f'{repo.remote().name}/{self.branch}'
+        branch_name = f"{repo.remote().name}/{self.branch}"
         for fetch in repo.remote().fetch(dry_run=True):
             if self.branch and fetch.name != branch_name:
                 continue
@@ -219,7 +217,7 @@ class Extension:
     def fetch_and_reset_hard(self, commit=None):
         repo = Repo(self.path)
         if commit is None:
-            commit = f'{repo.remote().name}/{self.branch}'
+            commit = f"{repo.remote().name}/{self.branch}"
         # Fix: `error: Your local changes to the following files would be overwritten by merge`,
         # because WSL2 Docker set 755 file permissions instead of 644, this results to the error.
         repo.git.fetch(all=True)
@@ -233,14 +231,13 @@ def list_extensions():
     loaded_extensions.clear()
 
     if shared.cmd_opts.disable_all_extensions:
-        print("*** \"--disable-all-extensions\" arg was used, will not load any extensions ***")
+        print('*** "--disable-all-extensions" arg was used, will not load any extensions ***')
     elif shared.opts.disable_all_extensions == "all":
-        print("*** \"Disable all extensions\" option was set, will not load any extensions ***")
+        print('*** "Disable all extensions" option was set, will not load any extensions ***')
     elif shared.cmd_opts.disable_extra_extensions:
-        print("*** \"--disable-extra-extensions\" arg was used, will only load built-in extensions ***")
+        print('*** "--disable-extra-extensions" arg was used, will only load built-in extensions ***')
     elif shared.opts.disable_all_extensions == "extra":
-        print("*** \"Disable all extensions\" option was set, will only load built-in extensions ***")
-
+        print('*** "Disable all extensions" option was set, will only load built-in extensions ***')
 
     # scan through extensions directory and load metadata
     for dirname in [extensions_builtin_dir, extensions_dir]:
@@ -265,13 +262,7 @@ def list_extensions():
 
             disabled_extensions = shared.opts.disabled_extensions + always_disabled_extensions
 
-            extension = Extension(
-                name=extension_dirname,
-                path=path,
-                enabled=extension_dirname not in disabled_extensions,
-                is_builtin=is_builtin,
-                metadata=metadata
-            )
+            extension = Extension(name=extension_dirname, path=path, enabled=extension_dirname not in disabled_extensions, is_builtin=is_builtin, metadata=metadata)
 
             extensions.append(extension)
             extension_paths[extension.path] = extension
@@ -308,4 +299,3 @@ def find_extension(filename):
         parentdir = os.path.dirname(filename)
 
     return None
-
