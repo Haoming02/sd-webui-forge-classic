@@ -1,69 +1,76 @@
-# SD-WebUI Forge Neo (Docker)
+<h2 align="center">Stable Diffusion WebUI Forge - Neo (Docker)</h2>
 
-Docker image for [sd-webui-forge-classic (neo branch)](https://github.com/Haoming02/sd-webui-forge-classic/tree/neo) by Haoming02.
+> [!Warning]
+> Requires an **NVIDIA** GPU<br>
+> Ensure driver is up to date (`560+` required)
 
-**Docker Hub:** `oromis995/sd-forge-neo`
+<hr>
 
-> ⚠ Requires an NVIDIA GPU. The application cannot run without one.
-> ⚠ Ensure NVIDIA drivers are up to date (560+ required for CUDA 12.6).
+## Unraid Deployment
 
----
+<table>
+	<tr>
+		<th>Container Path</th>
+		<th>Purpose</th>
+	</tr>
+	<tr>
+		<td>
+			<code>/home/forge/sd-webui/models</code>
+		</td>
+		<td>Checkpoint, Text Encoder, VAE, LoRA, ControlNet</td>
+	</tr>
+	<tr>
+		<td>
+			<code>/home/forge/sd-webui/output</code>
+		</td>
+		<td>Generated Images</td>
+	</tr>
+	<tr>
+		<td>
+			<code>/home/forge/sd-webui/extensions</code>
+		</td>
+		<td>User-Installed Extensions</td>
+	</tr>
+</table>
 
-## Unraid deployment
+- The container runs as **UID 99** / **GID 100** (`nobody:users`) to match Unraid's default share permissions
 
-| Container path | Purpose |
-|---|---|
-| `/home/forge/sd-webui/models` | Checkpoints, VAEs, LoRAs, ControlNet weights |
-| `/home/forge/sd-webui/output` | Generated images |
-| `/home/forge/sd-webui/extensions` | User-installed extensions |
-| `/home/forge/sd-webui/config` | Settings (`config.json`, `ui-config.json`, `styles.csv`, etc.) |
+<hr>
 
-The container runs as UID 99 / GID 100 (`nobody:users`) to match Unraid's default share permissions.
-
----
-
-## Manual docker run
-
-```bash
-docker run -d \
-  --gpus all \
-  -p 7860:7860 \
-  -v /path/to/models:/home/forge/sd-webui/models \
-  -v /path/to/outputs:/home/forge/sd-webui/output \
-  -v /path/to/extensions:/home/forge/sd-webui/extensions \
-  -v /path/to/config:/home/forge/sd-webui/config \
-  oromis995/sd-forge-neo:latest
-```
-
-Pass extra flags via `-e COMMANDLINE_ARGS="..."` if needed (e.g. `--api`, `--xformers`, `--cuda-malloc`).
-
-Access the WebUI at `http://<host-ip>:7860`.
-
----
-
-## Building locally
+## Building Locally
 
 ```bash
-git clone --branch neo https://github.com/Haoming02/sd-webui-forge-classic
-cd sd-webui-forge-classic/docker
+git clone https://github.com/Haoming02/sd-webui-forge-classic sd-webui-forge-neo --branch neo
+cd sd-webui-forge-neo/docker
 docker build -t forge-neo-local .
 ```
 
-To target a different CUDA variant:
-```bash
-docker build --build-arg TORCH_INDEX=cu124 -t forge-neo-local .
-```
-
----
+<hr>
 
 ## Image details
 
-| | |
-|---|---|
-| Base | `nvidia/cuda:12.6.1-runtime-ubuntu22.04` |
-| Python | 3.13 via uv |
-| PyTorch | Latest stable from `download.pytorch.org/whl/cu126` |
-| User | `forge` (UID 99 / GID 100) |
-| Port | 7860 |
+<table>
+	<tr>
+		<td>Base</td>
+		<td><code>nvidia/cuda:12.6.3-runtime-ubuntu22.04</code></td>
+	</tr>
+	<tr>
+		<td>Python</td>
+		<td><code>3.13</code> via <b>uv</b></td>
+	</tr>
+	<tr>
+		<td>PyTorch</td>
+		<td>Latest (<code>cu126</code>)</td>
+	</tr>
+	<tr>
+		<td>User</td>
+		<td><code>forge</code> (UID 99 / GID 100)</td>
+	</tr>
+	<tr>
+		<td>Port</td>
+		<td>7860</td>
+	</tr>
+</table>
 
-**First-start note:** On the first run `prepare_environment()` installs gradio, requirements, and any other dependencies. This may take a few minutes. Packages persist in the container's writable layer across restarts; recreating the container (e.g. on image update) will repeat this step once.
+> [!Note]
+> On the first run, `prepare_environment()` will install requirements and dependencies. This may take a few minutes
