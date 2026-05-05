@@ -57,22 +57,13 @@ def HWC3(x):
         return y
 
 
-def generate_random_filename(extension=".txt"):
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    random_string = "".join(random.choices(string.ascii_lowercase + string.digits, k=5))
-    filename = f"{timestamp}-{random_string}{extension}"
-    return filename
-
-
-@torch.no_grad()
 @torch.inference_mode()
-def pytorch_to_numpy(x):
+def pytorch_to_numpy(x: torch.Tensor) -> np.ndarray:
     return [np.clip(255.0 * y.cpu().numpy(), 0, 255).astype(np.uint8) for y in x]
 
 
-@torch.no_grad()
 @torch.inference_mode()
-def numpy_to_pytorch(x):
+def numpy_to_pytorch(x: np.ndarray) -> torch.Tensor:
     y = x.astype(np.float32) / 255.0
     y = y[None]
     y = np.ascontiguousarray(y.copy())
