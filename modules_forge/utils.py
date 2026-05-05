@@ -31,6 +31,10 @@ def apply_circular_forge(model, tiling_enabled=False):
     for layer in [layer for layer in unet.modules() if isinstance(layer, torch.nn.Conv2d)]:
         layer.padding_mode = "circular" if tiling_enabled else "zeros"
 
+    vae: torch.nn.Module = model.forge_objects.vae.first_stage_model
+    for layer in [layer for layer in vae.modules() if isinstance(layer, torch.nn.Conv2d)]:
+        layer.padding_mode = "circular" if tiling_enabled else "zeros"
+
     print(f"Tiling: {tiling_enabled}")
 
 
