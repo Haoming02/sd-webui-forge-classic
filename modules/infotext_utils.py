@@ -5,7 +5,6 @@ import io
 import json
 import os
 import re
-import sys
 
 import gradio as gr
 from PIL import Image
@@ -13,8 +12,6 @@ from PIL import Image
 from modules import errors, images, processing, prompt_parser, script_callbacks, shared, ui_tempdir
 from modules.paths import data_path
 from modules_forge import main_entry
-
-sys.modules["modules.generation_parameters_copypaste"] = sys.modules[__name__]  # alias for old name
 
 re_param_code = r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
