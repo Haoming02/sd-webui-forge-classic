@@ -787,6 +787,7 @@ def manage_model_and_prompt_cache(p: StableDiffusionProcessing):
 
     if need_global_unload and not just_reloaded:
         memory_management.unload_all_models()
+        p.clear_prompt_cache()
 
     need_global_unload = False
 
