@@ -145,31 +145,6 @@ def update_negative_prompt_token_counter(*args):
     return update_token_counter(*args, is_positive=False)
 
 
-def apply_setting(key, value):
-    if value is None:
-        return gr.skip()
-
-    if shared.cmd_opts.freeze_settings:
-        return gr.skip()
-
-    # dont allow model to be swapped when model hash exists in prompt
-    if key in ("sd_model_checkpoint", "forge_additional_modules"):
-        return gr.skip()
-
-    comp_args = opts.data_labels[key].component_args
-    if comp_args and isinstance(comp_args, dict) and comp_args.get("visible") is False:
-        return
-
-    valtype = type(opts.data_labels[key].default)
-    oldval = opts.data.get(key, None)
-    opts.data[key] = valtype(value) if valtype != type(None) else value
-    if oldval != value and opts.data_labels[key].onchange is not None:
-        opts.data_labels[key].onchange()
-
-    opts.save(shared.config_filename)
-    return getattr(opts, key)
-
-
 def create_output_panel(tabname, outdir, toprow=None):
     return ui_common.create_output_panel(tabname, outdir, toprow)
 
