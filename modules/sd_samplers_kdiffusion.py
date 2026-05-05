@@ -86,6 +86,9 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
             else:
                 scheduler_name = self.config.options.get("scheduler", None)
 
+            if scheduler_name is None and not p.sd_model.is_webui_legacy_model():
+                scheduler_name = "Normal"
+
         scheduler = sd_schedulers.schedulers_map.get(scheduler_name)
 
         m_sigma_min, m_sigma_max = self.model_wrap.sigmas[0].item(), self.model_wrap.sigmas[-1].item()
