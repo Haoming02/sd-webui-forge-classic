@@ -1,3 +1,4 @@
+import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -114,8 +115,8 @@ class AnimaTextProcessingEngine:
         if t5xxl_weights is not None:
             cross_attn *= t5xxl_weights.unsqueeze(0).unsqueeze(-1).to(cross_attn)
 
-        if cross_attn.shape[1] < 512:
-            cross_attn = torch.nn.functional.pad(cross_attn, (0, 0, 0, 512 - cross_attn.shape[1]))
+        dim = math.ceil(cross_attn.shape[1] / 512) * 512
+        cross_attn = torch.nn.functional.pad(cross_attn, (0, 0, 0, dim - cross_attn.shape[1]))
 
         return cross_attn
 
