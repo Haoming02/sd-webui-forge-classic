@@ -127,12 +127,12 @@ def register(options_templates: dict):
                 (f"ui_{name}", name.upper(), "presets"),
                 {
                     f"{name}_t2i_ss1": OptionRow(),
-                    f"{name}_t2i_sampler": OptionInfo(sampler, "txt2img sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()]}),
-                    f"{name}_t2i_scheduler": OptionInfo(scheduler, "txt2img scheduler", Dropdown, lambda: {"choices": list_schedulers()}),
+                    f"{name}_t2i_sampler": OptionInfo(sampler, "txt2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()]}),
+                    f"{name}_t2i_scheduler": OptionInfo(scheduler, "txt2img Scheduler", Dropdown, lambda: {"choices": list_schedulers()}),
                     f"{name}_t2i_ss0": OptionRow(),
                     f"{name}_i2i_ss1": OptionRow(),
-                    f"{name}_i2i_sampler": OptionInfo(sampler, "img2img sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()]}),
-                    f"{name}_i2i_scheduler": OptionInfo(scheduler, "img2img scheduler", Dropdown, lambda: {"choices": list_schedulers()}),
+                    f"{name}_i2i_sampler": OptionInfo(sampler, "img2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()]}),
+                    f"{name}_i2i_scheduler": OptionInfo(scheduler, "img2img Scheduler", Dropdown, lambda: {"choices": list_schedulers()}),
                     f"{name}_i2i_ss0": OptionRow(),
                 },
             )

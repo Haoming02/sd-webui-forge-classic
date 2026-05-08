@@ -2,6 +2,7 @@ import gradio as gr
 
 from modules import scripts, sd_samplers, sd_schedulers
 from modules.infotext_utils import PasteField
+from modules.ui import no_config
 from modules.ui_components import FormRow
 
 
@@ -31,6 +32,7 @@ class ScriptSampler(scripts.ScriptBuiltinUI):
             PasteField(self.scheduler, sd_samplers.get_scheduler_from_infotext, api="scheduler"),
         ]
 
+        no_config(self.sampler_name, self.scheduler, self.steps)
         return self.steps, self.sampler_name, self.scheduler
 
     def setup(self, p, steps, sampler_name, scheduler):
