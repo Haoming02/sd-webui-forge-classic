@@ -83,6 +83,10 @@ SHIFT = {
     PresetArch.ernie: 3.0,
 }
 
+FRAMES = {
+    PresetArch.wan.name: 16,
+}
+
 
 def use_distill(arch: str) -> bool:
     return arch in [preset.name for preset in DISTILL.keys()]
@@ -90,6 +94,10 @@ def use_distill(arch: str) -> bool:
 
 def use_shift(arch: str) -> bool:
     return arch in [preset.name for preset in SHIFT.keys()]
+
+
+def is_video(arch: str) -> int:
+    return FRAMES.get(arch, 1)
 
 
 def register(options_templates: dict):
@@ -185,6 +193,25 @@ def register(options_templates: dict):
                         f"{name}_t2i_hr_dcfg": OptionInfo(abs(shift), "txt2img Hires. Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
                         f"{name}_i2i_dcfg": OptionInfo(abs(shift), "img2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
                         f"{name}_dcfg0": OptionRow(),
+                    },
+                )
+            )
+
+        if (fps := FRAMES.get(arch.name, 1)) > 1:
+            options_templates.update(
+                options_section(
+                    (f"ui_{name}", name.upper(), "presets"),
+                    {
+                        f"{name}_batch_size": OptionInfo(1, "Frames", Slider, {"minimum": 1, "maximum": fps * 15 + 1, "step": fps}),
+                    },
+                )
+            )
+        else:
+            options_templates.update(
+                options_section(
+                    (f"ui_{name}", name.upper(), "presets"),
+                    {
+                        f"{name}_batch_size": OptionInfo(1, "Batch Size", Slider, {"minimum": 1, "maximum": 8, "step": 1}),
                     },
                 )
             )

@@ -18,7 +18,7 @@ from modules import (
     shared_items,
     ui_common,
 )
-from modules_forge.presets import PresetArch, use_distill, use_shift
+from modules_forge.presets import PresetArch, is_video, use_distill, use_shift
 
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
@@ -285,7 +285,10 @@ def on_preset_change(preset: str):
     else:
         d_args = {"visible": False}
 
-    batch_args = {"minimum": 1, "maximum": 241, "step": 16, "label": "Frames", "value": 1} if preset == "wan" else {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": 1}
+    if (fps := is_video(preset)) > 1:
+        batch_args = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": getattr(shared.opts, f"{preset}_batch_size", 1)}
+    else:
+        batch_args = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": getattr(shared.opts, f"{preset}_batch_size", 1)}
 
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
