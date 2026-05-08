@@ -432,6 +432,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     extra_dtype = str(guess.__class__.__name__)
                 elif quant_config is not None:
                     extra_dtype = quant_config
+                    to_args.clear()
                 else:
                     extra_dtype = None
 
