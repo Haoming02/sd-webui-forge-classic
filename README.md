@@ -131,7 +131,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support (short) videos in **Extras** tab
 - [X] Add support for `.avif`, `.heif`, and `.jxl` image formats
 - [X] Automatically determine the optimal row count for `X/Y/Z Plot`
-- [X] Support **Union** ControlNet
+- [X] Update **LLLite** Controlnet
+    - [SDXL](https://huggingface.co/kohya-ss/controlnet-lllite/tree/main) / [Anima](https://huggingface.co/kohya-ss/Anima-LLLite/tree/main)
+- [X] Support **Union** Controlnet
     - [SDXL](https://huggingface.co/xinsir/controlnet-union-sdxl-1.0) / [Chenkin](https://civitai.com/models/2527960/chenkin-unicontrol-xl)
 
 #### Removed Features
@@ -155,6 +157,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] No longer `git` `clone` any repository on fresh install
 - [X] No longer install `open-clip`
 - [X] Fix memory leak when switching checkpoints
+- [X] Restore the ability to drag-and-drop images onto `gr.Image` that already contains image
 - [X] Speed up launch time
 - [X] Improve timer logs
 - [X] Remove unused `cmd_args`
@@ -163,6 +166,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Remove legacy codes
 - [X] Fix some typos
 - [X] Fix automatic `Tiled VAE` fallback
+- [X] Fix `Tiling` for SD1 and SDXL
 - [X] Pad conditioning for SDXL
 - [X] Remove duplicated upscaler codes
 - [X] Update [spandrel](https://github.com/chaiNNer-org/spandrel)
@@ -238,10 +242,12 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 #### by. Neo
 
-- Add the following flags to slightly improve the model loading; in certain situations, they may cause `OutOfMemory` errors instead...
-    - `--cuda-malloc`
-    - `--cuda-stream`
-    - `--pin-shared-memory`
+- `--cuda-malloc`: Improve memory allocation
+- `--cuda-stream`: Enable async weight offloading
+- `--pin-shared-memory`: Improve RAM utilization
+- `--expandable-segments`: Enable experimental PyTorch allocator *(may prevent `OutOfMemory` errors on certain platforms)*
+
+<br>
 
 - `--uv`: Replace the `python -m pip` calls with `uv pip` to massively speed up package installation
     - requires **uv** to be installed first *(see [Installation](#installation))*
@@ -369,7 +375,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - **Issues** regarding **AMD** GPU will simply be ignored
 - **Issues** running non-official models will simply be ignored
     - do not just randomly download every single finetune/quant you find
-    - check the uploader and download count first
+- **Issues** about 3rd-party Extensions will simply be ignored
+    - extension should support the UI, not the other way around
 - **Issues** caused by [StabilityMatrix](https://github.com/LykosAI/StabilityMatrix) will simply be ignored
     - only open an Issue if you can reproduce it on a clean install following the official [Installation](#installation) instruction
 
@@ -380,7 +387,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <hr>
 
 > [!Tip]
-> Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki)~
+> Check out the [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki) & [FAQ](https://github.com/Haoming02/sd-webui-forge-classic/issues/414)
 
 <br>
 
