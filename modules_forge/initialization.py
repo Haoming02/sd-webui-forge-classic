@@ -32,7 +32,11 @@ def initialize_forge():
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_device_id)
         print("Set device to:", args.gpu_device_id)
 
-    from modules_forge.cuda_malloc import get_torch_version, try_cuda_malloc, try_expandable_segments
+    from modules_forge.cuda_malloc import (
+        get_torch_version,
+        try_cuda_malloc,
+        try_expandable_segments,
+    )
 
     if "rocm" in get_torch_version():
         # https://github.com/Comfy-Org/ComfyUI/blob/v0.10.0/main.py

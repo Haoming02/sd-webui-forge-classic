@@ -82,13 +82,13 @@ def patch_all_basics():
     file_download.tqdm = always_show_tqdm
     file_download.logger.setLevel(logging.ERROR)
 
-    from huggingface_hub.file_download import _download_to_tmp_and_move as original_download_to_tmp_and_move
+    from huggingface_hub.file_download import _download_to_tmp_and_move as orig_download
 
-    @wraps(original_download_to_tmp_and_move)
+    @wraps(orig_download)
     def patched_download_to_tmp_and_move(incomplete_path: Path, destination_path: Path, *args, **kwargs):
         incomplete_path = long_path_prefix(incomplete_path)
         destination_path = long_path_prefix(destination_path)
-        return original_download_to_tmp_and_move(incomplete_path, destination_path, *args, **kwargs)
+        return orig_download(incomplete_path, destination_path, *args, **kwargs)
 
     file_download._download_to_tmp_and_move = patched_download_to_tmp_and_move
 
