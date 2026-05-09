@@ -379,12 +379,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             override_dtype = backend.args.dynamic_args.forge_unet_storage_dtype
             if override_dtype is torch.int8:
-                if state_dict_dtype is torch.bfloat16:
-                    override_dtype = torch.bfloat16
-                    try_int8 = True
-                else:
-                    override_dtype = None
-                    logger.warning("int8 only supports bfloat16 models...")
+                override_dtype = torch.bfloat16
+                try_int8 = True
 
             if guess.nunchaku:
                 storage_dtype = torch.bfloat16
