@@ -1,4 +1,4 @@
-# https://github.com/BobJohnson24/ComfyUI-INT8-Fast/blob/BobJohnson24-Beta/int8_fused_kernel.py
+# https://github.com/BobJohnson24/ComfyUI-INT8-Fast/blob/main/int8_fused_kernel.py
 
 import torch
 import triton

@@ -1,4 +1,4 @@
-# https://github.com/BobJohnson24/ComfyUI-INT8-Fast/blob/BobJohnson24-Beta/quarot.py
+# https://github.com/BobJohnson24/ComfyUI-INT8-Fast/blob/main/convrot.py
 
 # Group-wise Hadamard rotation for INT8 quantization quality improvement
 # reference: https://github.com/newgrit1004/ComfyUI-ZImage-Triton

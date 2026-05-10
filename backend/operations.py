@@ -369,13 +369,14 @@ class ForgeOperations:
 
 
 from backend.operations_int8 import (
-    QUAROT_GROUP_SIZE,
+    CONVROT_GROUP_SIZE,
     dequantize,
     int8_forward_dynamic,
     int8_forward_dynamic_per_row,
     quantize_int8,
     quantize_int8_axiswise,
 )
+from backend.patcher.lora import merge_lora_to_weight
 from backend.quant_rotation import build_hadamard, rotate_activation, rotate_weight
 
 
@@ -384,9 +385,13 @@ class ForgeOperationsInt8(ForgeOperations):
 
     excluded_names = []
     dynamic_quantize = True  # Toggle for on-the-fly quantization
-    enable_quarot = True  # Toggle for QuaRot Hadamard rotation
+    enable_convrot = True  # Toggle for ConvRot Hadamard rotation
 
     _is_prequantized = False  # status flag (not used for detection)
+
+    applied_lora_patches = set()
+    lora_patches = {}  # Map of model_key -> patch list (from load_lora)
+    lora_strength = 1.0
 
     class Linear(torch.nn.Linear, ForgeWeights):
         def __init__(self, *args, **kwargs):
@@ -394,7 +399,7 @@ class ForgeOperationsInt8(ForgeOperations):
             self.register_buffer("weight_scale", None)
             self._is_quantized = False
             self._is_per_row = False  # Track quantization granularity
-            self._use_quarot = False  # Track if QuaRot was applied
+            self._use_convrot = False  # Track if ConvRot was applied
             self._weight_scale_scalar = None  # For scalar (non-tensor) scales
             self.compute_dtype = torch.bfloat16
             self.lora_patches = []  # List of (down_scaled, up, start, size) set by INT8ModelPatcher
@@ -404,6 +409,43 @@ class ForgeOperationsInt8(ForgeOperations):
 
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
             weight_key = prefix + "weight"
+
+            # Utility to normalize keys by stripping common prefixes
+            def normalize_key(key):
+                if not isinstance(key, str):
+                    return key
+                for p in ["diffusion_model.", "model.diffusion_model.", "model.", "transformer."]:
+                    if key.startswith(p):
+                        return key[len(p) :]
+                return key
+
+            def apply_lora_patches(tensor, key):
+                if not ForgeOperationsInt8.lora_patches or tensor.dtype == torch.int8:
+                    return tensor
+                nk = normalize_key(key)
+                patches = ForgeOperationsInt8.lora_patches.get(nk)
+                if patches:
+                    # calculate_weight expects: [(strength, v, strength_model, offset, function)]
+                    formatted = []
+                    for patch in patches:
+                        if len(patch) == 4:
+                            v, offset, function, strength = patch
+                        else:
+                            v, offset, function = patch
+                            strength = getattr(ForgeOperationsInt8, "lora_strength", 1.0)
+                        formatted.append((strength, v, 1.0, offset, function))
+
+                    # Track applied patches
+                    ForgeOperationsInt8.applied_lora_patches.add(nk)
+
+                    device = torch.device("cuda") if torch.cuda.is_available() else tensor.device
+                    temp_dtype = memory_management.lora_compute_dtype(device)
+
+                    tensor_temp = tensor.to(temp_dtype)
+                    result_temp = merge_lora_to_weight(formatted, tensor_temp, key)
+                    return result_temp.to(tensor.dtype)
+                return tensor
+
             input_scale_key = prefix + "input_scale"
             bias_key = prefix + "bias"
 
@@ -428,6 +470,7 @@ class ForgeOperationsInt8(ForgeOperations):
             comfy_quant_tensor = pop_metadata(state_dict, prefix, "comfy_quant")
 
             weight_tensor = state_dict.pop(weight_key, None)
+            bias_tensor = state_dict.pop(bias_key, None)
 
             # Pop input_scale to clean state_dict, but ignore it
             _ = state_dict.pop(input_scale_key, None)
@@ -437,13 +480,19 @@ class ForgeOperationsInt8(ForgeOperations):
                     import json
 
                     quant_conf = json.loads(bytes(comfy_quant_tensor.tolist()).decode("utf-8"))
-                    if quant_conf.get("quarot", False):
-                        self._use_quarot = True
-                        ForgeOperationsInt8.enable_quarot = True  # Propagate globally for LoRAs
-                        if "quarot_groupsize" in quant_conf:
-                            self._quarot_groupsize = quant_conf["quarot_groupsize"]
+                    if quant_conf.get("convrot", False):
+                        self._use_convrot = True
+                        ForgeOperationsInt8.enable_convrot = True  # Propagate globally for LoRA
+                        if "convrot_groupsize" in quant_conf:
+                            self._convrot_groupsize = quant_conf["convrot_groupsize"]
                 except Exception:
                     pass
+
+            # Apply LoRA patches to weight and bias once
+            if weight_tensor is not None:
+                weight_tensor = apply_lora_patches(weight_tensor, weight_key)
+            if bias_tensor is not None:
+                bias_tensor = apply_lora_patches(bias_tensor, bias_key)
 
             if weight_tensor is not None:
                 if weight_tensor.dtype == torch.int8 and weight_scale is not None:
@@ -471,7 +520,7 @@ class ForgeOperationsInt8(ForgeOperations):
                         self.weight_scale = None
                         self._is_per_row = False
 
-                elif weight_tensor.dtype in (torch.float16, torch.bfloat16, torch.float32):
+                elif weight_tensor.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float8_e4m3fn):
                     # Load High-Precision
                     is_excluded = any(ex in prefix for ex in ForgeOperationsInt8.excluded_names)
                     is_dim1 = self.in_features == 1 or self.out_features == 1 or weight_tensor.ndim == 1
@@ -483,17 +532,17 @@ class ForgeOperationsInt8(ForgeOperations):
                         # Quantize on the fly
                         device = torch.device("cuda") if torch.cuda.is_available() else weight_tensor.device
 
-                        # Cast to float32 before rotation and scale computation, may be snake oil but can it hurt?
+                        # Cast to float32 before rotation and scale computation
                         w_gpu = weight_tensor.to(device, non_blocking=True).float()
 
-                        self._use_quarot = False
-                        if getattr(ForgeOperationsInt8, "enable_quarot", False) and self.in_features % QUAROT_GROUP_SIZE == 0:
+                        self._use_convrot = False
+                        if getattr(ForgeOperationsInt8, "enable_convrot", False) and self.in_features % CONVROT_GROUP_SIZE == 0:
                             try:
-                                H = build_hadamard(QUAROT_GROUP_SIZE, device=w_gpu.device, dtype=w_gpu.dtype)
-                                w_gpu = rotate_weight(w_gpu, H, group_size=QUAROT_GROUP_SIZE)
-                                self._use_quarot = True
+                                H = build_hadamard(CONVROT_GROUP_SIZE, device=w_gpu.device, dtype=w_gpu.dtype)
+                                w_gpu = rotate_weight(w_gpu, H, group_size=CONVROT_GROUP_SIZE)
+                                self._use_convrot = True
                             except ImportError as e:
-                                memory_management.logger.warning(f"INT8 Fast: QuaRot Error: {e}")
+                                memory_management.logger.warning(f"[INT8 Fast] ConvRot Error: {e}")
 
                         q_weight, q_scale = quantize_int8_axiswise(w_gpu, dim=1)
 
@@ -508,7 +557,7 @@ class ForgeOperationsInt8(ForgeOperations):
             else:
                 missing_keys.append(weight_key)
 
-            bias_tensor = state_dict.pop(bias_key, None)
+            # Assign bias if it exists (already patched if needed)
             if bias_tensor is not None:
                 self.bias = torch.nn.Parameter(bias_tensor, requires_grad=False)
             else:
@@ -605,8 +654,8 @@ class ForgeOperationsInt8(ForgeOperations):
             x_shape = x.shape
             x_2d = x.reshape(-1, x_shape[-1])
 
-            if getattr(self, "_use_quarot", False):
-                group_size = getattr(self, "_quarot_groupsize", QUAROT_GROUP_SIZE)
+            if getattr(self, "_use_convrot", False):
+                group_size = getattr(self, "_convrot_groupsize", CONVROT_GROUP_SIZE)
                 H = build_hadamard(group_size, device=x.device, dtype=x.dtype)
                 x_2d = rotate_activation(x_2d, H, group_size=group_size)
 
