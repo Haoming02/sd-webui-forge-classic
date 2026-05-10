@@ -286,9 +286,12 @@ def on_preset_change(preset: str):
         d_args = {"visible": False}
 
     if (fps := is_video(preset)) > 1:
-        batch_args = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": getattr(shared.opts, f"{preset}_batch_size", 1)}
+        batch_args_t2i = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": getattr(shared.opts, f"{preset}_t2i_batch_size", 1)}
     else:
-        batch_args = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": getattr(shared.opts, f"{preset}_batch_size", 1)}
+        batch_args_t2i = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": getattr(shared.opts, f"{preset}_t2i_batch_size", 1)}
+
+    batch_args_i2i = batch_args_t2i.copy()
+    batch_args_i2i["value"] = getattr(shared.opts, f"{preset}_i2i_batch_size", 1)
 
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
@@ -318,6 +321,6 @@ def on_preset_change(preset: str):
         gr.update(value=getattr(shared.opts, f"{preset}_t2i_hr_dcfg", 3.0), **d_args),
         gr.update(value=getattr(shared.opts, f"{preset}_i2i_dcfg", 3.0), **d_args),
         # ui_txt2img_batch_size, ui_img2img_batch_size
-        gr.update(**batch_args),
-        gr.update(**batch_args),
+        gr.update(**batch_args_t2i),
+        gr.update(**batch_args_i2i),
     ]

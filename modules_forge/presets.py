@@ -202,7 +202,10 @@ def register(options_templates: dict):
                 options_section(
                     (f"ui_{name}", name.upper(), "presets"),
                     {
-                        f"{name}_batch_size": OptionInfo(1, "Frames", Slider, {"minimum": 1, "maximum": fps * 15 + 1, "step": fps}),
+                        f"{name}_batch1": OptionRow(),
+                        f"{name}_t2i_batch_size": OptionInfo(1, "txt2img Frames", Slider, {"minimum": 1, "maximum": fps * 15 + 1, "step": fps}),
+                        f"{name}_i2i_batch_size": OptionInfo(1, "img2img Frames", Slider, {"minimum": 1, "maximum": fps * 15 + 1, "step": fps}),
+                        f"{name}_batch0": OptionRow(),
                     },
                 )
             )
@@ -211,7 +214,10 @@ def register(options_templates: dict):
                 options_section(
                     (f"ui_{name}", name.upper(), "presets"),
                     {
-                        f"{name}_batch_size": OptionInfo(1, "Batch Size", Slider, {"minimum": 1, "maximum": 8, "step": 1}),
+                        f"{name}_batch1": OptionRow(),
+                        f"{name}_t2i_batch_size": OptionInfo(1, "txt2img Batch Size", Slider, {"minimum": 1, "maximum": 8, "step": 1}),
+                        f"{name}_i2i_batch_size": OptionInfo(1, "img2img Batch Size", Slider, {"minimum": 1, "maximum": 8, "step": 1}),
+                        f"{name}_batch0": OptionRow(),
                     },
                 )
             )

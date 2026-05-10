@@ -7,6 +7,7 @@ const titles = {
 
     "Batch Count": "How many batches of images to generate (in sequence)",
     "Batch Size": "How many images to generate in a single batch (in parallel)",
+    "Frames": "How many frames to generate for the video",
 
     "CFG Scale": "The strength used to calculate conditionings",
     "Rescale CFG": "Reduce the high-contrast burnt-color effects (mainly for v-pred checkpoints)",
