@@ -9,6 +9,7 @@ from backend.misc import image_resize
 from backend.nn.cnets import cldm, t2i_adapter
 from backend.operations import (
     ForgeOperations,
+    ForgeWeights,
     main_stream_worker,
     using_forge_operations,
     weights_manual_cast,
@@ -363,8 +364,8 @@ class ControlNet(ControlBase):
 
 
 class ControlLoraOps(ForgeOperations):
-    class Linear(torch.nn.Module):
-        def __init__(self, in_features: int, out_features: int, bias: bool = True, device=None, dtype=None) -> None:
+    class Linear(torch.nn.Module, ForgeWeights):
+        def __init__(self, in_features: int, out_features: int, *args, **kwargs):
             super().__init__()
             self.in_features = in_features
             self.out_features = out_features
@@ -381,8 +382,8 @@ class ControlLoraOps(ForgeOperations):
                 else:
                     return torch.nn.functional.linear(input, weight, bias)
 
-    class Conv2d(torch.nn.Module):
-        def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode="zeros", device=None, dtype=None):
+    class Conv2d(torch.nn.Module, ForgeWeights):
+        def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, padding_mode="zeros", *args, **kwargs):
             super().__init__()
             self.in_channels = in_channels
             self.out_channels = out_channels
@@ -420,6 +421,7 @@ class ControlLora(ControlNet):
         controlnet_config = model.diffusion_model.config.copy()
         controlnet_config.pop("out_channels")
         controlnet_config["hint_channels"] = self.control_weights["input_hint_block.0.weight"].shape[1]
+        controlnet_config["hint_width"] = self.control_weights["input_hint_block.0.weight"].shape[0]
 
         dtype = model.storage_dtype
 
