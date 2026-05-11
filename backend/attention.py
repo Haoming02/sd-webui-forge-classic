@@ -23,26 +23,39 @@ if memory_management.xformers_enabled() or memory_management.xformers_enabled_va
 if memory_management.sage_enabled():
     import importlib.metadata
 
+    IS_SAGE_3 = False
+
     if importlib.metadata.version("sageattention").startswith("1"):
-        IS_SAGE_2 = False
+        IS_SAGE_1 = True
         from sageattention import sageattn
     else:
-        IS_SAGE_2 = True
+        IS_SAGE_1 = False
+        from functools import partial
+
+        import sageattention
+
         from backend.args import SageAttentionFuncs
 
-        if args.sage2_function is SageAttentionFuncs.auto:
-            from sageattention import sageattn
-        else:
+        match args.sage_function:
+            case SageAttentionFuncs.auto:
+                sageattn = sageattention.sageattn
+            case SageAttentionFuncs.fp16_triton:
+                sageattn = sageattention.sageattn_qk_int8_pv_fp16_triton
+            case SageAttentionFuncs.fp16_cuda:
+                sageattn = partial(sageattention.sageattn_qk_int8_pv_fp16_cuda, pv_accum_dtype="fp32")
+            case SageAttentionFuncs.fp8_cuda:
+                sageattn = partial(sageattention.sageattn_qk_int8_pv_fp8_cuda, pv_accum_dtype="fp32+fp32")
+            case SageAttentionFuncs.fp8_cuda_pp:
+                sageattn = partial(sageattention.sageattn_qk_int8_pv_fp8_cuda, pv_accum_dtype="fp32+fp16")
+            case SageAttentionFuncs.sageattn3:
+                from sageattn3 import sageattn3_blackwell
 
-            from functools import partial
+                IS_SAGE_3 = True
 
-            import sageattention
-
-            _function = getattr(sageattention, f"sageattn_qk_int8_pv_{args.sage2_function.value}")
-            if args.sage2_function is SageAttentionFuncs.fp16_triton:
-                sageattn = partial(_function, quantization_backend=args.sage_quantization_backend.value)
-            else:
-                sageattn = partial(_function, qk_quant_gran=args.sage_quant_gran.value, pv_accum_dtype=args.sage_accum_dtype.value)
+                def sageattn(q, k, v, attn_mask=None, is_causal=False, tensor_layout="NHD"):
+                    q, k, v = [x.transpose(1, 2) if tensor_layout == "NHD" else x for x in (q, k, v)]
+                    out = sageattn3_blackwell(q, k, v, is_causal=is_causal, attn_mask=attn_mask)
+                    return out.transpose(1, 2) if tensor_layout == "NHD" else out
 
 
 if memory_management.flash_enabled():
@@ -222,6 +235,10 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
 
 @torch.compiler.disable
 def attention_sage(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
+    in_dtype = v.dtype
+    if torch.float32 in (q.dtype, k.dtype, v.dtype):
+        q, k, v = q.to(torch.float16), k.to(torch.float16), v.to(torch.float16)
+
     if skip_reshape:
         b, _, _, dim_head = q.shape
         tensor_layout = "HND"
@@ -240,11 +257,11 @@ def attention_sage(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=
         if mask.ndim == 3:
             mask = mask.unsqueeze(1)
 
-    _fallback: bool = (IS_SAGE_2 and dim_head > 128) or ((not IS_SAGE_2) and (dim_head not in (64, 96, 128)))
+    _fallback: bool = ((not IS_SAGE_1) and dim_head > 128) or (IS_SAGE_1 and (dim_head not in (64, 96, 128)))
 
     try:
         if not _fallback:
-            out = sageattn(q, k, v, attn_mask=mask, is_causal=False, tensor_layout=tensor_layout)
+            out = sageattn(q, k, v, attn_mask=mask, is_causal=False, tensor_layout=tensor_layout).to(in_dtype)
     except Exception as e:
         logger.error(f"Error running sageattn: {e}")
         _fallback = True
@@ -311,18 +328,22 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
 
 if memory_management.sage_enabled():
     attention_function = attention_sage
-    if not IS_SAGE_2:
+    if IS_SAGE_1:
         logger.info("Using SageAttention")
+    elif IS_SAGE_3:
+        logger.info("Using SageAttention 3")
     else:
-        match args.sage2_function:
+        match args.sage_function:
             case SageAttentionFuncs.auto:
                 logger.info("Using SageAttention 2")
             case SageAttentionFuncs.fp16_triton:
-                logger.info("Using SageAttention (fp16 Triton)")
+                logger.info("Using SageAttention 2 (fp16 Triton)")
             case SageAttentionFuncs.fp16_cuda:
-                logger.info("Using SageAttention (fp16 CUDA)")
+                logger.info("Using SageAttention 2 (fp16 CUDA)")
             case SageAttentionFuncs.fp8_cuda:
-                logger.info("Using SageAttention (fp8 CUDA)")
+                logger.info("Using SageAttention 2 (fp8 CUDA)")
+            case SageAttentionFuncs.fp8_cuda_pp:
+                logger.info("Using SageAttention 2 (fp8 CUDA ++)")
 
 elif memory_management.flash_enabled():
     logger.info("Using FlashAttention")
