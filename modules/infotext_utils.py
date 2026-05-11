@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import io
 import json
 import os
 import re
@@ -9,18 +7,26 @@ import re
 import gradio as gr
 from PIL import Image
 
-from modules import errors, images, processing, prompt_parser, script_callbacks, shared, ui_tempdir
+from modules import (
+    errors,
+    images,
+    processing,
+    prompt_parser,
+    script_callbacks,
+    shared,
+    ui_tempdir,
+)
 from modules.paths import data_path
 from modules_forge import main_entry
 
-re_param_code = r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
+re_param_code = r'\s*([\w\s\-\/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
 re_imagesize = re.compile(r"^(\d+)x(\d+)$")
 type_of_gr_update = type(gr.skip())
 
 
 class ParamBinding:
-    def __init__(self, paste_button, tabname, source_text_component=None, source_image_component=None, source_tabname=None, override_settings_component=None, paste_field_names=None):
+    def __init__(self, paste_button: gr.Button, tabname: str, source_text_component: gr.Textbox = None, source_image_component: gr.Gallery = None, source_tabname: str = None, override_settings_component: gr.Dropdown = None, paste_field_names: list[str] = None):
         self.paste_button = paste_button
         self.tabname = tabname
         self.source_text_component = source_text_component
@@ -35,12 +41,10 @@ class PasteField(tuple):
         return super().__new__(cls, (component, target))
 
     def __init__(self, component, target, *, api=None):
-        super().__init__()
-
-        self.api = api
-        self.component = component
+        self.component: gr.components.Component = component
         self.label = target if isinstance(target, str) else None
         self.function = target if callable(target) else None
+        self.api = api
 
 
 paste_fields: dict[str, dict] = {}
@@ -52,15 +56,18 @@ def reset():
     registered_param_bindings.clear()
 
 
-def quote(text):
+def quote(text: str) -> str:
     if "," not in str(text) and "\n" not in str(text) and ":" not in str(text):
         return text
 
-    return json.dumps(text, ensure_ascii=False)
+    try:
+        return json.dumps(text, ensure_ascii=False)
+    except Exception:
+        return text
 
 
-def unquote(text):
-    if len(text) == 0 or text[0] != '"' or text[-1] != '"':
+def unquote(text: str) -> str:
+    if not text or not (text.startswith('"') and text.endswith('"')):
         return text
 
     try:
@@ -69,45 +76,38 @@ def unquote(text):
         return text
 
 
-def image_from_url_text(filedata):
+def image_from_url_text(filedata) -> Image.Image:
     if filedata is None:
         return None
 
     if isinstance(filedata, list):
         if len(filedata) == 0:
             return None
-
         filedata = filedata[0]
 
-    if isinstance(filedata, dict) and filedata.get("is_file", False):
-        filedata = filedata
+    filename: os.PathLike = None
 
-    filename = None
-    if type(filedata) == dict and filedata.get("is_file", False):
+    if isinstance(filedata, dict) and filedata.get("is_file", False):
         filename = filedata["name"]
 
-    elif isinstance(filedata, tuple) and len(filedata) == 2:  # gradio 4.16 sends images from gallery as a list of tuples
+    elif isinstance(filedata, tuple) and len(filedata) == 2:  # Gradio 4 sends images from Gallery as a list of tuples
         return filedata[0]
 
     if filename:
         is_in_right_dir = ui_tempdir.check_tmp_file(shared.demo, filename)
         assert is_in_right_dir, "trying to open image file outside of allowed directories"
-
         filename = filename.rsplit("?", 1)[0]
         return images.read(filename)
 
     if isinstance(filedata, str):
-        if filedata.startswith("data:image/png;base64,"):
-            filedata = filedata[len("data:image/png;base64,") :]
+        from modules.api.api import decode_base64_to_image
 
-        filedata = base64.decodebytes(filedata.encode("utf-8"))
-        image = images.read(io.BytesIO(filedata))
-        return image
+        return decode_base64_to_image(filedata)
 
     return None
 
 
-def add_paste_fields(tabname, init_img, fields, override_settings_component=None):
+def add_paste_fields(tabname: str, init_img: gr.Gallery, fields: list[gr.components.Component], override_settings_component: gr.Dropdown = None):
 
     if fields:
         for i in range(len(fields)):
@@ -125,20 +125,8 @@ def add_paste_fields(tabname, init_img, fields, override_settings_component=None
         modules.ui.img2img_paste_fields = fields
 
 
-def create_buttons(tabs_list):
-    buttons = {}
-    for tab in tabs_list:
-        buttons[tab] = gr.Button(f"Send to {tab}", elem_id=f"{tab}_tab")
-    return buttons
-
-
-def bind_buttons(buttons, send_image, send_generate_info):
-    """old function for backwards compatibility; do not use this, use register_paste_params_button"""
-    for tabname, button in buttons.items():
-        source_text_component = send_generate_info if isinstance(send_generate_info, gr.components.Component) else None
-        source_tabname = send_generate_info if isinstance(send_generate_info, str) else None
-
-        register_paste_params_button(ParamBinding(paste_button=button, tabname=tabname, source_text_component=source_text_component, source_image_component=send_image, source_tabname=source_tabname))
+def create_buttons(tabs_list: list[str]) -> dict[str, gr.Button]:
+    return {tab: gr.Button(f"Send to {tab}", elem_id=f"{tab}_tab") for tab in tabs_list}
 
 
 def register_paste_params_button(binding: ParamBinding):
@@ -198,21 +186,21 @@ def connect_paste_params_buttons():
         )
 
 
-def send_image_and_dimensions(x):
+def send_image_and_dimensions(x) -> tuple[Image.Image, int, int]:
     if isinstance(x, Image.Image):
         img = x
-        if img.mode == "RGBA":
-            img = img.convert("RGB")
-    elif isinstance(x, list) and isinstance(x[0], tuple):
-        img = x[0][0]
     else:
         img = image_from_url_text(x)
-        if img is not None and img.mode == "RGBA":
-            img = img.convert("RGB")
+
+    if img is None:
+        return None, gr.skip(), gr.skip()
+
+    if img.mode != "RGB":
+        img = img.convert("RGB")
 
     if shared.opts.send_size and isinstance(img, Image.Image):
-        w = img.width
-        h = img.height
+        w = round(img.width / 64.0) * 64
+        h = round(img.height / 64.0) * 64
     else:
         w = gr.skip()
         h = gr.skip()
