@@ -62,9 +62,11 @@ def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Ten
 
 def weights_manual_cast(
     layer: Union[torch.nn.Module, "ForgeWeights"],
-    x: torch.Tensor,
+    x: torch.Tensor = None,
     *,
     dtype: torch.dtype = None,
+    device: torch.device = None,
+    bias_dtype: torch.dtype = None,
     weight_fn: Callable = None,
     bias_fn: Callable = None,
     skip_weight_dtype: bool = False,
@@ -75,7 +77,10 @@ def weights_manual_cast(
     * Reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L210
     """
 
-    target_dtype, target_device = x.dtype, x.device
+    if x is not None:
+        target_dtype, target_device = x.dtype, x.device
+    else:
+        target_dtype, target_device = dtype, device
 
     non_blocking = memory_management.device_supports_non_blocking(target_device)
     weight, bias = None, None
@@ -87,7 +92,7 @@ def weights_manual_cast(
     if skip_weight_dtype or weight_has_function:
         weight_args.pop("dtype")
 
-    bias_args = dict(device=target_device, dtype=target_dtype, non_blocking=non_blocking)
+    bias_args = dict(device=target_device, dtype=bias_dtype or target_dtype, non_blocking=non_blocking)
     if skip_bias_dtype or bias_has_function:
         bias_args.pop("dtype")
 
@@ -362,45 +367,132 @@ class ForgeOperations:
 
 # region Int8
 
+
 from backend.operations_int8 import (
+    CONVROT_GROUP_SIZE,
     dequantize,
     int8_forward_dynamic,
-    quantize_int8_tensorwise,
-    stochastic_round_int8_delta,
+    int8_forward_dynamic_per_row,
+    quantize_int8,
+    quantize_int8_axiswise,
 )
+from backend.patcher.lora import merge_lora_to_weight
+from backend.quant_rotation import build_hadamard, rotate_activation, rotate_weight
 
 
 class ForgeOperationsInt8(ForgeOperations):
     """Custom operations for INT8 tensorwise quantization"""
 
     excluded_names = []
-    _is_prequantized = None
+    dynamic_quantize = True  # Toggle for on-the-fly quantization
+    enable_convrot = True  # Toggle for ConvRot Hadamard rotation
+
+    _is_prequantized = False  # status flag (not used for detection)
+
+    applied_lora_patches = set()
+    lora_patches = {}  # Map of model_key -> patch list (from load_lora)
+    lora_strength = 1.0
 
     class Linear(torch.nn.Linear, ForgeWeights):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.weight_scale = None
+            self.register_buffer("weight_scale", None)
             self._is_quantized = False
+            self._is_per_row = False  # Track quantization granularity
+            self._use_convrot = False  # Track if ConvRot was applied
+            self._weight_scale_scalar = None  # For scalar (non-tensor) scales
             self.compute_dtype = torch.bfloat16
-            self.lora_A = None
-            self.lora_B = None
-            self.lora_alpha = None
+            self.lora_patches = []  # List of (down_scaled, up, start, size) set by INT8ModelPatcher
 
         def reset_parameters(self):
             return None
 
         def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
             weight_key = prefix + "weight"
-            scale_key = prefix + "weight_scale"
+
+            # Utility to normalize keys by stripping common prefixes
+            def normalize_key(key):
+                if not isinstance(key, str):
+                    return key
+                for p in ["diffusion_model.", "model.diffusion_model.", "model.", "transformer."]:
+                    if key.startswith(p):
+                        return key[len(p) :]
+                return key
+
+            def apply_lora_patches(tensor, key):
+                if not ForgeOperationsInt8.lora_patches or tensor.dtype == torch.int8:
+                    return tensor
+                nk = normalize_key(key)
+                patches = ForgeOperationsInt8.lora_patches.get(nk)
+                if patches:
+                    # calculate_weight expects: [(strength, v, strength_model, offset, function)]
+                    formatted = []
+                    for patch in patches:
+                        if len(patch) == 4:
+                            v, offset, function, strength = patch
+                        else:
+                            v, offset, function = patch
+                            strength = getattr(ForgeOperationsInt8, "lora_strength", 1.0)
+                        formatted.append((strength, v, 1.0, offset, function))
+
+                    # Track applied patches
+                    ForgeOperationsInt8.applied_lora_patches.add(nk)
+
+                    device = torch.device("cuda") if torch.cuda.is_available() else tensor.device
+                    temp_dtype = memory_management.lora_compute_dtype(device)
+
+                    tensor_temp = tensor.to(temp_dtype)
+                    result_temp = merge_lora_to_weight(formatted, tensor_temp, key)
+                    return result_temp.to(tensor.dtype)
+                return tensor
+
             input_scale_key = prefix + "input_scale"
             bias_key = prefix + "bias"
 
-            weight_scale = state_dict.pop(scale_key, None)
-            state_dict.pop(prefix + "comfy_quant", None)
+            def pop_metadata(sd, p, k):
+                v = sd.pop(p + k, None)
+                if v is not None:
+                    return v
+                v = sd.pop("model." + p + k, None)
+                if v is not None:
+                    return v
+                if p.startswith("model."):
+                    v = sd.pop(p[6:] + k, None)
+                    if v is not None:
+                        return v
+                if p.startswith("diffusion_model."):
+                    v = sd.pop("diffusion_model." + p + k, None)
+                    if v is not None:
+                        return v
+                return None
+
+            weight_scale = pop_metadata(state_dict, prefix, "weight_scale")
+            comfy_quant_tensor = pop_metadata(state_dict, prefix, "comfy_quant")
+
             weight_tensor = state_dict.pop(weight_key, None)
+            bias_tensor = state_dict.pop(bias_key, None)
 
             # Pop input_scale to clean state_dict, but ignore it
             _ = state_dict.pop(input_scale_key, None)
+
+            if comfy_quant_tensor is not None:
+                try:
+                    import json
+
+                    quant_conf = json.loads(bytes(comfy_quant_tensor.tolist()).decode("utf-8"))
+                    if quant_conf.get("convrot", False):
+                        self._use_convrot = True
+                        ForgeOperationsInt8.enable_convrot = True  # Propagate globally for LoRA
+                        if "convrot_groupsize" in quant_conf:
+                            self._convrot_groupsize = quant_conf["convrot_groupsize"]
+                except Exception:
+                    pass
+
+            # Apply LoRA patches to weight and bias once
+            if weight_tensor is not None:
+                weight_tensor = apply_lora_patches(weight_tensor, weight_key)
+            if bias_tensor is not None:
+                bias_tensor = apply_lora_patches(bias_tensor, bias_key)
 
             if weight_tensor is not None:
                 if weight_tensor.dtype == torch.int8 and weight_scale is not None:
@@ -410,72 +502,94 @@ class ForgeOperationsInt8(ForgeOperations):
                     ForgeOperationsInt8._is_prequantized = True  # Found a quantized layer
 
                     if isinstance(weight_scale, torch.Tensor):
-                        self.weight_scale = weight_scale.float().item() if weight_scale.numel() == 1 else weight_scale.float()
+                        if weight_scale.numel() == 1:
+                            # Scalar scale — store as float for speed
+                            self._weight_scale_scalar = weight_scale.float().item()
+                            self.weight_scale = None
+                            self._is_per_row = False
+                        elif weight_scale.dim() == 2 and weight_scale.shape[1] == 1:
+                            self.register_buffer("weight_scale", weight_scale.float())
+                            self._weight_scale_scalar = None
+                            self._is_per_row = True
+                        else:
+                            self.register_buffer("weight_scale", weight_scale.float())
+                            self._weight_scale_scalar = None
+                            self._is_per_row = False
                     else:
-                        self.weight_scale = float(weight_scale)
+                        self._weight_scale_scalar = float(weight_scale)
+                        self.weight_scale = None
+                        self._is_per_row = False
 
-                elif weight_tensor.dtype in (torch.float16, torch.bfloat16, torch.float32):
+                elif weight_tensor.dtype in (torch.float16, torch.bfloat16, torch.float32, torch.float8_e4m3fn):
                     # Load High-Precision
-                    # Detect if the model is pre-quantized if we don't know yet
-                    if ForgeOperationsInt8._is_prequantized is None:
-                        # Robust detection: scan keys and a sample of values
-                        is_prequant = False
-                        for k in state_dict.keys():
-                            if "weight_scale" in k or "comfy_quant" in k:
-                                is_prequant = True
-                                break
-
-                        if not is_prequant:
-                            # Fallback: scan a sample of values for int8 tensors
-                            for i, v in enumerate(state_dict.values()):
-                                if i > 200:
-                                    break  # Safety limit
-                                if getattr(v, "dtype", None) == torch.int8:
-                                    is_prequant = True
-                                    break
-                        ForgeOperationsInt8._is_prequantized = is_prequant
-
                     is_excluded = any(ex in prefix for ex in ForgeOperationsInt8.excluded_names)
                     is_dim1 = self.in_features == 1 or self.out_features == 1 or weight_tensor.ndim == 1
 
-                    if is_excluded or is_dim1 or ForgeOperationsInt8._is_prequantized:
+                    if is_excluded or is_dim1 or not ForgeOperationsInt8.dynamic_quantize:
                         self._is_quantized = False
                         self.weight = torch.nn.Parameter(weight_tensor, requires_grad=False)
                     else:
                         # Quantize on the fly
                         device = torch.device("cuda") if torch.cuda.is_available() else weight_tensor.device
-                        w_gpu = weight_tensor.to(device, non_blocking=True)
-                        q_weight, q_scale = quantize_int8_tensorwise(w_gpu)
+
+                        # Cast to float32 before rotation and scale computation
+                        w_gpu = weight_tensor.to(device, non_blocking=True).float()
+
+                        self._use_convrot = False
+                        if getattr(ForgeOperationsInt8, "enable_convrot", False) and self.in_features % CONVROT_GROUP_SIZE == 0:
+                            try:
+                                H = build_hadamard(CONVROT_GROUP_SIZE, device=w_gpu.device, dtype=w_gpu.dtype)
+                                w_gpu = rotate_weight(w_gpu, H, group_size=CONVROT_GROUP_SIZE)
+                                self._use_convrot = True
+                            except ImportError as e:
+                                memory_management.logger.warning(f"[INT8 Fast] ConvRot Error: {e}")
+
+                        q_weight, q_scale = quantize_int8_axiswise(w_gpu, dim=1)
 
                         self.weight = torch.nn.Parameter(q_weight.cpu(), requires_grad=False)
-                        self.weight_scale = q_scale.cpu() if isinstance(q_scale, torch.Tensor) else q_scale
+                        self.register_buffer("weight_scale", q_scale.cpu())
+                        self._weight_scale_scalar = None
                         self._is_quantized = True
+                        self._is_per_row = True
                 else:
                     self._is_quantized = False
                     self.weight = torch.nn.Parameter(weight_tensor, requires_grad=False)
             else:
                 missing_keys.append(weight_key)
 
-            bias_tensor = state_dict.pop(bias_key, None)
+            # Assign bias if it exists (already patched if needed)
             if bias_tensor is not None:
                 self.bias = torch.nn.Parameter(bias_tensor, requires_grad=False)
             else:
                 self.bias = None
+
+        def _get_weight_scale(self):
+            """Get weight scale, preferring scalar if available."""
+            if self._weight_scale_scalar is not None:
+                return self._weight_scale_scalar
+            return self.weight_scale
 
         def convert_weight(self, _weight, inplace=False):
             if not self._is_quantized:
                 return _weight
             return self.weight
 
-        def set_weight(self, out_weight, inplace_update=False, seed=0):
+        def set_weight(self, out_weight, inplace_update=False, seed=0, return_weight=False, **kwargs):
             if not self._is_quantized:
+                new_weight = out_weight.to(self.weight.dtype)
+                if return_weight:
+                    return new_weight
+
                 if inplace_update:
-                    self.weight.data.copy_(out_weight)
+                    self.weight.data.copy_(new_weight)
                 else:
-                    self.weight = torch.nn.Parameter(out_weight.to(self.weight.dtype), requires_grad=False)
+                    self.weight = torch.nn.Parameter(new_weight, requires_grad=False)
                 return
 
             if out_weight.dtype == torch.int8:
+                if return_weight:
+                    return out_weight
+
                 if inplace_update:
                     self.weight.data.copy_(out_weight)
                 else:
@@ -483,35 +597,56 @@ class ForgeOperationsInt8(ForgeOperations):
                 return
 
             # Re-quantize if fallback occurred
-            new_weight = stochastic_round_int8_delta(out_weight, self.weight_scale, seed)
+            new_weight = quantize_int8(out_weight, self._get_weight_scale())
+
+            if return_weight:
+                return new_weight
+
             if inplace_update:
                 self.weight.data.copy_(new_weight)
             else:
                 self.weight = torch.nn.Parameter(new_weight, requires_grad=False)
 
-        def set_bias(self, out_bias, inplace_update=False, seed=0):
+        def set_bias(self, out_bias, inplace_update=False, seed=0, return_weight=False, **kwargs):
             if out_bias is None:
-                return
+                return None
+
+            new_bias = out_bias
+            if return_weight:
+                return new_bias
+
             if inplace_update:
                 if self.bias is not None:
-                    self.bias.data.copy_(out_bias)
+                    self.bias.data.copy_(new_bias)
             else:
-                self.bias = torch.nn.Parameter(out_bias, requires_grad=False)
+                self.bias = torch.nn.Parameter(new_bias, requires_grad=False)
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             """Fast forward using torch._int_mm for quantized weights."""
 
+            # Check if ComfyUI needs to manage weight transfer (VBAR, offloading, LoRA patches, etc.)
+            # This mirrors the base class check in disable_weight_init.Linear.forward()
+            need_cast = self.parameters_manual_cast or len(self.weight_function) > 0 or len(self.bias_function) > 0
+
             if not self._is_quantized:
-                weight, bias, signal = weights_manual_cast(self, x)
-                with main_stream_worker(weight, bias, signal):
-                    return torch.nn.functional.linear(x, weight, bias)
+                if need_cast:
+                    weight, bias, signal = weights_manual_cast(self, x)
+                    with main_stream_worker(weight, bias, signal):
+                        return torch.nn.functional.linear(x, weight, bias)
+                else:
+                    return torch.nn.functional.linear(x, self.weight, self.bias)
 
-            # 1. Move weight/bias/scale to device (non_blocking)
-            weight = self.weight.to(x.device, non_blocking=True)
-            bias = self.bias.to(x.device, non_blocking=True) if self.bias is not None else None
+            # INT8 quantized path
+            if need_cast:
+                # VBAR / offload / lowvram path
+                weight, bias, signal = weights_manual_cast(self, x=None, dtype=torch.int8, device=x.device, bias_dtype=x.dtype)
+            else:
+                # Fast path: weights already on GPU, no functions to apply
+                weight = self.weight
+                bias = self.bias
 
-            w_scale = self.weight_scale
-            if isinstance(w_scale, torch.Tensor):
+            w_scale = self._get_weight_scale()
+            if isinstance(w_scale, torch.Tensor) and w_scale.device != x.device:
                 w_scale = w_scale.to(x.device, non_blocking=True)
 
             compute_dtype = x.dtype if x.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
@@ -519,26 +654,36 @@ class ForgeOperationsInt8(ForgeOperations):
             x_shape = x.shape
             x_2d = x.reshape(-1, x_shape[-1])
 
+            if getattr(self, "_use_convrot", False):
+                group_size = getattr(self, "_convrot_groupsize", CONVROT_GROUP_SIZE)
+                H = build_hadamard(group_size, device=x.device, dtype=x.dtype)
+                x_2d = rotate_activation(x_2d, H, group_size=group_size)
+
             if x_2d.shape[0] > 16:
-                y = int8_forward_dynamic(x_2d, weight, w_scale, bias, compute_dtype)
+                if self._is_per_row:
+                    y = int8_forward_dynamic_per_row(x_2d, weight, w_scale, bias, compute_dtype)
+                else:
+                    y = int8_forward_dynamic(x_2d, weight, w_scale, bias, compute_dtype)
             else:
                 # Small batch fallback
                 w_float = dequantize(weight, w_scale).to(x.dtype)
-                y = torch.nn.functional.linear(x_2d, w_float, bias)
+                bias_typed = bias.to(x.dtype) if bias is not None else None
+                y = torch.nn.functional.linear(x_2d, w_float, bias_typed)
 
-            # Dynamic LoRA Path
-            if self.lora_A is not None and self.lora_B is not None:
-                # Ensure LoRA tensors are on the same device as x
-                lA = self.lora_A.to(x.device, non_blocking=True)
-                lB = self.lora_B.to(x.device, non_blocking=True)
+            # Dynamic LoRA Path — handles split QKV via per-patch offsets
+            for lora_down, lora_up, lora_start, lora_size in self.lora_patches:
+                lD = lora_down.to(x.device, non_blocking=True)
+                lU = lora_up.to(x.device, non_blocking=True)
+                lora_x = torch.nn.functional.linear(x_2d.to(lD.dtype), lD)
+                lora_y = torch.nn.functional.linear(lora_x, lU)  # [batch, slice_size or full_out]
+                if lora_start is not None:
+                    y[:, lora_start : lora_start + lora_size] = y[:, lora_start : lora_start + lora_size] + lora_y.to(y.dtype)
+                else:
+                    y = y + lora_y.to(y.dtype)
 
-                lora_x = torch.nn.functional.linear(x_2d.to(lA.dtype), lA)
-                lora_y = torch.nn.functional.linear(lora_x, lB)
-
-                if self.lora_alpha is not None:
-                    lora_y = lora_y * self.lora_alpha
-
-                y = y + lora_y.to(y.dtype)
+            if need_cast:
+                with main_stream_worker(weight, bias, signal):
+                    pass
 
             return y.reshape(*x_shape[:-1], y.shape[-1])
 
@@ -834,14 +979,14 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
 
     if isinstance(bnb_dtype, str):
         # https://github.com/BobJohnson24/ComfyUI-Flux2-INT8/blob/main/int8_unet_loader.py
-        ForgeOperationsInt8._is_prequantized = None
+        ForgeOperationsInt8._is_prequantized = False
 
         match bnb_dtype:
             case "Flux2K4B" | "Flux2K9B":
-                ForgeOperationsInt8.excluded_names = ["img_in", "time_in", "guidance_in", "txt_in", "final_layer", "double_stream_modulation_img", "double_stream_modulation_txt", "single_stream_modulation"]
+                ForgeOperationsInt8.excluded_names = ["img_in", "time_in", "guidance_in", "txt_in", "double_stream_modulation_img", "double_stream_modulation_txt", "single_stream_modulation"]
                 operations = ForgeOperationsInt8
             case "ZImage":
-                ForgeOperationsInt8.excluded_names = ["cap_embedder", "t_embedder", "x_embedder", "cap_pad_token", "context_refiner", "final_layer", "noise_refiner", "adaLN", "x_pad_token"]
+                ForgeOperationsInt8.excluded_names = ["cap_embedder", "t_embedder", "x_embedder", "cap_pad_token", "context_refiner", "final_layer", "noise_refiner", "adaLN", "x_pad_token", "layers.0."]
                 operations = ForgeOperationsInt8
             case "Chroma":
                 ForgeOperationsInt8.excluded_names = ["distilled_guidance_layer", "final_layer", "img_in", "txt_in", "nerf_image_embedder", "nerf_blocks", "nerf_final_layer_conv", "__x0__", "nerf_final_layer_conv"]
@@ -849,8 +994,14 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
             case "QwenImage":
                 ForgeOperationsInt8.excluded_names = ["time_text_embed", "img_in", "norm_out", "proj_out", "txt_in"]
                 operations = ForgeOperationsInt8
+            case "ErnieImage":
+                ForgeOperationsInt8.excluded_names = ["time", "x_embedder", "text_proj", "adaLN"]
+                operations = ForgeOperationsInt8
+            case "Anima":
+                ForgeOperationsInt8.excluded_names = ["embed", "adaln"]
+                operations = ForgeOperationsInt8
             case "WAN21_T2V" | "WAN21_I2V":
-                ForgeOperationsInt8.excluded_names = ["patch_embedding", "text_embedding", "time_embedding", "time_projection" "head", "img_emb"]
+                ForgeOperationsInt8.excluded_names = ["patch_embedding", "text_embedding", "time_embedding", "time_projection", "head", "img_emb"]
                 operations = ForgeOperationsInt8
     elif isinstance(bnb_dtype, dict):
         # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L950
