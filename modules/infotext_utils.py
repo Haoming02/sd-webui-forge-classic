@@ -26,7 +26,7 @@ type_of_gr_update = type(gr.skip())
 
 
 class ParamBinding:
-    def __init__(self, paste_button: gr.Button, tabname: str, source_text_component: gr.Textbox = None, source_image_component: gr.Gallery = None, source_tabname: str = None, override_settings_component: gr.Dropdown = None, paste_field_names: list[str] = None):
+    def __init__(self, paste_button: gr.Button, tabname: str, source_text_component: gr.Textbox = None, source_image_component: gr.Gallery | gr.Image = None, source_tabname: str = None, override_settings_component: gr.Dropdown = None, paste_field_names: list[str] = None):
         self.paste_button = paste_button
         self.tabname = tabname
         self.source_text_component = source_text_component
@@ -107,7 +107,7 @@ def image_from_url_text(filedata) -> Image.Image:
     return None
 
 
-def add_paste_fields(tabname: str, init_img: gr.Gallery, fields: list[gr.components.Component], override_settings_component: gr.Dropdown = None):
+def add_paste_fields(tabname: str, init_img: gr.Image, fields: list[gr.components.Component], override_settings_component: gr.Dropdown = None):
 
     if fields:
         for i in range(len(fields)):
@@ -133,57 +133,56 @@ def register_paste_params_button(binding: ParamBinding):
     registered_param_bindings.append(binding)
 
 
-def connect_paste_params_buttons():
-    for binding in registered_param_bindings:
-        destination_image_component = paste_fields[binding.tabname]["init_img"]
-        fields = paste_fields[binding.tabname]["fields"]
-        override_settings_component = binding.override_settings_component or paste_fields[binding.tabname]["override_settings_component"]
+def _connect_paste_params_buttons(binding: ParamBinding):
+    fields: list[PasteField] = paste_fields[binding.tabname]["fields"]
+    dest_image: gr.Image = paste_fields[binding.tabname]["init_img"]
+    override_settings: gr.Dropdown = binding.override_settings_component or paste_fields[binding.tabname]["override_settings_component"]
 
-        destination_width_component = next(iter([field for field, name in fields if name == "Size-1"] if fields else []), None)
-        destination_height_component = next(iter([field for field, name in fields if name == "Size-2"] if fields else []), None)
+    dest_width: gr.Slider = next(iter([field for field, name in fields if name == "Size-1"] if fields else []), None)
+    dest_height: gr.Slider = next(iter([field for field, name in fields if name == "Size-2"] if fields else []), None)
 
-        if binding.source_image_component and destination_image_component:
-            need_send_dementions = destination_width_component and binding.tabname != "inpaint"
-            if isinstance(binding.source_image_component, gr.Gallery):
-                func = send_image_and_dimensions if need_send_dementions else image_from_url_text
-                jsfunc = "extract_image_from_gallery"
-            else:
-                func = send_image_and_dimensions if need_send_dementions else lambda x: x
-                jsfunc = None
+    if binding.source_image_component and dest_image:
+        need_dimensions: bool = binding.tabname != "inpaint" and (dest_width and dest_height)
 
-            binding.paste_button.click(
-                fn=func,
-                _js=jsfunc,
-                inputs=[binding.source_image_component],
-                outputs=[destination_image_component, destination_width_component, destination_height_component] if need_send_dementions else [destination_image_component],
-                show_progress=False,
-            )
-
-        if binding.source_text_component is not None and fields is not None:
-            connect_paste(binding.paste_button, fields, binding.source_text_component, override_settings_component, binding.tabname)
-
-        if binding.source_tabname is not None and fields is not None:
-            paste_field_names = [
-                *["Prompt", "Negative prompt", "Steps", "Face restoration"],
-                *(["Seed"] if shared.opts.send_seed else []),
-                *(["CFG scale"] if shared.opts.send_cfg else []),
-                *binding.paste_field_names,
-            ]
-
-            binding.paste_button.click(
-                fn=lambda *x: x,
-                inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
-                outputs=[field for field, name in fields if name in paste_field_names],
-                show_progress=False,
-            )
+        if isinstance(binding.source_image_component, gr.Gallery):
+            func = send_image_and_dimensions if need_dimensions else image_from_url_text
+            jsfunc = "extract_image_from_gallery"
+        else:
+            func = send_image_and_dimensions if need_dimensions else lambda x: x
+            jsfunc = None
 
         binding.paste_button.click(
-            fn=None,
-            _js=f"switch_to_{binding.tabname}",
-            inputs=None,
-            outputs=None,
+            fn=func,
+            inputs=[binding.source_image_component],
+            outputs=[dest_image, dest_width, dest_height] if need_dimensions else [dest_image],
+            show_progress=False,
+            js=jsfunc,
+        )
+
+    if binding.source_text_component is not None and fields is not None:
+        connect_paste(binding.paste_button, fields, binding.source_text_component, override_settings, binding.tabname)
+
+    if binding.source_tabname is not None and fields is not None:
+        paste_field_names = [
+            *["Prompt", "Negative prompt", "Steps", "Face restoration"],
+            *(["Seed"] if shared.opts.send_seed else []),
+            *(["CFG scale"] if shared.opts.send_cfg else []),
+            *binding.paste_field_names,
+        ]
+
+        binding.paste_button.click(
+            fn=lambda *x: x,
+            inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
+            outputs=[field for field, name in fields if name in paste_field_names],
             show_progress=False,
         )
+
+    binding.paste_button.click(fn=None, _js=f"switch_to_{binding.tabname}")
+
+
+def connect_paste_params_buttons():
+    for binding in registered_param_bindings:
+        _connect_paste_params_buttons(binding)
 
 
 def send_image_and_dimensions(x) -> tuple[Image.Image, int, int]:
@@ -208,15 +207,7 @@ def send_image_and_dimensions(x) -> tuple[Image.Image, int, int]:
     return img, w, h
 
 
-def restore_old_hires_fix_params(res):
-    """
-    for infotexts that specify old First pass size parameter,
-    convert it into width, height, and hr scale
-    """
-
-    firstpass_width = res.get("First pass size-1", None)
-    firstpass_height = res.get("First pass size-2", None)
-
+def restore_old_hires_fix_params(res: dict):
     if shared.opts.use_old_hires_fix_width_height:
         hires_width = int(res.get("Hires resize-1", 0))
         hires_height = int(res.get("Hires resize-2", 0))
@@ -226,10 +217,12 @@ def restore_old_hires_fix_params(res):
             res["Size-2"] = hires_height
             return
 
-    if firstpass_width is None or firstpass_height is None:
+    try:
+        firstpass_width = int(res.get("First pass size-1", None))
+        firstpass_height = int(res.get("First pass size-2", None))
+    except TypeError:
         return
 
-    firstpass_width, firstpass_height = int(firstpass_width), int(firstpass_height)
     width = int(res.get("Size-1", 512))
     height = int(res.get("Size-2", 512))
 
