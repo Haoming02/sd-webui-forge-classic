@@ -116,7 +116,10 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery
         if insert or i != gallery_index:
             image[0].already_saved_as = image[0].filename.rsplit("?", 1)[0]
             new_gallery.append(image)
-            new_infotexts.append(geninfo["infotexts"][i])
+            if i >= len(geninfo["infotexts"]):  # e.g. ControlNet Detected Map
+                new_infotexts.append(None)
+            else:
+                new_infotexts.append(geninfo["infotexts"][i])
         if i == gallery_index:
             new_gallery.extend(processed.images)
             new_infotexts.extend(processed.infotexts)
