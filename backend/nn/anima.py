@@ -55,9 +55,9 @@ class VideoRopePosition3DEmb(nn.Module):
         w_theta = 10000.0 * self.w_ntk_factor
         t_theta = 10000.0 * self.t_ntk_factor
 
-        h_spatial_freqs = 1.0 / (h_theta ** self.dim_spatial_range.to(device=device))
-        w_spatial_freqs = 1.0 / (w_theta ** self.dim_spatial_range.to(device=device))
-        temporal_freqs = 1.0 / (t_theta ** self.dim_temporal_range.to(device=device))
+        h_spatial_freqs = 1.0 / (h_theta ** self.dim_spatial_range.to(dtype=torch.float16, device=device))
+        w_spatial_freqs = 1.0 / (w_theta ** self.dim_spatial_range.to(dtype=torch.float16, device=device))
+        temporal_freqs = 1.0 / (t_theta ** self.dim_temporal_range.to(dtype=torch.float16, device=device))
 
         seq = torch.arange(max(H, W, T), dtype=torch.float, device=device)
         half_emb_h = torch.outer(seq[:H].to(device=device), h_spatial_freqs)
