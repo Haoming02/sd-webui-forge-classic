@@ -290,6 +290,12 @@ def _populate_defaults(res: dict):
     if "Hires negative prompt" not in res:
         res["Hires negative prompt"] = ""
 
+    if "MaHiRo" not in res:
+        res["MaHiRo"] = False
+
+    if "Rescale CFG" not in res:
+        res["Rescale CFG"] = 0.0
+
 
 def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     """
@@ -434,68 +440,57 @@ def create_override_settings_dict(text_pairs: list[str]) -> dict[str, Any]:
     return res
 
 
-def get_override_settings(params, *, skip_fields=None):
-    """Returns a list of settings overrides from the infotext parameters dictionary.
+def get_override_settings(params: dict[str, Any], *, skip_fields: list[str] = None) -> list[tuple[str, str, Any]]:
+    """
+    Returns a list of settings overrides from the infotext parameters dictionary
 
-    This function checks the `params` dictionary for any keys that correspond to settings in `shared.opts` and returns
-    a list of tuples containing the parameter name, setting name, and new value cast to correct type.
-
-    It checks for conditions before adding an override:
-    - ignores settings that match the current value
-    - ignores parameter keys present in skip_fields argument.
-
-    Example input:
-        {"Clip skip": "2"}
-
-    Example output:
-        [("Clip skip", "CLIP_stop_at_last_layers", 2)]
+    >>> {"Clip skip": "2"}
+    [("Clip skip", "CLIP_stop_at_last_layers", 2)]
     """
 
-    res = []
-
+    res: list[tuple[str, str, Any]] = []
     mapping = [(info.infotext, k) for k, info in shared.opts.data_labels.items() if info.infotext]
+
     for param_name, setting_name in mapping + INFOTEXT_TO_SETTING:
-        if param_name in (skip_fields or {}):
+        if param_name in (skip_fields or []):
             continue
 
-        v = params.get(param_name, None)
-        if v is None:
+        if (v := params.get(param_name, None)) is None:
             continue
 
         v = shared.opts.cast_value(setting_name, v)
         current_value = getattr(shared.opts, setting_name, None)
 
-        if v == current_value:
-            continue
-
-        res.append((param_name, setting_name, v))
+        if v != current_value:
+            res.append((param_name, setting_name, v))
 
     return res
 
 
-def connect_paste(button, paste_fields, input_comp, override_settings_component, tabname):
-    def paste_func(prompt):
-        if not prompt and not shared.cmd_opts.hide_ui_dir_config and not shared.cmd_opts.no_prompt_history:
-            filename = os.path.join(data_path, "params.txt")
+def connect_paste(button: gr.Button, paste_fields: list[PasteField], input_comp: gr.Textbox, override_settings_component: gr.Dropdown, tabname: str):
+    def paste_func(prompt: str) -> list[gr.update]:
+        if not prompt and not (shared.cmd_opts.hide_ui_dir_config or shared.cmd_opts.no_prompt_history):
             try:
+                filename = os.path.join(data_path, "params.txt")
                 with open(filename, "r", encoding="utf8") as file:
-                    prompt = file.read()
+                    prompt: str = file.read()
             except OSError:
                 pass
 
         params = parse_generation_parameters(prompt)
         script_callbacks.infotext_pasted_callback(prompt, params)
-        res = []
+
+        res: list[gr.update] = []
 
         for output, key in paste_fields:
-            if callable(key):
+            if not callable(key):
+                v = params.get(key, None)
+            else:
                 try:
                     v = key(params)
                 except Exception:
                     errors.report(f"Error executing {key}", exc_info=True)
                     v = None
-            else:
-                v = params.get(key, None)
 
             if v is None:
                 res.append(gr.skip())
@@ -519,13 +514,11 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
         return res
 
     if override_settings_component is not None:
-        already_handled_fields = {key: 1 for _, key in paste_fields}
+        _handled_fields = [key for _, key in paste_fields]
 
         def paste_settings(params):
-            vals = get_override_settings(params, skip_fields=already_handled_fields)
-
-            vals_pairs = [f"{infotext_text}: {value}" for infotext_text, setting_name, value in vals]
-
+            vals = get_override_settings(params, skip_fields=_handled_fields)
+            vals_pairs = [f"{infotext_text}: {value}" for infotext_text, _, value in vals]
             return gr.update(value=vals_pairs, choices=vals_pairs, visible=bool(vals_pairs))
 
         paste_fields = paste_fields + [(override_settings_component, paste_settings)]
@@ -535,11 +528,4 @@ def connect_paste(button, paste_fields, input_comp, override_settings_component,
         inputs=[input_comp],
         outputs=[x[0] for x in paste_fields],
         show_progress=False,
-    )
-    button.click(
-        fn=None,
-        _js=f"recalculate_prompts_{tabname}",
-        inputs=[],
-        outputs=[],
-        show_progress=False,
-    )
+    ).then(fn=None, js=f"recalculate_prompts_{tabname}")
