@@ -24,7 +24,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ffmpeg \
         git \
-        google-perftools \
         libgl1 \
         libglib2.0-0 \
         libgomp1 \
