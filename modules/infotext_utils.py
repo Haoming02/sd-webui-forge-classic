@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from ast import literal_eval
+from typing import Any
 
 import gradio as gr
 from PIL import Image
@@ -17,11 +19,11 @@ from modules import (
     ui_tempdir,
 )
 from modules.paths import data_path
-from modules_forge import main_entry
 
 re_param_code = r'\s*([\w\s\-\/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
 re_imagesize = re.compile(r"^(\d+)x(\d+)$")
+re_cfg = re.compile(r"CFG scale:\s*([\d\.]+)")
 type_of_gr_update = type(gr.skip())
 
 
@@ -235,86 +237,43 @@ def restore_old_hires_fix_params(res: dict):
     res["Hires resize-2"] = height
 
 
-def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
-    """parses generation parameters string, the one you see in text field under the picture in UI:
-    ```
-    girl with an artist's beret, determined, blue eyes, desert scene, computer monitors, heavy makeup, by Alphonse Mucha and Charlie Bowater, ((eyeshadow)), (coquettish), detailed, intricate
-    Negative prompt: ugly, fat, obese, chubby, (((deformed))), [blurry], bad anatomy, disfigured, poorly drawn face, mutation, mutated, (extra_limb), (ugly), (poorly drawn hands), messy drawing
-    Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 965400086, Size: 512x512, Model hash: 45dee52b
-    ```
+def _extract_styles(res: dict, prompt: str, negative_prompt: str) -> tuple[str, str]:
+    if shared.opts.infotext_styles == "Ignore":
+        return prompt, negative_prompt
 
-        returns a dict with field values
-    """
-    if skip_fields is None:
-        skip_fields = shared.opts.infotext_skip_pasting
+    found_styles, prompt_no_styles, negative_prompt_no_styles = shared.prompt_styles.extract_styles_from_prompt(prompt, negative_prompt)
 
-    res = {}
+    same_hr_styles = True
+    if "Hires prompt" in res or "Hires negative prompt" in res:
+        hr_prompt, hr_negative_prompt = res.get("Hires prompt", prompt), res.get("Hires negative prompt", negative_prompt)
+        hr_found_styles, hr_prompt_no_styles, hr_negative_prompt_no_styles = shared.prompt_styles.extract_styles_from_prompt(hr_prompt, hr_negative_prompt)
+        if same_hr_styles := (found_styles == hr_found_styles):
+            res["Hires prompt"] = "" if hr_prompt_no_styles == prompt_no_styles else hr_prompt_no_styles
+            res["Hires negative prompt"] = "" if hr_negative_prompt_no_styles == negative_prompt_no_styles else hr_negative_prompt_no_styles
 
-    prompt = ""
-    negative_prompt = ""
+    if same_hr_styles:
+        prompt, negative_prompt = prompt_no_styles, negative_prompt_no_styles
+        if (shared.opts.infotext_styles == "Apply if any" and found_styles) or shared.opts.infotext_styles == "Apply":
+            res["Styles array"] = found_styles
 
-    done_with_prompt = False
+    return prompt, negative_prompt
 
-    *lines, lastline = x.strip().split("\n")
-    if len(re_param.findall(lastline)) < 3:
-        lines.append(lastline)
-        lastline = ""
 
-    for line in lines:
-        line = line.strip()
-        if line.startswith("Negative prompt:"):
-            done_with_prompt = True
-            line = line[16:].strip()
-        if done_with_prompt:
-            negative_prompt += ("" if negative_prompt == "" else "\n") + line
-        else:
-            prompt += ("" if prompt == "" else "\n") + line
+def _populate_defaults(res: dict):
+    if "Sampler" not in res:
+        res["Sampler"] = "Euler"
 
-    if "Civitai" in lastline and "FLUX" in lastline:
-        lastline = lastline.replace("Sampler: Undefined,", "Sampler: Euler, Schedule type: Simple,")
-        lastline = lastline.replace("CFG scale: ", "CFG scale: 1, Distilled CFG Scale: ")
+    if "Schedule type" not in res:
+        res["Schedule type"] = "Automatic"
 
-    for k, v in re_param.findall(lastline):
-        if k == "Noise Schedule":
-            continue
-        try:
-            if v[0] == '"' and v[-1] == '"':
-                v = unquote(v)
-
-            m = re_imagesize.match(v)
-            if m is not None:
-                res[f"{k}-1"] = m.group(1)
-                res[f"{k}-2"] = m.group(2)
-            else:
-                res[k] = v
-        except Exception:
-            print(f'Error parsing "{k}: {v}"')
-
-    # Extract styles from prompt
-    if shared.opts.infotext_styles != "Ignore":
-        found_styles, prompt_no_styles, negative_prompt_no_styles = shared.prompt_styles.extract_styles_from_prompt(prompt, negative_prompt)
-
-        same_hr_styles = True
-        if "Hires prompt" in res or "Hires negative prompt" in res:
-            hr_prompt, hr_negative_prompt = res.get("Hires prompt", prompt), res.get("Hires negative prompt", negative_prompt)
-            hr_found_styles, hr_prompt_no_styles, hr_negative_prompt_no_styles = shared.prompt_styles.extract_styles_from_prompt(hr_prompt, hr_negative_prompt)
-            if same_hr_styles := found_styles == hr_found_styles:
-                res["Hires prompt"] = "" if hr_prompt_no_styles == prompt_no_styles else hr_prompt_no_styles
-                res["Hires negative prompt"] = "" if hr_negative_prompt_no_styles == negative_prompt_no_styles else hr_negative_prompt_no_styles
-
-        if same_hr_styles:
-            prompt, negative_prompt = prompt_no_styles, negative_prompt_no_styles
-            if (shared.opts.infotext_styles == "Apply if any" and found_styles) or shared.opts.infotext_styles == "Apply":
-                res["Styles array"] = found_styles
-
-    res["Prompt"] = prompt
-    res["Negative prompt"] = negative_prompt
-
-    res.pop("Clip skip", None)
+    if "RNG" not in res:
+        res["RNG"] = "CPU"
 
     if "Hires resize-1" not in res:
         res["Hires resize-1"] = 0
         res["Hires resize-2"] = 0
+
+    restore_old_hires_fix_params(res)
 
     if "Hires sampler" not in res:
         res["Hires sampler"] = "Use same sampler"
@@ -331,50 +290,65 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     if "Hires negative prompt" not in res:
         res["Hires negative prompt"] = ""
 
-    if "Mask mode" not in res:
-        res["Mask mode"] = "Inpaint masked"
 
-    if "Masked content" not in res:
-        res["Masked content"] = "original"
+def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
+    """
+    parses infotext (the string under the Gallery in UI)
+    returns a dict with field values
+    """
+    if skip_fields is None:
+        skip_fields = shared.opts.infotext_skip_pasting
 
-    if "Inpaint area" not in res:
-        res["Inpaint area"] = "Whole picture"
+    *lines, lastline = x.strip().split("\n")
+    if len(re_param.findall(lastline)) < 3:
+        lines.append(lastline)
+        lastline = ""
 
-    if "Masked area padding" not in res:
-        res["Masked area padding"] = 32
+    _prompts: list[str] = []
+    _negative_prompts: list[str] = []
+    _neg: bool = False
 
-    restore_old_hires_fix_params(res)
+    for line in lines:
+        line = line.strip()
+        if line.startswith("Negative prompt:"):
+            line = line.replace("Negative prompt:", "").strip()
+            _neg = True
+        (_negative_prompts if _neg else _prompts).append(line)
 
-    # Missing RNG means the default was set, which is GPU RNG
-    if "RNG" not in res:
-        res["RNG"] = "GPU"
+    prompt: str = "\n".join(_prompts)
+    negative_prompt: str = "\n".join(_negative_prompts)
 
-    if "Schedule type" not in res:
-        res["Schedule type"] = "Automatic"
+    if "flux" in lastline.lower():  # CivitAI
+        m = re.search(re_cfg, lastline)
+        if m and float(m.group(1)) > 1.0:
+            lastline = lastline.replace("CFG scale: ", "CFG scale: 1.0, Distilled CFG Scale: ")
 
-    if "Schedule max sigma" not in res:
-        res["Schedule max sigma"] = 0
+    lastline = lastline.replace("Sampler: Undefined,", "Sampler: Euler, Schedule type: Simple,")
 
-    if "Schedule min sigma" not in res:
-        res["Schedule min sigma"] = 0
+    res: dict[str, Any] = {}
 
-    if "Schedule rho" not in res:
-        res["Schedule rho"] = 0
+    for k, v in re_param.findall(lastline):
+        if k == "Noise Schedule":
+            continue
+        try:
+            v = unquote(v)
+            if (m := re_imagesize.match(v)) is not None:
+                res[f"{k}-1"] = m.group(1)
+                res[f"{k}-2"] = m.group(2)
+            else:
+                res[k] = v
+        except Exception:
+            print(f'Error parsing "{k}: {v}"')
 
-    if "VAE Encoder" not in res:
-        res["VAE Encoder"] = "Full"
+    res["Prompt"], res["Negative prompt"] = prompt, negative_prompt = _extract_styles(res, prompt, negative_prompt)
 
-    if "VAE Decoder" not in res:
-        res["VAE Decoder"] = "Full"
+    _populate_defaults(res)
 
     prompt_attention = prompt_parser.parse_prompt_attention(prompt)
     prompt_attention += prompt_parser.parse_prompt_attention(negative_prompt)
     prompt_uses_emphasis = len(prompt_attention) != len([p for p in prompt_attention if p[1] == 1.0 or p[0] == "BREAK"])
-    if "Emphasis" not in res and prompt_uses_emphasis:
+    if prompt_uses_emphasis and "Emphasis" not in res:
         res["Emphasis"] = "Original"
-
-    if "Refiner switch by sampling steps" not in res:
-        res["Refiner switch by sampling steps"] = False
 
     if "Shift" in res:
         res["Distilled CFG Scale"] = res.pop("Shift")
@@ -382,36 +356,25 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     if "Hires Shift" in res:
         res["Hires Distilled CFG Scale"] = res.pop("Hires Shift")
 
-    for key in skip_fields:
+    if "sd_model_name" in res:
+        res["Model"] = res.pop("sd_model_name")
+
+    for key in [*skip_fields, "Clip skip", "CLIP_stop_at_last_layers"]:
         res.pop(key, None)
 
-    # checkpoint override is not supported
-    res.pop("Model", None)
-
     # VAE / TE
-    modules = []
-    hr_modules = []
-    vae = res.pop("VAE", None)
-    if vae:
-        modules = [vae]
-    else:
-        for key in res:
-            if key.startswith("Module "):
-                added = False
-                for knownmodule in main_entry.module_list.keys():
-                    filename, _ = os.path.splitext(knownmodule)
-                    if res[key] == filename:
-                        added = True
-                        modules.append(knownmodule)
-                        break
-                if not added:
-                    modules.append(res[key])  # so it shows in the override section (consistent with checkpoint and old vae)
-            elif key.startswith("Hires Module "):
-                for knownmodule in main_entry.module_list.keys():
-                    filename, _ = os.path.splitext(knownmodule)
-                    if res[key] == filename:
-                        hr_modules.append(knownmodule)
-                        break
+    modules, hr_modules = [], []
+
+    if (vae := res.pop("VAE", None)) is not None:
+        modules.append(vae)  # Classic
+
+    _keys = list(res.keys())
+
+    for key in _keys:
+        if key.startswith("Module "):
+            modules.append(res.pop(key))
+        elif key.startswith("Hires Module "):
+            hr_modules.append(res.pop(key))
 
     if modules != []:
         current_modules = shared.opts.forge_additional_modules
@@ -422,8 +385,7 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
         if sorted(modules) != sorted(basename_modules):
             res["VAE/TE"] = modules
 
-    # if 'Use same choices' was the selection for Hires VAE / Text Encoder, it will be the only Hires Module
-    # if the selection was empty, it will be the only Hires Module, saved as 'Built-in'
+    # processing.py/StableDiffusionProcessingTxt2Img/init()
     if "Hires Module 1" in res:
         if res["Hires Module 1"] == "Use same choices":
             hr_modules = ["Use same choices"]
@@ -432,54 +394,35 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
 
         res["Hires VAE/TE"] = hr_modules
     else:
-        # no Hires Module infotext, use default
         res["Hires VAE/TE"] = ["Use same choices"]
 
     return res
 
 
-infotext_to_setting_name_mapping = [
-    ("VAE/TE", "forge_additional_modules"),
-]
-"""Mapping of infotext labels to setting names. Only left for backwards compatibility - use OptionInfo(..., infotext='...') instead.
-Example content:
-
-infotext_to_setting_name_mapping = [
-    ('Conditional mask weight', 'inpainting_mask_weight'),
-    ('Model hash', 'sd_model_checkpoint'),
-    ('ENSD', 'eta_noise_seed_delta'),
-    ('Schedule type', 'k_sched_type'),
-]
-"""
-from ast import literal_eval
+INFOTEXT_TO_SETTING = [("VAE/TE", "forge_additional_modules")]
 
 
-def create_override_settings_dict(text_pairs):
-    """creates processing's override_settings parameters from gradio's multiselect
-
-    Example input:
-        ['Clip skip: 2', 'Model hash: e6e99610c4', 'ENSD: 31337']
-
-    Example output:
-        {'CLIP_stop_at_last_layers': 2, 'sd_model_checkpoint': 'e6e99610c4', 'eta_noise_seed_delta': 31337}
+def create_override_settings_dict(text_pairs: list[str]) -> dict[str, Any]:
+    """
+    creates processing's override_settings parameters from gradio's multiselect
+    >>> ["VAE/TE: []"]
+    {"forge_additional_modules": []}
     """
 
-    res = {}
-
     if not text_pairs:
-        return res
+        return {}
 
     params = {}
+
     for pair in text_pairs:
-        k, v = pair.split(":", maxsplit=1)
+        k, v = pair.split(":", 1)
+        params[k.strip()] = v.strip()
 
-        params[k] = v.strip()
-
+    res: dict[str, Any] = {}
     mapping = [(info.infotext, k) for k, info in shared.opts.data_labels.items() if info.infotext]
-    for param_name, setting_name in mapping + infotext_to_setting_name_mapping:
-        value = params.get(param_name, None)
 
-        if value is None:
+    for param_name, setting_name in mapping + INFOTEXT_TO_SETTING:
+        if (value := params.get(param_name, None)) is None:
             continue
 
         if setting_name == "forge_additional_modules":
@@ -511,15 +454,12 @@ def get_override_settings(params, *, skip_fields=None):
     res = []
 
     mapping = [(info.infotext, k) for k, info in shared.opts.data_labels.items() if info.infotext]
-    for param_name, setting_name in mapping + infotext_to_setting_name_mapping:
+    for param_name, setting_name in mapping + INFOTEXT_TO_SETTING:
         if param_name in (skip_fields or {}):
             continue
 
         v = params.get(param_name, None)
         if v is None:
-            continue
-
-        if setting_name in ["sd_model_checkpoint", "forge_additional_modules"]:
             continue
 
         v = shared.opts.cast_value(setting_name, v)
