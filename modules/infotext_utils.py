@@ -19,6 +19,7 @@ from modules import (
     ui_tempdir,
 )
 from modules.paths import data_path
+from modules_forge import main_entry
 
 re_param_code = r'\s*([\w\s\-\/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
@@ -375,12 +376,15 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
         modules.append(vae)  # Classic
 
     _keys = list(res.keys())
+    known_modules = {os.path.splitext(m)[0]: m for m in main_entry.module_list.keys()}
 
     for key in _keys:
         if key.startswith("Module "):
-            modules.append(res.pop(key))
+            if (m := known_modules.get(res.pop(key), None)) is not None:
+                modules.append(m)
         elif key.startswith("Hires Module "):
-            hr_modules.append(res.pop(key))
+            if (m := known_modules.get(res.pop(key), None)) is not None:
+                hr_modules.append(m)
 
     if modules != []:
         current_modules = shared.opts.forge_additional_modules
