@@ -47,10 +47,16 @@ def add_supported_control_model(control_model):
 
 
 def try_load_supported_control_model(ckpt_path):
-    state_dict = utils.load_torch_file(ckpt_path, safe_load=True)
+    # return_metadata=True reads the safetensors header metadata alongside the
+    # tensors in a single pass.  Patchers that need model-level flags stored in
+    # the file's __metadata__ block (e.g. lllite.inpaint_masked_input for the
+    # Anima LLLite inpainting model) can inspect `metadata` directly instead of
+    # re-opening the file themselves.
+    state_dict, metadata = utils.load_torch_file(ckpt_path, safe_load=True, return_metadata=True)
+    metadata = metadata or {}
     for supported_type in supported_control_models:
         state_dict_copy = {k: v for k, v in state_dict.items()}
-        model = supported_type.try_build_from_state_dict(state_dict_copy, ckpt_path)
+        model = supported_type.try_build_from_state_dict(state_dict_copy, ckpt_path, metadata)
         if model is not None:
             return model
 

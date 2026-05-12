@@ -47,7 +47,7 @@ _CONTROL_MODEL_CACHE = ModelCache()
 class ControlModelPatcher:
 
     @staticmethod
-    def try_build_from_state_dict(state_dict, ckpt_path):
+    def try_build_from_state_dict(state_dict, ckpt_path, metadata=None):
         return None
 
     def __init__(self, model_patcher=None):
@@ -77,7 +77,7 @@ class ControlNetPatcher(ControlModelPatcher):
         super().__init__(model_patcher)
 
     @staticmethod
-    def try_build_from_state_dict(controlnet_data: dict[str, torch.Tensor], ckpt_path):
+    def try_build_from_state_dict(controlnet_data: dict[str, torch.Tensor], ckpt_path, metadata=None):
         if "lora_controlnet" in controlnet_data:
             return ControlNetPatcher(ControlLora(controlnet_data))
 
