@@ -464,9 +464,9 @@ def get_override_settings(params: dict[str, Any], *, skip_fields: list[str] = No
         if (v := params.get(param_name, None)) is None:
             continue
 
-        if shared.opts.disable_weights_auto_swap and setting_name == "sd_model_checkpoint":
+        if setting_name == "sd_model_checkpoint" and shared.opts.disable_weights_auto_swap:
             continue
-        if shared.opts.disable_modules_auto_swap and setting_name == "forge_additional_modules":
+        if setting_name == "forge_additional_modules" and shared.opts.disable_modules_auto_swap:
             continue
 
         v = shared.opts.cast_value(setting_name, v)
