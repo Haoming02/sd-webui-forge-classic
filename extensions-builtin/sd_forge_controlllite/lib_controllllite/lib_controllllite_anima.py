@@ -100,10 +100,10 @@ class _ASPP(nn.Module):
 
 
 class _Conditioning(nn.Module):
-    def __init__(self, cond_dim: int, cond_emb_dim: int, n_resblocks: int, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS):
+    def __init__(self, cond_dim: int, cond_emb_dim: int, n_resblocks: int, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS, cond_in_ch: int = 3):
         super().__init__()
         ch_half = cond_dim // 2
-        self.conv1 = nn.Conv2d(3, ch_half, kernel_size=4, stride=4, padding=0)
+        self.conv1 = nn.Conv2d(cond_in_ch, ch_half, kernel_size=4, stride=4, padding=0)
         self.norm1 = _gn(ch_half)
         self.conv2 = nn.Conv2d(ch_half, ch_half, kernel_size=3, stride=1, padding=1)
         self.norm2 = _gn(ch_half)
@@ -242,7 +242,7 @@ class LLLiteModuleDiT(nn.Module):
 
 
 class ControlNetLLLiteDiT(nn.Module):
-    def __init__(self, dit: nn.Module, cond_emb_dim: int = 32, mlp_dim: int = 64, target_layers: str = "self_attn_q", dropout: Optional[float] = None, multiplier: float = 1.0, cond_dim: int = 64, cond_resblocks: int = 1, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS):
+    def __init__(self, dit: nn.Module, cond_emb_dim: int = 32, mlp_dim: int = 64, target_layers: str = "self_attn_q", dropout: Optional[float] = None, multiplier: float = 1.0, cond_dim: int = 64, cond_resblocks: int = 1, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS, cond_in_ch: int = 3):
         super().__init__()
         atomics = parse_target_layers(target_layers)
         self.multiplier = multiplier
@@ -254,6 +254,7 @@ class ControlNetLLLiteDiT(nn.Module):
             cond_resblocks,
             use_aspp=use_aspp,
             aspp_dilations=aspp_dilations,
+            cond_in_ch=cond_in_ch,
         )
         modules = self._create_modules(dit, cond_emb_dim, mlp_dim, atomics, dropout, multiplier)
         self.lllite_modules: list[LLLiteModuleDiT] = nn.ModuleList(modules)
@@ -387,6 +388,7 @@ def infer_anima_config(state_dict: dict[str, torch.Tensor]) -> dict:
     """Reconstruct ControlNetLLLiteDiT constructor kwargs from a saved state dict."""
     cond_emb_dim = 32
     cond_dim = 64
+    cond_in_ch = 3
     mlp_dim = 64
     cond_resblocks = 0
     use_aspp = False
@@ -397,6 +399,7 @@ def infer_anima_config(state_dict: dict[str, torch.Tensor]) -> dict:
             cond_emb_dim = v.shape[0]
         elif k == "lllite_conditioning1.conv1.weight":
             cond_dim = v.shape[0] * 2
+            cond_in_ch = v.shape[1]
 
     for k, v in state_dict.items():
         if k.endswith(".down.weight") and "conditioning1" not in k:
@@ -439,6 +442,7 @@ def infer_anima_config(state_dict: dict[str, torch.Tensor]) -> dict:
         mlp_dim=mlp_dim,
         target_layers=target_layers,
         cond_dim=cond_dim,
+        cond_in_ch=cond_in_ch,
         cond_resblocks=cond_resblocks,
         use_aspp=use_aspp,
         aspp_dilations=aspp_dilations,
