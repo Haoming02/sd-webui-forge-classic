@@ -46,7 +46,7 @@ def add_supported_control_model(control_model):
     supported_control_models.append(control_model)
 
 
-def try_load_supported_control_model(ckpt_path: os.PathLike):
+def try_load_supported_control_model(ckpt_path):
     state_dict = utils.load_torch_file(ckpt_path, safe_load=True)
     for supported_type in supported_control_models:
         state_dict_copy = {k: v for k, v in state_dict.items()}
