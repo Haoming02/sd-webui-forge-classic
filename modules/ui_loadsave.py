@@ -47,6 +47,9 @@ class UiLoadsave:
             if getattr(obj, "do_not_save_to_config", False):
                 return
 
+            if field == "value" and getattr(obj, "_internal_preset_param", False):
+                return
+
             saved_value = self.ui_settings.get(key, None)
 
             if isinstance(obj, gr.Accordion) and isinstance(x, InputAccordionImpl) and field == "value":

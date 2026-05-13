@@ -59,7 +59,7 @@ def gr_show(visible=True):
 
 def no_config(*comps: gr.components.Component):
     for comp in comps:
-        comp.do_not_save_to_config = True
+        setattr(comp, "_internal_preset_param", True)
 
 
 # Using constants for these since the variation selector isn't visible.
@@ -292,6 +292,7 @@ def create_ui():
                             with FormRow(elem_id="txt2img_column_batch"):
                                 batch_count = gr.Slider(minimum=1, maximum=128, step=1, label="Batch Count", value=1, elem_id="txt2img_batch_count")
                                 batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch Size", value=1, elem_id="txt2img_batch_size")
+                                batch_size.do_not_save_to_config = True
 
                     elif category == "override_settings":
                         with FormRow(elem_id="txt2img_override_settings_row") as row:
@@ -447,7 +448,7 @@ def create_ui():
 
             steps = scripts.scripts_txt2img.script("Sampler").steps
 
-            no_config(width, height, cfg_scale, distilled_cfg_scale, batch_size)
+            no_config(width, height, cfg_scale, distilled_cfg_scale)
             no_config(hr_second_pass_steps, hr_cfg, hr_distilled_cfg)
 
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
@@ -638,6 +639,7 @@ def create_ui():
                             with FormRow(elem_id="img2img_column_batch"):
                                 batch_count = gr.Slider(minimum=1, maximum=128, step=1, label="Batch Count", value=1, elem_id="img2img_batch_count")
                                 batch_size = gr.Slider(minimum=1, maximum=8, step=1, label="Batch Size", value=1, elem_id="img2img_batch_size")
+                                batch_size.do_not_save_to_config = True
 
                     elif category == "override_settings":
                         with FormRow(elem_id="img2img_override_settings_row") as row:
@@ -797,7 +799,7 @@ def create_ui():
 
             steps = scripts.scripts_img2img.script("Sampler").steps
 
-            no_config(width, height, cfg_scale, distilled_cfg_scale, batch_size)
+            no_config(width, height, cfg_scale, distilled_cfg_scale)
 
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_token_counter), inputs=[toprow.prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.token_counter])
             toprow.ui_styles.dropdown.change(fn=wrap_queued_call(update_negative_prompt_token_counter), inputs=[toprow.negative_prompt, steps, toprow.ui_styles.dropdown], outputs=[toprow.negative_token_counter])
