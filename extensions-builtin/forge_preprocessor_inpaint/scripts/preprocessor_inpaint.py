@@ -10,6 +10,7 @@ import cv2
 import einops
 import numpy as np
 import torch
+import torch.nn.functional as F
 import yaml
 from omegaconf import OmegaConf
 
@@ -55,7 +56,7 @@ class PreprocessorInpaintOnly(PreprocessorInpaint):
         latent_image = vae.encode(self.image.movedim(1, -1))
         latent_image = process.sd_model.forge_objects.vae.first_stage_model.process_in(latent_image)
 
-        _, _, H, W = latent_image.shape
+        *_, H, W = latent_image.shape
 
         latent_mask = self.mask
         latent_mask = torch.nn.functional.interpolate(latent_mask, size=(H * 8, W * 8), mode="bilinear").round()
@@ -96,6 +97,10 @@ class PreprocessorInpaintOnly(PreprocessorInpaint):
             mask = torch.from_numpy(np.ascontiguousarray(mask).copy()).to(img).clip(0, 1)
             raw = self.image[0].to(img).clip(0, 1)
             img = img.clip(0, 1)
+
+            if img.shape != mask.shape:  # Interrupted
+                img = F.interpolate(img.unsqueeze(0), size=(mask.shape[1], mask.shape[2]), mode="nearest").squeeze(0)
+
             new_results.append(raw * (1.0 - mask) + img * mask)
 
         a1111_batch_result.images = new_results

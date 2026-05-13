@@ -1,4 +1,9 @@
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules_forge.supported_controlnet import ControlModelPatcher
+    from modules_forge.supported_preprocessor import Preprocessor
 
 from backend import utils
 from modules.paths_internal import models_path, normalized_filepath, parser
@@ -34,19 +39,19 @@ os.makedirs(preprocessor_dir, exist_ok=True)
 diffusers_dir: str = os.path.join(models_path, "diffusers")
 os.makedirs(diffusers_dir, exist_ok=True)
 
-supported_preprocessors = {}
-supported_control_models = []
+supported_preprocessors: dict[str, "Preprocessor"] = {}
+supported_control_models: list["ControlModelPatcher"] = []
 
 
-def add_supported_preprocessor(preprocessor):
+def add_supported_preprocessor(preprocessor: "Preprocessor"):
     supported_preprocessors[preprocessor.name] = preprocessor
 
 
-def add_supported_control_model(control_model):
+def add_supported_control_model(control_model: "ControlModelPatcher"):
     supported_control_models.append(control_model)
 
 
-def try_load_supported_control_model(ckpt_path):
+def try_load_supported_control_model(ckpt_path: os.PathLike):
     state_dict = utils.load_torch_file(ckpt_path, safe_load=True)
     for supported_type in supported_control_models:
         state_dict_copy = {k: v for k, v in state_dict.items()}
