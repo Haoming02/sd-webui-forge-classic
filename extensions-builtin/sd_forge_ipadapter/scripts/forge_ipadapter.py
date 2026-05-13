@@ -110,7 +110,7 @@ add_supported_preprocessor(PreprocessorInsightFaceForInstantID(
 
 class IPAdapterPatcher(ControlModelPatcher):
     @staticmethod
-    def try_build_from_state_dict(state_dict, ckpt_path, metadata=None):
+    def try_build_from_state_dict(state_dict, ckpt_path):
         model = state_dict
 
         if ckpt_path.lower().endswith(".safetensors"):

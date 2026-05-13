@@ -13,12 +13,13 @@ from modules_forge.supported_controlnet import ControlModelPatcher
 
 
 class ControlLLLiteAnimaPatcher(ControlModelPatcher):
+    _metadata = True
+
     @staticmethod
-    def try_build_from_state_dict(state_dict, ckpt_path, metadata=None):
+    def try_build_from_state_dict(state_dict, ckpt_path, metadata):
         if not any(k.startswith("lllite_dit") for k in state_dict):
             return None
-        meta = metadata or {}
-        inpaint_masked_input = meta.get("lllite.inpaint_masked_input", "false").lower() in ("true", "1", "yes")
+        inpaint_masked_input: bool = (metadata or {}).get("lllite.inpaint_masked_input", None) == "true"
         return ControlLLLiteAnimaPatcher(state_dict, inpaint_masked_input=inpaint_masked_input)
 
     def __init__(self, state_dict, inpaint_masked_input: bool = False):
@@ -44,7 +45,7 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
             if isinstance(mask, torch.Tensor):
                 inpaint_mask = mask.to(device=cond_image.device, dtype=cond_image.dtype)
                 if inpaint_mask.shape[-2:] != (h, w):
-                    inpaint_mask = F.interpolate(inpaint_mask, size=(h, w), mode='nearest')
+                    inpaint_mask = F.interpolate(inpaint_mask, size=(h, w), mode="nearest")
             else:
                 inpaint_mask = torch.zeros(b, 1, h, w, device=cond_image.device, dtype=cond_image.dtype)
             if self.inpaint_masked_input:
@@ -64,7 +65,7 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
 
 class ControlLLLitePatcher(ControlModelPatcher):
     @staticmethod
-    def try_build_from_state_dict(state_dict, ckpt_path, metadata=None):
+    def try_build_from_state_dict(state_dict, ckpt_path):
         if not any(k.startswith("lllite") for k in state_dict):
             return None
         return ControlLLLitePatcher(state_dict)

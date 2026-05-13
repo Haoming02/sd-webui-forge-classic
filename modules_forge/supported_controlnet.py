@@ -1,4 +1,5 @@
 import os
+from abc import abstractmethod
 from collections import OrderedDict
 
 import torch
@@ -45,10 +46,12 @@ _CONTROL_MODEL_CACHE = ModelCache()
 
 
 class ControlModelPatcher:
+    _metadata: bool = False
 
     @staticmethod
-    def try_build_from_state_dict(state_dict, ckpt_path, metadata=None):
-        return None
+    @abstractmethod
+    def try_build_from_state_dict(state_dict, ckpt_path):
+        raise NotImplementedError
 
     def __init__(self, model_patcher=None):
         self.model_patcher = model_patcher
@@ -77,7 +80,7 @@ class ControlNetPatcher(ControlModelPatcher):
         super().__init__(model_patcher)
 
     @staticmethod
-    def try_build_from_state_dict(controlnet_data: dict[str, torch.Tensor], ckpt_path, metadata=None):
+    def try_build_from_state_dict(controlnet_data: dict[str, torch.Tensor], ckpt_path):
         if "lora_controlnet" in controlnet_data:
             return ControlNetPatcher(ControlLora(controlnet_data))
 
