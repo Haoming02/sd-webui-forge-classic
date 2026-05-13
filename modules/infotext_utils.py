@@ -20,6 +20,7 @@ from modules import (
 )
 from modules.paths import data_path
 from modules_forge import main_entry
+from backend.text_processing.emphasis import uses_emphasis
 
 re_param_code = r'\s*([\w\s\-\/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
@@ -351,9 +352,7 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
 
     _populate_defaults(res)
 
-    prompt_attention = prompt_parser.parse_prompt_attention(prompt)
-    prompt_attention += prompt_parser.parse_prompt_attention(negative_prompt)
-    prompt_uses_emphasis = len(prompt_attention) != len([p for p in prompt_attention if p[1] == 1.0 or p[0] == "BREAK"])
+    prompt_uses_emphasis: bool = uses_emphasis(prompt) or uses_emphasis(negative_prompt)
     if prompt_uses_emphasis and "Emphasis" not in res:
         res["Emphasis"] = "Original"
 

@@ -4,12 +4,12 @@ from collections import namedtuple
 import torch
 
 from backend import memory_management
+from backend.args import dynamic_args
 from backend.text_processing import emphasis, parsing
 from backend.text_processing.textual_inversion import EmbeddingDatabase
 from modules.shared import opts
 
 PromptChunkFix = namedtuple("PromptChunkFix", ["offset", "embedding"])
-last_extra_generation_params = {}
 
 
 class PromptChunk:
@@ -63,7 +63,6 @@ class ClassicTextProcessingEngine:
 
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         self.text_projection = text_projection
         self.minimal_clip_skip = minimal_clip_skip
@@ -227,6 +226,8 @@ class ClassicTextProcessingEngine:
 
     def __call__(self, texts):
         self.emphasis = emphasis.get_current_option(opts.emphasis)()
+        if any(emphasis.uses_emphasis(x) for x in texts):
+            dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
 
         batch_chunks, token_count = self.process_texts(texts)
 
@@ -248,8 +249,6 @@ class ClassicTextProcessingEngine:
             z = self.process_tokens(tokens, multipliers)
             zs.append(z)
 
-        global last_extra_generation_params
-
         if used_embeddings:
             names = []
 
@@ -257,13 +256,10 @@ class ClassicTextProcessingEngine:
                 print(f"[Textual Inversion] Used Embedding [{name}] in CLIP of [{self.embedding_key}]")
                 names.append(name.replace(":", "").replace(",", ""))
 
-            if "TI" in last_extra_generation_params:
-                last_extra_generation_params["TI"] += ", " + ", ".join(names)
+            if (prev := dynamic_args.last_extra_generation_params.get("TI", None)) is None:
+                dynamic_args.last_extra_generation_params["TI"] = ", ".join(names)
             else:
-                last_extra_generation_params["TI"] = ", ".join(names)
-
-        if any(x for x in texts if "(" in x or "[" in x) and self.emphasis.name != "Original":
-            last_extra_generation_params["Emphasis"] = self.emphasis.name
+                dynamic_args.last_extra_generation_params["TI"] = ", ".join([prev] + names)
 
         if self.return_pooled:
             return torch.hstack(zs), zs[0].pooled

@@ -4,8 +4,8 @@
 import torch
 
 from backend import memory_management
+from backend.args import dynamic_args
 from backend.text_processing import emphasis, parsing
-from modules.shared import opts
 
 
 class PromptChunk:
@@ -36,8 +36,7 @@ class Ministral3TextProcessingEngine:
         return self.text_encoder(input_ids=tokens)
 
     def tokenize_line(self, line: str):
-        # https://github.com/Comfy-Org/ComfyUI/blob/v0.19.1/comfy/text_encoders/ernie.py#L14
-        parsed = parsing.parse_prompt_attention(line, "None")
+        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
         tokenized = self.tokenize([text for text, _ in parsed])
 
         chunks = []
@@ -63,10 +62,13 @@ class Ministral3TextProcessingEngine:
         return chunks
 
     def __call__(self, texts):
+        # https://github.com/Comfy-Org/ComfyUI/blob/v0.19.1/comfy/text_encoders/ernie.py#L14
+        self.emphasis = emphasis.EmphasisNone()
+        if any(emphasis.uses_emphasis(x) for x in texts):
+            dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
+
         zs = []
         cache = {}
-
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         for line in texts:
             if line in cache:
@@ -123,12 +125,6 @@ class Ministral3TextProcessingEngine:
     def process_tokens(self, batch_tokens, batch_multipliers):
         embeds, mask, count = self.process_embeds(batch_tokens)
 
-        self.emphasis.tokens = batch_tokens
-        self.emphasis.multipliers = torch.asarray(batch_multipliers).to(embeds)
-        self.emphasis.z = embeds
-        self.emphasis.after_transformers()
-        embeds = self.emphasis.z
-
         _, z = self.text_encoder(
             None,
             attention_mask=mask,
@@ -137,4 +133,5 @@ class Ministral3TextProcessingEngine:
             intermediate_output=self.intermediate_output,
             final_layer_norm_intermediate=self.layer_norm_hidden_state,
         )
+
         return z

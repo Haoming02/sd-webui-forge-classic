@@ -458,7 +458,7 @@ class StableDiffusionProcessing:
         shared.sd_model.extra_generation_params.update(last_extra_generation_params)
 
         if len(cache) > 2:
-            cache[2] = last_extra_generation_params
+            cache[2] = last_extra_generation_params.copy()
 
         args.dynamic_args.last_extra_generation_params.clear()
 
