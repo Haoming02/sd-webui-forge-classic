@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-
 from lib_controllllite.lib_controllllite import LLLiteLoader
 from lib_controllllite.lib_controllllite_anima import (
     ControlNetLLLiteDiT,
@@ -8,17 +7,18 @@ from lib_controllllite.lib_controllllite_anima import (
     load_lllite_weights_from_dict,
 )
 
+from backend.utils import load_torch_file
 from modules_forge.shared import add_supported_control_model
 from modules_forge.supported_controlnet import ControlModelPatcher
 
 
 class ControlLLLiteAnimaPatcher(ControlModelPatcher):
-    _metadata = True
 
     @staticmethod
-    def try_build_from_state_dict(state_dict, ckpt_path, metadata):
+    def try_build_from_state_dict(state_dict, ckpt_path):
         if not any(k.startswith("lllite_dit") for k in state_dict):
             return None
+        _, metadata = load_torch_file(ckpt_path, return_metadata=True)
         inpaint_masked_input: bool = (metadata or {}).get("lllite.inpaint_masked_input", None) == "true"
         return ControlLLLiteAnimaPatcher(state_dict, inpaint_masked_input=inpaint_masked_input)
 

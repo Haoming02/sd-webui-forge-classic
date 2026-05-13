@@ -1,8 +1,4 @@
 import os
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from modules_forge.supported_controlnet import ControlModelPatcher
 
 from backend import utils
 from modules.paths_internal import models_path, normalized_filepath, parser
@@ -39,7 +35,7 @@ diffusers_dir: str = os.path.join(models_path, "diffusers")
 os.makedirs(diffusers_dir, exist_ok=True)
 
 supported_preprocessors = {}
-supported_control_models: list["ControlModelPatcher"] = []
+supported_control_models = []
 
 
 def add_supported_preprocessor(preprocessor):
@@ -51,11 +47,10 @@ def add_supported_control_model(control_model):
 
 
 def try_load_supported_control_model(ckpt_path: os.PathLike):
-    state_dict, metadata = utils.load_torch_file(ckpt_path, safe_load=True, return_metadata=True)
+    state_dict = utils.load_torch_file(ckpt_path, safe_load=True)
     for supported_type in supported_control_models:
         state_dict_copy = {k: v for k, v in state_dict.items()}
-        args = [state_dict_copy, ckpt_path] + ([metadata] if supported_type._metadata else [])
-        model = supported_type.try_build_from_state_dict(*args)
+        model = supported_type.try_build_from_state_dict(state_dict_copy, ckpt_path)
         if model is not None:
             return model
 

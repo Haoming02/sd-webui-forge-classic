@@ -1,5 +1,4 @@
 import os
-from abc import abstractmethod
 from collections import OrderedDict
 
 import torch
@@ -46,12 +45,10 @@ _CONTROL_MODEL_CACHE = ModelCache()
 
 
 class ControlModelPatcher:
-    _metadata: bool = False
 
     @staticmethod
-    @abstractmethod
     def try_build_from_state_dict(state_dict, ckpt_path):
-        raise NotImplementedError
+        return None
 
     def __init__(self, model_patcher=None):
         self.model_patcher = model_patcher
