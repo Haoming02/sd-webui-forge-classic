@@ -9,18 +9,10 @@ from typing import Any
 import gradio as gr
 from PIL import Image
 
-from modules import (
-    errors,
-    images,
-    processing,
-    prompt_parser,
-    script_callbacks,
-    shared,
-    ui_tempdir,
-)
+from backend.text_processing.emphasis import uses_emphasis
+from modules import errors, images, processing, script_callbacks, shared, ui_tempdir
 from modules.paths import data_path
 from modules_forge import main_entry
-from backend.text_processing.emphasis import uses_emphasis
 
 re_param_code = r'\s*([\w\s\-\/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
