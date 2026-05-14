@@ -61,6 +61,7 @@ RUN mkdir -p \
         models/Lora \
         models/ControlNet \
         extensions \
+        config \
         output
 
 # Runtime

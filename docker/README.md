@@ -37,6 +37,16 @@
 
 <hr>
 
+## Pre-built Image
+
+A pre-built image with this code is maintained on Docker Hub by [@oromis995](https://github.com/oromis995):
+
+```bash
+docker pull oromis995/sd-forge-neo:latest
+```
+
+<hr>
+
 ## Building Locally
 
 ```bash
