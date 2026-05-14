@@ -463,6 +463,8 @@ options_templates.update(
             "send_seed": OptionInfo(True, 'Send the Seed information when using the "Send to" buttons'),
             "send_cfg": OptionInfo(True, 'Send the CFG information when using the "Send to" buttons'),
             "send_size": OptionInfo(True, 'Send the Resolution information when using the "Send to" buttons'),
+            "send_image_info_not_ui": OptionInfo(False, 'Send the Parameters in the infotext instead of the UI fields when using the "Send to" buttons').info("<b>e.g.</b> send the result of Wildcards instead of the syntax").needs_reload_ui(),
+            "allow_i2i_send_info": OptionInfo(False, 'Send the Parameters too when using the "Send to" buttons in img2img tab').info("otherwise only the image is sent").needs_reload_ui(),
             "enable_reloading_ui_scripts": OptionInfo(False, 'Additionally reload the "modules.ui" scripts when using "Reload UI"').info("for developing"),
         },
     )

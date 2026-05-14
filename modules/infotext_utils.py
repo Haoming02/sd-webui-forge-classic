@@ -4,6 +4,7 @@ import json
 import os
 import re
 from ast import literal_eval
+from functools import partial
 from typing import Any
 
 import gradio as gr
@@ -70,6 +71,36 @@ def unquote(text: str) -> str:
         return json.loads(text)
     except Exception:
         return text
+
+
+def _parse_info(output: gr.components.Component, key: str, params: dict[str, Any]) -> gr.update:
+    if not callable(key):
+        v = params.get(key, None)
+    else:
+        try:
+            v = key(params)
+        except Exception:
+            errors.report(f'Error executing "{key}"', exc_info=True)
+            v = None
+
+    if v is None:
+        return gr.skip()
+    elif isinstance(v, type_of_gr_update):
+        return v
+    else:
+        try:
+            valtype = type(output.value)
+
+            if valtype == bool and v == "False":
+                val = False
+            elif valtype == int:
+                val = float(v)
+            else:
+                val = valtype(v)
+
+            return gr.update(value=val)
+        except Exception:
+            return gr.skip()
 
 
 def image_from_url_text(filedata) -> Image.Image:
@@ -166,12 +197,41 @@ def _connect_paste_params_buttons(binding: ParamBinding):
             *binding.paste_field_names,
         ]
 
-        binding.paste_button.click(
-            fn=lambda *x: x,
-            inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
-            outputs=[field for field, name in fields if name in paste_field_names],
-            show_progress=False,
-        )
+        if isinstance(binding.source_image_component, gr.Gallery) and shared.opts.send_image_info_not_ui:
+
+            def read_infotext(x: Any, paste_fields: list[tuple]) -> list[gr.update]:
+                image: Image.Image = x if isinstance(x, Image.Image) else image_from_url_text(x)
+                if image is None:
+                    return [gr.skip() for _ in paste_fields]
+
+                info, _ = images.read_info_from_image(image)
+                if not info:
+                    return [gr.skip() for _ in paste_fields]
+
+                params = parse_generation_parameters(info)
+                script_callbacks.infotext_pasted_callback(info, params)
+
+                res = []
+                for output, key in paste_fields:
+                    res.append(_parse_info(output, key, params))
+
+                return res
+
+            binding.paste_button.click(
+                fn=partial(read_infotext, paste_fields=[(field, name) for field, name in fields if name in paste_field_names]),
+                inputs=[binding.source_image_component],
+                outputs=[field for field, name in fields if name in paste_field_names],
+                js="extract_image_from_gallery",
+                show_progress=False,
+            )
+
+        else:
+            binding.paste_button.click(
+                fn=lambda *x: x,
+                inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
+                outputs=[field for field, name in fields if name in paste_field_names],
+                show_progress=False,
+            )
 
     binding.paste_button.click(fn=None, _js=f"switch_to_{binding.tabname}")
 
@@ -486,33 +546,7 @@ def connect_paste(button: gr.Button, paste_fields: list[PasteField], input_comp:
         res: list[gr.update] = []
 
         for output, key in paste_fields:
-            if not callable(key):
-                v = params.get(key, None)
-            else:
-                try:
-                    v = key(params)
-                except Exception:
-                    errors.report(f"Error executing {key}", exc_info=True)
-                    v = None
-
-            if v is None:
-                res.append(gr.skip())
-            elif isinstance(v, type_of_gr_update):
-                res.append(v)
-            else:
-                try:
-                    valtype = type(output.value)
-
-                    if valtype == bool and v == "False":
-                        val = False
-                    elif valtype == int:
-                        val = float(v)
-                    else:
-                        val = valtype(v)
-
-                    res.append(gr.update(value=val))
-                except Exception:
-                    res.append(gr.skip())
+            res.append(_parse_info(output, key, params))
 
         return res
 
