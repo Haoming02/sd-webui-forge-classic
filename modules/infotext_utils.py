@@ -223,7 +223,7 @@ def _connect_paste_params_buttons(binding: ParamBinding):
                 outputs=[field for field, name in fields if name in paste_field_names],
                 js="extract_image_from_gallery",
                 show_progress=False,
-            )
+            ).then(fn=None, _js=f"switch_to_{binding.tabname}")
 
         else:
             binding.paste_button.click(
@@ -231,9 +231,10 @@ def _connect_paste_params_buttons(binding: ParamBinding):
                 inputs=[field for field, name in paste_fields[binding.source_tabname]["fields"] if name in paste_field_names],
                 outputs=[field for field, name in fields if name in paste_field_names],
                 show_progress=False,
-            )
+            ).then(fn=None, _js=f"switch_to_{binding.tabname}")
 
-    binding.paste_button.click(fn=None, _js=f"switch_to_{binding.tabname}")
+    else:
+        binding.paste_button.click(fn=None, _js=f"switch_to_{binding.tabname}")
 
 
 def connect_paste_params_buttons():
