@@ -329,7 +329,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > For **Linux** and **macOS**, refer to [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Unix)
 
 > [!Tip]
-> For **Docker** (`Nvidia`), refer to [docker](docker/)
+> For **Docker** (`Nvidia`), refer to [Docker](docker/)
 
 <br>
 

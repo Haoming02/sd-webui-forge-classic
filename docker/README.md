@@ -31,19 +31,15 @@
 		</td>
 		<td>User-Installed Extensions</td>
 	</tr>
+	<tr>
+		<td>
+			<code>/home/forge/sd-webui/config</code>
+		</td>
+		<td>User Settings</td>
+	</tr>
 </table>
 
 - The container runs as **UID 99** / **GID 100** (`nobody:users`) to match Unraid's default share permissions
-
-<hr>
-
-## Pre-built Image
-
-A pre-built image with this code is maintained on Docker Hub by [@oromis995](https://github.com/oromis995):
-
-```bash
-docker pull oromis995/sd-forge-neo:latest
-```
 
 <hr>
 
@@ -57,7 +53,17 @@ docker build -t forge-neo-local .
 
 <hr>
 
-## Image details
+## Pre-Built Image
+
+> a non-official pre-built image is maintained on Docker Hub by [@oromis995](https://github.com/oromis995):
+
+```bash
+docker pull oromis995/sd-forge-neo:latest
+```
+
+<hr>
+
+## Image Details
 
 <table>
 	<tr>

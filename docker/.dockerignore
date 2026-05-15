@@ -1,6 +1,6 @@
-.DS_Store
 __pycache__
+.DS_Store
 data
+*.log
 *.pyc
 *.pyo
-*.log
