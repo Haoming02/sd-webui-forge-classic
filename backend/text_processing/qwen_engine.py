@@ -4,6 +4,7 @@
 import torch
 
 from backend import memory_management
+from backend.args import dynamic_args
 from backend.text_processing import emphasis, parsing
 from modules.shared import opts
 
@@ -74,10 +75,16 @@ class QwenTextProcessingEngine:
         return chunks
 
     def __call__(self, texts, images=None):
+        if images is not None:
+            self.emphasis = emphasis.EmphasisNone()
+        else:
+            self.emphasis = emphasis.get_current_option(opts.emphasis)()
+
+        if any(emphasis.uses_emphasis(x) for x in texts):
+            dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
+
         zs = []
         cache = {}
-
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         for line in texts:
             if line in cache:

@@ -449,21 +449,18 @@ class StableDiffusionProcessing:
 
         cache = caches[0]
 
-        with devices.autocast():
-            shared.sd_model.set_clip_skip(int(opts.CLIP_stop_at_last_layers))
+        shared.sd_model.set_clip_skip(int(opts.CLIP_stop_at_last_layers))
 
-            cache[1] = function(shared.sd_model, required_prompts, steps, hires_steps)
+        cache[1] = function(shared.sd_model, required_prompts, steps, hires_steps)
 
-            import backend.text_processing.classic_engine
+        last_extra_generation_params = args.dynamic_args.last_extra_generation_params
 
-            last_extra_generation_params = backend.text_processing.classic_engine.last_extra_generation_params.copy()
+        shared.sd_model.extra_generation_params.update(last_extra_generation_params)
 
-            shared.sd_model.extra_generation_params.update(last_extra_generation_params)
+        if len(cache) > 2:
+            cache[2] = last_extra_generation_params.copy()
 
-            if len(cache) > 2:
-                cache[2] = last_extra_generation_params
-
-            backend.text_processing.classic_engine.last_extra_generation_params = {}
+        args.dynamic_args.last_extra_generation_params.clear()
 
         cache[0] = cached_params
         return cache[1]
@@ -723,12 +720,11 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
 
     generation_params.update(
         {
-            "Image CFG scale": getattr(p, "image_cfg_scale", None),
             "Seed": p.all_seeds[0] if use_main_prompt else all_seeds[index],
             "Face restoration": opts.face_restoration_model if p.restore_faces else None,
             "Size": f"{p.width}x{p.height}",
-            "Model hash": p.sd_model_hash if opts.add_model_hash_to_info else None,
             "Model": p.sd_model_name if opts.add_model_name_to_info else None,
+            "Model hash": p.sd_model_hash if opts.add_model_hash_to_info else None,
         }
     )
 
@@ -744,16 +740,16 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
             "Variation seed": (None if p.subseed_strength == 0 else (p.all_subseeds[0] if use_main_prompt else all_subseeds[index])),
             "Variation seed strength": (None if p.subseed_strength == 0 else p.subseed_strength),
             "Seed resize from": (None if p.seed_resize_from_w <= 0 or p.seed_resize_from_h <= 0 else f"{p.seed_resize_from_w}x{p.seed_resize_from_h}"),
-            "Denoising strength": p.extra_generation_params.get("Denoising strength"),
+            "Denoising strength": p.extra_generation_params.pop("Denoising strength", None),
             "Conditional mask weight": getattr(p, "inpainting_mask_weight", shared.opts.inpainting_mask_weight) if p.is_using_inpainting_conditioning else None,
-            "Clip skip": None if clip_skip <= 1 else clip_skip,
+            "Clip skip": clip_skip if p.sd_model.is_sd1 else None,
             "ENSD": opts.eta_noise_seed_delta if uses_ensd else None,
             "eps_scaling_factor": opts.scaling_factor if opts.scaling_factor > 1.0 else None,
             "Token merging ratio": None if token_merging_ratio == 0 else token_merging_ratio,
             "Token merging ratio hr": None if not enable_hr or token_merging_ratio_hr == 0 else token_merging_ratio_hr,
             "Init image hash": getattr(p, "init_img_hash", None),
             "RNG": shared.opts.randn_source,
-            "Tiling": "True" if p.tiling else None,
+            "Tiling": True if p.tiling else None,
             **p.extra_generation_params,
             "Version": program_version() if opts.add_version_to_infotext else None,
             "User": p.user if opts.add_user_name_to_info else None,

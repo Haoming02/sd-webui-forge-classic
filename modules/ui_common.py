@@ -283,7 +283,7 @@ def create_output_panel(tabname, outdir, toprow=None):
                     parameters_copypaste.ParamBinding(
                         paste_button=paste_button,
                         tabname=paste_tabname,
-                        source_tabname="txt2img" if tabname == "txt2img" else None,
+                        source_tabname=tabname if (tabname == "txt2img" or (tabname == "img2img" and shared.opts.allow_i2i_send_info)) else None,
                         source_image_component=res.gallery,
                         paste_field_names=paste_field_names,
                     )
