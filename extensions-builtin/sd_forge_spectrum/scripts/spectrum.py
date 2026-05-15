@@ -1,9 +1,12 @@
 import gradio as gr
 from lib_spectrum.forecaster import SpectrumNode
+from lib_spectrum.presets import PresetManager
 
 from modules import scripts, shared
 from modules.infotext_utils import PasteField
 from modules.ui_components import InputAccordion
+
+PresetManager.load_presets()
 
 
 class SpectrumForForge(scripts.Script):
@@ -77,6 +80,42 @@ class SpectrumForForge(scripts.Script):
                     info="Run the full model for the last few steps",
                 )
 
+            with gr.Accordion("Presets", open=False):
+                _preset = gr.Dropdown(
+                    value=None,
+                    label="Preset Name",
+                    chois=PresetManager.list_preset(),
+                    allow_custom_value=True,
+                )
+                with gr.Row():
+                    _load = gr.Button("Apply Preset", variant="secondary")
+                    _save = gr.Button("Save Preset", variant="primary")
+                    _del = gr.Button("Delete Preset", variant="stop")
+
+                for comp in (_preset, _load, _save, _del):
+                    comp.do_not_save_to_config = True
+
+                args = (w, m, lam, window_size, flex_window, warmup_steps, stop_caching_step)
+
+                _load.click(
+                    fn=lambda name: PresetManager.get_preset(name),
+                    inputs=[_preset],
+                    outputs=[*args],
+                    queue=False,
+                )
+                _save.click(
+                    fn=lambda *args: PresetManager.save_preset(*args),
+                    inputs=[_preset, *args],
+                    outputs=[_preset],
+                    queue=False,
+                )
+                _del.click(
+                    fn=lambda name: PresetManager.delete_preset(name),
+                    inputs=[_preset],
+                    outputs=[_preset],
+                    queue=False,
+                )
+
         self.infotext_fields = [
             PasteField(w, "spec_w"),
             PasteField(m, "spec_m"),
@@ -86,6 +125,7 @@ class SpectrumForForge(scripts.Script):
             PasteField(warmup_steps, "spec_warmup_steps"),
             PasteField(stop_caching_step, "spec_stop_caching_step"),
         ]
+        self.paste_field_names = [field.label for field in self.infotext_fields]
 
         return [enable, w, m, lam, window_size, flex_window, warmup_steps, stop_caching_step]
 
