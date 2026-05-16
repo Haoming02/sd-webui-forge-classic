@@ -265,9 +265,16 @@ class SdModelData:
 model_data = SdModelData()
 
 
-def unload_model_weights(sd_model=None, info=None):
+def unload_model_weights(*args, **kwargs):
     memory_management.unload_all_models()
-    return
+
+    del model_data.sd_model
+
+    model_data.sd_model = FakeInitialModel()
+    model_data.forge_hash = ""
+
+    memory_management.soft_empty_cache()
+    gc.collect()
 
 
 def list_loaded_weights():
@@ -344,7 +351,6 @@ def forge_model_reload():
         sd_model = forge_loader(state_dict, additional_state_dicts=additional_state_dicts)
     except Exception as e:
         model_data.sd_model = FakeInitialModel()
-        model_data.forge_loading_parameters = {}
         model_data.forge_hash = ""
         errors.display(e, "forge_loader")
         memory_management.logger.error("Failed to load diffusion model... (check README for supported models)")
