@@ -404,7 +404,7 @@ class ForgeOperationsInt8(ForgeOperations):
             self.compute_dtype = torch.bfloat16
             self.lora_patches = []  # List of (down_scaled, up, start, size) set by INT8ModelPatcher
 
-            self.parameters_manual_cast = True
+            self.parameters_manual_cast = current_dtype != self.compute_dtype
 
         def reset_parameters(self):
             return None
