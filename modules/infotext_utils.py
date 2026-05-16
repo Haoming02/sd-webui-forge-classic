@@ -319,7 +319,7 @@ def _populate_defaults(res: dict):
         res["Sampler"] = "Euler"
 
     if "Schedule type" not in res:
-        res["Schedule type"] = "Automatic"
+        res["Schedule type"] = "Simple"
 
     if "RNG" not in res:
         res["RNG"] = "CPU"
@@ -379,12 +379,15 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     prompt: str = "\n".join(_prompts)
     negative_prompt: str = "\n".join(_negative_prompts)
 
-    if "flux" in lastline.lower():  # CivitAI
+    # region CivitAI
+    if "flux" in lastline.lower():
         m = re.search(re_cfg, lastline)
         if m and float(m.group(1)) > 1.0:
             lastline = lastline.replace("CFG scale: ", "CFG scale: 1.0, Distilled CFG Scale: ")
 
     lastline = lastline.replace("Sampler: Undefined,", "Sampler: Euler, Schedule type: Simple,")
+    lastline = lastline.replace(", width:", ", Size-1:").replace(", height:", ", Size-2:")
+    # endregion
 
     res: dict[str, Any] = {}
 
