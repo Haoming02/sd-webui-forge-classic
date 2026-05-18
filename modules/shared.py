@@ -9,7 +9,8 @@ from modules import options, shared_cmd_options, shared_gradio_themes, shared_it
 from modules.paths_internal import data_path, extensions_builtin_dir, extensions_dir, models_path, script_path  # noqa: F401
 
 if TYPE_CHECKING:
-    from modules import memmon, shared_state, shared_total_tqdm, styles
+    from backend.diffusion_engine.base import ForgeDiffusionEngine
+    from modules import face_restoration, memmon, shared_state, shared_total_tqdm, styles, upscaler
 
 cmd_opts = shared_cmd_options.cmd_opts
 parser = shared_cmd_options.parser
@@ -30,18 +31,18 @@ state: "shared_state.State" = None
 
 prompt_styles: "styles.StyleDatabase" = None
 
-face_restorers = []
+face_restorers: list["face_restoration.FaceRestoration"] = []
 
 options_templates: dict = None
 opts: options.Options = None
 restricted_opts: set[str] = None
 
-sd_model = None
+sd_model: "ForgeDiffusionEngine" = None
 
 settings_components: dict = None
 """assigned from ui.py, a mapping on setting names to gradio components responsible for those settings"""
 
-tab_names = []
+tab_names: list[str] = []
 
 latent_upscale_default_mode = "Latent"
 latent_upscale_modes = {
@@ -53,9 +54,7 @@ latent_upscale_modes = {
     "Latent (nearest-exact)": {"mode": "nearest-exact", "antialias": False},
 }
 
-sd_upscalers = []
-
-clip_model = None
+sd_upscalers: list["upscaler.Upscaler"] = []
 
 progress_print_out = sys.stdout
 
