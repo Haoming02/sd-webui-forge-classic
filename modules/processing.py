@@ -1833,7 +1833,11 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
         devices.torch_gc()
 
         if self.resize_mode == 3:
+            if _5d := (self.init_latent.ndim == 5):
+                self.init_latent = self.init_latent.squeeze(2)
             self.init_latent = torch.nn.functional.interpolate(self.init_latent, size=(self.height // opt_f, self.width // opt_f), mode="bilinear")
+            if _5d:
+                self.init_latent = self.init_latent.unsqueeze(2)
 
         if image_mask is not None:
             init_mask = latent_mask
