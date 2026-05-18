@@ -31,6 +31,8 @@ def process_anima(lora: dict[str, torch.Tensor]):
     for k in keys:
         if k.startswith("diffusion_model.llm_adapter"):
             lora[k.replace("diffusion_model", "text_encoders.qwen3_06b")] = lora.pop(k)
+        elif k.startswith("lora_unet_llm_adapter"):
+            lora[k.replace("lora_unet_llm_adapter", "lora_te_llm_adapter")] = lora.pop(k)
 
 
 def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, torch.Tensor], strength_model: float, strength_clip: float, filename: str = "default", online_mode: bool = False):
