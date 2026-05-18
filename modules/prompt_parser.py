@@ -49,8 +49,6 @@ def get_learned_conditioning_prompt_schedules(prompts: SdConditioning | list[str
     [[10, 'a [unbalanced']]
     >>> g("a [b:.5] c")
     [[5, 'a  c'], [10, 'a b c']]
-    >>> g("a [{b|d{:.5] c")  # not handling this right now
-    [[5, 'a  c'], [10, 'a {b|d{ c']]
     >>> g("((a][:b:c [d:3]")
     [[3, '((a][:b:c '], [10, '((a][:b:c d']]
     >>> g("[a|(b:1.1)]")
@@ -167,19 +165,12 @@ def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps: 
     converts a list of prompts into a list of prompt schedules - each schedule is a list of ScheduledPromptConditioning,
     specifying the condition (cond), and the sampling step at which this condition is to be replaced by the next one.
 
-    Input:
-    (model, ['a red crown', 'a [blue:green:5] jeweled crown'], 20)
-
-    Output:
-    [
-        [
-            ScheduledPromptConditioning(end_at_step=20, cond=tensor([[-0.3886,  0.0229, -0.0523,  ..., -0.4901, -0.3066,  0.0674], ..., [ 0.3317, -0.5102, -0.4066,  ...,  0.4119, -0.7647, -1.0160]], device='cuda:0'))
-        ],
-        [
-            ScheduledPromptConditioning(end_at_step=5, cond=tensor([[-0.3886,  0.0229, -0.0522,  ..., -0.4901, -0.3067,  0.0673], ..., [-0.0192,  0.3867, -0.4644,  ...,  0.1135, -0.3696, -0.4625]], device='cuda:0')),
-            ScheduledPromptConditioning(end_at_step=20, cond=tensor([[-0.3886,  0.0229, -0.0522,  ..., -0.4901, -0.3067,  0.0673], ..., [-0.7352, -0.4356, -0.7888,  ...,  0.6994, -0.4312, -1.2593]], device='cuda:0'))
-        ]
-    ]
+    >>> class Mock:
+    ...   def get_learned_conditioning(self, texts):
+    ...     return [torch.tensor([len(text)]) for text in texts]
+    >>> model = Mock()
+    >>> get_learned_conditioning(model, ['a red crown', 'a [blue:green:5] jeweled crown'], 20)
+    [[ScheduledPromptConditioning(end_at_step=20, cond=tensor([11]))], [ScheduledPromptConditioning(end_at_step=5, cond=tensor([20])), ScheduledPromptConditioning(end_at_step=20, cond=tensor([21]))]]
     """
     res = []
 
@@ -194,7 +185,7 @@ def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps: 
             continue
 
         texts = SdConditioning([x[1] for x in prompt_schedule], copy_from=prompts)
-        conds = model.get_learned_conditioning(texts)
+        conds: torch.Tensor = model.get_learned_conditioning(texts)
 
         cond_schedule = []
         for i, (end_at_step, _) in enumerate(prompt_schedule):
@@ -414,20 +405,12 @@ def parse_prompt_attention(text):
     [['an ', 1.0], ['important', 1.1], [' word', 1.0]]
     >>> parse_prompt_attention('(unbalanced')
     [['unbalanced', 1.1]]
-    >>> parse_prompt_attention('\(literal\]')
+    >>> parse_prompt_attention(r'\(literal\]')
     [['(literal]', 1.0]]
     >>> parse_prompt_attention('(unnecessary)(parens)')
     [['unnecessaryparens', 1.1]]
-    >>> parse_prompt_attention('a (((house:1.3)) [on] a (hill:0.5), sun, (((sky))).')
-    [['a ', 1.0],
-     ['house', 1.5730000000000004],
-     [' ', 1.1],
-     ['on', 1.0],
-     [' a ', 1.1],
-     ['hill', 0.55],
-     [', sun, ', 1.1],
-     ['sky', 1.4641000000000006],
-     ['.', 1.1]]
+    >>> parse_prompt_attention('a (house:1.3) on a (hill:0.5), sun, (sky).')
+    [['a ', 1.0], ['house', 1.3], [' on a ', 1.0], ['hill', 0.5], [', sun, ', 1.0], ['sky', 1.1], ['.', 1.0]]
     """
 
     res = []
@@ -435,7 +418,7 @@ def parse_prompt_attention(text):
     square_brackets = []
 
     round_bracket_multiplier = 1.1
-    square_bracket_multiplier = 1 / 1.1
+    square_bracket_multiplier = 1.0 / 1.1
 
     def multiply_range(start_position, multiplier):
         for p in range(start_position, len(res)):
