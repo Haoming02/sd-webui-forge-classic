@@ -743,7 +743,7 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
             "Variation seed": (None if p.subseed_strength == 0 else (p.all_subseeds[0] if use_main_prompt else all_subseeds[index])),
             "Variation seed strength": (None if p.subseed_strength == 0 else p.subseed_strength),
             "Seed resize from": (None if p.seed_resize_from_w <= 0 or p.seed_resize_from_h <= 0 else f"{p.seed_resize_from_w}x{p.seed_resize_from_h}"),
-            "Denoising strength": p.extra_generation_params.pop("Denoising strength", None),
+            "Denoising strength": p.extra_generation_params.get("Denoising strength", None),
             "Conditional mask weight": getattr(p, "inpainting_mask_weight", shared.opts.inpainting_mask_weight) if p.is_using_inpainting_conditioning else None,
             "Clip skip": clip_skip if p.sd_model.is_sd1 else None,
             "ENSD": opts.eta_noise_seed_delta if uses_ensd else None,
