@@ -911,7 +911,7 @@ def fix_png_transparency(image: Image.Image):
     return image
 
 
-def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = "", audio_copy: os.PathLike = None) -> str:
+def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = None, audio_copy: os.PathLike = None) -> str:
     height, width, channels = frames[0].shape
     assert channels == 3, "Frames must be in (H, W, 3) RGB format"
 
@@ -1001,5 +1001,10 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
         proc.stdin.write(frame.tobytes())
     proc.stdin.close()
     proc.wait()
+
+    if opts.save_txt and info is not None:
+        txt_fullfn = os.path.join(folder, f"{file_decoration}.txt")
+        with open(txt_fullfn, "w", encoding="utf8") as file:
+            file.write(f"{info}\n")
 
     return fullfn
