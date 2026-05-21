@@ -396,6 +396,41 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
+## Multilingual UI
+
+A **language selector** sits in the top-right of the quicksettings row
+(next to **UI Preset** / **Checkpoint** / **VAE**). Switching languages
+reloads the UI automatically and persists the choice through
+`shared.opts.localization`.
+
+| Locale | Flag | Status |
+|---|---|---|
+| English | 🇬🇧 | source language |
+| Italiano (`it_IT`) | 🇮🇹 | full translation |
+| Español (`es_ES`) | 🇪🇸 | full translation |
+| Français (`fr_FR`) | 🇫🇷 | full translation |
+| Deutsch (`de_DE`) | 🇩🇪 | full translation |
+| 简体中文 (`zh_CN`) | 🇨🇳 | full translation |
+| 日本語 (`ja_JP`) | 🇯🇵 | full translation |
+
+Each entry shows an inline-SVG flag next to its autoglottonym so the
+icons render identically across browsers without depending on Unicode
+regional-indicator emoji font support.
+
+Stable Diffusion technical vocabulary (CFG, VAE, LoRA, UNet, SDXL,
+ControlNet, Hires, Sampler, Scheduler, Seed, sigma, Karras, txt2img,
+img2img, infotext, Flux, Wan, Lumina, …) is kept in English across
+every locale, matching international community usage.
+
+See [`TRANSLATIONS.md`](TRANSLATIONS.md) for the contributor workflow:
+how to fix a string, complete a partial locale, or add a brand-new
+language. The underlying i18n machinery (`localization.list_localizations`,
+the `webui_tooltip` config field, `javascript/localization.js`) is the
+existing upstream system — this contribution only seeds the dictionaries
+and adds the in-UI dropdown.
+
+<br>
+
 <p align="center">
 Special thanks to <b>AUTOMATIC1111</b>, <b>lllyasviel</b>, and <b>comfyanonymous</b>, <b>kijai</b>, <b>city96</b>, <br>
 along with the rest of the contributors, <br>
