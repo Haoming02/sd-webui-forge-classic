@@ -84,7 +84,7 @@ class SpectrumForForge(scripts.Script):
                 _preset = gr.Dropdown(
                     value=None,
                     label="Preset Name",
-                    chois=PresetManager.list_preset(),
+                    choices=PresetManager.list_preset(),
                     allow_custom_value=True,
                 )
                 with gr.Row():
