@@ -1,8 +1,9 @@
 if __name__ == "__main__":
     raise SystemError("Call launch.py instead")
 
+import os, sys
+sys.path.insert(0, os.path.dirname(__file__))
 
-import os
 import time
 from threading import Thread
 
