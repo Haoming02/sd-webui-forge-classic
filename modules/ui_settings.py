@@ -300,6 +300,7 @@ class UiSettings:
                 for _i, k, _item in sorted(self.quicksettings_list, key=lambda x: self.quicksettings_names.get(x[1], x[0])):
                     component = create_setting_component(k, is_quicksettings=True)
                     self.component_dict[k] = component
+                main_entry.make_language_selector_ui()
         return quicksettings_row
 
     def add_functionality(self, demo):
