@@ -487,6 +487,9 @@ class ControlNetForForgeOfficial(scripts.Script):
 
     @torch.no_grad()
     def process(self, p, *args, **kwargs):
+        if getattr(p, "control_net_disabled", False):
+            return
+
         self.current_params = {}
         enabled_units = self.get_enabled_units(args)
         Infotext.write_infotext(enabled_units, p)
