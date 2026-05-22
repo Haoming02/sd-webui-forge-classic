@@ -421,7 +421,7 @@ def parse_generation_parameters(x: str, skip_fields: list[str] | None = None):
     if "sd_model_name" in res:
         res["Model"] = res.pop("sd_model_name")
 
-    if res["Model"] == os.path.splitext(shared.opts.sd_model_checkpoint)[0]:
+    if res.get("Model", None) == os.path.splitext(shared.opts.sd_model_checkpoint)[0]:
         res.pop("Model", None)
 
     for key in [*skip_fields, "Clip skip", "CLIP_stop_at_last_layers"]:
