@@ -228,7 +228,7 @@ class ControlNetUiGroup:
 
             with gr.Row(elem_classes=["cnet-image-row"], equal_height=True):
                 with gr.Group(elem_classes=["cnet-input-image-group"]):
-                    self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], height=384, contrast_scribbles=True, numpy=True)
+                    self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], height=384, contrast_scribbles=shared.opts.img2img_inpaint_mask_high_contrast, scribble_color=shared.opts.img2img_inpaint_mask_brush_color, scribble_color_fixed=True, scribble_alpha=shared.opts.img2img_inpaint_mask_scribble_alpha, scribble_alpha_fixed=True, scribble_softness_fixed=True, numpy=True)
                     self.openpose_editor.render_upload()
 
                 with gr.Group(visible=False, elem_classes=["cnet-generated-image-group"]) as self.generated_image_group:
@@ -237,10 +237,24 @@ class ControlNetUiGroup:
                     with gr.Group(elem_classes=["cnet-generated-image-control-group"]):
                         self.openpose_editor.render_edit()
                         preview_check_elem_id = f"{elem_id_tabname}_{tabname}_controlnet_preprocessor_preview_checkbox"
+                        preview_download_button_js = f"""
+                            const image = document.querySelector('#{elem_id_tabname}_{tabname}_generated_image img.forge-image');
+                            const src = image.getAttribute('src');
+                            if (!src || !image.complete || image.naturalWidth === 0) return;
+
+                            const a = document.createElement('a');
+                            a.href = src; a.download = 'preview.jpg';
+
+                            document.body.appendChild(a);
+                            a.click(); a.remove();
+                        """
                         preview_close_button_js = f"document.querySelector('#{preview_check_elem_id} input[type=\\'checkbox\\']').click();"
                         gr.HTML(
-                            value=f"""<a title="Close Preview" onclick="{preview_close_button_js}">Close</a>""",
-                            visible=True,
+                            value=f'<a title="Download Preview" onclick="{preview_download_button_js}">Download</a>',
+                            elem_classes=["cnet-download-preview"],
+                        )
+                        gr.HTML(
+                            value=f'<a title="Close Preview" onclick="{preview_close_button_js}">Close</a>',
                             elem_classes=["cnet-close-preview"],
                         )
 

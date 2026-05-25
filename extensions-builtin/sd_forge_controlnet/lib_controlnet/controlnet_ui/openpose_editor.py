@@ -24,8 +24,6 @@ def encode_data_url(json_string: str) -> str:
 
 
 class OpenposeEditor:
-    # Filename used when user click the download link
-    download_file = "pose.json"
 
     def __init__(self) -> None:
         self.render_button = None
@@ -42,15 +40,21 @@ class OpenposeEditor:
         self.pose_input = gr.Textbox(visible=False, elem_classes=["cnet-pose-json"])
         # The button to download the pose json.
         self.download_link = gr.HTML(
-            value=f'<a href="" download="{OpenposeEditor.download_file}">JSON</a>',
+            value=f'<a href="" download="">JSON</a>',
             visible=False,
             elem_classes=["cnet-download-pose"],
         )
 
     def render_upload(self):
         """Renders the button in input image control button group."""
+
+        upload_button_js = 'this.querySelector("input").click()'
         self.upload_link = gr.HTML(
-            value='<label>Upload JSON</label><input type="file" accept=".json"/>',
+            value=f"""
+            <a title="Upload an OpenPose .json" onclick="{upload_button_js}">
+            Upload JSON <input type="file" accept=".json"/>
+            </a>
+            """,
             visible=False,
             elem_classes=["cnet-upload-pose"],
         )
@@ -98,9 +102,9 @@ class OpenposeEditor:
         )
 
         def update_upload_link(model: str) -> dict:
-            return gr.update(visible=("openpose" in model.lower()))
+            return gr.update(visible=(any(key in model.lower() for key in ("openpose", "union", "promax", "unicontrol"))))
 
-        model.change(fn=update_upload_link, inputs=[model], outputs=[self.upload_link])
+        model.change(fn=update_upload_link, inputs=[model], outputs=[self.upload_link], queue=False)
 
     def outputs(self) -> list[gr.components.Component]:
         return [self.download_link]
@@ -117,10 +121,5 @@ class OpenposeEditor:
             An gr.update event.
         """
 
-        hint = "Download the pose as .json file"
-        html = f'<a href="{encode_data_url(json_string)}" download="{OpenposeEditor.download_file}" title="{hint}">JSON</a>'
-        visible: bool = json_string != ""
-        return [
-            # Download link update
-            gr.update(value=html, visible=visible),
-        ]
+        html = f'<a href="{encode_data_url(json_string)}" download="pose.json" title="Download the Pose as .json">JSON</a>'
+        return [gr.update(value=html, visible=(json_string != ""))]

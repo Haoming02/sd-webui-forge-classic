@@ -25,9 +25,9 @@
     bottom: var(--size-4);
 }
 
-.cnet-download-pose a,
+.cnet-download-pose,
 .cnet-close-preview,
-.cnet-edit-pose,
+.cnet-download-preview,
 .cnet-upload-pose {
     font-size: x-small !important;
     font-weight: bold !important;
@@ -47,9 +47,9 @@
     margin-bottom: 16px;
 }
 
-.cnet-download-pose:hover a,
-.cnet-close-preview:hover a,
-.cnet-edit-pose:hover,
+.cnet-download-pose:hover,
+.cnet-close-preview:hover,
+.cnet-download-preview:hover,
 .cnet-upload-pose:hover {
     color: var(--block-label-text-color) !important;
 }
