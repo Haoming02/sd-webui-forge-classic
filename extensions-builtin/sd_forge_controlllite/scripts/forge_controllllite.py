@@ -28,6 +28,12 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
         self._is_inpaint = inpaint
         self._lllite_net: ControlNetLLLiteDiT = None
 
+    @staticmethod
+    def _is_black_on_white(image: torch.Tensor) -> bool:
+        grey = image.mean(dim=1).squeeze(0)
+        white_ratio = (grey > 0.9).float().mean().item()
+        return white_ratio > 0.85
+
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
         unet = process.sd_model.forge_objects.unet
         device, dtype = unet.load_device, unet.model.computation_dtype
@@ -39,6 +45,13 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
             load_lllite_weights_from_dict(self._lllite_net, self.state_dict)
             self._lllite_net = self._lllite_net.eval().to(device=device, dtype=dtype)
             del self.state_dict
+
+        if (not self._is_inpaint) and (mask is not None):
+            if inv := self._is_black_on_white(cond):
+                cond = 1.0 - cond
+            cond *= mask
+            if inv:
+                cond = 1.0 - cond
 
         cond_image = cond * 2.0 - 1.0
         if self._is_inpaint:
@@ -73,6 +86,9 @@ class ControlLLLitePatcher(ControlModelPatcher):
 
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
         unet = process.sd_model.forge_objects.unet
+
+        if mask is not None:
+            cond *= mask
 
         unet = LLLiteLoader.load_lllite(model=unet, state_dict=self.state_dict, cond_image=cond.movedim(1, -1), strength=self.strength, steps=process.steps, start_percent=self.start_percent, end_percent=self.end_percent)
 
