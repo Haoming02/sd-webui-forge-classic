@@ -6,10 +6,12 @@ import os
 import re
 import threading
 
+from rich import print
+
 from modules import cache, errors, scripts, shared
 from modules.gitpython_hack import Repo
 from modules.paths_internal import extensions_builtin_dir, extensions_dir, script_path  # noqa: F401
-from modules_forge.config import always_disabled_extensions
+from modules_forge.config import always_disabled_extensions, prefer_official_extensions
 
 extensions: list["Extension"] = []
 extension_paths: dict[str, "Extension"] = {}
@@ -263,6 +265,14 @@ def list_extensions():
             disabled_extensions = shared.opts.disabled_extensions + always_disabled_extensions
 
             extension = Extension(name=extension_dirname, path=path, enabled=extension_dirname not in disabled_extensions, is_builtin=is_builtin, metadata=metadata)
+
+            for ext, url in prefer_official_extensions.items():
+                if not ext.lower() in extension_dirname.lower():
+                    continue
+                if "neo" in extension_dirname.lower():
+                    continue
+                print(f'*** Extension "{extension_dirname}" might be outdated!')
+                print(f'*** > Recommended to install "{url}" instead')
 
             extensions.append(extension)
             extension_paths[extension.path] = extension
