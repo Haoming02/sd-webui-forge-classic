@@ -4,7 +4,7 @@
 # export GIT=
 # export VENV_DIR=
 
-export TORCH_COMMAND="pip install torch==2.10.0 torchvision==0.25.0"
+# export TORCH_COMMAND="pip install torch==2.12.0 torchvision==0.27.0"
 
 export COMMANDLINE_ARGS="--uv"
 
