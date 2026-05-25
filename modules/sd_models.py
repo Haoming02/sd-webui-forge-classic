@@ -9,7 +9,7 @@ import torch
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.loader import forge_loader
-from modules import cache, devices, errors, extra_networks, hashes, modelloader, patches, paths, processing, script_callbacks, sd_unet, sd_vae, shared  # noqa
+from modules import cache, errors, extra_networks, hashes, modelloader, paths, processing, script_callbacks, sd_unet, sd_vae, shared  # noqa
 from modules.prompt_parser import DictWithShape, SdConditioning  # noqa
 from modules.shared import cmd_opts, opts
 from modules.timer import Timer
@@ -17,8 +17,8 @@ from modules.timer import Timer
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
 
-checkpoints_list = {}
-checkpoint_aliases = {}
+checkpoints_list: dict[str, "CheckpointInfo"] = {}
+checkpoint_aliases: dict[str, "CheckpointInfo"] = {}
 
 
 def replace_key(d, key, new_key, value):
@@ -59,8 +59,7 @@ class CheckpointInfo:
 
         def read_metadata():
             metadata = read_metadata_from_safetensors(filename)
-            self.modelspec_thumbnail = metadata.pop("modelspec.thumbnail", None)
-
+            metadata.pop("modelspec.thumbnail", None)
             return metadata
 
         self.metadata = {}
@@ -240,13 +239,17 @@ def read_metadata_from_safetensors(filename):
 class FakeInitialModel:
     """a dummy class for compatibility when no model is loaded yet"""
 
-    def __init__(self):
-        self.cond_stage_model = None
-        self.chunk_length = 75
+    @property
+    def first_stage_model(self):
+        return None
+
+    @property
+    def cond_stage_model(self):
+        return None
 
     def get_prompt_lengths_on_ui(self, prompt):
-        r = len(prompt.strip("!,. ").replace(" ", ",").replace(".", ",").replace("!", ",").replace(",,", ",").replace(",,", ",").replace(",,", ",").replace(",,", ",").split(","))
-        return r, math.ceil(max(r, 1) / self.chunk_length) * self.chunk_length
+        r = len(prompt.strip("!?,. ").replace(" ", ",").replace(".", ",").replace("!", ",").replace("?", ",").split(","))
+        return r, math.ceil(max(r, 1) / 75) * 75
 
 
 class SdModelData:
