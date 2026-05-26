@@ -991,8 +991,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
             if getattr(samples_ddim, "already_decoded", False):
                 x_samples_ddim = samples_ddim
             else:
-                devices.test_for_nans(samples_ddim, "unet")
-
                 if opts.sd_vae_decode_method != "Full":
                     p.extra_generation_params["VAE Decoder"] = opts.sd_vae_decode_method
                 x_samples_ddim = decode_latent_batch(p.sd_model, samples_ddim, target_device=devices.cpu, check_for_nans=True)
@@ -1005,6 +1003,7 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
 
             del samples_ddim
 
+            devices.test_for_nans(x_samples_ddim)
             devices.torch_gc()
 
             state.nextjob()
