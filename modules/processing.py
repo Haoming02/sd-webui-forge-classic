@@ -361,11 +361,8 @@ class StableDiffusionProcessing:
         return image_conditioning
 
     def img2img_image_conditioning(self, source_image, latent_image, image_mask=None, round_image_mask=True):
-        source_image = devices.cond_cast_float(source_image)
-
         if self.sd_model.is_inpaint:
             return self.inpainting_image_conditioning(source_image, latent_image, image_mask=image_mask, round_image_mask=round_image_mask)
-
         return latent_image.new_zeros(latent_image.shape[0], 5, 1, 1)
 
     def init(self, all_prompts, all_seeds, all_subseeds):
