@@ -827,7 +827,7 @@ def unet_dtype(device: torch.device = None, model_params: int = 0, supported_dty
     return torch.float32
 
 
-def inference_cast(weight_dtype: torch.device, inference_device: torch.device, supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32]) -> torch.dtype:
+def inference_cast(weight_dtype: torch.dtype, inference_device: torch.device, supported_dtypes: list[torch.dtype] = [torch.float16, torch.bfloat16, torch.float32]) -> torch.dtype:
     if weight_dtype == torch.float32:
         return weight_dtype
 

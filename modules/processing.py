@@ -1036,9 +1036,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
 
             for i, x_sample in enumerate(x_samples_ddim):
                 p.batch_index = i
-                if torch.isnan(x_sample).any():
-                    logger.warning("Encountered NaN in Latent\nIf you are using SageAttention, try --disable-sage")
-                    x_sample.nan_to_num_(nan=0.0, posinf=1.0, neginf=0.0)
                 x_sample = 255.0 * np.moveaxis(x_sample.cpu().numpy(), 0, 2)
                 x_sample = x_sample.astype(np.uint8)
                 if _is_video:
