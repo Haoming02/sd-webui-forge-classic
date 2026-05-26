@@ -55,8 +55,8 @@ def without_autocast(*args, **kwargs):
     return contextlib.nullcontext()
 
 
-# class NansException(Exception):
-#     pass
+class NansException(Exception):
+    pass
 
 
 def test_for_nans(x: torch.Tensor, *args, **kwargs):
