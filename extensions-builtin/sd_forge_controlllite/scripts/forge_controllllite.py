@@ -46,6 +46,9 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
             self._lllite_net = self._lllite_net.eval().to(device=device, dtype=dtype)
             del self.state_dict
 
+        if mask is not None and getattr(process, "inpainting_mask_invert", False):
+            mask = 1.0 - mask
+
         if (not self._is_inpaint) and (mask is not None):
             if inv := self._is_black_on_white(cond):
                 cond = 1.0 - cond
@@ -88,6 +91,8 @@ class ControlLLLitePatcher(ControlModelPatcher):
         unet = process.sd_model.forge_objects.unet
 
         if mask is not None:
+            if getattr(process, "inpainting_mask_invert", False):
+                mask = 1.0 - mask
             cond *= mask
 
         unet = LLLiteLoader.load_lllite(model=unet, state_dict=self.state_dict, cond_image=cond.movedim(1, -1), strength=self.strength, steps=process.steps, start_percent=self.start_percent, end_percent=self.end_percent)
