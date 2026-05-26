@@ -5,14 +5,15 @@
 # https://github.com/madebyollin/taehv/blob/main/taehv.py
 
 # reference:
-# - https://github.com/Comfy-Org/ComfyUI/pull/12043
-# - https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/taesd/taehv.py
+# - https://github.com/Comfy-Org/ComfyUI/blob/v0.21.0/comfy/taesd/taehv.py
 
 import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from modules_forge.packages.huggingface_guess.latent import LatentFormat
+
+from collections import deque, namedtuple
 
 import torch
 import torch.nn as nn
@@ -24,7 +25,9 @@ from modules import devices, paths_internal, shared
 
 URL: str = "https://github.com/madebyollin/taesd/raw/main/"
 URL_V: str = "https://github.com/madebyollin/taehv/raw/main/"
-sd_vae_taesd_models: dict[str, torch.nn.Module] = {}
+sd_vae_taesd_models: dict[str, nn.Module] = {}
+
+TWorkItem = namedtuple("TWorkItem", ("input_tensor", "block_index"))
 
 
 def conv(n_in, n_out, **kwargs):
@@ -156,30 +159,46 @@ class TAEHV(nn.Module):
         self.t_upscale = 2 ** sum(t.stride == 2 for t in self.decoder if isinstance(t, TGrow))
         self.frames_to_trim = self.t_upscale - 1
 
-    @staticmethod
-    def apply_model_with_memblocks(model: nn.Sequential, x: torch.Tensor):
+    def apply_model_with_memblocks(self, x: torch.Tensor, patch_size: int):
         B, T, C, H, W = x.shape
-        x = x.reshape(B * T, C, H, W)
 
-        for b in model:
-            if isinstance(b, MemBlock):
-                BT, C, H, W = x.shape
-                T = BT // B
-                _x = x.reshape(B, T, C, H, W)
-                mem = F.pad(_x, (0, 0, 0, 0, 0, 0, 1, 0), value=0)[:, :T].reshape(x.shape)
-                x = b(x, mem)
+        mem = [None] * len(self.decoder)
+        work_queue = deque([TWorkItem(xt.squeeze(1), 0) for xt in x.chunk(T, dim=1)])
+        out = []
+
+        while work_queue:
+            xt, i = work_queue.popleft()
+            if i == len(self.decoder):
+                if patch_size > 1:
+                    xt = F.pixel_shuffle(xt, patch_size)
+                out.append(xt)
+                del xt
             else:
-                x = b(x)
+                b = self.decoder[i]
+                if isinstance(b, MemBlock):
+                    if mem[i] is None:
+                        xt_new = b(xt, xt * 0)
+                        mem[i] = xt.detach().clone()
+                    else:
+                        xt_new = b(xt, mem[i])
+                        mem[i] = xt.detach().clone()
+                    del xt
+                    work_queue.appendleft(TWorkItem(xt_new, i + 1))
+                elif isinstance(b, TGrow):
+                    xt = b(xt)
+                    _, C, H, W = xt.shape
+                    for xt_next in reversed(xt.view(B, b.stride * C, H, W).chunk(b.stride, 1)):
+                        work_queue.appendleft(TWorkItem(xt_next, i + 1))
+                    del xt
+                else:
+                    xt = b(xt)
+                    work_queue.appendleft(TWorkItem(xt, i + 1))
 
-        BT, C, H, W = x.shape
-        T = BT // B
-        return x.view(B, T, C, H, W)
+        return torch.stack(out, 1)
 
     def decode(self, x: torch.Tensor) -> torch.Tensor:
         x = x.movedim(2, 1)
-        x = self.apply_model_with_memblocks(self.decoder, x)
-        if self.patch_size > 1:
-            x = F.pixel_shuffle(x, self.patch_size)
+        x = self.apply_model_with_memblocks(x, self.patch_size)
         return x[:, self.frames_to_trim :]
 
 
@@ -191,6 +210,7 @@ class TAEHVDecoder(nn.Module):
         self.decoder = TAEHV(self.latent_channels)
         load_state_dict(self.decoder, load_torch_file(decoder_path), ignore_start="encoder")
 
+    @torch.inference_mode()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         z = self.decoder.decode(x)
         return z.squeeze(1)
