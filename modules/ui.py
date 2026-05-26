@@ -15,7 +15,7 @@ import modules.processing_scripts.comments as comments
 import modules.shared as shared
 from modules import extra_networks, gradio_extensions, launch_utils, paths_internal, processing, progress, prompt_parser, script_callbacks, scripts, sd_models, sd_samplers, sd_schedulers, shared_items, sysinfo, timer, ui_checkpoint_merger, ui_common, ui_extensions, ui_extra_networks, ui_loadsave, ui_postprocessing, ui_settings, ui_toprow  # noqa: F401
 from modules.call_queue import wrap_gradio_call, wrap_gradio_call_no_job, wrap_gradio_gpu_call, wrap_queued_call  # noqa: F401
-from modules.infotext_utils import PasteField, image_from_url_text
+from modules.infotext_utils import PasteField
 from modules.paths import script_path
 from modules.shared import cmd_opts, opts
 from modules.ui_common import create_refresh_button  # noqa: F401
@@ -80,8 +80,11 @@ detect_image_size_symbol = "\U0001f4d0"  # 📐
 plaintext_to_html = ui_common.plaintext_to_html
 
 
-def _round(v: float) -> int:
-    return round(v / 64.0) * 64
+_STEP = int(opts.res_step)
+
+
+def sRound(val: int) -> int:
+    return round(val / _STEP) * _STEP
 
 
 def calc_resolution_hires(enable, width, height, hr_scale, hr_resize_x, hr_resize_y):
@@ -91,15 +94,15 @@ def calc_resolution_hires(enable, width, height, hr_scale, hr_resize_x, hr_resiz
     p = processing.StableDiffusionProcessingTxt2Img(width=width, height=height, enable_hr=True, hr_scale=hr_scale, hr_resize_x=hr_resize_x, hr_resize_y=hr_resize_y)
     p.calculate_target_resolution()
 
-    new_width = _round(p.hr_resize_x or p.hr_upscale_to_x)
-    new_height = _round(p.hr_resize_y or p.hr_upscale_to_y)
+    new_width = sRound(p.hr_resize_x or p.hr_upscale_to_x)
+    new_height = sRound(p.hr_resize_y or p.hr_upscale_to_y)
 
     return f"from <span class='resolution'>{p.width}x{p.height}</span> to <span class='resolution'>{new_width}x{new_height}</span>"
 
 
 def resize_from_to_html(width, height, scale_by):
-    target_width = _round(int(width) * scale_by)
-    target_height = _round(int(height) * scale_by)
+    target_width = sRound(int(width) * scale_by)
+    target_height = sRound(int(height) * scale_by)
 
     if not target_width or not target_height:
         return "no image selected"
@@ -211,8 +214,8 @@ def create_ui():
                     elif category == "dimensions":
                         with FormRow():
                             with gr.Column(elem_id="txt2img_column_size", scale=4):
-                                width = gr.Slider(minimum=64, maximum=2048, step=64, label="Width", value=1024, elem_id="txt2img_width")
-                                height = gr.Slider(minimum=64, maximum=2048, step=64, label="Height", value=1024, elem_id="txt2img_height")
+                                width = gr.Slider(minimum=64, maximum=2048, step=_STEP, label="Width", value=1024, elem_id="txt2img_width")
+                                height = gr.Slider(minimum=64, maximum=2048, step=_STEP, label="Height", value=1024, elem_id="txt2img_height")
 
                             with gr.Column(elem_id="txt2img_dimensions_row", scale=1, elem_classes="dimensions-tools"):
                                 res_switch_btn = ToolButton(value=switch_values_symbol, elem_id="txt2img_res_switch_btn", tooltip="Switch width/height")
@@ -242,8 +245,8 @@ def create_ui():
 
                                 with FormRow(elem_id="txt2img_hires_fix_row2", variant="compact"):
                                     hr_scale = gr.Slider(minimum=1.0, maximum=4.0, step=0.05, label="Upscale by", value=2.0, elem_id="txt2img_hr_scale")
-                                    hr_resize_x = gr.Slider(minimum=0, maximum=4096, step=64, label="Resize width to", value=0, elem_id="txt2img_hr_resize_x")
-                                    hr_resize_y = gr.Slider(minimum=0, maximum=4096, step=64, label="Resize height to", value=0, elem_id="txt2img_hr_resize_y")
+                                    hr_resize_x = gr.Slider(minimum=0, maximum=4096, step=_STEP, label="Resize width to", value=0, elem_id="txt2img_hr_resize_x")
+                                    hr_resize_y = gr.Slider(minimum=0, maximum=4096, step=_STEP, label="Resize height to", value=0, elem_id="txt2img_hr_resize_y")
 
                                 with FormRow(elem_id="txt2img_hires_fix_row_cfg", variant="compact"):
                                     hr_distilled_cfg = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="Hires Distilled CFG Scale", value=3.0, elem_id="txt2img_hr_distilled_cfg")
@@ -575,8 +578,8 @@ def create_ui():
                                     with gr.Tab(label="Resize to", id="to", elem_id="img2img_tab_resize_to") as tab_scale_to:
                                         with FormRow():
                                             with gr.Column(elem_id="img2img_column_size", scale=4):
-                                                width = gr.Slider(minimum=64, maximum=2048, step=64, label="Width", value=1024, elem_id="img2img_width")
-                                                height = gr.Slider(minimum=64, maximum=2048, step=64, label="Height", value=1024, elem_id="img2img_height")
+                                                width = gr.Slider(minimum=64, maximum=2048, step=_STEP, label="Width", value=1024, elem_id="img2img_width")
+                                                height = gr.Slider(minimum=64, maximum=2048, step=_STEP, label="Height", value=1024, elem_id="img2img_height")
                                             with gr.Column(elem_id="img2img_dimensions_row", scale=1, elem_classes="dimensions-tools"):
                                                 res_switch_btn = ToolButton(value=switch_values_symbol, elem_id="img2img_res_switch_btn", tooltip="Switch width/height")
                                                 detect_image_size_btn = ToolButton(value=detect_image_size_symbol, elem_id="img2img_detect_image_size_btn", tooltip="Auto detect size from img2img")
@@ -602,7 +605,7 @@ def create_ui():
 
                                     def updateWH(img):
                                         if img and shared.opts.img2img_autosize is True:
-                                            return _round(img.size[0]), _round(img.size[1])
+                                            return sRound(img.size[0]), sRound(img.size[1])
                                         else:
                                             return gr.skip(), gr.skip()
 

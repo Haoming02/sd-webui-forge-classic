@@ -163,6 +163,7 @@ options_templates.update(
         ("system", "System", "system"),
         {
             "setting_allocated_vram": OptionInfo(1.0, "GPU Weights", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}).info("amount of VRAM that Forge can access").info("in % of total vram"),
+            "res_step": OptionInfo(64, "Resolution Step", gr.Radio, {"choices": (8, 16, 32, 64, 128, 256)}).info('"64" is recommended to prevent compatibility issues').needs_restart(),
             "auto_launch_browser": OptionInfo("Local", "Launch the webui in browser on startup", gr.Radio, {"choices": ("Disable", "Local", "Remote")}).info("Remote = always automatically start; Local = only when not sharing the server, such as <b>--share</b>"),
             "enable_console_prompts": OptionInfo(False, "Print the generation prompts to console"),
             "samples_log_stdout": OptionInfo(False, "Print the generation infotxt to console"),

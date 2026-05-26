@@ -32,6 +32,7 @@ from modules.sd_models import apply_token_merging, forge_model_reload
 from modules.sd_samplers_common import approximation_indexes, decode_first_stage, images_tensor_to_samples
 from modules.shared import cmd_opts, opts, state
 from modules.sysinfo import set_config
+from modules.ui import sRound
 from modules_forge import main_entry
 from modules_forge.utils import apply_circular_forge
 
@@ -1185,8 +1186,8 @@ def old_hires_fix_first_pass_dimensions(width: int, height: int) -> tuple[int, i
     desired_pixel_count = 512 * 512
     actual_pixel_count = width * height
     scale = math.sqrt(desired_pixel_count / actual_pixel_count)
-    width = round(scale * width / 64.0) * 64
-    height = round(scale * height / 64.0) * 64
+    width = sRound(scale * width)
+    height = sRound(scale * height)
 
     return width, height
 
@@ -1254,8 +1255,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
         if self.hr_resize_x == 0 and self.hr_resize_y == 0:
             self.extra_generation_params["Hires upscale"] = self.hr_scale
-            self.hr_upscale_to_x = round(self.width * self.hr_scale / 64.0) * 64
-            self.hr_upscale_to_y = round(self.height * self.hr_scale / 64.0) * 64
+            self.hr_upscale_to_x = sRound(self.width * self.hr_scale)
+            self.hr_upscale_to_y = sRound(self.height * self.hr_scale)
         else:
             if self.hr_resize_y == 0:
                 self.hr_upscale_to_x = self.hr_resize_x
@@ -1267,8 +1268,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                 self.hr_upscale_to_x = self.hr_resize_x
                 self.hr_upscale_to_y = self.hr_resize_y
 
-            self.hr_upscale_to_x = round(self.hr_upscale_to_x / 64.0) * 64
-            self.hr_upscale_to_y = round(self.hr_upscale_to_y / 64.0) * 64
+            self.hr_upscale_to_x = sRound(self.hr_upscale_to_x)
+            self.hr_upscale_to_y = sRound(self.hr_upscale_to_y)
 
             self.extra_generation_params["Hires resize"] = f"{self.hr_upscale_to_x}x{self.hr_upscale_to_y}"
 

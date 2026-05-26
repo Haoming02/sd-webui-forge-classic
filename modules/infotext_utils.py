@@ -254,9 +254,11 @@ def send_image_and_dimensions(x) -> tuple[Image.Image, int, int]:
     if img.mode != "RGB":
         img = img.convert("RGB")
 
+    from modules.ui import sRound
+
     if shared.opts.send_size and isinstance(img, Image.Image):
-        w = round(img.width / 64.0) * 64
-        h = round(img.height / 64.0) * 64
+        w = sRound(img.width)
+        h = sRound(img.height)
     else:
         w = gr.skip()
         h = gr.skip()
