@@ -7,7 +7,7 @@ import math
 import os
 import random
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from backend.diffusion_engine.base import ForgeDiffusionEngine
@@ -729,9 +729,8 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
         }
     )
 
-    if isinstance(shared.opts.forge_additional_modules, list):
-        for i, m in enumerate(shared.opts.forge_additional_modules):
-            generation_params[f"Module {i+1}"] = os.path.splitext(os.path.basename(m))[0]
+    for i, m in enumerate(_overridden_modules or shared.opts.forge_additional_modules):
+        generation_params[f"Module {i+1}"] = os.path.splitext(os.path.basename(m))[0]
 
     if shared.opts.forge_unet_storage_dtype != "Automatic":
         generation_params["Diffusion in Low Bits"] = shared.opts.forge_unet_storage_dtype
@@ -789,6 +788,9 @@ def manage_model_and_prompt_cache(p: StableDiffusionProcessing):
     need_global_unload = False
 
 
+_overridden_modules: Optional[list[str]] = None
+
+
 def process_images(p: StableDiffusionProcessing) -> Processed:
     """applies settings overrides (if any) before processing images, then restores settings as applicable."""
     if p.scripts is not None:
@@ -814,19 +816,20 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         else:
             manage_model_and_prompt_cache(p)
             if _vae_override is not None:
+                global _overridden_modules
+                _overridden_modules = shared.opts.forge_additional_modules.copy()
                 override: str = _vae_override
                 all_vae: list[str] = sd_vae.vae_dict.keys()
-                _orig: list[str] = shared.opts.forge_additional_modules.copy()
-                for i in range(len(_orig)):
-                    if os.path.basename(_orig[i]) in all_vae:
-                        if _orig[i] != override:
-                            shared.opts.forge_additional_modules.pop(i)
+                for i in range(len(_overridden_modules)):
+                    if os.path.basename(_overridden_modules[i]) in all_vae:
+                        if _overridden_modules[i] != override:
+                            _overridden_modules.pop(i)
                         else:
                             override = None
                         break
 
                 if sd_vae.reload_vae_weights(override):
-                    shared.opts.forge_additional_modules.append(override)
+                    _overridden_modules.append(override)
 
         # backwards compatibility, fix sampler and scheduler if invalid
         sd_samplers.fix_p_invalid_sampler_and_scheduler(p)
@@ -840,7 +843,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
             set_config(stored_opts, save_config=False)
         if _vae_override is not None:
             sd_vae.restore_vae_weights()
-            shared.opts.forge_additional_modules = _orig
+            _overridden_modules = None
 
     return res
 
