@@ -1,21 +1,18 @@
-from modules_forge.supported_preprocessor import PreprocessorClipVision, Preprocessor, PreprocessorParameter
-from modules_forge.shared import add_supported_preprocessor
-from modules_forge.utils import numpy_to_pytorch
-from modules_forge.shared import add_supported_control_model
-from modules_forge.supported_controlnet import ControlModelPatcher
-from lib_ipadapter.IPAdapterPlus import IPAdapterApply, InsightFaceLoader
 from pathlib import Path
 
+from lib_ipadapter.IPAdapterPlus import InsightFaceLoader, IPAdapterApply
 
-opIPAdapterApply = IPAdapterApply().apply_ipadapter
-opInsightFaceLoader = InsightFaceLoader().load_insight_face
+from modules_forge.shared import add_supported_control_model, add_supported_preprocessor
+from modules_forge.supported_controlnet import ControlModelPatcher
+from modules_forge.supported_preprocessor import Preprocessor, PreprocessorClipVision, PreprocessorParameter
+from modules_forge.utils import numpy_to_pytorch
 
 
 class PreprocessorClipVisionForIPAdapter(PreprocessorClipVision):
     def __init__(self, name, url, filename):
         super().__init__(name, url, filename)
-        self.tags = ['IP-Adapter']
-        self.model_filename_filters = ['IP-Adapter', 'IP_Adapter']
+        self.tags = ["IP-Adapter"]
+        self.model_filename_filters = ["IP-Adapter", "IP_Adapter"]
         self.sorting_priority = 20
 
     def __call__(self, input_image, resolution, slider_1=None, slider_2=None, slider_3=None, **kwargs):
@@ -37,7 +34,7 @@ class PreprocessorClipVisionWithInsightFaceForIPAdapter(PreprocessorClipVisionFo
 
     def load_insightface(self):
         if self.cached_insightface is None:
-            self.cached_insightface = opInsightFaceLoader()[0]
+            self.cached_insightface = InsightFaceLoader.load_insight_face()
         return self.cached_insightface
 
     def __call__(self, input_image, resolution, slider_1=None, slider_2=None, slider_3=None, **kwargs):
@@ -57,8 +54,8 @@ class PreprocessorInsightFaceForInstantID(Preprocessor):
     def __init__(self, name):
         super().__init__()
         self.name = name
-        self.tags = ['Instant-ID']
-        self.model_filename_filters = ['Instant-ID', 'Instant_ID']
+        self.tags = ["Instant-ID"]
+        self.model_filename_filters = ["Instant-ID", "Instant_ID"]
         self.sorting_priority = 20
         self.slider_resolution = PreprocessorParameter(visible=False)
         self.corp_image_with_a1111_mask_when_in_img2img_inpaint_tab = False
@@ -68,44 +65,21 @@ class PreprocessorInsightFaceForInstantID(Preprocessor):
 
     def load_insightface(self):
         if self.cached_insightface is None:
-            self.cached_insightface = opInsightFaceLoader(name='antelopev2')[0]
+            self.cached_insightface = InsightFaceLoader.load_insight_face(name="antelopev2")
         return self.cached_insightface
 
     def __call__(self, input_image, resolution, slider_1=None, slider_2=None, slider_3=None, **kwargs):
-        cond = dict(
-            clip_vision=None,
-            insightface=self.load_insightface(),
-            image=numpy_to_pytorch(input_image),
-            weight_type="original",
-            noise=0.0,
-            embeds=None,
-            unfold_batch=False,
-            instant_id=True
-        )
+        cond = dict(clip_vision=None, insightface=self.load_insightface(), image=numpy_to_pytorch(input_image), weight_type="original", noise=0.0, embeds=None, unfold_batch=False, instant_id=True)
         return cond
 
 
-add_supported_preprocessor(PreprocessorClipVisionForIPAdapter(
-    name='CLIP-ViT-H (IPAdapter)',
-    url='https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors',
-    filename='CLIP-ViT-H-14.safetensors'
-))
+add_supported_preprocessor(PreprocessorClipVisionForIPAdapter(name="CLIP-ViT-H (IPAdapter)", url="https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors", filename="CLIP-ViT-H-14.safetensors"))
 
-add_supported_preprocessor(PreprocessorClipVisionForIPAdapter(
-    name='CLIP-ViT-bigG (IPAdapter)',
-    url='https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/image_encoder/model.safetensors',
-    filename='CLIP-ViT-bigG.safetensors'
-))
+add_supported_preprocessor(PreprocessorClipVisionForIPAdapter(name="CLIP-ViT-bigG (IPAdapter)", url="https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/image_encoder/model.safetensors", filename="CLIP-ViT-bigG.safetensors"))
 
-add_supported_preprocessor(PreprocessorClipVisionWithInsightFaceForIPAdapter(
-    name='InsightFace+CLIP-H (IPAdapter)',
-    url='https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors',
-    filename='CLIP-ViT-H-14.safetensors'
-))
+add_supported_preprocessor(PreprocessorClipVisionWithInsightFaceForIPAdapter(name="InsightFace+CLIP-H (IPAdapter)", url="https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors", filename="CLIP-ViT-H-14.safetensors"))
 
-add_supported_preprocessor(PreprocessorInsightFaceForInstantID(
-    name='InsightFace (InstantID)',
-))
+add_supported_preprocessor(PreprocessorInsightFaceForInstantID(name="InsightFace (InstantID)"))
 
 
 class IPAdapterPatcher(ControlModelPatcher):
@@ -128,7 +102,7 @@ class IPAdapterPatcher(ControlModelPatcher):
         o = IPAdapterPatcher(model)
 
         model_filename = Path(ckpt_path).name.lower()
-        if 'v2' in model_filename:
+        if "v2" in model_filename:
             o.faceid_v2 = True
             o.weight_v2 = True
 
@@ -144,7 +118,7 @@ class IPAdapterPatcher(ControlModelPatcher):
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
         unet = process.sd_model.forge_objects.unet
 
-        unet = opIPAdapterApply(
+        unet = IPAdapterApply.apply_ipadapter(
             ipadapter=self.ip_adapter,
             model=unet,
             weight=self.strength,
@@ -154,7 +128,7 @@ class IPAdapterPatcher(ControlModelPatcher):
             weight_v2=self.weight_v2,
             attn_mask=mask.squeeze(1) if mask is not None else None,
             **cond,
-        )[0]
+        )
 
         process.sd_model.forge_objects.unet = unet
         return
