@@ -1,4 +1,5 @@
 import datetime
+import math
 import mimetypes
 import os
 import sys
@@ -83,11 +84,11 @@ plaintext_to_html = ui_common.plaintext_to_html
 _STEP = int(opts.res_step)
 
 
-def sRound(val: int) -> int:
-    return round(val / _STEP) * _STEP
+def sRound(val: int | float) -> int:
+    return math.floor(val / _STEP + 0.5) * _STEP
 
 
-def calc_resolution_hires(enable, width, height, hr_scale, hr_resize_x, hr_resize_y):
+def calc_resolution_hires(enable: bool, width: int, height: int, hr_scale: float, hr_resize_x: int, hr_resize_y: int) -> str:
     if not enable:
         return ""
 
@@ -100,9 +101,9 @@ def calc_resolution_hires(enable, width, height, hr_scale, hr_resize_x, hr_resiz
     return f"from <span class='resolution'>{p.width}x{p.height}</span> to <span class='resolution'>{new_width}x{new_height}</span>"
 
 
-def resize_from_to_html(width, height, scale_by):
-    target_width = sRound(int(width) * scale_by)
-    target_height = sRound(int(height) * scale_by)
+def resize_from_to_html(width: str, height: str, scale_by: float) -> str:
+    target_width = sRound(float(width) * scale_by)
+    target_height = sRound(float(height) * scale_by)
 
     if not target_width or not target_height:
         return "no image selected"
