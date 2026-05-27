@@ -91,7 +91,7 @@ def refresh_vae_list():
 
 
 def reload_vae_weights(vae: str) -> bool:
-    if vae in (None, "None", "Automatic"):
+    if vae in (None, "None"):
         return False
 
     store_base_vae(shared.sd_model)

@@ -802,7 +802,7 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         if sd_models.checkpoint_aliases.get(p.override_settings.get("sd_model_checkpoint")) is None:
             p.override_settings.pop("sd_model_checkpoint", None)
 
-        _vae_override: tuple[str, list[str]] = p.override_settings.pop("sd_vae", None)
+        _vae_override = p.override_settings.pop("sd_vae", None)
 
         # apply any options overrides
         set_config(p.override_settings, is_api=True, run_callbacks=False, save_config=False)
@@ -814,10 +814,11 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         else:
             manage_model_and_prompt_cache(p)
             if _vae_override is not None:
-                override, choices = _vae_override
+                override: str = _vae_override
+                all_vae: list[str] = sd_vae.vae_dict.keys()
                 _orig: list[str] = shared.opts.forge_additional_modules.copy()
                 for i in range(len(_orig)):
-                    if os.path.basename(_orig[i]) in choices:
+                    if os.path.basename(_orig[i]) in all_vae:
                         if _orig[i] != override:
                             shared.opts.forge_additional_modules.pop(i)
                         else:
