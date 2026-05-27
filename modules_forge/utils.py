@@ -1,3 +1,5 @@
+import math
+
 import cv2
 import numpy as np
 import torch
@@ -34,7 +36,7 @@ def apply_circular_forge(model, tiling_enabled=False):
     print(f"Tiling: {tiling_enabled}")
 
 
-def HWC3(x):
+def HWC3(x: np.ndarray) -> np.ndarray:
     assert x.dtype == np.uint8
     if x.ndim == 2:
         x = x[:, :, None]
@@ -67,16 +69,17 @@ def numpy_to_pytorch(x: np.ndarray) -> torch.Tensor:
     return y
 
 
-def pad64(x):
-    return int(np.ceil(float(x) / 64.0) * 64 - x)
+def pad64(x: int) -> int:
+    return int(math.ceil(x / 64.0) * 64 - x)
 
 
-def safer_memory(x):
-    # Fix many MAC/AMD problems
+def safer_memory(x: np.ndarray) -> np.ndarray:
+    # Fix many macOS / AMD problems
     return np.ascontiguousarray(x.copy()).copy()
 
 
-def resize_image_with_pad(img, resolution):
+def resize_image_with_pad(input_image: np.ndarray, resolution: int, *, skip_hwc3: bool = False):
+    img = input_image if skip_hwc3 else HWC3(input_image)
     H_raw, W_raw, _ = img.shape
     k = float(resolution) / float(min(H_raw, W_raw))
     interpolation = cv2.INTER_CUBIC if k > 1 else cv2.INTER_AREA
