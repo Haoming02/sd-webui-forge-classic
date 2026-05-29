@@ -92,6 +92,13 @@ class Wan(ForgeDiffusionEngine):
                 end_image = self.end_image.movedim(1, -1)
                 _, h, w, _ = end_image.shape
 
+        if self.start_image is not None and self.end_image is not None:
+            memory_management.logger.info("[Wan] FirstLastFrameToVideo")
+        elif self.start_image is not None and self.end_image is None:
+            memory_management.logger.info("[Wan] ImageToVideo")
+        elif self.start_image is None and self.end_image is not None:
+            memory_management.logger.info("[Wan] LastFrameToVideo")
+
         image = torch.ones((length, h, w, 3), device="cpu", dtype=torch.float32).mul(0.5)
         mask = torch.ones((1, 1, latent_shape[2] * 4, latent_shape[-2], latent_shape[-1]), device="cpu", dtype=torch.float32)
 

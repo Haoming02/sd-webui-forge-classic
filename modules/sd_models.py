@@ -329,7 +329,14 @@ def forge_model_reload():
 
     timer = Timer()
 
+    _last_frame: torch.Tensor = None
+    # maintain the end_image so that FirstLastFrame is not broken
+    # when reloading Wan 2.2 models via Refiner
+
     if model_data.sd_model is not None:
+        if getattr(model_data.sd_model, "end_image", None) is not None:
+            _last_frame = model_data.sd_model.end_image.clone()
+
         model_data.sd_model = None
         model_data.forge_hash = ""
         memory_management.unload_all_models()
@@ -369,6 +376,9 @@ def forge_model_reload():
     sd_model.filename = checkpoint_info.filename
     sd_model.sd_model_hash = checkpoint_info.calculate_shorthash()
     timer.record("calculate hash")
+
+    if _last_frame is not None:
+        setattr(sd_model, "end_image", _last_frame)
 
     shared.opts.data["sd_checkpoint_hash"] = checkpoint_info.sha256
     model_data.set_sd_model(sd_model)
