@@ -2,7 +2,10 @@ import importlib
 import logging
 import os.path
 from functools import partial
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from backend.diffusion_engine.base import ForgeDiffusionEngine
 
 import torch
 import yaml
@@ -38,7 +41,7 @@ from backend.utils import (
 )
 from modules_forge.packages.comfy.utils import convert_diffusers_mmdit
 
-possible_models = [StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage, Anima, ErnieImage]
+possible_models: tuple["ForgeDiffusionEngine"] = (StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage, Anima, ErnieImage)
 
 logger = logging.getLogger("loader")
 setup_logger(logger)
@@ -796,7 +799,7 @@ def split_state_dict(path: os.PathLike, additional_state_dicts: list[os.PathLike
 
 
 @torch.inference_mode()
-def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = None):
+def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = None) -> "ForgeDiffusionEngine":
     try:
         state_dicts, estimated_config = split_state_dict(sd, additional_state_dicts=additional_state_dicts)
     except AttributeError:
