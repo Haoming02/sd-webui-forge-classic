@@ -17,7 +17,7 @@ class PromptChunk:
 
 class UMT5TextProcessingEngine:
     def __init__(self, text_encoder, tokenizer, min_length=512):
-        super().__init__()
+        self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         self.text_encoder = text_encoder.transformer
         self.tokenizer = tokenizer

@@ -14,7 +14,7 @@ class PromptChunk:
 
 class T5TextProcessingEngine:
     def __init__(self, text_encoder, tokenizer, min_length: int = 256, min_padding: int = -1):
-        super().__init__()
+        self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         self.text_encoder = text_encoder.transformer
         self.tokenizer = tokenizer

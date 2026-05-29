@@ -21,7 +21,7 @@ class PromptChunk:
 
 class AnimaTextProcessingEngine:
     def __init__(self, text_encoder, qwen_tokenizer, t5_tokenizer):
-        super().__init__()
+        self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         self.text_encoder: "Qwen3_06B" = text_encoder
         self.qwen_tokenizer = qwen_tokenizer

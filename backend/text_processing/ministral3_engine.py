@@ -16,7 +16,7 @@ class PromptChunk:
 
 class Ministral3TextProcessingEngine:
     def __init__(self, text_encoder, tokenizer):
-        super().__init__()
+        self.emphasis = emphasis.EmphasisNone()
 
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer

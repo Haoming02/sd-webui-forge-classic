@@ -22,7 +22,7 @@ re_attention = re.compile(
 re_break = re.compile(r"\s*\bBREAK\b\s*", re.S)
 
 
-def parse_prompt_attention(text, emphasis):
+def parse_prompt_attention(text: str, emphasis: str):
     res = []
     round_brackets = []
     square_brackets = []

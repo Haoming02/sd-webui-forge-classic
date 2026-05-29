@@ -22,7 +22,7 @@ class PromptChunk:
 
 class Qwen3TextProcessingEngine:
     def __init__(self, text_encoder, tokenizer):
-        super().__init__()
+        self.emphasis = emphasis.get_current_option(opts.emphasis)()
 
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
