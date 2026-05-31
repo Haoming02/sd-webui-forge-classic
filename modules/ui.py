@@ -544,8 +544,7 @@ def create_ui():
                                         img2img_batch_inpaint_mask_dir = gr.Textbox(label="Inpaint batch mask directory (required for inpaint batch processing only)", **shared.hide_dirs, elem_id="img2img_batch_inpaint_mask_dir")
                                 tab_batch_upload.select(fn=lambda: "upload", outputs=[img2img_batch_source_type])
                                 tab_batch_from_dir.select(fn=lambda: "from dir", outputs=[img2img_batch_source_type])
-                                with gr.Accordion("PNG info", open=False):
-                                    img2img_batch_use_png_info = gr.Checkbox(label="Append png info to prompts", elem_id="img2img_batch_use_png_info")
+                                with InputAccordion(False, label="Append PNG Info", elem_id="img2img_batch_use_png_info") as img2img_batch_use_png_info:
                                     img2img_batch_png_info_dir = gr.Textbox(label="PNG info directory", **shared.hide_dirs, placeholder="Leave empty to use input directory", elem_id="img2img_batch_png_info_dir")
                                     img2img_batch_png_info_props = gr.CheckboxGroup(["Prompt", "Negative prompt", "Seed", "CFG scale", "Sampler", "Steps", "Model hash", "Filename"], label="Parameters to take from png info", info="Prompts from png info will be appended to prompts set in ui.")
 
