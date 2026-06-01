@@ -22,7 +22,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [May.]
+## Features [Jun.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -90,6 +90,15 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - [X] Rewrite Preset System
     - now remembers the checkpoint/module selection and parameters for each preset
+
+> [!Note]
+> This overrides the `UI Defaults` for the controlled parameters
+
+<br>
+
+- [X] Enforce Resolution Steps
+    - dimensions must be multiples of `64` by default
+    - adjust in **Settings/System**
 - [X] Support [uv](https://github.com/astral-sh/uv) package manager
     - drastically speed up installation
     - requires **manually** installing [uv](https://github.com/astral-sh/uv/releases)
@@ -122,7 +131,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - see [Commandline](#by-neo)
 - [X] Implement full precision calculation for `Mask blur` blending
     - enable in **Settings/img2img**
-- [X] Support TAESD live preview for all models
+- [X] Support TAESD / TAEHV live preview for all models
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
     - enable in **Settings/Upscaling**
@@ -206,6 +215,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - correct default values
 - [X] ControlNet Rewrite
     - change Units to `gr.Tab`
+    - improve `masks` & `buttons`
     - remove multi-inputs, as they are "[misleading](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/932)"
 - [X] Disable Refiner by default
     - enable again in **Settings/Refiner**
