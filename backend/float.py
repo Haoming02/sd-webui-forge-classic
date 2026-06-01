@@ -1,5 +1,6 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/float.py
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/float.py
 
+import comfy_kitchen as ck
 import torch
 
 
@@ -35,22 +36,18 @@ def manual_stochastic_round_to_float8(x, dtype, generator=None):
     return sign
 
 
-def stochastic_rounding(value, dtype, seed=0):
-    if dtype == torch.float32:
+def stochastic_rounding(value: torch.Tensor, dtype: torch.dtype, seed: int = 0):
+    if dtype is torch.float32:
         return value.to(dtype=torch.float32)
-    if dtype == torch.float16:
+    if dtype is torch.float16:
         return value.to(dtype=torch.float16)
-    if dtype == torch.bfloat16:
+    if dtype is torch.bfloat16:
         return value.to(dtype=torch.bfloat16)
-    if dtype == torch.float8_e4m3fn or dtype == torch.float8_e5m2:
+    if dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
         generator = torch.Generator(device=value.device)
         generator.manual_seed(seed)
-        output = torch.empty_like(value, dtype=dtype)
-        num_slices = max(1, (value.numel() / (4096 * 4096)))
-        slice_size = max(1, round(value.shape[0] / num_slices))
-        for i in range(0, value.shape[0], slice_size):
-            output[i : i + slice_size].copy_(manual_stochastic_round_to_float8(value[i : i + slice_size], dtype, generator=generator))
-        return output
+        rng = torch.randint(0, 256, value.size(), dtype=torch.uint8, layout=value.layout, device=value.device, generator=generator)
+        return ck.stochastic_rounding_fp8(value, rng, dtype)
 
     return value.to(dtype=dtype)
 

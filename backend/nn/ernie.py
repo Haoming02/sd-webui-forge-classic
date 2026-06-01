@@ -1,7 +1,8 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.19.1/comfy/ldm/ernie/model.py
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ldm/ernie/model.py
 
 import math
 
+import comfy_kitchen as ck
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,16 +25,6 @@ def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     return out.to(dtype=torch.float32, device=pos.device)
 
 
-def apply_rotary_emb(x_in: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
-    rot_dim = freqs_cis.shape[-1]
-    x, x_pass = x_in[..., :rot_dim], x_in[..., rot_dim:]
-    cos_ = freqs_cis[0]
-    sin_ = freqs_cis[1]
-    x1, x2 = x.chunk(2, dim=-1)
-    x_rotated = torch.cat((-x2, x1), dim=-1)
-    return torch.cat((x * cos_ + x_rotated * sin_, x_pass), dim=-1)
-
-
 class ErnieImageEmbedND3(nn.Module):
     def __init__(self, dim: int, theta: int, axes_dim: tuple):
         super().__init__()
@@ -44,8 +35,16 @@ class ErnieImageEmbedND3(nn.Module):
 
     def forward(self, ids: torch.Tensor) -> torch.Tensor:
         emb = torch.cat([rope(ids[..., i], self.axes_dim[i], self.theta) for i in range(3)], dim=-1)
-        emb = emb.unsqueeze(3)
-        return torch.stack([emb, emb], dim=-1).reshape(*emb.shape[:-1], -1)
+        cos_ = emb[0]
+        sin_ = emb[1]
+        N = cos_.shape[-1]
+        half = N // 2
+        cos_top = cos_[..., :half].repeat_interleave(2, dim=-1)
+        sin_top = sin_[..., :half].repeat_interleave(2, dim=-1)
+        cos_bot = cos_[..., half:].repeat_interleave(2, dim=-1)
+        sin_bot = sin_[..., half:].repeat_interleave(2, dim=-1)
+        rot = torch.stack([cos_top, -sin_top, sin_bot, cos_bot], dim=-1)
+        return rot.reshape(*rot.shape[:-1], 2, 2).unsqueeze(2)
 
 
 class ErnieImagePatchEmbedDynamic(nn.Module):
@@ -126,10 +125,7 @@ class ErnieImageAttention(nn.Module):
         key = self.norm_k(key)
 
         if image_rotary_emb is not None:
-            query = apply_rotary_emb(query, image_rotary_emb)
-            key = apply_rotary_emb(key, image_rotary_emb)
-
-        query, key = query.to(x.dtype), key.to(x.dtype)
+            query, key = ck.apply_rope_split_half(query, key, image_rotary_emb)
 
         q_flat = query.reshape(B, S, -1)
         k_flat = key.reshape(B, S, -1)
@@ -271,7 +267,7 @@ class ErnieImageModel(nn.Module):
 
         image_ids = image_ids.view(1, N_img, 3).expand(B, -1, -1)
 
-        rotary_pos_emb = self.pos_embed(torch.cat([image_ids, text_ids], dim=1)).to(x.dtype)
+        rotary_pos_emb = self.pos_embed(torch.cat([image_ids, text_ids], dim=1))
         del image_ids, text_ids
 
         sample = self.time_proj(timesteps).to(dtype)

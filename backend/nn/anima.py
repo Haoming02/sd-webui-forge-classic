@@ -8,8 +8,8 @@
 import math
 from typing import Callable, Optional
 
+import comfy_kitchen as ck
 import torch
-import torch.nn.functional as F
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from torch import nn
@@ -118,13 +118,6 @@ class SelfCrossAttention(nn.Module):
         self.output_proj = nn.Linear(inner_dim, query_dim, bias=False)
         self.output_dropout = nn.Dropout(dropout) if dropout > 1e-4 else nn.Identity()
 
-    @staticmethod
-    def apply_rotary_pos_emb(t: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
-        t_ = t.reshape(*t.shape[:-1], 2, -1).movedim(-2, -1).unsqueeze(-2).float()
-        t_out = freqs[..., 0] * t_[..., 0] + freqs[..., 1] * t_[..., 1]
-        t_out = t_out.movedim(-1, -2).reshape(*t.shape).type_as(t)
-        return t_out
-
     def compute_qkv(self, x: torch.Tensor, context: Optional[torch.Tensor] = None, rope_emb: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         q = self.q_proj(x)
         k = self.k_proj(x if context is None else context)
@@ -138,8 +131,7 @@ class SelfCrossAttention(nn.Module):
         k = self.k_norm(k)
         v = self.v_norm(v)
         if self.is_SelfAttn and rope_emb is not None:
-            q = self.apply_rotary_pos_emb(q, rope_emb)
-            k = self.apply_rotary_pos_emb(k, rope_emb)
+            q, k = ck.apply_rope_split_half(q, k, rope_emb)
 
         return q, k, v
 
