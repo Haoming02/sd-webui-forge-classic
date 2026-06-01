@@ -67,6 +67,13 @@ def no_config(*comps: gr.components.Component):
         setattr(comp, "_internal_preset_param", True)
 
 
+def cleanup():
+    from modules_forge.main_thread import last_exception
+
+    if last_exception == "OOM":
+        sd_models.unload_model_weights()
+
+
 # Using constants for these since the variation selector isn't visible.
 # Important that they exactly match script.js for tooltip to work.
 random_symbol = "\U0001f3b2\ufe0f"  # 🎲️
@@ -378,8 +385,8 @@ def create_ui():
                 show_progress=False,
             )
 
-            toprow.prompt.submit(**txt2img_args)
-            toprow.submit.click(**txt2img_args)
+            toprow.prompt.submit(**txt2img_args).then(fn=cleanup)
+            toprow.submit.click(**txt2img_args).then(fn=cleanup)
 
             def select_gallery_image(index):
                 index = int(index)
@@ -749,8 +756,8 @@ def create_ui():
                 show_progress=False,
             )
 
-            toprow.prompt.submit(**img2img_args)
-            toprow.submit.click(**img2img_args)
+            toprow.prompt.submit(**img2img_args).then(fn=cleanup)
+            toprow.submit.click(**img2img_args).then(fn=cleanup)
 
             res_switch_btn.click(lambda w, h: (h, w), inputs=[width, height], outputs=[width, height], show_progress=False)
 

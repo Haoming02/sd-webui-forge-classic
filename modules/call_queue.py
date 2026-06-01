@@ -1,11 +1,11 @@
-import os.path
-from functools import wraps
 import html
+import os.path
 import time
 import traceback
+from functools import wraps
 
+from modules import devices, fifo_lock, profiling, progress, shared
 from modules_forge import main_thread
-from modules import shared, progress, errors, devices, fifo_lock, profiling
 
 queue_lock = fifo_lock.FIFOLock()
 
@@ -76,15 +76,14 @@ def wrap_gradio_call_no_job(func, extra_outputs=None, add_stats=False):
             res = list(func(*args, **kwargs))
         except Exception as e:
             if main_thread.last_exception is not None:
-                e = main_thread.last_exception
+                error_message = main_thread.last_exception
             else:
+                error_message = f"{type(e).__name__}: {e}"
                 traceback.print_exc()
-                print(e)
 
             if extra_outputs_array is None:
-                extra_outputs_array = [None, '']
+                extra_outputs_array = [None, ""]
 
-            error_message = f'{type(e).__name__}: {e}'
             res = extra_outputs_array + [f"<div class='error'>{html.escape(error_message)}</div>"]
 
         devices.torch_gc()
@@ -97,15 +96,15 @@ def wrap_gradio_call_no_job(func, extra_outputs=None, add_stats=False):
         elapsed_s = elapsed % 60
         elapsed_text = f"{elapsed_s:.1f} sec."
         if elapsed_m > 0:
-            elapsed_text = f"{elapsed_m} min. "+elapsed_text
+            elapsed_text = f"{elapsed_m} min. " + elapsed_text
 
         if run_memmon:
-            mem_stats = {k: -(v//-(1024*1024)) for k, v in shared.mem_mon.stop().items()}
-            active_peak = mem_stats['active_peak']
-            reserved_peak = mem_stats['reserved_peak']
-            sys_peak = mem_stats['system_peak']
-            sys_total = mem_stats['total']
-            sys_pct = sys_peak/max(sys_total, 1) * 100
+            mem_stats = {k: -(v // -(1024 * 1024)) for k, v in shared.mem_mon.stop().items()}
+            active_peak = mem_stats["active_peak"]
+            reserved_peak = mem_stats["reserved_peak"]
+            sys_peak = mem_stats["system_peak"]
+            sys_total = mem_stats["total"]
+            sys_pct = sys_peak / max(sys_total, 1) * 100
 
             toltip_a = "Active: peak amount of video memory used during generation (excluding cached data)"
             toltip_r = "Reserved: total amount of video memory allocated by the Torch library "
@@ -117,12 +116,12 @@ def wrap_gradio_call_no_job(func, extra_outputs=None, add_stats=False):
 
             vram_html = f"<p class='vram'>{text_a}, <wbr>{text_r}, <wbr>{text_sys}</p>"
         else:
-            vram_html = ''
+            vram_html = ""
 
         if shared.opts.profiling_enable and os.path.exists(shared.opts.profiling_filename):
             profiling_html = f"<p class='profile'> [ <a href='{profiling.webpath()}' download>Profile</a> ] </p>"
         else:
-            profiling_html = ''
+            profiling_html = ""
 
         # last item is always HTML
         res[-1] += f"<div class='performance'><p class='time'>Time taken: <wbr><span class='measurement'>{elapsed_text}</span></p>{vram_html}{profiling_html}</div>"
@@ -130,4 +129,3 @@ def wrap_gradio_call_no_job(func, extra_outputs=None, add_stats=False):
         return tuple(res)
 
     return f
-

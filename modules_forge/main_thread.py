@@ -5,7 +5,7 @@
 import threading
 import traceback
 from collections import deque
-from typing import Callable
+from typing import Callable, Optional
 
 lock = threading.Lock()
 condition = threading.Condition(lock)
@@ -13,7 +13,7 @@ condition = threading.Condition(lock)
 last_id: int = 0
 waiting_queue: deque["Task"] = deque()
 finished_tasks: dict[int, "Task"] = {}
-last_exception: Exception = None
+last_exception: Optional[str] = None
 
 
 class Task:
@@ -23,18 +23,21 @@ class Task:
         self.args = args
         self.kwargs = kwargs
         self.result = None
-        self.exception = None
 
     def work(self):
         global last_exception
         try:
             self.result = self.func(*self.args, **self.kwargs)
-            self.exception = None
             last_exception = None
         except Exception as e:
-            traceback.print_exc()
-            self.exception = e
-            last_exception = e
+            from backend.memory_management import is_oom, logger
+
+            if is_oom(e):
+                logger.error("Encountered Out of Memory during Sampling; Unloading all Models...")
+                last_exception = "OOM"
+            else:
+                traceback.print_exc()
+                last_exception = f"{type(e).__name__}: {e}"
 
 
 def loop():

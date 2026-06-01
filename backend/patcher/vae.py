@@ -219,8 +219,10 @@ class VAE:
                 if pixel_samples is None:
                     pixel_samples = torch.empty((samples_in.shape[0],) + tuple(out.shape[1:]), device=self.output_device)
                 pixel_samples[x : x + batch_number] = out
-        except memory_management.OOM_EXCEPTION:
-            print("Warning: Encountered Out of Memory during VAE decoding; Retrying with Tiled VAE Decoding...")
+        except Exception as e:
+            if not memory_management.is_oom(e):
+                raise e
+            memory_management.logger.warning("Encountered Out of Memory during VAE decoding; Retrying with Tiled VAE Decoding...")
             _tile = True
 
         if _tile:
@@ -270,8 +272,10 @@ class VAE:
                     samples = torch.empty((_samples.shape[0],) + tuple(out.shape[1:]), device=self.output_device)
                 samples[x : x + batch_number] = out
             _tile = False
-        except memory_management.OOM_EXCEPTION:
-            print("Warning: Encountered Out of Memory during VAE Encoding; Retrying with Tiled VAE Encoding...")
+        except Exception as e:
+            if not memory_management.is_oom(e):
+                raise e
+            memory_management.logger.warning("Encountered Out of Memory during VAE Encoding; Retrying with Tiled VAE Encoding...")
             _tile = True
 
         if _tile:

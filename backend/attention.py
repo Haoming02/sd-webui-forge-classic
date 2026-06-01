@@ -389,12 +389,15 @@ def slice_attention_vae(q, k, v):
                 r1[:, :, i:end] = torch.bmm(v, s2)
                 del s2
             break
-        except memory_management.OOM_EXCEPTION as e:
-            memory_management.soft_empty_cache(True)
-            steps *= 2
+        except Exception as e:
+            if not memory_management.is_oom(e):
+                raise e
             if steps > 128:
                 raise e
-            logger.warning(f"Out of Memory Error; trying again... ({steps})")
+
+        logger.warning("Out of Memory Error; retrying with higher steps...")
+        memory_management.soft_empty_cache()
+        steps *= 2
 
     return r1
 
@@ -450,11 +453,14 @@ def pytorch_attention_vae(q, k, v):
         out = operations.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False)
         out = out.transpose(2, 3).reshape(orig_shape)
         _fallback = False
-    except memory_management.OOM_EXCEPTION:
+    except Exception as e:
+        if not memory_management.is_oom(e):
+            raise e
         logger.warning("Out of Memory Error; retrying with Slice Attention")
         _fallback = True
 
     if _fallback:
+        memory_management.soft_empty_cache()
         out = slice_attention_vae(q.view(B, -1, C), k.view(B, -1, C).transpose(1, 2), v.view(B, -1, C).transpose(1, 2)).reshape(orig_shape)
 
     return out
