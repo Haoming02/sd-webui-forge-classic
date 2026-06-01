@@ -61,7 +61,7 @@
         const counter = gradioApp().getElementById(id_counter);
 
         if (textarea && counter)
-            onEdit(`${id_prompt}_BracketChecking`, textarea, 400, () => checkBrackets(textarea, counter));
+            onEdit(`${id_prompt}_BracketChecking`, textarea, 600, () => checkBrackets(textarea, counter));
     }
 
     onUiLoaded(function () {

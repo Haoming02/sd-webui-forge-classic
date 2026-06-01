@@ -54,7 +54,7 @@ function setupTokenCounting(id, id_counter, id_button) {
     prompt.parentElement.insertBefore(counter, prompt);
     prompt.parentElement.style.position = "relative";
 
-    let func = onEdit(id, textarea, 800, function () {
+    let func = onEdit(id, textarea, 600, function () {
         if (counter.classList.contains("token-counter-visible")) {
             gradioApp().getElementById(id_button)?.click();
         }

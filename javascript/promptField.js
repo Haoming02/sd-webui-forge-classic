@@ -21,7 +21,7 @@ function shushTextfield() {
 
 onUiLoaded(() => {
     function checkSettings() {
-        if (Object.keys(opts).length == 0) {
+        if (Object.keys(opts).length === 0) {
             setTimeout(checkSettings, 100);
             return;
         }

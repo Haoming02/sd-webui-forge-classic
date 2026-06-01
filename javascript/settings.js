@@ -29,7 +29,7 @@ onUiLoaded(function () {
     );
     let settings_tabs = gradioApp().querySelector("#settings div");
 
-    onEdit("settingsSearch", editTextarea, 250, function () {
+    onEdit("settingsSearch", editTextarea, 300, function () {
         let searchText = (editTextarea.value || "").trim().toLowerCase();
 
         gradioApp()
