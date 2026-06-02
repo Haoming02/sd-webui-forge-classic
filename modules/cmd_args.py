@@ -102,5 +102,7 @@ pkm = parser.add_mutually_exclusive_group()
 pkm.add_argument("--uv", action="store_true", help="Use the uv package manager")
 pkm.add_argument("--uv-symlink", action="store_true", help="Use the uv package manager with symlink")
 
+parser.add_argument("--uv-local-cache", action="store_true", help="Use a project-local uv cache directory (.uv-cache) instead of the user-global cache")
+
 parser = _parser
 paths_internal.parser = parser
