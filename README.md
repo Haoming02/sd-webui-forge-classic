@@ -326,7 +326,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - Install **[uv](https://github.com/astral-sh/uv#installation)**
 - The launcher automatically detects **uv** and handles the rest
-- *(Optional)* Add `--uv` to `COMMANDLINE_ARGS` for faster package installation
+- Add `--uv` to `COMMANDLINE_ARGS` to use uv for package installation
 
 </details>
 
