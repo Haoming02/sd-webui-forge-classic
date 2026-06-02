@@ -26,6 +26,8 @@ __pycache__
 /ui-config.json
 /user.css
 /venv
+/.uv-cache
+/.env
 /webui-user.bat
 /webui-user.sh
 notification.mp3
