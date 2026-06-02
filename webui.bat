@@ -14,6 +14,11 @@ set ERROR_REPORTING=FALSE
 mkdir tmp 2>NUL
 
 set USE_UV=0
+echo %COMMANDLINE_ARGS% | findstr /c:"--uv" >nul
+if %ERRORLEVEL% == 0 (
+    set USE_UV=1
+    goto :find_uv
+)
 uv help python >tmp/stdout.txt 2>tmp/stderr.txt
 if %ERRORLEVEL% == 0 (
     set USE_UV=1
@@ -22,6 +27,12 @@ if %ERRORLEVEL% == 0 (
 %PYTHON% -c "" >tmp/stdout.txt 2>tmp/stderr.txt
 if %ERRORLEVEL% == 0 goto :check_pip
 echo Couldn't launch python
+goto :show_stdout_stderr
+
+:find_uv
+uv help python >tmp/stdout.txt 2>tmp/stderr.txt
+if %ERRORLEVEL% == 0 goto :check_pip
+echo Couldn't launch uv
 goto :show_stdout_stderr
 
 :check_pip
