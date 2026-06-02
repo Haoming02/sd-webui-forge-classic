@@ -14,15 +14,13 @@ set ERROR_REPORTING=FALSE
 mkdir tmp 2>NUL
 
 set UV_CACHE_DIR=
-echo %COMMANDLINE_ARGS% | findstr /c:"--uv-local-cache" >nul
-if %ERRORLEVEL% == 0 (
-    set "UV_CACHE_DIR=%~dp0.uv-cache"
-    if not exist "%UV_CACHE_DIR%" mkdir "%UV_CACHE_DIR%"
-    echo Using project-local uv cache at %UV_CACHE_DIR%
-)
+echo(%COMMANDLINE_ARGS% | findstr /c:"--uv-local-cache" >nul
+if %ERRORLEVEL% == 0 set "UV_CACHE_DIR=%~dp0.uv-cache"
+if %ERRORLEVEL% == 0 if not exist "%UV_CACHE_DIR%" mkdir "%UV_CACHE_DIR%"
+if %ERRORLEVEL% == 0 echo Using project-local uv cache at %UV_CACHE_DIR%
 
 set USE_UV=0
-echo %COMMANDLINE_ARGS% | findstr /c:"--uv" >nul
+echo(%COMMANDLINE_ARGS% | findstr /c:"--uv" >nul
 if %ERRORLEVEL% == 0 (
     set USE_UV=1
     goto :find_uv
