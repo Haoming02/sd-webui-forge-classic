@@ -15,9 +15,18 @@ mkdir tmp 2>NUL
 
 set UV_CACHE_DIR=
 echo(%COMMANDLINE_ARGS% | findstr /c:"--uv-local-cache" >nul
-if %ERRORLEVEL% == 0 set "UV_CACHE_DIR=%~dp0.uv-cache"
-if %ERRORLEVEL% == 0 if not exist "%UV_CACHE_DIR%" mkdir "%UV_CACHE_DIR%"
-if %ERRORLEVEL% == 0 echo Using project-local uv cache at %UV_CACHE_DIR%
+if not %ERRORLEVEL% == 0 goto :no_uv_local_cache
+echo( %COMMANDLINE_ARGS%  | findstr /c:" --uv " /c:" --uv-symlink " >nul
+if %ERRORLEVEL% == 0 goto :setup_uv_cache
+echo ERROR: --uv-local-cache requires --uv or --uv-symlink
+goto :show_stdout_stderr
+
+:setup_uv_cache
+set "UV_CACHE_DIR=%~dp0.uv-cache"
+if not exist "%UV_CACHE_DIR%" mkdir "%UV_CACHE_DIR%"
+echo Using project-local uv cache at %UV_CACHE_DIR%
+
+:no_uv_local_cache
 
 set USE_UV=0
 echo(%COMMANDLINE_ARGS% | findstr /c:"--uv" >nul
