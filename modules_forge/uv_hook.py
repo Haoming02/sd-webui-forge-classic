@@ -6,7 +6,7 @@ from functools import wraps
 
 def _pre_check():
     try:
-        subprocess.run(["uv", "--help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["uv", "--help"], capture_output=True)
     except FileNotFoundError:
         print("\n[Error] uv is not installed...")
     except Exception:
@@ -24,7 +24,10 @@ def _set_cache():
     webui = os.path.dirname(os.path.dirname(__file__))
     cache = os.path.normpath(os.path.join(webui, ".uv-cache"))
 
-    os.makedirs(cache, exist_ok=True)
+    if not os.path.exists(cache):
+        print("[uv] Creating .uv-cache folder...")
+        os.makedirs(cache)
+
     os.environ.setdefault("UV_CACHE_DIR", cache)
 
 
