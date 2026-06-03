@@ -9,6 +9,7 @@ __pycache__
 *.sft
 .DS_Store
 .vscode
+/.uv-cache
 /cache
 /config.json
 /config_states/

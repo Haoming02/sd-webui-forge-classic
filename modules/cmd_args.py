@@ -101,6 +101,7 @@ parser.add_argument("--adv-samplers", action="store_true", help='show the "sampl
 pkm = parser.add_mutually_exclusive_group()
 pkm.add_argument("--uv", action="store_true", help="Use the uv package manager")
 pkm.add_argument("--uv-symlink", action="store_true", help="Use the uv package manager with symlink")
+pkm.add_argument("--uv-local-cache", action="store_true", help="Use the uv package manager with a local cache (.uv-cache) instead of the system-wide cache")
 
 parser = _parser
 paths_internal.parser = parser
