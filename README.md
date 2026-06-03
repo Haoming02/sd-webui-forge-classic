@@ -264,12 +264,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 - `--uv`: Replace the `python -m pip` calls with `uv pip` to massively speed up package installation
-    - see [Installation](#installation)
+    - requires **uv** to be installed first *(see [Installation](#installation))*
 - `--uv-symlink`: Same as above; but additionally pass `--link-mode symlink` to the commands
     - significantly reduces installation size (`~7 GB` to `~100 MB`)
-
-> [!Tip]
-> When **uv** is detected on your system, the launcher automatically uses it to create the virtual environment (`uv venv --python 3.13 --seed`), so the `--uv` flag is only needed for pip operations during installation.
 
 > [!Important]
 > Using `symlink` means it will directly access the packages from the cache folders; refrain from clearing the cache if using this option
@@ -325,8 +322,12 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <summary>Recommended Method</summary>
 
 - Install **[uv](https://github.com/astral-sh/uv#installation)**
-- The launcher automatically detects **uv** and handles the rest
-- Add `--uv` to `COMMANDLINE_ARGS` to use uv for package installation
+- Set up **venv**
+    ```bash
+    cd sd-webui-forge-neo
+    uv venv venv --python 3.13 --seed
+    ```
+- Add the `--uv` flag to `webui-user.bat`
 
 </details>
 
