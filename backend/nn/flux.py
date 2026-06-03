@@ -4,8 +4,8 @@
 import math
 from dataclasses import dataclass
 
-import comfy_kitchen as ck
 import torch
+from comfy_kitchen import apply_rope, apply_rope1  # noqa
 from einops import rearrange, repeat
 from torch import nn
 
@@ -36,13 +36,6 @@ def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     out = torch.stack([torch.cos(out), -torch.sin(out), torch.sin(out), torch.cos(out)], dim=-1)
     out = rearrange(out, "b n d (i j) -> b n d i j", i=2, j=2)
     return out.to(dtype=torch.float32, device=pos.device)
-
-
-apply_rope1 = ck.apply_rope1
-
-
-def apply_rope(xq: torch.Tensor, xk: torch.Tensor, freqs_cis: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    return apply_rope1(xq, freqs_cis), apply_rope1(xk, freqs_cis)
 
 
 def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000, time_factor: float = 1000.0) -> torch.Tensor:
