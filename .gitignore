@@ -9,6 +9,7 @@ __pycache__
 *.sft
 .DS_Store
 .vscode
+/.uv-cache
 /cache
 /config.json
 /config_states/
@@ -26,8 +27,6 @@ __pycache__
 /ui-config.json
 /user.css
 /venv
-/.uv-cache
-/.env
 /webui-user.bat
 /webui-user.sh
 notification.mp3

@@ -6,9 +6,10 @@ git = launch_utils.git
 index_url = launch_utils.index_url
 dir_repos = launch_utils.dir_repos
 
-if args.uv or args.uv_symlink:
+if args.uv or args.uv_symlink or args.uv_local_cache:
     from modules_forge.uv_hook import patch
-    patch(args.uv_symlink)
+
+    patch(not args.uv, args.uv_local_cache)
 
 git_tag = launch_utils.git_tag
 

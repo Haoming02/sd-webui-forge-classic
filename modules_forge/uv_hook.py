@@ -4,9 +4,38 @@ from copy import copy
 from functools import wraps
 
 
-def patch(symlink: bool):
+def _pre_check():
+    try:
+        subprocess.run(["uv", "--help"])
+    except FileNotFoundError:
+        print("\n[Error] uv is not installed...")
+    except Exception:
+        print("\n[Error] Failed to access uv...")
+    else:
+        return
+
+    input("Press Enter to Continue...")
+    raise SystemExit
+
+
+def _set_cache():
+    import os
+
+    webui = os.path.dirname(os.path.dirname(__file__))
+    cache = os.path.normpath(os.path.join(webui, ".uv-cache"))
+
+    os.makedirs(cache, exist_ok=True)
+    os.environ.setdefault("UV_CACHE_DIR", cache)
+
+
+def patch(symlink: bool, local: bool):
     if hasattr(subprocess, "__original_run"):
         return
+
+    _pre_check()
+
+    if local:
+        _set_cache()
 
     subprocess.__original_run = subprocess.run
     BAD_FLAGS = ("--prefer-binary", "--ignore-installed", "-I")

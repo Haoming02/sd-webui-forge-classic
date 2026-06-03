@@ -264,12 +264,15 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 - `--uv`: Replace the `python -m pip` calls with `uv pip` to massively speed up package installation
-    - requires **uv** to be installed first *(see [Installation](#installation))*
+    - requires **uv** to be installed first *(see [Extra Installations](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations))*
 - `--uv-symlink`: Same as above; but additionally pass `--link-mode symlink` to the commands
     - significantly reduces installation size (`~7 GB` to `~100 MB`)
+- `--uv-local-cache`: Same as above; but additionally set `UV_CACHE_DIR` to a `.uv-cache` folder inside WebUI directory
+    - speed up installation on non-default drive *(**i.e.** not `C:` on Windows)*
+    - allow clean uninstall by simply deleting the WebUI directory
 
 > [!Important]
-> Using `symlink` means it will directly access the packages from the cache folders; refrain from clearing the cache if using this option
+> `symlink` means it will directly access the packages from the cache folder instead of copying the packages over ; refrain from clearing the cache when using this option
 
 - `--model-ref`: Points to a central `models` folder that contains all your models
     - said folder should contain subfolders like `Stable-diffusion`, `Lora`, `VAE`, `ESRGAN`, etc.
