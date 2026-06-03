@@ -6,7 +6,7 @@ from functools import wraps
 
 def _pre_check():
     try:
-        subprocess.run(["uv", "--help"])
+        subprocess.run(["uv", "--help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         print("\n[Error] uv is not installed...")
     except Exception:
