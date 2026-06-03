@@ -89,7 +89,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 - [X] Rewrite Preset System
-    - now remembers the checkpoint/module selection and parameters for each preset
+    - now save the checkpoint/module selection and parameters per each Preset
 
 > [!Note]
 > This overrides the `UI Defaults` for the controlled parameters
@@ -101,7 +101,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - adjust in **Settings/System**
 - [X] Support [uv](https://github.com/astral-sh/uv) package manager
     - drastically speed up installation
-    - requires **manually** installing [uv](https://github.com/astral-sh/uv/releases)
+    - require **manually** installing [uv](https://github.com/astral-sh/uv/releases)
     - see [Commandline](#by-neo)
 - [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), `fp16_accumulation`, `torch._scaled_mm`
     - see [Commandline](#by-neo)
@@ -110,7 +110,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable by selecting `int8` in the `Diffusion in Low Bits`
 - [X] Implement [Radial Attention](https://github.com/mit-han-lab/radial-attention)
     - speed up `Wan 2.2`
-    - requires **manually** installing [SpargeAttn](https://github.com/thu-ml/SpargeAttn)
+    - require **manually** installing [SpargeAttn](https://github.com/thu-ml/SpargeAttn)
 - [X] Implement fast `state_dict` switching for Refiner
     - enable in **Settings/Refiner**
 - [X] Implement RescaleCFG
@@ -267,18 +267,22 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - requires **uv** to be installed first *(see [Extra Installations](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations))*
 - `--uv-symlink`: Same as above; but additionally pass `--link-mode symlink` to the commands
     - significantly reduces installation size (`~7 GB` to `~100 MB`)
-- `--uv-local-cache`: Same as above; but additionally set `UV_CACHE_DIR` to a `.uv-cache` folder inside WebUI directory
+- `--uv-local-cache`: Same as above; but additionally set `UV_CACHE_DIR` to a `.uv-cache` folder within WebUI directory
     - speed up installation on non-default drive *(**i.e.** not `C:` on Windows)*
-    - allow clean uninstall by simply deleting the WebUI directory
+    - allow clean uninstallation by simply deleting the WebUI directory
 
 > [!Important]
 > `symlink` means it will directly access the packages from the cache folder instead of copying the packages over ; refrain from clearing the cache when using this option
+
+<br>
 
 - `--model-ref`: Points to a central `models` folder that contains all your models
     - said folder should contain subfolders like `Stable-diffusion`, `Lora`, `VAE`, `ESRGAN`, etc.
 
 > [!Important]
 > This simply **replaces** the `models` folder rather than adding on top of it
+
+<br>
 
 - `--forge-ref-a1111-home`: Point to an Automatic1111 installation to load its `models` folders
     - **i.e.** `Stable-diffusion`, `text_encoder`, etc.
