@@ -1,29 +1,17 @@
 import torch
 import torch.nn as nn
 
-from comfy.ldm.flux.math import apply_rope, rope
-from comfy.ldm.modules.attention import optimized_attention
-from comfy.ldm.modules.diffusionmodules.mmdit import Mlp, get_1d_sincos_pos_embed_from_grid_torch
+from backend.attention import attention_function
+from backend.nn.flux import apply_rope, rope
+
+from .mmdit import Mlp, get_1d_sincos_pos_embed_from_grid_torch
 
 
 def apply_adaln_(x, shift, scale):
     return x.addcmul_(x, scale).add_(shift)
 
 
-def precompute_freqs_cis_2d(dim, height, width, theta=10000.0, scale=16.0,
-                            ref_grid_h=None, ref_grid_w=None,
-                            scale_x=1.0, scale_y=1.0, shift_x=0.0, shift_y=0.0,
-                            device=None, dtype=torch.float32, **kwargs):
-    """2D RoPE with x/y axis frequencies interleaved at stride 2 across head dim.
-
-    rope_options:
-      scale_x / scale_y multiply the position range (RoPE extrapolation).
-      shift_x / shift_y offset the position origin (tiled / regional inference).
-    With ref_grid_h/w set, also applies NTK-aware per-axis theta scaling
-    (rope_mode='ntk_aware'): theta_axis = theta * (current/ref)^(dim_axis/(dim_axis-2)).
-    Returns Flux-format rotation matrices of shape [H*W, dim/2, 2, 2].
-    Layout of head-dim pairs: [x_0, y_0, x_1, y_1, ..., x_{dim/4-1}, y_{dim/4-1}].
-    """
+def precompute_freqs_cis_2d(dim, height, width, theta=10000.0, scale=16.0, ref_grid_h=None, ref_grid_w=None, scale_x=1.0, scale_y=1.0, shift_x=0.0, shift_y=0.0, device=None, dtype=torch.float32, **kwargs):
     dim_axis = dim // 2
     if ref_grid_h is not None and dim_axis > 2:
         h_ntk = (height / ref_grid_h) ** (dim_axis / (dim_axis - 2))
@@ -41,10 +29,6 @@ def precompute_freqs_cis_2d(dim, height, width, theta=10000.0, scale=16.0,
 
 
 def get_2d_sincos_pos_embed(embed_dim, height, width, device=None, dtype=torch.float32):
-    """Standard 2D sin/cos absolute positional embedding (ViT-style).
-
-    first half encodes W-coordinates, second half H.
-    """
     assert embed_dim % 4 == 0
     grid_h = torch.arange(height, dtype=torch.float32, device=device)
     grid_w = torch.arange(width, dtype=torch.float32, device=device)
@@ -55,7 +39,7 @@ def get_2d_sincos_pos_embed(embed_dim, height, width, device=None, dtype=torch.f
 
 
 class RotaryAttention(nn.Module):
-    """Single-stream self-attention with rotary positional encoding (used inside PiTBlock)."""
+
     def __init__(self, dim, num_heads=8, qkv_bias=False, dtype=None, device=None, operations=None):
         super().__init__()
         assert dim % num_heads == 0
@@ -73,7 +57,7 @@ class RotaryAttention(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, H, D).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
         q, k = apply_rope(self.q_norm(q), self.k_norm(k), pos[None, None])
-        x = optimized_attention(q, k, v, H, mask=mask, skip_reshape=True, transformer_options=transformer_options)
+        x = attention_function(q, k, v, H, mask=mask, skip_reshape=True, transformer_options=transformer_options)
         return self.proj(x)
 
 
@@ -88,7 +72,7 @@ class FinalLayer(nn.Module):
 
 
 class PatchTokenEmbedder(nn.Module):
-    """Linear projection used both for patchified-image tokens and text-feature tokens."""
+
     def __init__(self, in_chans, embed_dim, use_norm=False, bias=True, dtype=None, device=None, operations=None):
         super().__init__()
         self.proj = operations.Linear(in_chans, embed_dim, bias=bias, dtype=dtype, device=device)
@@ -99,7 +83,7 @@ class PatchTokenEmbedder(nn.Module):
 
 
 class PixelTokenEmbedder(nn.Module):
-    """Pixel-level embedder: lifts each RGB pixel to hidden_size and packs into per-patch sequences."""
+
     def __init__(self, in_channels, hidden_size_output, dtype=None, device=None, operations=None):
         super().__init__()
         self.in_channels = in_channels
@@ -119,14 +103,8 @@ class PixelTokenEmbedder(nn.Module):
 
 
 class PiTBlock(nn.Module):
-    """Pixel-level transformer block.
 
-    Compresses each patch's P^2 pixel tokens → 1 attention token via a linear,
-    runs global self-attention across patches with 2D RoPE, then expands back to P^2 tokens.
-    Conditioning is per-pixel adaLN from the patch-level features.
-    """
-    def __init__(self, pixel_hidden_size, patch_hidden_size, patch_size, num_heads, mlp_ratio=4.0,
-                 attn_hidden_size=None, attn_num_heads=None, dtype=None, device=None, operations=None, mlp_chunks=1):
+    def __init__(self, pixel_hidden_size, patch_hidden_size, patch_size, num_heads, mlp_ratio=4.0, attn_hidden_size=None, attn_num_heads=None, dtype=None, device=None, operations=None, mlp_chunks=1):
         super().__init__()
         self.pixel_dim = pixel_hidden_size
         self.context_dim = patch_hidden_size

@@ -2,29 +2,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import comfy.ldm.common_dit
-import comfy.patcher_extension
-from comfy.ldm.flux.math import apply_rope, rope
-from comfy.ldm.hidream.model import FeedForwardSwiGLU
-from comfy.ldm.modules.attention import optimized_attention
-from comfy.ldm.modules.diffusionmodules.mmdit import TimestepEmbedder
+from backend.nn.lumina import TimestepEmbedder
+from backend.utils import pad_to_patch_size
 
+from .mmdit import FeedForwardSwiGLU
 from .modules import (
     FinalLayer,
     PatchTokenEmbedder,
     PiTBlock,
     PixelTokenEmbedder,
     apply_adaln_,
+    apply_rope,
+    attention_function,
     precompute_freqs_cis_2d,
+    rope,
 )
 
 
 class MMDiTJointAttention(nn.Module):
-    """Joint MMDiT attention with separate Q/K/V/proj for image and text streams.
 
-    RoPE is applied to each stream before concatenation so each stream uses its own
-    2D/1D positional encoding. Concat order is [text, image] (text first).
-    """
     def __init__(self, dim, num_heads=8, qkv_bias=False, dtype=None, device=None, operations=None):
         super().__init__()
         assert dim % num_heads == 0
@@ -66,9 +62,14 @@ class MMDiTJointAttention(nn.Module):
         k_joint = torch.cat([ky, kx], dim=2)
         v_joint = torch.cat([vy, vx], dim=2)
 
-        out_joint = optimized_attention(
-            q_joint, k_joint, v_joint, H,
-            mask=attn_mask, skip_reshape=True, skip_output_reshape=True,
+        out_joint = attention_function(
+            q_joint,
+            k_joint,
+            v_joint,
+            H,
+            mask=attn_mask,
+            skip_reshape=True,
+            skip_output_reshape=True,
             transformer_options=transformer_options,
         )
 
@@ -108,15 +109,7 @@ class MMDiTBlockT2I(nn.Module):
 
 
 class PixDiT_T2I(nn.Module):
-    """PixelDiT T2I model. Hardcoded for the released 1024px Stage-3 checkpoint
-    (also runs at 512px when fed the appropriate latent size and flow_shift).
 
-    Forward:
-      x:        [B, 3, H, W] pixel-space input (no VAE)
-      timesteps:[B] in [0, 1000] (ComfyUI flow sampling convention)
-      context:  [B, Ltxt, 2304] Gemma-2-2b-it hidden states (chi_prompt prepended)
-    Returns flow-matching velocity [B, 3, H, W].
-    """
     def __init__(
         self,
         in_channels=3,
@@ -156,29 +149,29 @@ class PixDiT_T2I(nn.Module):
         self.text_rope_theta = text_rope_theta
 
         self.pixel_embedder = PixelTokenEmbedder(self.in_channels, self.pixel_hidden_size, dtype=dtype, device=device, operations=operations)
-        self.s_embedder = PatchTokenEmbedder(self.in_channels * self.patch_size ** 2, self.hidden_size, bias=True, dtype=dtype, device=device, operations=operations)
+        self.s_embedder = PatchTokenEmbedder(self.in_channels * self.patch_size**2, self.hidden_size, bias=True, dtype=dtype, device=device, operations=operations)
         self.t_embedder = TimestepEmbedder(self.hidden_size, dtype=dtype, device=device, operations=operations, max_period=10)
         self.y_embedder = PatchTokenEmbedder(self.txt_embed_dim, self.hidden_size, bias=True, use_norm=True, dtype=dtype, device=device, operations=operations)
         self.y_pos_embedding = nn.Parameter(torch.empty(1, self.txt_max_length, self.hidden_size, dtype=dtype, device=device))
 
-        self.patch_blocks = nn.ModuleList([
-            MMDiTBlockT2I(self.hidden_size, self.num_groups,
-                          dtype=dtype, device=device, operations=operations)
-            for _ in range(self.patch_depth)
-        ])
-        self.pixel_blocks = nn.ModuleList([
-            PiTBlock(
-                self.pixel_hidden_size,
-                self.hidden_size,
-                patch_size=self.patch_size,
-                num_heads=self.num_groups,
-                attn_hidden_size=self.pixel_attn_hidden_size,
-                attn_num_heads=self.pixel_num_groups,
-                dtype=dtype, device=device, operations=operations,
-                mlp_chunks=pixel_mlp_chunks,
-            )
-            for _ in range(self.pixel_depth)
-        ])
+        self.patch_blocks = nn.ModuleList([MMDiTBlockT2I(self.hidden_size, self.num_groups, dtype=dtype, device=device, operations=operations) for _ in range(self.patch_depth)])
+        self.pixel_blocks = nn.ModuleList(
+            [
+                PiTBlock(
+                    self.pixel_hidden_size,
+                    self.hidden_size,
+                    patch_size=self.patch_size,
+                    num_heads=self.num_groups,
+                    attn_hidden_size=self.pixel_attn_hidden_size,
+                    attn_num_heads=self.pixel_num_groups,
+                    dtype=dtype,
+                    device=device,
+                    operations=operations,
+                    mlp_chunks=pixel_mlp_chunks,
+                )
+                for _ in range(self.pixel_depth)
+            ]
+        )
 
         self.final_layer = FinalLayer(self.pixel_hidden_size, self.out_channels, dtype=dtype, device=device, operations=operations)
 
@@ -188,18 +181,12 @@ class PixDiT_T2I(nn.Module):
     def _fetch_text_pos(self, length, device, dtype):
         return rope(torch.arange(length, dtype=torch.float32, device=device).reshape(1, -1), self.hidden_size // self.num_groups, self.text_rope_theta).squeeze(0).to(dtype=dtype)
 
-    def forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, **kwargs):
-        return comfy.patcher_extension.WrapperExecutor.new_class_executor(
-            self._forward, self, comfy.patcher_extension.get_all_wrappers(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, transformer_options),
-        ).execute(x, timesteps, context, attention_mask, transformer_options, **kwargs)
-
     def _pre_patch_block(self, s, i, **kwargs):
-        """Hook for subclasses to inject per-block state into the patch stream (e.g. PiD's LQ gate)."""
         return s
 
-    def _forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, **kwargs):
+    def forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, **kwargs):
         H_orig, W_orig = x.shape[2], x.shape[3]
-        x = comfy.ldm.common_dit.pad_to_patch_size(x, (self.patch_size, self.patch_size))
+        x = pad_to_patch_size(x, (self.patch_size, self.patch_size))
         B, _, H, W = x.shape
         Hs = H // self.patch_size
         Ws = W // self.patch_size
@@ -215,7 +202,7 @@ class PixDiT_T2I(nn.Module):
         Ltxt = min(context.shape[1], self.txt_max_length)
         y = context[:, :Ltxt, :]
         y_emb = self.y_embedder(y).view(B, Ltxt, self.hidden_size)
-        y_emb = y_emb + self.y_pos_embedding[:, :Ltxt, :].to(y_emb) # y_pos_embedding is a raw nn.Parameter
+        y_emb = y_emb + self.y_pos_embedding[:, :Ltxt, :].to(y_emb)  # y_pos_embedding is a raw nn.Parameter
 
         condition = F.silu(t_emb)
         pos_txt = self._fetch_text_pos(Ltxt, x.device, x.dtype) if self.use_text_rope else None
