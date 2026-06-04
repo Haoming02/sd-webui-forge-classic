@@ -1,3 +1,5 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/ldm/pixeldit/pid.py
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,15 +9,14 @@ from .modules import precompute_freqs_cis_2d
 
 
 class SigmaAwareGatePerTokenPerDim(nn.Module):
-
-    def __init__(self, dim: int, dtype=None, device=None, operations=None):
+    def __init__(self, dim: int):
         super().__init__()
-        self.content_proj = operations.Linear(dim * 2, dim, dtype=dtype, device=device)
-        self.log_alpha = nn.Parameter(torch.empty((), dtype=dtype, device=device))
+
+        self.content_proj = nn.Linear(dim * 2, dim)
+        self.log_alpha = nn.Parameter(torch.empty(()))
 
     def forward(self, x: torch.Tensor, lq: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
         content_logit = self.content_proj(torch.cat([x, lq], dim=-1))
-        # log_alpha is a raw nn.Parameter -> doesn't auto-cast under dynamic VRAM.
         log_alpha = self.log_alpha.to(device=x.device, dtype=torch.float32)
         sigma_offset = -log_alpha.exp() * sigma.float().view(-1, 1, 1)
         gate = torch.sigmoid(content_logit + sigma_offset)
@@ -23,16 +24,16 @@ class SigmaAwareGatePerTokenPerDim(nn.Module):
 
 
 class ResBlock(nn.Module):
-
-    def __init__(self, channels: int, num_groups: int = 4, dtype=None, device=None, operations=None):
+    def __init__(self, channels: int, num_groups: int = 4):
         super().__init__()
+
         self.block = nn.Sequential(
-            operations.GroupNorm(num_groups, channels, dtype=dtype, device=device),
+            nn.GroupNorm(num_groups, channels),
             nn.SiLU(),
-            operations.Conv2d(channels, channels, kernel_size=3, padding=1, dtype=dtype, device=device),
-            operations.GroupNorm(num_groups, channels, dtype=dtype, device=device),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.GroupNorm(num_groups, channels),
             nn.SiLU(),
-            operations.Conv2d(channels, channels, kernel_size=3, padding=1, dtype=dtype, device=device),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -40,7 +41,6 @@ class ResBlock(nn.Module):
 
 
 class LQProjection2D(nn.Module):
-
     def __init__(
         self,
         latent_channels: int,
@@ -52,11 +52,9 @@ class LQProjection2D(nn.Module):
         num_res_blocks: int = 4,
         num_outputs: int = 7,
         interval: int = 2,
-        dtype=None,
-        device=None,
-        operations=None,
     ):
         super().__init__()
+
         self.latent_channels = latent_channels
         self.hidden_dim = hidden_dim
         self.out_dim = out_dim
@@ -78,16 +76,18 @@ class LQProjection2D(nn.Module):
             latent_proj_in_ch = latent_channels * fold_factor * fold_factor
 
         layers = [
-            operations.Conv2d(latent_proj_in_ch, hidden_dim, kernel_size=3, padding=1, dtype=dtype, device=device),
+            nn.Conv2d(latent_proj_in_ch, hidden_dim, kernel_size=3, padding=1),
             nn.SiLU(),
-            operations.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1, dtype=dtype, device=device),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
         ]
+
         for _ in range(num_res_blocks):
-            layers.append(ResBlock(hidden_dim, dtype=dtype, device=device, operations=operations))
+            layers.append(ResBlock(hidden_dim))
+
         self.latent_proj = nn.Sequential(*layers)
 
-        self.output_heads = nn.ModuleList([operations.Linear(hidden_dim, out_dim, dtype=dtype, device=device) for _ in range(num_outputs)])
-        self.gate_modules = nn.ModuleList([SigmaAwareGatePerTokenPerDim(out_dim, dtype=dtype, device=device, operations=operations) for _ in range(num_outputs)])
+        self.output_heads = nn.ModuleList([nn.Linear(hidden_dim, out_dim) for _ in range(num_outputs)])
+        self.gate_modules = nn.ModuleList([SigmaAwareGatePerTokenPerDim(out_dim) for _ in range(num_outputs)])
 
     def is_gate_active(self, block_idx: int) -> bool:
         return block_idx % self.interval == 0
@@ -122,7 +122,6 @@ class LQProjection2D(nn.Module):
 
 
 class PidNet(PixDiT_T2I):
-
     def __init__(
         self,
         lq_latent_channels: int = 16,
@@ -131,20 +130,15 @@ class PidNet(PixDiT_T2I):
         lq_interval: int = 2,
         sr_scale: int = 4,
         latent_spatial_down_factor: int = 8,
-        rope_ref_h: int = 1024,  # NTK ref resolution in PIXEL units: 1024px / patch=16 -> grid_ref=64.
+        rope_ref_h: int = 1024,
         rope_ref_w: int = 1024,
-        image_model=None,
-        dtype=None,
-        device=None,
-        operations=None,
         **pixdit_kwargs,
     ):
-        super().__init__(dtype=dtype, device=device, operations=operations, **pixdit_kwargs)
+        super().__init__(**pixdit_kwargs)
 
         self.rope_ref_grid_h = rope_ref_h // self.patch_size
         self.rope_ref_grid_w = rope_ref_w // self.patch_size
 
-        # Parent's PiTBlocks were built with plain RoPE — swap in NTK-aware.
         def _pit_rope_fn(head_dim, h, w, device=None, dtype=torch.float32, **rope_opts):
             return precompute_freqs_cis_2d(head_dim, h, w, ref_grid_h=self.rope_ref_grid_h, ref_grid_w=self.rope_ref_grid_w, device=device, dtype=dtype, **rope_opts)
 
@@ -162,9 +156,6 @@ class PidNet(PixDiT_T2I):
             num_res_blocks=lq_num_res_blocks,
             num_outputs=num_lq_outputs,
             interval=lq_interval,
-            dtype=dtype,
-            device=device,
-            operations=operations,
         )
 
     def _fetch_patch_pos(self, height, width, device, dtype, **rope_opts):
@@ -188,13 +179,12 @@ class PidNet(PixDiT_T2I):
         return self.lq_proj.gate(s, pid_lq_features[out_idx], pid_degrade_sigma, out_idx)
 
     def forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, lq_latent=None, degrade_sigma=None, **kwargs):
-        if lq_latent is None:
-            raise ValueError("PidNet requires lq_latent — attach via PiDConditioning")
+        assert lq_latent is not None
+
         expected_c = self.lq_proj.latent_channels
-        if lq_latent.shape[1] != expected_c:
-            raise ValueError(f"Input latent has {lq_latent.shape[1]} channels, this model variant expects {expected_c}. " f"Flux1/SD3 = 16 channels, Flux2 = 128 channels.")
+        assert lq_latent.shape[1] == expected_c
+
         B = x.shape[0]
-        # Match the backbone's pad_to_patch_size (round up) so the LQ grid lines up with the patch stream.
         Hs = -(-x.shape[2] // self.patch_size)
         Ws = -(-x.shape[3] // self.patch_size)
 

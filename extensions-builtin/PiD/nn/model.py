@@ -1,11 +1,12 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/ldm/pixeldit/model.py
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from backend.nn.lumina import TimestepEmbedder
 from backend.utils import pad_to_patch_size
 
-from .mmdit import FeedForwardSwiGLU
+from .mmdit import FeedForwardSwiGLU, TimestepEmbedder
 from .modules import (
     FinalLayer,
     PatchTokenEmbedder,
@@ -20,23 +21,23 @@ from .modules import (
 
 
 class MMDiTJointAttention(nn.Module):
-
-    def __init__(self, dim, num_heads=8, qkv_bias=False, dtype=None, device=None, operations=None):
+    def __init__(self, dim, num_heads=8, qkv_bias=False):
         super().__init__()
+
         assert dim % num_heads == 0
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
 
-        self.qkv_x = operations.Linear(dim, dim * 3, bias=qkv_bias, dtype=dtype, device=device)
-        self.qkv_y = operations.Linear(dim, dim * 3, bias=qkv_bias, dtype=dtype, device=device)
+        self.qkv_x = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.qkv_y = nn.Linear(dim, dim * 3, bias=qkv_bias)
 
-        self.q_norm_x = operations.RMSNorm(self.head_dim, eps=1e-6, dtype=dtype, device=device)
-        self.k_norm_x = operations.RMSNorm(self.head_dim, eps=1e-6, dtype=dtype, device=device)
-        self.q_norm_y = operations.RMSNorm(self.head_dim, eps=1e-6, dtype=dtype, device=device)
-        self.k_norm_y = operations.RMSNorm(self.head_dim, eps=1e-6, dtype=dtype, device=device)
+        self.q_norm_x = nn.RMSNorm(self.head_dim, eps=1e-6)
+        self.k_norm_x = nn.RMSNorm(self.head_dim, eps=1e-6)
+        self.q_norm_y = nn.RMSNorm(self.head_dim, eps=1e-6)
+        self.k_norm_y = nn.RMSNorm(self.head_dim, eps=1e-6)
 
-        self.proj_x = operations.Linear(dim, dim, dtype=dtype, device=device)
-        self.proj_y = operations.Linear(dim, dim, dtype=dtype, device=device)
+        self.proj_x = nn.Linear(dim, dim)
+        self.proj_y = nn.Linear(dim, dim)
 
     def forward(self, x, y, pos_img, pos_txt=None, attn_mask=None, transformer_options={}):
         B, Nx, _ = x.shape
@@ -80,18 +81,19 @@ class MMDiTJointAttention(nn.Module):
 
 
 class MMDiTBlockT2I(nn.Module):
-    def __init__(self, hidden_size, groups, mlp_ratio=4.0, dtype=None, device=None, operations=None):
+    def __init__(self, hidden_size, groups, mlp_ratio=4.0):
         super().__init__()
-        self.norm_x1 = operations.RMSNorm(hidden_size, eps=1e-6, dtype=dtype, device=device)
-        self.norm_y1 = operations.RMSNorm(hidden_size, eps=1e-6, dtype=dtype, device=device)
-        self.attn = MMDiTJointAttention(hidden_size, num_heads=groups, qkv_bias=False, dtype=dtype, device=device, operations=operations)
-        self.norm_x2 = operations.RMSNorm(hidden_size, eps=1e-6, dtype=dtype, device=device)
-        self.norm_y2 = operations.RMSNorm(hidden_size, eps=1e-6, dtype=dtype, device=device)
+
+        self.norm_x1 = nn.RMSNorm(hidden_size, eps=1e-6)
+        self.norm_y1 = nn.RMSNorm(hidden_size, eps=1e-6)
+        self.attn = MMDiTJointAttention(hidden_size, num_heads=groups, qkv_bias=False)
+        self.norm_x2 = nn.RMSNorm(hidden_size, eps=1e-6)
+        self.norm_y2 = nn.RMSNorm(hidden_size, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        self.mlp_x = FeedForwardSwiGLU(hidden_size, mlp_hidden_dim, multiple_of=1, dtype=dtype, device=device, operations=operations)
-        self.mlp_y = FeedForwardSwiGLU(hidden_size, mlp_hidden_dim, multiple_of=1, dtype=dtype, device=device, operations=operations)
-        self.adaLN_modulation_img = nn.Sequential(operations.Linear(hidden_size, 6 * hidden_size, bias=True, dtype=dtype, device=device))
-        self.adaLN_modulation_txt = nn.Sequential(operations.Linear(hidden_size, 6 * hidden_size, bias=True, dtype=dtype, device=device))
+        self.mlp_x = FeedForwardSwiGLU(hidden_size, mlp_hidden_dim, multiple_of=1)
+        self.mlp_y = FeedForwardSwiGLU(hidden_size, mlp_hidden_dim, multiple_of=1)
+        self.adaLN_modulation_img = nn.Sequential(nn.Linear(hidden_size, 6 * hidden_size, bias=True))
+        self.adaLN_modulation_txt = nn.Sequential(nn.Linear(hidden_size, 6 * hidden_size, bias=True))
 
     def forward(self, x, y, c, pos_img, pos_txt=None, attn_mask=None, transformer_options={}):
         shift_msa_x, scale_msa_x, gate_msa_x, shift_mlp_x, scale_mlp_x, gate_mlp_x = self.adaLN_modulation_img(c).chunk(6, dim=-1)
@@ -100,16 +102,16 @@ class MMDiTBlockT2I(nn.Module):
         x_norm = apply_adaln_(self.norm_x1(x), shift_msa_x, scale_msa_x)
         y_norm = apply_adaln_(self.norm_y1(y), shift_msa_y, scale_msa_y)
         attn_x, attn_y = self.attn(x_norm, y_norm, pos_img, pos_txt, attn_mask, transformer_options=transformer_options)
+
         x = torch.addcmul(x, gate_msa_x, attn_x)
         y = torch.addcmul(y, gate_msa_y, attn_y)
-
         x = torch.addcmul(x, gate_mlp_x, self.mlp_x(apply_adaln_(self.norm_x2(x), shift_mlp_x, scale_mlp_x)))
         y = torch.addcmul(y, gate_mlp_y, self.mlp_y(apply_adaln_(self.norm_y2(y), shift_mlp_y, scale_mlp_y)))
+
         return x, y
 
 
 class PixDiT_T2I(nn.Module):
-
     def __init__(
         self,
         in_channels=3,
@@ -125,14 +127,10 @@ class PixDiT_T2I(nn.Module):
         txt_max_length=300,
         use_text_rope=True,
         text_rope_theta=10000.0,
-        image_model=None,
-        dtype=None,
-        device=None,
-        operations=None,
         pixel_mlp_chunks=2,
     ):
         super().__init__()
-        self.dtype = dtype
+
         self.in_channels = in_channels
         self.out_channels = in_channels
         self.hidden_size = hidden_size
@@ -148,13 +146,13 @@ class PixDiT_T2I(nn.Module):
         self.use_text_rope = use_text_rope
         self.text_rope_theta = text_rope_theta
 
-        self.pixel_embedder = PixelTokenEmbedder(self.in_channels, self.pixel_hidden_size, dtype=dtype, device=device, operations=operations)
-        self.s_embedder = PatchTokenEmbedder(self.in_channels * self.patch_size**2, self.hidden_size, bias=True, dtype=dtype, device=device, operations=operations)
-        self.t_embedder = TimestepEmbedder(self.hidden_size, dtype=dtype, device=device, operations=operations, max_period=10)
-        self.y_embedder = PatchTokenEmbedder(self.txt_embed_dim, self.hidden_size, bias=True, use_norm=True, dtype=dtype, device=device, operations=operations)
-        self.y_pos_embedding = nn.Parameter(torch.empty(1, self.txt_max_length, self.hidden_size, dtype=dtype, device=device))
+        self.pixel_embedder = PixelTokenEmbedder(self.in_channels, self.pixel_hidden_size)
+        self.s_embedder = PatchTokenEmbedder(self.in_channels * self.patch_size**2, self.hidden_size, bias=True)
+        self.t_embedder = TimestepEmbedder(self.hidden_size, max_period=10)
+        self.y_embedder = PatchTokenEmbedder(self.txt_embed_dim, self.hidden_size, bias=True, use_norm=True)
+        self.y_pos_embedding = nn.Parameter(torch.empty(1, self.txt_max_length, self.hidden_size))
 
-        self.patch_blocks = nn.ModuleList([MMDiTBlockT2I(self.hidden_size, self.num_groups, dtype=dtype, device=device, operations=operations) for _ in range(self.patch_depth)])
+        self.patch_blocks = nn.ModuleList([MMDiTBlockT2I(self.hidden_size, self.num_groups) for _ in range(self.patch_depth)])
         self.pixel_blocks = nn.ModuleList(
             [
                 PiTBlock(
@@ -164,16 +162,13 @@ class PixDiT_T2I(nn.Module):
                     num_heads=self.num_groups,
                     attn_hidden_size=self.pixel_attn_hidden_size,
                     attn_num_heads=self.pixel_num_groups,
-                    dtype=dtype,
-                    device=device,
-                    operations=operations,
                     mlp_chunks=pixel_mlp_chunks,
                 )
                 for _ in range(self.pixel_depth)
             ]
         )
 
-        self.final_layer = FinalLayer(self.pixel_hidden_size, self.out_channels, dtype=dtype, device=device, operations=operations)
+        self.final_layer = FinalLayer(self.pixel_hidden_size, self.out_channels)
 
     def _fetch_patch_pos(self, height, width, device, dtype, **rope_opts):
         return precompute_freqs_cis_2d(self.hidden_size // self.num_groups, height, width, device=device, dtype=dtype, **rope_opts)
@@ -202,7 +197,7 @@ class PixDiT_T2I(nn.Module):
         Ltxt = min(context.shape[1], self.txt_max_length)
         y = context[:, :Ltxt, :]
         y_emb = self.y_embedder(y).view(B, Ltxt, self.hidden_size)
-        y_emb = y_emb + self.y_pos_embedding[:, :Ltxt, :].to(y_emb)  # y_pos_embedding is a raw nn.Parameter
+        y_emb = y_emb + self.y_pos_embedding[:, :Ltxt, :].to(y_emb)
 
         condition = F.silu(t_emb)
         pos_txt = self._fetch_text_pos(Ltxt, x.device, x.dtype) if self.use_text_rope else None
@@ -223,4 +218,5 @@ class PixDiT_T2I(nn.Module):
         P2 = self.patch_size * self.patch_size
         x_pixels = x_pixels.view(B, L, P2, C_out).permute(0, 3, 2, 1).reshape(B, C_out * P2, L)
         out = F.fold(x_pixels, (H, W), kernel_size=self.patch_size, stride=self.patch_size)
+
         return out[:, :, :H_orig, :W_orig]

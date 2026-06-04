@@ -1,3 +1,5 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/ldm/pixeldit/modules.py
+
 import torch
 import torch.nn as nn
 
@@ -39,16 +41,17 @@ def get_2d_sincos_pos_embed(embed_dim, height, width, device=None, dtype=torch.f
 
 
 class RotaryAttention(nn.Module):
-
-    def __init__(self, dim, num_heads=8, qkv_bias=False, dtype=None, device=None, operations=None):
+    def __init__(self, dim, num_heads=8, qkv_bias=False):
         super().__init__()
+
         assert dim % num_heads == 0
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        self.qkv = operations.Linear(dim, dim * 3, bias=qkv_bias, dtype=dtype, device=device)
-        self.q_norm = operations.RMSNorm(self.head_dim, eps=1e-6, dtype=dtype, device=device)
-        self.k_norm = operations.RMSNorm(self.head_dim, eps=1e-6, dtype=dtype, device=device)
-        self.proj = operations.Linear(dim, dim, dtype=dtype, device=device)
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
+        self.proj = nn.Linear(dim, dim)
 
     def forward(self, x, pos, mask=None, transformer_options={}):
         B, N, C = x.shape
@@ -58,37 +61,39 @@ class RotaryAttention(nn.Module):
         q, k, v = qkv.unbind(0)
         q, k = apply_rope(self.q_norm(q), self.k_norm(k), pos[None, None])
         x = attention_function(q, k, v, H, mask=mask, skip_reshape=True, transformer_options=transformer_options)
+
         return self.proj(x)
 
 
 class FinalLayer(nn.Module):
-    def __init__(self, hidden_size, out_channels, dtype=None, device=None, operations=None):
+    def __init__(self, hidden_size, out_channels):
         super().__init__()
-        self.norm = operations.RMSNorm(hidden_size, eps=1e-6, dtype=dtype, device=device)
-        self.linear = operations.Linear(hidden_size, out_channels, bias=True, dtype=dtype, device=device)
+
+        self.norm = nn.RMSNorm(hidden_size, eps=1e-6)
+        self.linear = nn.Linear(hidden_size, out_channels, bias=True)
 
     def forward(self, x):
         return self.linear(self.norm(x))
 
 
 class PatchTokenEmbedder(nn.Module):
-
-    def __init__(self, in_chans, embed_dim, use_norm=False, bias=True, dtype=None, device=None, operations=None):
+    def __init__(self, in_chans, embed_dim, use_norm=False, bias=True):
         super().__init__()
-        self.proj = operations.Linear(in_chans, embed_dim, bias=bias, dtype=dtype, device=device)
-        self.norm = operations.RMSNorm(embed_dim, eps=1e-6, dtype=dtype, device=device) if use_norm else nn.Identity()
+
+        self.proj = nn.Linear(in_chans, embed_dim, bias=bias)
+        self.norm = nn.RMSNorm(embed_dim, eps=1e-6) if use_norm else nn.Identity()
 
     def forward(self, x):
         return self.norm(self.proj(x))
 
 
 class PixelTokenEmbedder(nn.Module):
-
-    def __init__(self, in_channels, hidden_size_output, dtype=None, device=None, operations=None):
+    def __init__(self, in_channels, hidden_size_output):
         super().__init__()
+
         self.in_channels = in_channels
         self.hidden_size_output = hidden_size_output
-        self.proj = operations.Linear(self.in_channels, self.hidden_size_output, bias=True, dtype=dtype, device=device)
+        self.proj = nn.Linear(self.in_channels, self.hidden_size_output, bias=True)
 
     def forward(self, inputs, patch_size):
         B, _, H, W = inputs.shape
@@ -103,9 +108,9 @@ class PixelTokenEmbedder(nn.Module):
 
 
 class PiTBlock(nn.Module):
-
-    def __init__(self, pixel_hidden_size, patch_hidden_size, patch_size, num_heads, mlp_ratio=4.0, attn_hidden_size=None, attn_num_heads=None, dtype=None, device=None, operations=None, mlp_chunks=1):
+    def __init__(self, pixel_hidden_size, patch_hidden_size, patch_size, num_heads, mlp_ratio=4.0, attn_hidden_size=None, attn_num_heads=None, mlp_chunks=1):
         super().__init__()
+
         self.pixel_dim = pixel_hidden_size
         self.context_dim = patch_hidden_size
         self.attn_dim = attn_hidden_size if attn_hidden_size is not None else patch_hidden_size
@@ -113,16 +118,16 @@ class PiTBlock(nn.Module):
         assert self.attn_dim % self.num_heads == 0
 
         p2 = patch_size * patch_size
-        self.compress_to_attn = operations.Linear(p2 * self.pixel_dim, self.attn_dim, bias=True, dtype=dtype, device=device)
-        self.expand_from_attn = operations.Linear(self.attn_dim, p2 * self.pixel_dim, bias=True, dtype=dtype, device=device)
+        self.compress_to_attn = nn.Linear(p2 * self.pixel_dim, self.attn_dim, bias=True)
+        self.expand_from_attn = nn.Linear(self.attn_dim, p2 * self.pixel_dim, bias=True)
 
-        self.norm1 = operations.RMSNorm(self.pixel_dim, eps=1e-6, dtype=dtype, device=device)
-        self.attn = RotaryAttention(self.attn_dim, num_heads=self.num_heads, qkv_bias=False, dtype=dtype, device=device, operations=operations)
-        self.norm2 = operations.RMSNorm(self.pixel_dim, eps=1e-6, dtype=dtype, device=device)
-        self.mlp = Mlp(self.pixel_dim, hidden_features=int(self.pixel_dim * mlp_ratio), dtype=dtype, device=device, operations=operations)
+        self.norm1 = nn.RMSNorm(self.pixel_dim, eps=1e-6)
+        self.attn = RotaryAttention(self.attn_dim, num_heads=self.num_heads, qkv_bias=False)
+        self.norm2 = nn.RMSNorm(self.pixel_dim, eps=1e-6)
+        self.mlp = Mlp(self.pixel_dim, hidden_features=int(self.pixel_dim * mlp_ratio))
 
-        self.adaLN_modulation_msa = operations.Linear(self.context_dim, 3 * self.pixel_dim * p2, bias=True, dtype=dtype, device=device)
-        self.adaLN_modulation_mlp = operations.Linear(self.context_dim, 3 * self.pixel_dim * p2, bias=True, dtype=dtype, device=device)
+        self.adaLN_modulation_msa = nn.Linear(self.context_dim, 3 * self.pixel_dim * p2, bias=True)
+        self.adaLN_modulation_mlp = nn.Linear(self.context_dim, 3 * self.pixel_dim * p2, bias=True)
 
         self._rope_fn = precompute_freqs_cis_2d
         self.mlp_chunks = max(1, int(mlp_chunks))
@@ -136,7 +141,6 @@ class PiTBlock(nn.Module):
         L = Hs * Ws
         B = BL // L
 
-        # Attention path uses only msa params; compute, use, free before mlp params allocate.
         msa_params = self.adaLN_modulation_msa(s_cond).view(BL, P2, 3 * self.pixel_dim)
         shift_msa, scale_msa, gate_msa = msa_params.chunk(3, dim=-1)
 
@@ -153,13 +157,13 @@ class PiTBlock(nn.Module):
 
         mlp_params = self.adaLN_modulation_mlp(s_cond).view(BL, P2, 3 * self.pixel_dim)
         shift_mlp, scale_mlp, gate_mlp = mlp_params.chunk(3, dim=-1)
-        gate_mlp = gate_mlp.contiguous()  # detach from mlp_params so the del below frees shift+scale storage before the MLP
+        gate_mlp = gate_mlp.contiguous()
         mlp_input = apply_adaln_(self.norm2(x), shift_mlp, scale_mlp)
         del mlp_params, shift_mlp, scale_mlp
 
-        # MLP in chunks since the peak memory usage is huge here
         chunk_size = (BL + self.mlp_chunks - 1) // self.mlp_chunks
         for s in range(0, BL, chunk_size):
             e = min(s + chunk_size, BL)
             x[s:e].addcmul_(gate_mlp[s:e], self.mlp(mlp_input[s:e]))
+
         return x
