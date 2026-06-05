@@ -38,3 +38,9 @@ torchsde==0.2.6
 tqdm==4.67.3
 transformers==4.56.2
 torch
+
+# Ideogram 4.0 (optional): install the official inference package to enable the
+# 'ideogram4' model type — `pip install ideogram4` (github.com/ideogram-oss/ideogram4).
+# It is imported lazily; without it the Ideogram UI still loads and only errors at
+# generation time. Model weights are NOT bundled — download them separately and set
+# Settings → 'Ideogram 4.0' → 'Model path' to the local diffusers folder.

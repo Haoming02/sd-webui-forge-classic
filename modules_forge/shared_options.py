@@ -1,4 +1,6 @@
 def register(options_templates, options_section, OptionInfo):
+    import gradio as gr
+
     from modules.ui_components import FormColorPicker
 
     options_templates.update(
@@ -9,6 +11,16 @@ def register(options_templates, options_section, OptionInfo):
                 "forge_preset": OptionInfo("sd"),
                 "forge_additional_modules": OptionInfo([]),
                 "forge_unet_storage_dtype": OptionInfo("Automatic"),
+            },
+        )
+    )
+    options_templates.update(
+        options_section(
+            ("ideogram4", "Ideogram 4.0"),
+            {
+                "ideogram4_model_path": OptionInfo("", "Model path").info("local diffusers folder for Ideogram 4.0 (or a Hugging Face repo id such as ideogram-ai/ideogram-4-nf4)"),
+                "ideogram4_quantization": OptionInfo("nf4", "Quantization", gr.Radio, {"choices": ["nf4", "fp8"]}).info("nf4 requires CUDA and is Diffusers-compatible; fp8 needs the official non-diffusers loader"),
+                "ideogram4_hf_token": OptionInfo("", "HF token").info("only needed when loading gated weights by repo id; falls back to the HF_TOKEN environment variable"),
             },
         )
     )

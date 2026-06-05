@@ -796,6 +796,13 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
     if p.scripts is not None:
         p.scripts.before_process(p)
 
+    # Ideogram 4.0 uses an external diffusers pipeline, not Forge's native sampler/sd_model.
+    # The Ideogram UI script sets `ideogram4_enabled` in before_process when its preset is active.
+    if getattr(p, "ideogram4_enabled", False):
+        from modules.ideogram4.processing import process_images_ideogram4
+
+        return process_images_ideogram4(p)
+
     stored_opts = {k: opts.data[k] if k in opts.data else opts.get_default(k) for k in p.override_settings.keys() if k in opts.data}
 
     try:

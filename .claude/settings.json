@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash([ -f \"$f\" ])",
+      "Bash(python _ideogram4_selftest.py)",
+      "Bash(python -m py_compile modules/ideogram4/__init__.py modules/ideogram4/caption.py modules/ideogram4/caption_verifier.py modules/ideogram4/sampler_configs.py modules/ideogram4/pipeline.py modules/ideogram4/processing.py modules/ideogram4/ui_state.py modules/processing_scripts/ideogram4.py modules_forge/presets.py modules_forge/shared_options.py modules_forge/main_entry.py modules/processing.py)",
+      "Bash(python -c \"import gradio; print\\('gradio', gradio.__version__\\)\")",
+      "Bash(python -m py_compile modules/processing_scripts/ideogram4.py modules_forge/main_entry.py modules/ideogram4/ui_state.py)",
+      "Bash(python -m py_compile modules/ideogram4/*.py modules/processing_scripts/ideogram4.py modules_forge/presets.py modules_forge/shared_options.py modules_forge/main_entry.py modules/processing.py)",
+      "Bash(rm _ideogram4_selftest.py)"
+    ]
+  }
+}

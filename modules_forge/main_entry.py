@@ -264,7 +264,45 @@ def forge_main_entry():
     ).then(js="clickLoraRefresh", fn=None, queue=False, show_progress=False)
     Context.root_block.load(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False)
 
+    _wire_ideogram4(ui_txt2img_steps, ui_txt2img_width, ui_txt2img_height, ui_txt2img_sampler, ui_txt2img_scheduler)
+
     refresh_model_loading_parameters()
+
+
+def _wire_ideogram4(ui_txt2img_steps, ui_txt2img_width, ui_txt2img_height, ui_txt2img_sampler, ui_txt2img_scheduler):
+    """Show the Ideogram 4.0 panel (and hide sampler/scheduler/VAE) when the
+    model-type preset is 'ideogram4'; wire its Sampler/Resolution presets to the
+    shared Steps / Width / Height sliders. No-op if the Ideogram script is absent.
+    """
+    try:
+        from modules.ideogram4 import ui_state as ig
+        from modules.ideogram4.sampler_configs import get_preset
+    except Exception:
+        logger.exception("Ideogram 4.0: could not import ui_state")
+        return
+
+    if ig.group is None:
+        return  # Ideogram UI script did not build (e.g. disabled)
+
+    def _toggle(preset_name):
+        is_ig = preset_name == "ideogram4"
+        return [gr.update(visible=is_ig), gr.update(visible=not is_ig), gr.update(visible=not is_ig), gr.update(visible=not is_ig)]
+
+    toggle_outputs = [ig.group, ui_txt2img_sampler, ui_txt2img_scheduler, ui_vae]
+    ui_forge_preset.change(_toggle, inputs=[ui_forge_preset], outputs=toggle_outputs, queue=False, show_progress=False)
+    Context.root_block.load(_toggle, inputs=[ui_forge_preset], outputs=toggle_outputs, queue=False, show_progress=False)
+
+    if ig.sampler_preset is not None:
+        ig.sampler_preset.change(lambda name: gr.update(value=get_preset(name).steps), inputs=[ig.sampler_preset], outputs=[ui_txt2img_steps], queue=False, show_progress=False)
+
+    if ig.resolution_preset is not None:
+        def _resolution(name):
+            wh = ig.resolution_map.get(name)
+            if not wh:
+                return gr.skip(), gr.skip()
+            return gr.update(value=wh[0]), gr.update(value=wh[1])
+
+        ig.resolution_preset.change(_resolution, inputs=[ig.resolution_preset], outputs=[ui_txt2img_width, ui_txt2img_height], queue=False, show_progress=False)
 
 
 def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_unet_dtype: str, ui_forge_preset: str):

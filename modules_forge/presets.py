@@ -12,6 +12,7 @@ class PresetArch(Enum):
     wan = 8  # Wan2.2
     anima = 9  # Anima
     ernie = 10  # Ernie-Image
+    ideogram4 = 11  # Ideogram 4.0 (external Ideogram4Pipeline; dispatch trigger)
 
     @staticmethod
     def choices() -> list[str]:
@@ -29,6 +30,7 @@ SAMPLERS = {
     PresetArch.wan: "Euler",
     PresetArch.anima: "ER SDE",
     PresetArch.ernie: "Euler",
+    PresetArch.ideogram4: "Euler",  # placeholder; sampler UI is hidden for Ideogram 4.0
 }
 
 SCHEDULERS = {
@@ -42,6 +44,7 @@ SCHEDULERS = {
     PresetArch.wan: "Simple",
     PresetArch.anima: "Beta",
     PresetArch.ernie: "Simple",
+    PresetArch.ideogram4: "Simple",  # placeholder; scheduler is internal to Ideogram4Pipeline
 }
 
 STEPS = {
@@ -55,6 +58,7 @@ STEPS = {
     PresetArch.wan: 4,
     PresetArch.anima: 32,
     PresetArch.ernie: 8,
+    PresetArch.ideogram4: 48,  # V4_QUALITY_48 default (overridden by Sampler Preset)
 }
 
 CFG = {
@@ -68,6 +72,7 @@ CFG = {
     PresetArch.wan: 1.0,
     PresetArch.anima: 4.0,
     PresetArch.ernie: 1.0,
+    PresetArch.ideogram4: 7.0,  # base guidance (gw=7); polish handled by guidance_schedule
 }
 
 DISTILL = {
