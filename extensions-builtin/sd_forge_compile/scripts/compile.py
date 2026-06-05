@@ -23,6 +23,7 @@ else:
     TRITON_AVAILABLE = True
 
 _COMPILE_CONFIG_KEY = "_torch_compile_config"
+_COMPILE_WRAPPER_KEY = "_torch_compile_wrapper"
 _ORIG_APPLY_KEY = "_orig_apply_model"
 
 logger = logging.getLogger("compile")
@@ -81,10 +82,13 @@ class TorchCompileForForge(scripts.Script):
     def process_batch(self, p, preset: str, **kwargs):
         kmodel: "KModel" = p.sd_model.forge_objects.unet.model
         prev_config: tuple[str] = getattr(kmodel, _COMPILE_CONFIG_KEY, None)
-        enable: bool = (prev_config is not None) if preset == "Automatic" else (preset != "Disable")
 
-        if not enable:
-            self._remove_compile_wrapper(kmodel)
+        if preset == "Automatic":
+            return
+
+        if preset == "Disable":
+            if TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
+                TorchCompileForForge._remove_compile_wrapper(kmodel)
             return
 
         if preset in ("max-autotune", "reduce-overhead") and cmd_args.cuda_malloc:
@@ -92,13 +96,11 @@ class TorchCompileForForge(scripts.Script):
             return
 
         _config: tuple[str] = (preset,)
-        if _config == prev_config:
+        if _config == prev_config and getattr(kmodel, _ORIG_APPLY_KEY, None) is not None:
             return
 
-        setattr(kmodel, _COMPILE_CONFIG_KEY, _config)
-
-        if prev_config is not None:
-            self._remove_compile_wrapper(kmodel)
+        if prev_config is not None and TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
+            TorchCompileForForge._remove_compile_wrapper(kmodel)
 
         match preset:
             case "guard_filter_fn":
@@ -112,30 +114,46 @@ class TorchCompileForForge(scripts.Script):
             case "reduce-overhead":
                 config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False)
 
-        self._wrap_apply_model(kmodel, config)
+        TorchCompileForForge._wrap_apply_model(kmodel, config)
+        setattr(kmodel, _COMPILE_CONFIG_KEY, _config)
 
         logger.info(f"Model Compiled ({preset})")
 
     @staticmethod
-    def _wrap_apply_model(kmodel: "KModel", compile_config: dict):
-        setattr(kmodel, _ORIG_APPLY_KEY, kmodel.apply_model)
+    def _is_compile_wrapper(fn):
+        return getattr(fn, _COMPILE_WRAPPER_KEY, False)
 
-        @wraps(kmodel._orig_apply_model)
+    @staticmethod
+    def _wrap_apply_model(kmodel: "KModel", compile_config: dict):
+        if TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
+            TorchCompileForForge._remove_compile_wrapper(kmodel)
+
+        original_apply_model = kmodel.apply_model
+        setattr(kmodel, _ORIG_APPLY_KEY, original_apply_model)
+
+        @wraps(original_apply_model)
         def apply_model_with_compile(*args, **kwargs):
             orig_model = get_attr(kmodel, "diffusion_model")
             compiled = torch.compile(orig_model, **compile_config)
             set_attr_raw(kmodel, "diffusion_model", compiled)
             try:
-                return kmodel._orig_apply_model(*args, **kwargs)
+                return original_apply_model(*args, **kwargs)
             finally:
                 set_attr_raw(kmodel, "diffusion_model", orig_model)
 
+        setattr(apply_model_with_compile, _COMPILE_WRAPPER_KEY, True)
         kmodel.apply_model = apply_model_with_compile
 
     @staticmethod
     def _remove_compile_wrapper(kmodel: "KModel"):
-        if (orig := getattr(kmodel, _ORIG_APPLY_KEY, None)) is not None:
+        orig = getattr(kmodel, _ORIG_APPLY_KEY, None)
+        if orig is not None:
             kmodel.apply_model = orig
-            delattr(kmodel, _ORIG_APPLY_KEY)
-            delattr(kmodel, _COMPILE_CONFIG_KEY)
             logger.info("Model Decompiled")
+        elif TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
+            kmodel.apply_model = type(kmodel).apply_model.__get__(kmodel, type(kmodel))
+            logger.warning("KModel.apply_model was reset because the uncompiled model function was unavailable")
+
+        for attr in (_ORIG_APPLY_KEY, _COMPILE_CONFIG_KEY):
+            if hasattr(kmodel, attr):
+                delattr(kmodel, attr)
