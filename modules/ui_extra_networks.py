@@ -19,7 +19,7 @@ from modules.infotext_utils import image_from_url_text
 
 extra_pages = []
 allowed_dirs = set()
-default_allowed_preview_extensions = ["png", "jpg", "jpeg", "webp", "gif"]
+default_allowed_preview_extensions = ["png", "jpg", "jpeg", "webp", "gif", "mp4", "webm"]
 
 @functools.cache
 def allowed_preview_extensions_with_extra(extra_extensions=None):
@@ -262,7 +262,14 @@ class ExtraNetworksPage:
         style_width = f"width: {shared.opts.extra_networks_card_width}px;" if shared.opts.extra_networks_card_width else ''
         style_font_size = f"font-size: {shared.opts.extra_networks_card_text_scale*100}%;"
         card_style = style_height + style_width + style_font_size
-        background_image = f'<img src="{html.escape(preview)}" class="preview" loading="lazy">' if preview else ''
+        background_image = ''
+
+        if preview:
+            _, preview_format = os.path.splitext(preview.rsplit("&mtime=", 1)[0])
+            if preview_format.lower() in (".mp4", ".webm"):
+                background_image = f'<video src="{html.escape(preview)}" class="preview" loading="lazy" autoplay loop muted playsinline></video>'
+            else:
+                background_image = f'<img src="{html.escape(preview)}" class="preview" loading="lazy">'
 
         onclick = item.get("onclick", None)
         if onclick is None:  # Textual Inversion / LoRA

@@ -78,16 +78,16 @@ class UserMetadataEditor:
             preview_url = self.page.find_preview(filename)
             item["preview"] = preview_url
 
-        if preview_url:
-            preview = f'''
-            <div class='card standalone-card-preview'>
-                <img src="{html.escape(preview_url)}" class="preview">
-            </div>
-            '''
-        else:
-            preview = "<div class='card standalone-card-preview'></div>"
+        preview = ""
 
-        return preview
+        if preview_url:
+            _, preview_format = os.path.splitext(preview_url.rsplit("&mtime=", 1)[0])
+            if preview_format.lower() in (".mp4", ".webm"):
+                preview = f'<video src="{html.escape(preview_url)}" class="preview" autoplay loop muted playsinline></video>'
+            else:
+                preview = f'<img src="{html.escape(preview_url)}" class="preview">'
+
+        return f'<div class="card standalone-card-preview">{preview}</div>'
 
     def relative_path(self, path):
         for parent_path in self.page.allowed_directories_for_previews():
