@@ -75,7 +75,9 @@ def apply_overlay(image: Image.Image, paste_loc: tuple[int], overlay: Image.Imag
     if overlay is None:
         return image, image.copy()
 
-    if opts.img2img_inpaint_precise_mask:
+    high_prec: bool = opts.img2img_inpaint_precise_mask and isinstance(overlay, tuple)  # Extensions may override Overlay
+
+    if high_prec:
         mask: np.ndarray = overlay[1]
         overlay: Image.Image = overlay[0]
 
@@ -84,7 +86,7 @@ def apply_overlay(image: Image.Image, paste_loc: tuple[int], overlay: Image.Imag
 
     original_denoised_image = image.copy()
 
-    if opts.img2img_inpaint_precise_mask:
+    if high_prec:
         mask = np.expand_dims(mask, axis=-1)
         overlay_rgb = np.array(overlay, dtype=np.float32) / 255.0
         image_np = np.array(image, dtype=np.float32) / 255.0
