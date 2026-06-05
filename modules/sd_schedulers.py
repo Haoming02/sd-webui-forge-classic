@@ -264,7 +264,7 @@ def flux2_scheduler(n: int, width: int, height: int, sigma_min, sigma_max, devic
     return torch.FloatTensor(sigmas).to(device)
 
 
-schedulers = [
+all_schedulers = [
     Scheduler("automatic", "Automatic", None),
     Scheduler("karras", "Karras", k_diffusion.sampling.get_sigmas_karras, default_rho=7.0),
     Scheduler("exponential", "Exponential", k_diffusion.sampling.get_sigmas_exponential),
@@ -283,5 +283,7 @@ schedulers = [
     Scheduler("flow_match", "FlowMatchEulerDiscrete", flow_match_euler_discrete_scheduler, need_inner_model=True),
     Scheduler("flux2", "Flux2", flux2_scheduler),
 ]
+
+schedulers = [s for s in all_schedulers if s.label not in shared.opts.hide_schedulers]
 
 schedulers_map = {**{x.name: x for x in schedulers}, **{x.label: x for x in schedulers}}

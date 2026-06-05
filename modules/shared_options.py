@@ -526,6 +526,7 @@ options_templates.update(
         ("sampler-params", "Sampler Parameters", "sd"),
         {
             "hide_samplers": OptionInfo([], "Hide Samplers", ui_components.DropdownMulti, lambda: {"choices": [x.name for x in shared_items.list_samplers()]}).needs_reload_ui(),
+            "hide_schedulers": OptionInfo([], "Hide Schedulers", ui_components.DropdownMulti, lambda: {"choices": shared_items.list_schedulers()}).needs_restart(),
         },
     )
 )
