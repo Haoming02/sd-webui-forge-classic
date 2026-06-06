@@ -68,8 +68,25 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
         # region VAE
 
         if cls_name == "PiDAutoVAE":
-            # TODO
-            pass
+            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
+            _dim: int = state_dict.pop("_dim")
+
+            if _dim == 4:
+                cls_name = "AutoencoderKL"
+                config_path = os.path.join(HF, "stabilityai", "stable-diffusion-xl-base-1.0", "vae_1_0")
+            elif _dim == 128:
+                cls_name = "AutoencoderKLFlux2"
+                config_path = os.path.join(HF, "black-forest-labs", "FLUX.2-klein-9B", "vae")
+            elif _dim == 16:
+                if "decoder.middle.0.residual.0.gamma" in state_dict:
+                    cls_name = "AutoencoderKLQwenImage"
+                    config_path = os.path.join(HF, "Qwen", "Qwen-Image", "vae")
+                else:
+                    cls_name = "AutoencoderKL"
+                    config_path = os.path.join(HF, "black-forest-labs", "FLUX.1-dev", "vae")
+            else:
+                raise NotImplementedError
+
         if cls_name == "AutoencoderKL":
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
             from backend.nn.vae import IntegratedAutoencoderKL
@@ -833,6 +850,7 @@ def split_state_dict(path: os.PathLike, additional_state_dicts: list[os.PathLike
         process_anima(state_dict["transformer"], state_dict["text_encoder"])
     if "PiD" in guess.huggingface_repo:
         process_pid(state_dict["transformer"])
+        state_dict["vae"]["_dim"] = guess.unet_config["lq_latent_channels"]
 
     print_dict = {k: len(v) for k, v in state_dict.items()}
     logger.debug(f"StateDict Keys: {print_dict}")
