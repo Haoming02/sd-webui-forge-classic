@@ -587,7 +587,7 @@ class ErnieImage(BASE):
 
 
 class PiD(BASE):
-    huggingface_repo = ""
+    huggingface_repo = "nvidia/PiD"
 
     unet_config = {
         "image_model": "pid",
@@ -609,29 +609,14 @@ class PiD(BASE):
 
     unet_target = "transformer"
 
-    def process_unet_state_dict(self, state_dict: dict[str, torch.Tensor]):
-        pixel_dim = next(v for k, v in state_dict.items() if k.endswith("pixel_embedder.proj.weight")).shape[0]
-        marker = ".adaLN_modulation.0."
-
-        out = {}
-        for k, v in state_dict.items():
-            if k.startswith("_repa_projector") or k.startswith("net_ema."):
-                continue
-            if k.startswith("core."):
-                k = k[len("core.") :]
-            elif k.startswith("net."):
-                k = k[len("net.") :]
-            if "pixel_blocks." in k and marker in k:
-                p2 = v.shape[0] // (6 * pixel_dim)
-                trail = v.shape[1:]
-                vv = v.view(p2, 6, pixel_dim, *trail)
-                base, suffix = k.split(marker)
-                out[f"{base}.adaLN_modulation_msa.{suffix}"] = vv[:, 0:3].reshape(3 * p2 * pixel_dim, *trail).contiguous()
-                out[f"{base}.adaLN_modulation_mlp.{suffix}"] = vv[:, 3:6].reshape(3 * p2 * pixel_dim, *trail).contiguous()
-            else:
-                out[k] = v
-
-        return out
+    def clip_target(self, state_dict: dict):
+        pref = self.text_encoder_key_prefix[0]
+        if "{}gemma2_2b.transformer.model.embed_tokens.weight".format(pref) in state_dict:
+            state_dict.pop("{}gemma2_2b.logit_scale".format(pref), None)
+            state_dict.pop("{}spiece_model".format(pref), None)
+            return {"gemma2_2b.transformer": "text_encoder"}
+        else:
+            return {"gemma2_2b": "text_encoder"}
 
 
 models = [
