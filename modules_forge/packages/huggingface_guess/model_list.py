@@ -1,4 +1,4 @@
-# reference: https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/supported_models.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/supported_models.py
 
 from enum import Enum
 
@@ -586,6 +586,54 @@ class ErnieImage(BASE):
         return {"ministral3_3b.transformer": "text_encoder"}
 
 
+class PiD(BASE):
+    huggingface_repo = ""
+
+    unet_config = {
+        "image_model": "pid",
+    }
+
+    sampling_settings = {
+        "shift": 1.5,
+    }
+
+    memory_usage_factor = 0.04
+
+    unet_extra_config = {}
+    latent_format = latent.RGB
+
+    supported_inference_dtypes = [torch.bfloat16, torch.float32]
+
+    vae_key_prefix = ["vae."]
+    text_encoder_key_prefix = ["text_encoders."]
+
+    unet_target = "transformer"
+
+    def process_unet_state_dict(self, state_dict: dict[str, torch.Tensor]):
+        pixel_dim = next(v for k, v in state_dict.items() if k.endswith("pixel_embedder.proj.weight")).shape[0]
+        marker = ".adaLN_modulation.0."
+
+        out = {}
+        for k, v in state_dict.items():
+            if k.startswith("_repa_projector") or k.startswith("net_ema."):
+                continue
+            if k.startswith("core."):
+                k = k[len("core.") :]
+            elif k.startswith("net."):
+                k = k[len("net.") :]
+            if "pixel_blocks." in k and marker in k:
+                p2 = v.shape[0] // (6 * pixel_dim)
+                trail = v.shape[1:]
+                vv = v.view(p2, 6, pixel_dim, *trail)
+                base, suffix = k.split(marker)
+                out[f"{base}.adaLN_modulation_msa.{suffix}"] = vv[:, 0:3].reshape(3 * p2 * pixel_dim, *trail).contiguous()
+                out[f"{base}.adaLN_modulation_mlp.{suffix}"] = vv[:, 3:6].reshape(3 * p2 * pixel_dim, *trail).contiguous()
+            else:
+                out[k] = v
+
+        return out
+
+
 models = [
     SD15,
     SDXL,
@@ -603,4 +651,5 @@ models = [
     WAN21_I2V,
     QwenImage,
     ErnieImage,
+    PiD,
 ]

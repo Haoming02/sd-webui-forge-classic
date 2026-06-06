@@ -1,4 +1,4 @@
-# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.11.0/comfy/model_detection.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/model_detection.py
 
 import logging
 
@@ -218,6 +218,17 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
         dit_config["rope_w_extrapolation_ratio"] = 4.0
         dit_config["rope_t_extrapolation_ratio"] = 1.0
 
+        return dit_config
+
+    if (_lq_w_key := "{}lq_proj.latent_proj.0.weight".format(key_prefix)) in state_dict_keys:  # PiD
+        _gate_prefix = "{}lq_proj.gate_modules.".format(key_prefix)
+        num_gates = len({k[len(_gate_prefix) :].split(".")[0] for k in state_dict_keys if k.startswith(_gate_prefix)})
+        in_ch = int(state_dict[_lq_w_key].shape[1])
+        dit_config = {"image_model": "pid"}
+        dit_config["lq_latent_channels"] = in_ch
+        dit_config["latent_spatial_down_factor"] = 16 if in_ch >= 64 else 8
+        if num_gates > 0:
+            dit_config["lq_interval"] = (14 + num_gates - 1) // num_gates
         return dit_config
 
     if "{}txt_norm.weight".format(key_prefix) in state_dict_keys:  # Qwen Image
