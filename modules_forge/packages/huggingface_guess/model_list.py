@@ -473,6 +473,9 @@ class Anima(BASE):
 
     unet_target = "transformer"
 
+    def model_type(self, state_dict):
+        return ModelType.FLOW
+
     def clip_target(self, state_dict={}):
         return {"qwen3_06b.transformer": "text_encoder"}
 
