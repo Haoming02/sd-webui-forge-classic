@@ -64,6 +64,12 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             comp = cls.from_pretrained(os.path.join(repo_path, component_name))
             comp._eventual_warn_about_too_long_sequence = lambda *args, **kwargs: None
             return comp
+
+        # region VAE
+
+        if cls_name == "PiDAutoVAE":
+            # TODO
+            pass
         if cls_name == "AutoencoderKL":
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
             from backend.nn.vae import IntegratedAutoencoderKL
@@ -110,6 +116,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict)
             return model
+
+        # region Text Encoder
+
         if component_name.startswith("text_encoder") and cls_name in ["CLIPTextModel", "CLIPTextModelWithProjection"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have CLIP state dict!"
             from transformers import CLIPTextConfig, CLIPTextModel
@@ -311,7 +320,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["transformer.encoder.embed_tokens.weight", "logit_scale"])
             return model
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel"]:
+
+        # region UNet / DiT
+
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel", "PiDTransformer2DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
             pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
@@ -369,6 +381,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.ernie import ErnieImageModel
 
                 model_loader = lambda c: ErnieImageModel(**c)
+            elif cls_name == "PiDTransformer2DModel":
+                from backend.nn.pixeldit.pid import PidNet
+
+                model_loader = lambda c: PidNet(**c)
 
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
@@ -721,6 +737,32 @@ def process_anima(dit: dict[str, torch.Tensor], enc: dict[str, torch.Tensor]):
             enc[k] = dit.pop(k)
 
 
+def process_pid(state_dict: dict[str, torch.Tensor]):
+    pixel_dim = next(v for k, v in state_dict.items() if k.endswith("pixel_embedder.proj.weight")).shape[0]
+    marker = ".adaLN_modulation.0."
+
+    out = {}
+    for k, v in state_dict.items():
+        if k.startswith("_repa_projector") or k.startswith("net_ema."):
+            continue
+        if k.startswith("core."):
+            k = k[len("core.") :]
+        elif k.startswith("net."):
+            k = k[len("net.") :]
+        if "pixel_blocks." in k and marker in k:
+            p2 = v.shape[0] // (6 * pixel_dim)
+            trail = v.shape[1:]
+            vv = v.view(p2, 6, pixel_dim, *trail)
+            base, suffix = k.split(marker)
+            out[f"{base}.adaLN_modulation_msa.{suffix}"] = vv[:, 0:3].reshape(3 * p2 * pixel_dim, *trail).contiguous()
+            out[f"{base}.adaLN_modulation_mlp.{suffix}"] = vv[:, 3:6].reshape(3 * p2 * pixel_dim, *trail).contiguous()
+        else:
+            out[k] = v
+
+    state_dict.clear()
+    state_dict.update(out)
+
+
 def _load_unet(path: os.PathLike):
     import huggingface_guess
 
@@ -789,6 +831,8 @@ def split_state_dict(path: os.PathLike, additional_state_dicts: list[os.PathLike
 
     if "Anima" in guess.huggingface_repo:
         process_anima(state_dict["transformer"], state_dict["text_encoder"])
+    if "PiD" in guess.huggingface_repo:
+        process_pid(state_dict["transformer"])
 
     print_dict = {k: len(v) for k, v in state_dict.items()}
     logger.debug(f"StateDict Keys: {print_dict}")
