@@ -1,0 +1,25 @@
+{
+  "_class_name": "Lumina2Pipeline",
+  "_diffusers_version": "0.35.0.dev0",
+  "_name_or_path": "neta-lumina-v1.0",
+  "scheduler": [
+    "diffusers",
+    "FlowMatchEulerDiscreteScheduler"
+  ],
+  "text_encoder": [
+    "transformers",
+    "Gemma2Model"
+  ],
+  "tokenizer": [
+    "transformers",
+    "GemmaTokenizerFast"
+  ],
+  "transformer": [
+    "diffusers",
+    "Lumina2Transformer2DModel"
+  ],
+  "vae": [
+    "diffusers",
+    "AutoencoderKL"
+  ]
+}

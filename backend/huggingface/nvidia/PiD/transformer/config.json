@@ -1,0 +1,28 @@
+{
+  "_class_name": "Lumina2Transformer2DModel",
+  "_diffusers_version": "0.35.0.dev0",
+  "axes_dim_rope": [
+    32,
+    32,
+    32
+  ],
+  "axes_lens": [
+    300,
+    512,
+    512
+  ],
+  "cap_feat_dim": 2304,
+  "ffn_dim_multiplier": null,
+  "hidden_size": 2304,
+  "in_channels": 16,
+  "multiple_of": 256,
+  "norm_eps": 1e-05,
+  "num_attention_heads": 24,
+  "num_kv_heads": 8,
+  "num_layers": 26,
+  "num_refiner_layers": 2,
+  "out_channels": null,
+  "patch_size": 2,
+  "sample_size": 128,
+  "scaling_factor": 1.0
+}
