@@ -22,16 +22,19 @@ class PiD(ForgeDiffusionEngine):
 
         clip = CLIP(model_dict={"gemma2": huggingface_components["text_encoder"]}, tokenizer_dict={"gemma2": huggingface_components["tokenizer"]})
 
-        _vae: torch.nn.Module = huggingface_components["vae"]
+        ae: torch.nn.Module = huggingface_components["vae"]
 
-        if _wan := isinstance(_vae, WanVAE):
-            _vae.latent_format = latent.Wan21()
-        if _f2 := isinstance(_vae, AutoencoderKLFlux2):
-            _vae.latent_format = latent.Flux2()
-        if isinstance(_vae, IntegratedAutoencoderKL):
-            _vae.latent_format = latent.SDXL() if _vae.embed_dim == 4 else latent.Flux()
+        if is_wan := type(ae) is WanVAE:
+            ae.latent_format = latent.Wan21()
+        if is_flux2 := type(ae) is AutoencoderKLFlux2:
+            ae.latent_format = latent.Flux2()
+        if type(ae) is IntegratedAutoencoderKL:
+            if ae.embed_dim == 4:
+                ae.latent_format = latent.SDXL()
+            if ae.embed_dim == 16:
+                ae.latent_format = latent.Flux()
 
-        vae = VAE(model=_vae, is_wan=_wan, is_flux2=_f2)
+        vae = VAE(model=ae, is_wan=is_wan, is_flux2=is_flux2)
 
         k_predictor = PredictionDiscreteFlow(estimated_config)
 
@@ -67,8 +70,7 @@ class PiD(ForgeDiffusionEngine):
 
         sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
-        if sample.ndim == 5:
-            sample = sample[:, :, 0]
+        sample = sample.squeeze(2)
 
         dynamic_args.lq_latent = (sample, torch.tensor([float(self.degrade_sigma)], dtype=torch.float32))
         return None
