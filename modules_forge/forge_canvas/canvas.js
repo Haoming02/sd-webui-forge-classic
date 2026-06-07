@@ -748,12 +748,11 @@ class ForgeCanvas {
 		// Cap history length so large snapshots do not exhaust mobile memory
 		const HISTORY_LIMIT = 12;
 		while (this.history.length > HISTORY_LIMIT) {
-        this.history.shift();
-        this.historyIndex--;
-    }
-
-    this.updateUndoRedoButtons();
-    this.updateDrawingData();
+        	this.history.shift();
+        	this.historyIndex--;
+    	}
+    	this.updateUndoRedoButtons();
+    	this.updateDrawingData();
     }
 
     undo() {
