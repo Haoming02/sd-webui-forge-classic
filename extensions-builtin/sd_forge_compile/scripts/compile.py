@@ -146,8 +146,7 @@ class TorchCompileForForge(scripts.Script):
 
     @staticmethod
     def _remove_compile_wrapper(kmodel: "KModel"):
-        orig = getattr(kmodel, _ORIG_APPLY_KEY, None)
-        if orig is not None:
+        if (orig := getattr(kmodel, _ORIG_APPLY_KEY, None)) is not None:
             kmodel.apply_model = orig
             logger.info("Model Decompiled")
         elif TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
