@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from backend.args import dynamic_args
+
 from .model import PixDiT_T2I
 from .modules import precompute_freqs_cis_2d
 
@@ -178,7 +180,8 @@ class PidNet(PixDiT_T2I):
             return s
         return self.lq_proj.gate(s, pid_lq_features[out_idx], pid_degrade_sigma, out_idx)
 
-    def forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, lq_latent=None, degrade_sigma=None, **kwargs):
+    def forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, **kwargs):
+        lq_latent, degrade_sigma = dynamic_args.lq_latent
         assert lq_latent is not None
 
         expected_c = self.lq_proj.latent_channels

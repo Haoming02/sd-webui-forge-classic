@@ -162,10 +162,14 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """Flux.2 Klein"""
     wan: bool = False
     """Wan 2.2"""
+    pid: bool = False
+    """PiD"""
     ref_latents: list["torch.Tensor"] = []
     """Reference Latent(s) for Flux Kontext / Qwen-Image-Edit / Flux.2 Klein"""
     concat_latent: "torch.Tensor" = None
     """Input Latent for Wan 2.2 I2V"""
+    lq_latent: tuple["torch.Tensor", "torch.Tensor"] = None
+    """lq_latent & degrade_sigma for PiD"""
     is_referencing: bool = False
     """Appending Reference Latent(s) (by. ImageStitch)"""
     ops: str = None
