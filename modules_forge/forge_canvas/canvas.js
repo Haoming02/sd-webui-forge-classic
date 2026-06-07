@@ -156,6 +156,9 @@ class ForgeCanvas {
 
         const drawContext = drawingCanvas.getContext("2d");
         self.drawingCanvas_ = drawingCanvas;
+		// Stop mobile browsers from treating draw gestures as page scroll
+		drawingCanvas.style.touchAction = "none";
+		container.style.touchAction = "none";
 
         if (self.no_scribbles) {
             toolbar.querySelector(".forge-toolbar-box-b").style.display = "none";
@@ -256,6 +259,8 @@ class ForgeCanvas {
 
         drawingCanvas.addEventListener("pointerdown", (e) => {
             if (!self.img || e.button !== 0 || self.no_scribbles) return;
+			e.preventDefault();  // Prevent the default touch behavior
+			drawingCanvas.setPointerCapture(e.pointerId);  // Capture later pointer events on this canvas
             const rect = drawingCanvas.getBoundingClientRect();
             self.drawing = true;
             drawingCanvas.style.cursor = "crosshair";
@@ -278,17 +283,34 @@ class ForgeCanvas {
             e.stopPropagation();
         });
 
-        drawingCanvas.addEventListener("pointerup", () => {
-            self.drawing = false;
-            drawingCanvas.style.cursor = "";
-            self.saveState();
-        });
+        // Commit each stroke once; avoids duplicate saveState from pointerup / pointerout
+		function endStroke() {
+			if (!self.drawing) return;
+			self.drawing = false;
+			drawingCanvas.style.cursor = "";
+			scribbleIndicator.style.display = "none";
+			self.saveState();
+		}
 
-        drawingCanvas.addEventListener("pointerout", () => {
-            self.drawing = false;
-            drawingCanvas.style.cursor = "";
-            scribbleIndicator.style.display = "none";
-            self.saveState();
+		drawingCanvas.addEventListener("pointerup", (e) => {
+			if (drawingCanvas.hasPointerCapture && drawingCanvas.hasPointerCapture(e.pointerId)) {
+				drawingCanvas.releasePointerCapture(e.pointerId);
+			}
+			endStroke();
+		});
+
+		drawingCanvas.addEventListener("pointercancel", (e) => {
+			if (drawingCanvas.hasPointerCapture && drawingCanvas.hasPointerCapture(e.pointerId)) {
+				drawingCanvas.releasePointerCapture(e.pointerId);
+			}
+			endStroke();
+		});
+
+		drawingCanvas.addEventListener("pointerout", (e) => {
+			scribbleIndicator.style.display = "none";
+			// Still the same stroke while captured, so do not end it at the canvas edge
+			if (drawingCanvas.hasPointerCapture && drawingCanvas.hasPointerCapture(e.pointerId)) return;
+			endStroke();
         });
 
         container.addEventListener("pointerdown", (e) => {
@@ -718,13 +740,20 @@ class ForgeCanvas {
 
     saveState() {
         const canvas = document.getElementById(`drawingCanvas_${this.uuid}`);
-        const ctx = canvas.getContext("2d");
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        this.history = this.history.slice(0, this.historyIndex + 1);
-        this.history.push(imageData);
-        this.historyIndex++;
-        this.updateUndoRedoButtons();
-        this.updateDrawingData();
+		const ctx = canvas.getContext("2d");
+		const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+		this.history = this.history.slice(0, this.historyIndex + 1);
+		this.history.push(imageData);
+		this.historyIndex++;
+		// Cap history length so large snapshots do not exhaust mobile memory
+		const HISTORY_LIMIT = 12;
+		while (this.history.length > HISTORY_LIMIT) {
+        this.history.shift();
+        this.historyIndex--;
+    }
+
+    this.updateUndoRedoButtons();
+    this.updateDrawingData();
     }
 
     undo() {
