@@ -6,7 +6,11 @@ from PIL import Image
 from backend.args import dynamic_args
 from modules import images, scripts, sd_models
 from modules.api import api
-from modules.processing import StableDiffusionProcessing, StableDiffusionProcessingTxt2Img, logger
+from modules.processing import (
+    StableDiffusionProcessing,
+    StableDiffusionProcessingTxt2Img,
+    logger,
+)
 from modules.sd_samplers_common import images_tensor_to_samples
 from modules.shared import device, opts
 from modules.ui_components import FormRow, InputAccordion
@@ -14,6 +18,7 @@ from modules.ui_components import FormRow, InputAccordion
 t2i_info = """
 For <b>Flux.1-Kontext</b> / <b>Flux.2-Klein</b> / <b>Qwen-Image-Edit</b>: Use in <b>txt2img</b> to achieve the effect of empty latent with custom resolution<br>
 For <b>Wan 2.2 I2V</b>: Use in <b>txt2img</b> to set as the Last Frame to achieve LastFrameToVideo<br>
+For <b>PiD</b>: Use in <b>txt2img</b> to set as the lq_latent<br>
 <b>Note:</b> This doesn't actually stitch the images ; <b>Tip:</b> Use the "Image to Upload" to paste images
 """
 
@@ -92,6 +97,15 @@ class ImageStitch(scripts.Script):
                 info="reduce VRAM usage during encoding ; apply to all reference images ; set to 0 for no limit",
             )
 
+            degrade_sigma = gr.Slider(
+                minimum=0.0,
+                maximum=1.0,
+                value=0.0,
+                step=0.05,
+                label="Degrade Sigma",
+                info="denoising strength ; for PiD only",
+            )
+
         def _upload(gallery: list[tuple[Image.Image, str]], image: Image.Image):
             if not image:
                 return [gr.skip(), gr.skip()]
@@ -144,7 +158,7 @@ class ImageStitch(scripts.Script):
             show_progress=False,
         )
 
-        return [enable, references, max_dim]
+        return [enable, references, max_dim, degrade_sigma]
 
     @staticmethod
     def reset_references(p: StableDiffusionProcessing):
@@ -152,8 +166,8 @@ class ImageStitch(scripts.Script):
         p.clear_prompt_cache()
         p.sd_model.clear_references()
 
-    def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int):
-        if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein", "wan"))):
+    def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int, degrade_sigma: float):
+        if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein", "wan", "pid"))):
             if ImageStitch.cached_parameters is None:
                 return
 
@@ -183,6 +197,16 @@ class ImageStitch(scripts.Script):
             if len(references) > 1:
                 logger.warning("Wan 2.2 only uses the first reference image...")
                 references = [references[0]]
+
+        if dynamic_args.pid:
+            if not isinstance(p, StableDiffusionProcessingTxt2Img):
+                logger.error("PiD only supports txt2img...")
+                return
+            if len(references) > 1:
+                logger.warning("PiD only uses the first reference image...")
+                references = [references[0]]
+
+            p.sd_model.degrade_sigma = degrade_sigma
 
         dynamic_args.is_referencing = True
 
