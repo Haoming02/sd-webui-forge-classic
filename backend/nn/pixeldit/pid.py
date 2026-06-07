@@ -191,7 +191,7 @@ class PidNet(PixDiT_T2I):
         Hs = -(-x.shape[2] // self.patch_size)
         Ws = -(-x.shape[3] // self.patch_size)
 
-        degrade_sigma = degrade_sigma.to(device=x.device, dtype=torch.float32).reshape(-1)
+        degrade_sigma = degrade_sigma.to(device=x.device).reshape(-1)
         if degrade_sigma.numel() == 1 and B > 1:
             degrade_sigma = degrade_sigma.expand(B).contiguous()
 

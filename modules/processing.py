@@ -1691,6 +1691,12 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
         if (args.dynamic_args.kontext or args.dynamic_args.edit) and self.denoising_strength < 0.9:
             logger.warning("Edit Models require High Denoising Strength")
 
+        if args.dynamic_args.pid:
+            args.dynamic_args.lq_latent[1] = torch.tensor([self.denoising_strength], dtype=torch.float32)
+            self.denoising_strength = 1.0
+            self.resize_mode = 3  # skip resize image
+            assert self.image_mask is None
+
         self.image_cfg_scale: float = None
 
         self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
@@ -1867,6 +1873,9 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
         if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)
+
+        if args.dynamic_args.pid:
+            self.init_latent = x.detach().clone()
 
         if self.initial_noise_multiplier != 1.0:
             self.extra_generation_params["Noise multiplier"] = self.initial_noise_multiplier

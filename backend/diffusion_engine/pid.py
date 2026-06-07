@@ -51,8 +51,6 @@ class PiD(ForgeDiffusionEngine):
 
         self.use_shift = True
 
-        self.degrade_sigma: float = None
-
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
@@ -65,15 +63,12 @@ class PiD(ForgeDiffusionEngine):
 
     @torch.inference_mode()
     def encode_first_stage(self, x):
-        if not dynamic_args.is_referencing:
-            raise SystemError("PiD only supports txt2img")
-
         sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
         sample = sample.squeeze(2)
+        dynamic_args.lq_latent[0] = sample.detach().clone()
 
-        dynamic_args.lq_latent = (sample, torch.tensor([float(self.degrade_sigma)], dtype=torch.float32))
-        return None
+        return sample
 
     @torch.inference_mode()
     def decode_first_stage(self, x):
