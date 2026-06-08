@@ -80,27 +80,25 @@ class TorchCompileForForge(scripts.Script):
         return [preset]
 
     def process_batch(self, p, preset: str, **kwargs):
-        kmodel: "KModel" = p.sd_model.forge_objects.unet.model
-        prev_config: tuple[str] = getattr(kmodel, _COMPILE_CONFIG_KEY, None)
-
         if preset == "Automatic":
             return
 
+        kmodel: "KModel" = p.sd_model.forge_objects.unet.model
+        prev_config: tuple[str] = getattr(kmodel, _COMPILE_CONFIG_KEY, None)
+
         if preset == "Disable":
-            if TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
-                TorchCompileForForge._remove_compile_wrapper(kmodel)
+            self._remove_compile_wrapper(kmodel)
             return
 
         if preset in ("max-autotune", "reduce-overhead") and cmd_args.cuda_malloc:
             logger.error(f"{preset} does not support --cuda-malloc\nModel is not compiled...")
             return
 
-        _config: tuple[str] = (preset,)
-        if _config == prev_config and getattr(kmodel, _ORIG_APPLY_KEY, None) is not None:
+        if prev_config == preset and getattr(kmodel, _ORIG_APPLY_KEY, None) is not None:
             return
 
-        if prev_config is not None and TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
-            TorchCompileForForge._remove_compile_wrapper(kmodel)
+        if prev_config is not None:
+            self._remove_compile_wrapper(kmodel)
 
         match preset:
             case "guard_filter_fn":
@@ -114,20 +112,13 @@ class TorchCompileForForge(scripts.Script):
             case "reduce-overhead":
                 config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False)
 
-        TorchCompileForForge._wrap_apply_model(kmodel, config)
-        setattr(kmodel, _COMPILE_CONFIG_KEY, _config)
+        self._wrap_apply_model(kmodel, config)
+        setattr(kmodel, _COMPILE_CONFIG_KEY, preset)
 
         logger.info(f"Model Compiled ({preset})")
 
     @staticmethod
-    def _is_compile_wrapper(fn):
-        return getattr(fn, _COMPILE_WRAPPER_KEY, False)
-
-    @staticmethod
     def _wrap_apply_model(kmodel: "KModel", compile_config: dict):
-        if TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
-            TorchCompileForForge._remove_compile_wrapper(kmodel)
-
         original_apply_model = kmodel.apply_model
         setattr(kmodel, _ORIG_APPLY_KEY, original_apply_model)
 
@@ -141,17 +132,14 @@ class TorchCompileForForge(scripts.Script):
             finally:
                 set_attr_raw(kmodel, "diffusion_model", orig_model)
 
-        setattr(apply_model_with_compile, _COMPILE_WRAPPER_KEY, True)
         kmodel.apply_model = apply_model_with_compile
+        setattr(kmodel.apply_model, _COMPILE_WRAPPER_KEY, True)
 
     @staticmethod
     def _remove_compile_wrapper(kmodel: "KModel"):
         if (orig := getattr(kmodel, _ORIG_APPLY_KEY, None)) is not None:
-            kmodel.apply_model = orig
-            logger.info("Model Decompiled")
-        elif TorchCompileForForge._is_compile_wrapper(kmodel.apply_model):
-            kmodel.apply_model = type(kmodel).apply_model.__get__(kmodel, type(kmodel))
-            logger.warning("KModel.apply_model was reset because the uncompiled model function was unavailable")
+            if getattr(kmodel.apply_model, _COMPILE_WRAPPER_KEY, False):
+                kmodel.apply_model = orig
 
         for attr in (_ORIG_APPLY_KEY, _COMPILE_CONFIG_KEY):
             if hasattr(kmodel, attr):
