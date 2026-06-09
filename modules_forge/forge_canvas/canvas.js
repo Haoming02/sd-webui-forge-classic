@@ -30,6 +30,8 @@ class GradioTextAreaBind {
     }
 }
 
+const HISTORY_LIMIT = 16;
+
 class ForgeCanvas {
     constructor(
         uuid,
@@ -194,6 +196,14 @@ class ForgeCanvas {
             scribbleIndicator.style.top = `${e.clientY - rect.top - indicatorSize / 2}px`;
         }
 
+        function endStroke() {
+            if (!self.drawing) return;
+            self.drawing = false;
+            drawingCanvas.style.cursor = "";
+            scribbleIndicator.style.display = "none";
+            self.saveState();
+        }
+
         const resizeObserver = new ResizeObserver(() => {
             self.adjustInitialPositionAndScale();
             self.drawImage();
@@ -256,6 +266,8 @@ class ForgeCanvas {
 
         drawingCanvas.addEventListener("pointerdown", (e) => {
             if (!self.img || e.button !== 0 || self.no_scribbles) return;
+            e.preventDefault();
+            drawingCanvas.setPointerCapture(e.pointerId);
             const rect = drawingCanvas.getBoundingClientRect();
             self.drawing = true;
             drawingCanvas.style.cursor = "crosshair";
@@ -278,17 +290,20 @@ class ForgeCanvas {
             e.stopPropagation();
         });
 
-        drawingCanvas.addEventListener("pointerup", () => {
-            self.drawing = false;
-            drawingCanvas.style.cursor = "";
-            self.saveState();
+        drawingCanvas.addEventListener("pointerup", (e) => {
+            if (drawingCanvas.hasPointerCapture(e.pointerId)) drawingCanvas.releasePointerCapture(e.pointerId);
+            endStroke();
         });
 
-        drawingCanvas.addEventListener("pointerout", () => {
-            self.drawing = false;
-            drawingCanvas.style.cursor = "";
+        drawingCanvas.addEventListener("pointercancel", (e) => {
+            if (drawingCanvas.hasPointerCapture(e.pointerId)) drawingCanvas.releasePointerCapture(e.pointerId);
+            endStroke();
+        });
+
+        drawingCanvas.addEventListener("pointerout", (e) => {
             scribbleIndicator.style.display = "none";
-            self.saveState();
+            if (!drawingCanvas.hasPointerCapture(e.pointerId)) return;
+            endStroke();
         });
 
         container.addEventListener("pointerdown", (e) => {
@@ -429,8 +444,7 @@ class ForgeCanvas {
             if (!self.pointerInsideContainer) return;
             if (e.shiftKey) {
                 e.preventDefault();
-                if (this._original_alpha === null)
-                    this._original_alpha = scribbleAlpha.value;
+                if (this._original_alpha === null) this._original_alpha = scribbleAlpha.value;
                 scribbleAlpha.value = 0.0;
                 updateInput(scribbleAlpha);
                 scribbleIndicator.style.border = "2px dotted";
@@ -455,10 +469,8 @@ class ForgeCanvas {
                 centerButton.click();
             }
             if (e.key === "f") {
-                if (maxButton.style.display === "none")
-                    minButton.click();
-                else
-                    maxButton.click();
+                if (maxButton.style.display === "none") minButton.click();
+                else maxButton.click();
             }
 
             if (e.key === "w") this._held_W = true;
@@ -516,7 +528,7 @@ class ForgeCanvas {
 
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        ctx.lineWidth = this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0) * 4;
+        ctx.lineWidth = (this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0)) * 4;
 
         if (this.scribbleAlpha <= 0) {
             ctx.globalCompositeOperation = "destination-out";
@@ -723,6 +735,10 @@ class ForgeCanvas {
         this.history = this.history.slice(0, this.historyIndex + 1);
         this.history.push(imageData);
         this.historyIndex++;
+        if (this.history.length > HISTORY_LIMIT) {
+            this.history.shift();
+            this.historyIndex--;
+        }
         this.updateUndoRedoButtons();
         this.updateDrawingData();
     }
