@@ -30,6 +30,8 @@ class GradioTextAreaBind {
     }
 }
 
+const HISTORY_LIMIT = 16;
+
 class ForgeCanvas {
     constructor(
         uuid,
@@ -156,9 +158,6 @@ class ForgeCanvas {
 
         const drawContext = drawingCanvas.getContext("2d");
         self.drawingCanvas_ = drawingCanvas;
-		// Stop mobile browsers from treating draw gestures as page scroll
-		drawingCanvas.style.touchAction = "none";
-		container.style.touchAction = "none";
 
         if (self.no_scribbles) {
             toolbar.querySelector(".forge-toolbar-box-b").style.display = "none";
@@ -195,6 +194,14 @@ class ForgeCanvas {
             scribbleIndicator.style.height = `${indicatorSize}px`;
             scribbleIndicator.style.left = `${e.clientX - rect.left - indicatorSize / 2}px`;
             scribbleIndicator.style.top = `${e.clientY - rect.top - indicatorSize / 2}px`;
+        }
+
+        function endStroke() {
+            if (!self.drawing) return;
+            self.drawing = false;
+            drawingCanvas.style.cursor = "";
+            scribbleIndicator.style.display = "none";
+            self.saveState();
         }
 
         const resizeObserver = new ResizeObserver(() => {
@@ -259,8 +266,8 @@ class ForgeCanvas {
 
         drawingCanvas.addEventListener("pointerdown", (e) => {
             if (!self.img || e.button !== 0 || self.no_scribbles) return;
-			e.preventDefault();  // Prevent the default touch behavior
-			drawingCanvas.setPointerCapture(e.pointerId);  // Capture later pointer events on this canvas
+            e.preventDefault();
+            drawingCanvas.setPointerCapture(e.pointerId);
             const rect = drawingCanvas.getBoundingClientRect();
             self.drawing = true;
             drawingCanvas.style.cursor = "crosshair";
@@ -283,34 +290,20 @@ class ForgeCanvas {
             e.stopPropagation();
         });
 
-        // Commit each stroke once; avoids duplicate saveState from pointerup / pointerout
-		function endStroke() {
-			if (!self.drawing) return;
-			self.drawing = false;
-			drawingCanvas.style.cursor = "";
-			scribbleIndicator.style.display = "none";
-			self.saveState();
-		}
+        drawingCanvas.addEventListener("pointerup", (e) => {
+            if (drawingCanvas.hasPointerCapture(e.pointerId)) drawingCanvas.releasePointerCapture(e.pointerId);
+            endStroke();
+        });
 
-		drawingCanvas.addEventListener("pointerup", (e) => {
-			if (drawingCanvas.hasPointerCapture && drawingCanvas.hasPointerCapture(e.pointerId)) {
-				drawingCanvas.releasePointerCapture(e.pointerId);
-			}
-			endStroke();
-		});
+        drawingCanvas.addEventListener("pointercancel", (e) => {
+            if (drawingCanvas.hasPointerCapture(e.pointerId)) drawingCanvas.releasePointerCapture(e.pointerId);
+            endStroke();
+        });
 
-		drawingCanvas.addEventListener("pointercancel", (e) => {
-			if (drawingCanvas.hasPointerCapture && drawingCanvas.hasPointerCapture(e.pointerId)) {
-				drawingCanvas.releasePointerCapture(e.pointerId);
-			}
-			endStroke();
-		});
-
-		drawingCanvas.addEventListener("pointerout", (e) => {
-			scribbleIndicator.style.display = "none";
-			// Still the same stroke while captured, so do not end it at the canvas edge
-			if (drawingCanvas.hasPointerCapture && drawingCanvas.hasPointerCapture(e.pointerId)) return;
-			endStroke();
+        drawingCanvas.addEventListener("pointerout", (e) => {
+            scribbleIndicator.style.display = "none";
+            if (!drawingCanvas.hasPointerCapture(e.pointerId)) return;
+            endStroke();
         });
 
         container.addEventListener("pointerdown", (e) => {
@@ -451,8 +444,7 @@ class ForgeCanvas {
             if (!self.pointerInsideContainer) return;
             if (e.shiftKey) {
                 e.preventDefault();
-                if (this._original_alpha === null)
-                    this._original_alpha = scribbleAlpha.value;
+                if (this._original_alpha === null) this._original_alpha = scribbleAlpha.value;
                 scribbleAlpha.value = 0.0;
                 updateInput(scribbleAlpha);
                 scribbleIndicator.style.border = "2px dotted";
@@ -477,10 +469,8 @@ class ForgeCanvas {
                 centerButton.click();
             }
             if (e.key === "f") {
-                if (maxButton.style.display === "none")
-                    minButton.click();
-                else
-                    maxButton.click();
+                if (maxButton.style.display === "none") minButton.click();
+                else maxButton.click();
             }
 
             if (e.key === "w") this._held_W = true;
@@ -538,7 +528,7 @@ class ForgeCanvas {
 
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        ctx.lineWidth = this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0) * 4;
+        ctx.lineWidth = (this.scribbleWidth / (this.scribbleWidthConsistent ? this.imgScale : 1.0)) * 4;
 
         if (this.scribbleAlpha <= 0) {
             ctx.globalCompositeOperation = "destination-out";
@@ -740,19 +730,17 @@ class ForgeCanvas {
 
     saveState() {
         const canvas = document.getElementById(`drawingCanvas_${this.uuid}`);
-		const ctx = canvas.getContext("2d");
-		const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-		this.history = this.history.slice(0, this.historyIndex + 1);
-		this.history.push(imageData);
-		this.historyIndex++;
-		// Cap history length so large snapshots do not exhaust mobile memory
-		const HISTORY_LIMIT = 12;
-		while (this.history.length > HISTORY_LIMIT) {
-        	this.history.shift();
-        	this.historyIndex--;
-    	}
-    	this.updateUndoRedoButtons();
-    	this.updateDrawingData();
+        const ctx = canvas.getContext("2d");
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        this.history = this.history.slice(0, this.historyIndex + 1);
+        this.history.push(imageData);
+        this.historyIndex++;
+        if (this.history.length > HISTORY_LIMIT) {
+            this.history.shift();
+            this.historyIndex--;
+        }
+        this.updateUndoRedoButtons();
+        this.updateDrawingData();
     }
 
     undo() {
