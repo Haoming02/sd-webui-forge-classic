@@ -353,9 +353,7 @@ def weighted_histogram_filter(img, kernel, kernel_center, percentile_min=0.0, pe
         return np.sum(values * overlap) / np.sum(overlap) if np.sum(overlap) > 0 else 0
 
     # Split pixel_coords into equal chunks based on n_jobs
-    n_jobs = -1
-    if cpu_count() > 6:
-        n_jobs = 6  # More than 6 isn't worth unless it's more than 3000x3000px
+    n_jobs = min(cpu_count(), 8)
 
     chunk_size = len(pixel_coords) // n_jobs
     pixel_chunks = [pixel_coords[i : i + chunk_size] for i in range(0, len(pixel_coords), chunk_size)]
@@ -512,12 +510,10 @@ class Script(scripts.ScriptBuiltinUI):
 
         with InputAccordion(False, label=enabled_ui_label, elem_id=enabled_el_id) as soft_inpainting_enabled:
             with gr.Group():
-                gr.Markdown(
-                    """
+                gr.Markdown("""
                     Soft inpainting allows you to **seamlessly blend original content with inpainted content** according to the mask opacity.
                     High **Mask blur** values are recommended!
-                    """
-                )
+                    """)
 
                 power = gr.Slider(label=ui_labels.mask_blend_power, info=ui_info.mask_blend_power, minimum=0, maximum=8, step=0.1, value=default.mask_blend_power, elem_id=el_ids.mask_blend_power)
                 scale = gr.Slider(label=ui_labels.mask_blend_scale, info=ui_info.mask_blend_scale, minimum=0, maximum=8, step=0.05, value=default.mask_blend_scale, elem_id=el_ids.mask_blend_scale)
@@ -530,8 +526,7 @@ class Script(scripts.ScriptBuiltinUI):
                 dif_contr = gr.Slider(label=ui_labels.composite_difference_contrast, info=ui_info.composite_difference_contrast, minimum=0, maximum=8, step=0.25, value=default.composite_difference_contrast, elem_id=el_ids.composite_difference_contrast)
 
                 with gr.Accordion("Help", open=False):
-                    gr.Markdown(
-                        f"""
+                    gr.Markdown(f"""
                         ### {ui_labels.mask_blend_power}
 
                         The blending strength of original content is scaled proportionally with the decreasing noise level values at each step (sigmas).
@@ -541,10 +536,8 @@ class Script(scripts.ScriptBuiltinUI):
                         - **Below 1**: Stronger preservation near the end (with low sigma)
                         - **1**: Balanced (proportional to sigma)
                         - **Above 1**: Stronger preservation in the beginning (with high sigma)
-                        """
-                    )
-                    gr.Markdown(
-                        f"""
+                        """)
+                    gr.Markdown(f"""
                         ### {ui_labels.mask_blend_scale}
 
                         Skews whether partially masked image regions should be more likely to preserve the original content or favor inpainted content.
@@ -552,10 +545,8 @@ class Script(scripts.ScriptBuiltinUI):
 
                         - **Low values**: Favors generated content.
                         - **High values**: Favors original content.
-                        """
-                    )
-                    gr.Markdown(
-                        f"""
+                        """)
+                    gr.Markdown(f"""
                         ### {ui_labels.inpaint_detail_preservation}
 
                         This parameter controls how the original latent vectors and denoised latent vectors are interpolated.
@@ -564,51 +555,42 @@ class Script(scripts.ScriptBuiltinUI):
 
                         - **Low values**: Softer blending, details may fade.
                         - **High values**: Stronger contrast, may over-saturate colors.
-                        """
-                    )
+                        """)
 
-                    gr.Markdown(
-                        """
+                    gr.Markdown("""
                         ## Pixel Composite Settings
 
                         Masks are generated based on how much a part of the image changed after denoising.
                         These masks are used to blend the original and final images together.
                         If the difference is low, the original pixels are used instead of the pixels returned by the inpainting process.
-                        """
-                    )
+                        """)
 
-                    gr.Markdown(
-                        f"""
+                    gr.Markdown(f"""
                         ### {ui_labels.composite_mask_influence}
 
                         This parameter controls how much the mask should bias this sensitivity to difference.
 
                         - **0**: Ignore the mask, only consider differences in image content.
                         - **1**: Follow the mask closely despite image content changes.
-                        """
-                    )
+                        """)
 
-                    gr.Markdown(
-                        f"""
+                    gr.Markdown(f"""
                         ### {ui_labels.composite_difference_threshold}
 
                         This value represents the difference at which the original pixels will have less than 50% opacity.
 
                         - **Low values**: Two images patches must be almost the same in order to retain original pixels.
                         - **High values**: Two images patches can be very different and still retain original pixels.
-                        """
-                    )
+                        """)
 
-                    gr.Markdown(
-                        f"""
+                    gr.Markdown(f"""
                         ### {ui_labels.composite_difference_contrast}
 
                         This value represents the contrast between the opacity of the original and inpainted content.
 
                         - **Low values**: The blend will be more gradual and have longer transitions, but may cause ghosting.
                         - **High values**: Ghosting will be less common, but transitions may be very sudden.
-                        """
-                    )
+                        """)
 
         self.infotext_fields = [(soft_inpainting_enabled, enabled_gen_param_label), (power, gen_param_labels.mask_blend_power), (scale, gen_param_labels.mask_blend_scale), (detail, gen_param_labels.inpaint_detail_preservation), (mask_inf, gen_param_labels.composite_mask_influence), (dif_thresh, gen_param_labels.composite_difference_threshold), (dif_contr, gen_param_labels.composite_difference_contrast)]
 
