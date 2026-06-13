@@ -63,7 +63,7 @@ class OpenposeEditor:
         self,
         generated_image: gr.Image,
         use_preview_as_input: gr.Checkbox,
-        model: gr.Dropdown,
+        type_filter: gr.Radio,
     ):
         def render_pose(pose_url: str) -> tuple[dict]:
             json_string = parse_data_url(pose_url).decode("utf-8")
@@ -101,10 +101,10 @@ class OpenposeEditor:
             outputs=[generated_image.background, use_preview_as_input, *self.outputs()],
         )
 
-        def update_upload_link(model: str) -> dict:
-            return gr.update(visible=(any(key in model.lower() for key in ("openpose", "union", "promax", "unicontrol"))))
+        def update_upload_link(type_: str) -> dict:
+            return gr.update(visible=(type_ == "OpenPose"))
 
-        model.change(fn=update_upload_link, inputs=[model], outputs=[self.upload_link], queue=False)
+        type_filter.change(fn=update_upload_link, inputs=[type_filter], outputs=[self.upload_link], queue=False)
 
     def outputs(self) -> list[gr.components.Component]:
         return [self.download_link]

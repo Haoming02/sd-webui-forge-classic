@@ -878,19 +878,18 @@ class ControlNetUiGroup:
                 event_subscriber(fn=clear_preview, inputs=self.use_preview_as_input, outputs=[self.use_preview_as_input, self.generated_image.background], show_progress=False)
 
     def register_core_callbacks(self):
-        """Register core callbacks that only involves gradio components defined
-        within this ui group."""
+        """Register core callbacks that only involves gradio components defined within this ui group."""
         self.register_refresh_all_models()
         self.register_build_sliders()
         self.register_shift_preview()
         self.register_create_canvas()
         self.register_clear_preview()
+        assert self.type_filter is not None
         self.openpose_editor.register_callbacks(
             self.generated_image,
             self.use_preview_as_input,
-            self.model,
+            self.type_filter,
         )
-        assert self.type_filter is not None
         if self.is_img2img:
             self.register_img2img_same_input()
 
