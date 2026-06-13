@@ -20,6 +20,7 @@ from lib_controlnet.utils import (
     set_numpy_seed,
 )
 from PIL import Image
+from tqdm import tqdm
 
 import modules.scripts as scripts
 import modules.util as util
@@ -273,12 +274,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         preprocessor_output_is_image = False
         preprocessor_output = None
 
-        def optional_tqdm(iterable, use_tqdm):
-            from tqdm import tqdm
-
-            return tqdm(iterable) if use_tqdm else iterable
-
-        for input_image, input_mask in optional_tqdm(input_list, len(input_list) > 1):
+        for input_image, input_mask in tqdm(input_list, disable=(len(input_list) < 2)):
             if unit.pixel_perfect:
                 unit.processor_res = external_code.pixel_perfect_resolution(
                     input_image,
