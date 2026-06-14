@@ -1,6 +1,10 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/context_windows.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy_extras/nodes_context_windows.py
+
 import collections
 import logging
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -14,6 +18,43 @@ from backend.logging import setup_logger
 
 logger = logging.getLogger("ContextWindow")
 setup_logger(logger)
+
+
+class IndexListCallbacks(Enum):
+    EVALUATE_CONTEXT_WINDOWS = "evaluate_context_windows"
+    COMBINE_CONTEXT_WINDOW_RESULTS = "combine_context_window_results"
+    EXECUTE_START = "execute_start"
+    EXECUTE_CLEANUP = "execute_cleanup"
+    RESIZE_COND_ITEM = "resize_cond_item"
+
+
+class ContextSchedules(Enum):
+    UNIFORM_LOOPED = "looped_uniform"
+    UNIFORM_STANDARD = "standard_uniform"
+    STATIC_STANDARD = "standard_static"
+    BATCHED = "batched"
+
+
+class ContextFuseMethods(Enum):
+    FLAT = "flat"
+    PYRAMID = "pyramid"
+    RELATIVE = "relative"
+    OVERLAP_LINEAR = "overlap-linear"
+
+
+@dataclass
+class ContextSchedule:
+    name: str
+    func: Callable
+
+
+@dataclass
+class ContextFuseMethod:
+    name: str
+    func: Callable
+
+
+ContextResults = collections.namedtuple("ContextResults", ["window_idx", "sub_conds_out", "sub_conds", "window"])
 
 
 class IndexListContextWindow:
@@ -50,17 +91,6 @@ class IndexListContextWindow:
     def get_region_index(self, num_regions: int) -> int:
         region_idx = int(self.center_ratio * num_regions)
         return min(max(region_idx, 0), num_regions - 1)
-
-
-class IndexListCallbacks:
-    EVALUATE_CONTEXT_WINDOWS = "evaluate_context_windows"
-    COMBINE_CONTEXT_WINDOW_RESULTS = "combine_context_window_results"
-    EXECUTE_START = "execute_start"
-    EXECUTE_CLEANUP = "execute_cleanup"
-    RESIZE_COND_ITEM = "resize_cond_item"
-
-    def init_callbacks(self):
-        return {}
 
 
 def slice_cond(cond_value, window: IndexListContextWindow, x_in: torch.Tensor, device, temporal_dim: int, temporal_scale: int = 1, temporal_offset: int = 0, retain_index_list: list[int] = []):
@@ -112,21 +142,6 @@ def slice_cond(cond_value, window: IndexListContextWindow, x_in: torch.Tensor, d
     idx = tuple([slice(None)] * temporal_dim + [indices])
     sliced = cond_tensor[idx].to(device)
     return cond_value._copy_with(sliced)
-
-
-@dataclass
-class ContextSchedule:
-    name: str
-    func: Callable
-
-
-@dataclass
-class ContextFuseMethod:
-    name: str
-    func: Callable
-
-
-ContextResults = collections.namedtuple("ContextResults", ["window_idx", "sub_conds_out", "sub_conds", "window"])
 
 
 class IndexListContextHandler:
@@ -195,7 +210,7 @@ class IndexListContextHandler:
                             # Allow callbacks to handle custom conditioning items
                             handled = False
                             if not handled and self._model is not None:
-                                result = self._model.resize_cond_for_context_window(cond_key, cond_value, window, x_in, device, retain_index_list=self.cond_retain_index_list)
+                                result = resize_cond_for_context_window(self._model, cond_key, cond_value, window, x_in, device, retain_index_list=self.cond_retain_index_list)
                                 if result is not None:
                                     new_cond_item[cond_key] = result
                                     handled = True
@@ -231,7 +246,7 @@ class IndexListContextHandler:
         return resized_cond
 
     def set_step(self, timestep: torch.Tensor, model_options: dict[str]):
-        mask = torch.isclose(model_options["transformer_options"]["sample_sigmas"], timestep[0], rtol=0.0001)
+        mask = torch.isclose(model_options["transformer_options"]["sampling_sigmas"], timestep[0], rtol=0.0001)
         matches = torch.nonzero(mask)
         if torch.numel(matches) == 0:
             return  # substep from multi-step sampler: keep self._step from the last full step
@@ -291,7 +306,7 @@ class IndexListContextHandler:
             sub_timestep = window.get_tensor(timestep, device, dim=0)
             sub_conds = [self.get_resized_cond(cond, x_in, window, device) for cond in conds]
 
-            sub_conds_out = calc_cond_batch(model, sub_conds, sub_x, sub_timestep, model_options)
+            sub_conds_out = calc_cond_batch(model, *sub_conds, sub_x, sub_timestep, model_options)
             if device is not None:
                 for i in range(len(sub_conds_out)):
                     sub_conds_out[i] = sub_conds_out[i].to(x_in.device)
@@ -349,13 +364,6 @@ def get_shape_for_dim(x_in: torch.Tensor, dim: int) -> list[int]:
     for _ in range(total_dims - dim - 1):
         shape.append(1)
     return shape
-
-
-class ContextSchedules:
-    UNIFORM_LOOPED = "looped_uniform"
-    UNIFORM_STANDARD = "standard_uniform"
-    STATIC_STANDARD = "standard_static"
-    BATCHED = "batched"
 
 
 # from https://github.com/neggles/animatediff-cli/blob/main/src/animatediff/pipelines/context.py
@@ -463,21 +471,6 @@ def create_windows_default(num_frames: int, handler: IndexListContextHandler):
     return [list(range(num_frames))]
 
 
-CONTEXT_MAPPING = {
-    ContextSchedules.UNIFORM_LOOPED: create_windows_uniform_looped,
-    ContextSchedules.UNIFORM_STANDARD: create_windows_uniform_standard,
-    ContextSchedules.STATIC_STANDARD: create_windows_static_standard,
-    ContextSchedules.BATCHED: create_windows_batched,
-}
-
-
-def get_matching_context_schedule(context_schedule: str) -> ContextSchedule:
-    func = CONTEXT_MAPPING.get(context_schedule, None)
-    if func is None:
-        raise ValueError(f"Unknown context_schedule '{context_schedule}'.")
-    return ContextSchedule(context_schedule, func)
-
-
 def get_context_weights(length: int, full_length: int, idxs: list[int], handler: IndexListContextHandler, sigma: torch.Tensor = None):
     return handler.fuse_method.func(length, sigma=sigma, handler=handler, full_length=full_length, idxs=idxs)
 
@@ -514,14 +507,12 @@ def create_weights_overlap_linear(length: int, full_length: int, idxs: list[int]
     return weights_torch
 
 
-class ContextFuseMethods:
-    FLAT = "flat"
-    PYRAMID = "pyramid"
-    RELATIVE = "relative"
-    OVERLAP_LINEAR = "overlap-linear"
-
-    LIST = [PYRAMID, FLAT, OVERLAP_LINEAR]
-    LIST_STATIC = [PYRAMID, RELATIVE, FLAT, OVERLAP_LINEAR]
+CONTEXT_MAPPING = {
+    ContextSchedules.UNIFORM_LOOPED: create_windows_uniform_looped,
+    ContextSchedules.UNIFORM_STANDARD: create_windows_uniform_standard,
+    ContextSchedules.STATIC_STANDARD: create_windows_static_standard,
+    ContextSchedules.BATCHED: create_windows_batched,
+}
 
 
 FUSE_MAPPING = {
@@ -530,13 +521,6 @@ FUSE_MAPPING = {
     ContextFuseMethods.RELATIVE: create_weights_pyramid,
     ContextFuseMethods.OVERLAP_LINEAR: create_weights_overlap_linear,
 }
-
-
-def get_matching_fuse_method(fuse_method: str) -> ContextFuseMethod:
-    func = FUSE_MAPPING.get(fuse_method, None)
-    if func is None:
-        raise ValueError(f"Unknown fuse_method '{fuse_method}'.")
-    return ContextFuseMethod(fuse_method, func)
 
 
 # Returns fraction that has denominator that is a power of 2
@@ -617,51 +601,26 @@ def apply_freenoise(noise: torch.Tensor, dim: int, context_length: int, context_
     return noise
 
 
-from comfy_api.latest import ComfyExtension, io
-import comfy.context_windows
-import nodes
+class ContextWindowsHandler:
 
+    @staticmethod
+    def execute(
+        context_length: int = 2048,
+        context_overlap: int = 512,
+        context_schedule: ContextSchedules = ContextSchedules.STATIC_STANDARD,
+        context_stride: int = 1,
+        closed_loop: bool = False,
+        fuse_method: ContextFuseMethods = ContextFuseMethods.PYRAMID,
+        dim: int = 2,
+        freenoise: bool = False,
+        cond_retain_index_list: list[int] = [],
+        split_conds_to_windows: bool = False,
+        causal_window_fix: bool = False,
+    ) -> IndexListContextHandler:
 
-class ContextWindowsManualNode(io.ComfyNode):
-    @classmethod
-    def define_schema(cls) -> io.Schema:
-        return io.Schema(
-            node_id="ContextWindowsManual",
-            display_name="Context Windows (Manual)",
-            category="model/patch",
-            description="Manually set context windows.",
-            inputs=[
-                io.Model.Input("model", tooltip="The model to apply context windows to during sampling."),
-                io.Int.Input("context_length", min=1, default=16, tooltip="The length of the context window.", advanced=True),
-                io.Int.Input("context_overlap", min=0, default=4, tooltip="The overlap of the context window.", advanced=True),
-                io.Combo.Input("context_schedule", options=[
-                    comfy.context_windows.ContextSchedules.STATIC_STANDARD,
-                    comfy.context_windows.ContextSchedules.UNIFORM_STANDARD,
-                    comfy.context_windows.ContextSchedules.UNIFORM_LOOPED,
-                    comfy.context_windows.ContextSchedules.BATCHED,
-                    ], tooltip="The stride of the context window."),
-                io.Int.Input("context_stride", min=1, default=1, tooltip="The stride of the context window; only applicable to uniform schedules.", advanced=True),
-                io.Boolean.Input("closed_loop", default=False, tooltip="Whether to close the context window loop; only applicable to looped schedules."),
-                io.Combo.Input("fuse_method", options=comfy.context_windows.ContextFuseMethods.LIST_STATIC, default=comfy.context_windows.ContextFuseMethods.PYRAMID, tooltip="The method to use to fuse the context windows."),
-                io.Int.Input("dim", min=0, max=5, default=0, tooltip="The dimension to apply the context windows to."),
-                io.Boolean.Input("freenoise", default=False, tooltip="Whether to apply FreeNoise noise shuffling, improves window blending."),
-                io.String.Input("cond_retain_index_list", default="", tooltip="List of latent indices to retain in the conditioning tensors for each window, for example setting this to '0' will use the initial start image for each window."),
-                io.Boolean.Input("split_conds_to_windows", default=False, tooltip="Whether to split multiple conditionings (created by ConditionCombine) to each window based on region index."),
-                io.Boolean.Input("causal_window_fix", default=True, tooltip="Whether to add a causal fix frame to non-0-indexed context windows."),
-            ],
-            outputs=[
-                io.Model.Output(tooltip="The model with context windows applied during sampling."),
-            ],
-            is_experimental=True,
-        )
-
-    @classmethod
-    def execute(cls, model: io.Model.Type, context_length: int, context_overlap: int, context_schedule: str, context_stride: int, closed_loop: bool, fuse_method: str, dim: int, freenoise: bool,
-                cond_retain_index_list: list[int]=[], split_conds_to_windows: bool=False, causal_window_fix: bool=True) -> io.Model:
-        model = model.clone()
-        model.model_options["context_handler"] = comfy.context_windows.IndexListContextHandler(
-            context_schedule=comfy.context_windows.get_matching_context_schedule(context_schedule),
-            fuse_method=comfy.context_windows.get_matching_fuse_method(fuse_method),
+        return IndexListContextHandler(
+            context_schedule=ContextSchedule(context_schedule, CONTEXT_MAPPING[context_schedule]),
+            fuse_method=ContextFuseMethod(fuse_method, FUSE_MAPPING[fuse_method]),
             context_length=context_length,
             context_overlap=context_overlap,
             context_stride=context_stride,
@@ -672,20 +631,17 @@ class ContextWindowsManualNode(io.ComfyNode):
             split_conds_to_windows=split_conds_to_windows,
             causal_window_fix=causal_window_fix,
         )
-        # make memory usage calculation only take into account the context window latents
-        comfy.context_windows.create_prepare_sampling_wrapper(model)
-        if freenoise: # no other use for this wrapper at this time
-            comfy.context_windows.create_sampler_sample_wrapper(model)
-        return io.NodeOutput(model)
 
 
-def resize_cond_for_context_window(self, cond_key, cond_value, window, x_in, device, retain_index_list=[]):
+def resize_cond_for_context_window(model, cond_key, cond_value, window, x_in, device, retain_index_list=[]):
+    """https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/model_base.py#L1433"""
+
     if cond_key == "lq_latent" and hasattr(cond_value, "cond") and isinstance(cond_value.cond, torch.Tensor):
         lq = cond_value.cond
         dim = window.dim
         if dim >= lq.ndim:
             return None
-        lq_proj = self.diffusion_model.lq_proj
+        lq_proj = model.diffusion_model.lq_proj
         ratio = lq_proj.sr_scale * lq_proj.latent_spatial_down_factor
         # Map x window indices -> lq indices (deduplicated, sorted, in-bounds).
         lq_size = lq.size(dim)
@@ -694,4 +650,4 @@ def resize_cond_for_context_window(self, cond_key, cond_value, window, x_in, dev
             return None
         idx = tuple([slice(None)] * dim + [lq_indices])
         return cond_value._copy_with(lq[idx].to(device))
-    return super().resize_cond_for_context_window(cond_key, cond_value, window, x_in, device, retain_index_list=retain_index_list)
+    return None

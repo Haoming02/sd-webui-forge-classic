@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 import torch
 
 from backend import memory_management, utils
-from backend.args import args
+from backend.args import args, dynamic_args
 from backend.sampling.condition import (
     Condition,
     compile_conditions,
@@ -300,7 +300,13 @@ def sampling_function_inner(model, x, timestep, uncond, cond, cond_scale, model_
     for fn in model_options.get("sampler_pre_cfg_function", []):
         model, cond, uncond_, x, timestep, model_options = fn(model, cond, uncond_, x, timestep, model_options)
 
-    cond_pred, uncond_pred = calc_cond_uncond_batch(model, cond, uncond_, x, timestep, model_options)
+    if dynamic_args.pid:
+        from backend.misc.context_windows import ContextWindowsHandler
+
+        handler = ContextWindowsHandler.execute()
+        cond_pred, uncond_pred = handler.execute(calc_cond_uncond_batch, model, [cond, uncond_], x, timestep, model_options)
+    else:
+        cond_pred, uncond_pred = calc_cond_uncond_batch(model, cond, uncond_, x, timestep, model_options)
 
     if "sampler_cfg_function" in model_options:
         args = {"cond": x - cond_pred, "uncond": x - uncond_pred, "cond_scale": cond_scale, "timestep": timestep, "input": x, "sigma": timestep, "cond_denoised": cond_pred, "uncond_denoised": uncond_pred, "model": model, "model_options": model_options}
