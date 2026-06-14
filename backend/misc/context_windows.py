@@ -677,3 +677,21 @@ class ContextWindowsManualNode(io.ComfyNode):
         if freenoise: # no other use for this wrapper at this time
             comfy.context_windows.create_sampler_sample_wrapper(model)
         return io.NodeOutput(model)
+
+
+def resize_cond_for_context_window(self, cond_key, cond_value, window, x_in, device, retain_index_list=[]):
+    if cond_key == "lq_latent" and hasattr(cond_value, "cond") and isinstance(cond_value.cond, torch.Tensor):
+        lq = cond_value.cond
+        dim = window.dim
+        if dim >= lq.ndim:
+            return None
+        lq_proj = self.diffusion_model.lq_proj
+        ratio = lq_proj.sr_scale * lq_proj.latent_spatial_down_factor
+        # Map x window indices -> lq indices (deduplicated, sorted, in-bounds).
+        lq_size = lq.size(dim)
+        lq_indices = sorted({i // ratio for i in window.index_list if 0 <= i // ratio < lq_size})
+        if not lq_indices:
+            return None
+        idx = tuple([slice(None)] * dim + [lq_indices])
+        return cond_value._copy_with(lq[idx].to(device))
+    return super().resize_cond_for_context_window(cond_key, cond_value, window, x_in, device, retain_index_list=retain_index_list)
