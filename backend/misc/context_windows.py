@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 import numpy as np
 import torch
 
+from backend.args import dynamic_args
 from backend.logging import setup_logger
 
 logger = logging.getLogger("ContextWindow")
@@ -161,14 +162,10 @@ class IndexListContextHandler:
 
         self.callbacks = {}
 
-    def should_use_context(self, model: "KModel", conds: list[list[dict]], x_in: torch.Tensor, timestep: torch.Tensor, model_options: dict[str]) -> bool:
-        # for now, assume first dim is batch - should have stored on BaseModel in actual implementation
-        if x_in.size(self.dim) > self.context_length:
-            logger.info(f"Using context windows {self.context_length} with overlap {self.context_overlap} for {x_in.size(self.dim)} frames.")
-            if self.cond_retain_index_list:
-                logger.info(f"Retaining original cond for indexes: {self.cond_retain_index_list}")
-            return True
-        return False
+        self.orig_lq_latent: torch.Tensor = None
+
+    def should_use_context(self, x_in: torch.Tensor) -> bool:
+        return x_in.size(self.dim) > self.context_length
 
     def prepare_control_objects(self, control: "ControlBase", device=None) -> "ControlBase":
         if control.previous_controlnet is not None:
@@ -192,7 +189,9 @@ class IndexListContextHandler:
             for key in actual_cond:
                 try:
                     cond_item = actual_cond[key]
-                    if isinstance(cond_item, torch.Tensor):
+                    if key == "lq_latent":
+                        dynamic_args.lq_latent[0] = resize_cond_for_context_window(self._model, cond_item, window, x_in, device, retain_index_list=self.cond_retain_index_list)
+                    elif isinstance(cond_item, torch.Tensor):
                         # check that tensor is the expected length - x.size(0)
                         if self.dim < cond_item.ndim and cond_item.size(self.dim) == x_in.size(self.dim):
                             # if so, it's subsetting time - tell controls the expected indeces so they can handle them
@@ -207,15 +206,6 @@ class IndexListContextHandler:
                         new_cond_item = cond_item.copy()
                         # when in dictionary, look for tensors and CONDCrossAttn [comfy/conds.py] (has cond attr that is a tensor)
                         for cond_key, cond_value in new_cond_item.items():
-                            # Allow callbacks to handle custom conditioning items
-                            handled = False
-                            if not handled and self._model is not None:
-                                result = resize_cond_for_context_window(self._model, cond_key, cond_value, window, x_in, device, retain_index_list=self.cond_retain_index_list)
-                                if result is not None:
-                                    new_cond_item[cond_key] = result
-                                    handled = True
-                            if handled:
-                                continue
                             if isinstance(cond_value, torch.Tensor):
                                 if (self.dim < cond_value.ndim and cond_value.size(self.dim) == x_in.size(self.dim)) or (cond_value.ndim < self.dim and cond_value.size(0) == x_in.size(self.dim)):
                                     new_cond_item[cond_key] = window.get_tensor(cond_value, device)
@@ -264,6 +254,7 @@ class IndexListContextHandler:
         context_windows = self.get_context_windows(model, x_in, model_options)
         enumerated_context_windows = list(enumerate(context_windows))
 
+        conds[0][0]["lq_latent"] = self.orig_lq_latent.clone()
         conds_final = [torch.zeros_like(x_in) for _ in conds]
         if self.fuse_method.name == ContextFuseMethods.RELATIVE:
             counts_final = [torch.ones(get_shape_for_dim(x_in, self.dim), device=x_in.device) for _ in conds]
@@ -633,11 +624,11 @@ class ContextWindowsHandler:
         )
 
 
-def resize_cond_for_context_window(model, cond_key, cond_value, window, x_in, device, retain_index_list=[]):
+def resize_cond_for_context_window(model, cond_value, window, x_in, device, retain_index_list=[]):
     """https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/model_base.py#L1433"""
 
-    if cond_key == "lq_latent" and hasattr(cond_value, "cond") and isinstance(cond_value.cond, torch.Tensor):
-        lq = cond_value.cond
+    if isinstance(cond_value, torch.Tensor):
+        lq = cond_value
         dim = window.dim
         if dim >= lq.ndim:
             return None
@@ -649,5 +640,5 @@ def resize_cond_for_context_window(model, cond_key, cond_value, window, x_in, de
         if not lq_indices:
             return None
         idx = tuple([slice(None)] * dim + [lq_indices])
-        return cond_value._copy_with(lq[idx].to(device))
+        return lq[idx].to(device)
     return None

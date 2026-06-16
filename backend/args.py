@@ -128,6 +128,8 @@ if TYPE_CHECKING:
 
     import torch
 
+    from backend.misc.context_windows import IndexListContextHandler
+
 
 class _DynamicArgsMeta(type):
     def get(cls, key, default=None):
@@ -170,9 +172,18 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """Input Latent for Wan 2.2 I2V"""
     lq_latent: list["torch.Tensor", "torch.Tensor"] = [None, None]
     """lq_latent & degrade_sigma for PiD"""
+    context_handler: "IndexListContextHandler" = None
+    """Context Handler for PiD"""
     is_referencing: bool = False
     """Appending Reference Latent(s) (by. ImageStitch)"""
     ops: str = None
     """Operations for the Diffusion Model"""
     last_extra_generation_params: dict[str, str] = {}
     """Infotext captured during `get_learned_conditioning`"""
+
+    @classmethod
+    def reset(cls):
+        cls.ref_latents.clear()
+        cls.concat_latent = None
+        cls.lq_latent = [None, None]
+        cls.context_handler = None

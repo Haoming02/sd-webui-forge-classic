@@ -4,6 +4,7 @@ from huggingface_guess import model_list
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
+from backend.misc.context_windows import ContextWindowsHandler
 from backend.modules.k_prediction import PredictionDiscreteFlow
 from backend.nn.vae import AutoencoderKLFlux2, IntegratedAutoencoderKL
 from backend.nn.wan_vae import WanVAE
@@ -50,6 +51,8 @@ class PiD(ForgeDiffusionEngine):
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
 
         self.use_shift = True
+
+        dynamic_args.context_handler = ContextWindowsHandler.execute()
 
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):

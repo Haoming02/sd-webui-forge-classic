@@ -300,11 +300,8 @@ def sampling_function_inner(model, x, timestep, uncond, cond, cond_scale, model_
     for fn in model_options.get("sampler_pre_cfg_function", []):
         model, cond, uncond_, x, timestep, model_options = fn(model, cond, uncond_, x, timestep, model_options)
 
-    if dynamic_args.pid:
-        from backend.misc.context_windows import ContextWindowsHandler
-
-        handler = ContextWindowsHandler.execute()
-        cond_pred, uncond_pred = handler.execute(calc_cond_uncond_batch, model, [cond, uncond_], x, timestep, model_options)
+    if getattr(dynamic_args.context_handler, "should_use_context", lambda *args: False)(x):
+        cond_pred, uncond_pred = dynamic_args.context_handler.execute(calc_cond_uncond_batch, model, [cond, uncond_], x, timestep, model_options)
     else:
         cond_pred, uncond_pred = calc_cond_uncond_batch(model, cond, uncond_, x, timestep, model_options)
 

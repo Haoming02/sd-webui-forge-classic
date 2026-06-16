@@ -1876,6 +1876,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
         if args.dynamic_args.pid:
             self.init_latent = x.detach().clone()
+            args.dynamic_args.context_handler.orig_lq_latent = args.dynamic_args.lq_latent[0].clone()
 
         if self.initial_noise_multiplier != 1.0:
             self.extra_generation_params["Noise multiplier"] = self.initial_noise_multiplier
