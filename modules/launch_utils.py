@@ -286,9 +286,16 @@ def requirements_met(requirements_file):
 
 
 def prepare_environment():
-    torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
-    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
+    is_macos = sys.platform == "darwin"
+
+    if is_macos:
+        torch_index_url = ""
+        torch_command = os.environ.get("TORCH_COMMAND", "pip install torch==2.11.0 torchvision==0.26.0")
+        xformers_package = os.environ.get("XFORMERS_PACKAGE", "xformers==0.0.35")
+    else:
+        torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
+        torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
+        xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
     bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.2")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.0")
@@ -329,6 +336,8 @@ assert cuda or xpu or mps
         if not success:
             if "older driver" in str(err).lower():
                 raise SystemError("Please update your GPU driver to support cu130 ; or manually install older PyTorch")
+            if is_macos:
+                raise RuntimeError("PyTorch cannot access MPS — requires macOS 12.3+ on Apple Silicon, or skip with --skip-torch-cuda-test")
             raise RuntimeError("PyTorch is not able to access GPU")
         startup_timer.record("torch GPU test")
 
@@ -340,23 +349,27 @@ assert cuda or xpu or mps
     ver_FLASH = "2.8.3"
     ver_TRITON = "3.6.0"
     ver_NUNCHAKU = "1.2.1"
-    ver_TORCH, ver_CUDA = _torch_version()
-    v_TORCH = ver_TORCH.rsplit(".", 1)[0]
-    v_CUDA = f"{ver_CUDA[0:-1]}.{ver_CUDA[-1]}"
 
-    if os.name == "nt":
-        ver_TRITON += ".post26"
-
-        sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post4/sageattention-{ver_SAGE}+{ver_CUDA}torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.6/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
-        triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
-
+    if is_macos:
+        sage_package = flash_package = triton_package = nunchaku_package = None
     else:
-        sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
-        triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        ver_TORCH, ver_CUDA = _torch_version()
+        v_TORCH = ver_TORCH.rsplit(".", 1)[0]
+        v_CUDA = f"{ver_CUDA[0:-1]}.{ver_CUDA[-1]}"
+
+        if os.name == "nt":
+            ver_TRITON += ".post26"
+
+            sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post4/sageattention-{ver_SAGE}+{ver_CUDA}torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl")
+            flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.6/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+            triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
+            nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+
+        else:
+            sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
+            flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+            triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
+            nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
 
     def _verify_nunchaku() -> bool:
         if not is_installed("nunchaku"):
@@ -376,7 +389,7 @@ assert cuda or xpu or mps
         run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
         startup_timer.record("install xformers")
 
-    if args.sage:
+    if args.sage and sage_package:
         if not is_installed("triton"):
             try:
                 run_pip(f"install -U -I --no-deps {triton_package}", "triton")
@@ -392,7 +405,7 @@ assert cuda or xpu or mps
             else:
                 startup_timer.record("install sageattention")
 
-    if args.flash and not is_installed("flash_attn"):
+    if args.flash and flash_package and not is_installed("flash_attn"):
         try:
             run_pip(f"install {flash_package}", "flash_attn")
         except RuntimeError:
@@ -400,7 +413,7 @@ assert cuda or xpu or mps
         else:
             startup_timer.record("install flash_attn")
 
-    if args.nunchaku and not _verify_nunchaku():
+    if args.nunchaku and nunchaku_package and not _verify_nunchaku():
         try:
             run_pip(f"install {nunchaku_package}", "nunchaku")
         except RuntimeError:
