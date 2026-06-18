@@ -36,7 +36,10 @@ class Task:
                 logger.error("Encountered Out of Memory during Sampling; Unloading all Models...")
                 last_exception = "OOM"
             else:
-                traceback.print_exc()
+                if isinstance(e, ModuleNotFoundError) and "recognize" in str(e):
+                    logger.error("Failed to recognize diffusion model... (check README for supported models)")
+                else:
+                    traceback.print_exc()
                 last_exception = f"{type(e).__name__}: {e}"
 
 

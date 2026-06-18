@@ -737,7 +737,8 @@ def _load_diffuser(path: os.PathLike):
 
     sd, metadata = load_torch_file(path, return_metadata=True)
     sd, metadata = convert_quantization(sd, metadata)
-    sd = convert_diffusers_mmdit(sd, "")
+    if (sd := convert_diffusers_mmdit(sd, "")) is None:
+        raise ModuleNotFoundError("Failed to recognize model...")
     sd = preprocess_state_dict(sd)
     guess = huggingface_guess.guess(sd)
 
@@ -747,7 +748,7 @@ def _load_diffuser(path: os.PathLike):
 def split_state_dict(path: os.PathLike, additional_state_dicts: list[os.PathLike] = None):
     try:
         sd, metadata, guess = _load_unet(path)
-    except Exception:
+    except ModuleNotFoundError:
         sd, metadata, guess = _load_diffuser(path)
     finally:
         memory_management.soft_empty_cache()
@@ -800,12 +801,8 @@ def split_state_dict(path: os.PathLike, additional_state_dicts: list[os.PathLike
 
 @torch.inference_mode()
 def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = None) -> "ForgeDiffusionEngine":
-    try:
-        state_dicts, estimated_config = split_state_dict(sd, additional_state_dicts=additional_state_dicts)
-    except AttributeError:
-        raise ValueError("Failed to recognize model...") from None
-
-    repo_name = estimated_config.huggingface_repo
+    state_dicts, estimated_config = split_state_dict(sd, additional_state_dicts=additional_state_dicts)
+    repo_name: str = estimated_config.huggingface_repo
 
     backend.args.dynamic_args.kontext = "kontext" in str(sd).lower()
     backend.args.dynamic_args.edit = "qwen" in str(sd).lower() and "edit" in str(sd).lower()
@@ -869,4 +866,4 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
         if any(type(estimated_config) is x for x in M.matched_guesses):
             return M(estimated_config=estimated_config, huggingface_components=huggingface_components)
 
-    raise ValueError("Failed to recognize model...") from None
+    raise ModuleNotFoundError("Failed to recognize model...")
