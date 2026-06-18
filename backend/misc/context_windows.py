@@ -3,15 +3,12 @@
 
 import collections
 import logging
-from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from backend.patcher.controlnet import ControlBase
     from backend.patcher.unet import KModel
 
-import numpy as np
 import torch
 
 from backend.args import dynamic_args
@@ -19,40 +16,6 @@ from backend.logging import setup_logger
 
 logger = logging.getLogger("ContextWindow")
 setup_logger(logger)
-
-
-class IndexListCallbacks(Enum):
-    EVALUATE_CONTEXT_WINDOWS = "evaluate_context_windows"
-    COMBINE_CONTEXT_WINDOW_RESULTS = "combine_context_window_results"
-    EXECUTE_START = "execute_start"
-    EXECUTE_CLEANUP = "execute_cleanup"
-    RESIZE_COND_ITEM = "resize_cond_item"
-
-
-class ContextSchedules(Enum):
-    UNIFORM_LOOPED = "looped_uniform"
-    UNIFORM_STANDARD = "standard_uniform"
-    STATIC_STANDARD = "standard_static"
-    BATCHED = "batched"
-
-
-class ContextFuseMethods(Enum):
-    FLAT = "flat"
-    PYRAMID = "pyramid"
-    RELATIVE = "relative"
-    OVERLAP_LINEAR = "overlap-linear"
-
-
-@dataclass
-class ContextSchedule:
-    name: str
-    func: Callable
-
-
-@dataclass
-class ContextFuseMethod:
-    name: str
-    func: Callable
 
 
 ContextResults = collections.namedtuple("ContextResults", ["window_idx", "sub_conds_out", "sub_conds", "window"])
@@ -94,195 +57,107 @@ class IndexListContextWindow:
         return min(max(region_idx, 0), num_regions - 1)
 
 
-def slice_cond(cond_value, window: IndexListContextWindow, x_in: torch.Tensor, device, temporal_dim: int, temporal_scale: int = 1, temporal_offset: int = 0, retain_index_list: list[int] = []):
-    if not (hasattr(cond_value, "cond") and isinstance(cond_value.cond, torch.Tensor)):
-        return None
-    cond_tensor = cond_value.cond
-    if temporal_dim >= cond_tensor.ndim:
-        return None
-
-    cond_size = cond_tensor.size(temporal_dim)
-
-    if temporal_scale == 1:
-        expected_size = x_in.size(window.dim) - temporal_offset
-        if cond_size != expected_size:
-            return None
-
-    if temporal_offset == 0 and temporal_scale == 1:
-        sliced = window.get_tensor(cond_tensor, device, dim=temporal_dim, retain_index_list=retain_index_list)
-        return cond_value._copy_with(sliced)
-
-    # skip leading latent positions that have no corresponding conditioning (e.g. reference frames)
-    if temporal_offset > 0:
-        anchor_idx = getattr(window, "causal_anchor_index", None)
-        if anchor_idx is not None and anchor_idx >= 0:
-            # anchor occupies one of the no-cond positions, so skip one fewer from window.index_list
-            skip_count = temporal_offset - 1
-        else:
-            skip_count = temporal_offset
-
-        indices = [i - temporal_offset for i in window.index_list[skip_count:]]
-        indices = [i for i in indices if 0 <= i]
-    else:
-        indices = list(window.index_list)
-
-    if not indices:
-        return None
-
-    if temporal_scale > 1:
-        scaled = []
-        for i in indices:
-            for k in range(temporal_scale):
-                si = i * temporal_scale + k
-                if si < cond_size:
-                    scaled.append(si)
-        indices = scaled
-        if not indices:
-            return None
-
-    idx = tuple([slice(None)] * temporal_dim + [indices])
-    sliced = cond_tensor[idx].to(device)
-    return cond_value._copy_with(sliced)
-
-
 class IndexListContextHandler:
-    def __init__(self, context_schedule: ContextSchedule, fuse_method: ContextFuseMethod, context_length: int = 1, context_overlap: int = 0, context_stride: int = 1, closed_loop: bool = False, dim: int = 0, freenoise: bool = False, cond_retain_index_list: list[int] = [], split_conds_to_windows: bool = False, causal_window_fix: bool = True):
-        self.context_schedule = context_schedule
-        self.fuse_method = fuse_method
+    def __init__(self, context_length: int = 2048, context_overlap: int = 512, context_stride: int = 1, closed_loop: bool = False, dim: int = 2, freenoise: bool = False, cond_retain_index_list: str = None, split_conds_to_windows: bool = False, causal_window_fix: bool = False):
         self.context_length = context_length
         self.context_overlap = context_overlap
         self.context_stride = context_stride
         self.closed_loop = closed_loop
         self.dim = dim
-        self._step = 0
         self.freenoise = freenoise
         self.cond_retain_index_list = [int(x.strip()) for x in cond_retain_index_list.split(",")] if cond_retain_index_list else []
         self.split_conds_to_windows = split_conds_to_windows
         self.causal_window_fix = causal_window_fix
 
-        self.callbacks = {}
-
+        self._step: int = 0
         self.orig_lq_latent: torch.Tensor = None
 
     def should_use_context(self, x_in: torch.Tensor) -> bool:
         return x_in.size(self.dim) > self.context_length
 
-    def prepare_control_objects(self, control: "ControlBase", device=None) -> "ControlBase":
+    def _prepare_control_objects(self, control: "ControlBase", device=None) -> "ControlBase":
         if control.previous_controlnet is not None:
-            self.prepare_control_objects(control.previous_controlnet, device)
+            self._prepare_control_objects(control.previous_controlnet, device)
         return control
 
-    def get_resized_cond(self, cond_in: list[dict], x_in: torch.Tensor, window: IndexListContextWindow, device=None) -> list:
+    def _get_resized_cond(self, cond_in: list[dict], x_in: torch.Tensor, window: IndexListContextWindow, device=None) -> list:
         if cond_in is None:
             return None
-        # reuse or resize cond items to match context requirements
+
         resized_cond = []
-        # if multiple conds, split based on primary region
         if self.split_conds_to_windows and len(cond_in) > 1:
             region = window.get_region_index(len(cond_in))
             logger.info(f"Splitting conds to windows; using region {region} for window {window.index_list[0]}-{window.index_list[-1]} with center ratio {window.center_ratio:.3f}")
             cond_in = [cond_in[region]]
-        # cond object is a list containing a dict - outer list is irrelevant, so just loop through it
+
         for actual_cond in cond_in:
             resized_actual_cond = actual_cond.copy()
-            # now we are in the inner dict - "pooled_output" is a tensor, "control" is a ControlBase object, "model_conds" is dictionary
             for key in actual_cond:
                 try:
                     cond_item = actual_cond[key]
                     if key == "lq_latent":
-                        dynamic_args.lq_latent[0] = resize_cond_for_context_window(self._model, cond_item, window, x_in, device, retain_index_list=self.cond_retain_index_list)
+                        dynamic_args.lq_latent[0] = _resize_cond_for_context_window(self._model, cond_item, window, device)
                     elif isinstance(cond_item, torch.Tensor):
-                        # check that tensor is the expected length - x.size(0)
                         if self.dim < cond_item.ndim and cond_item.size(self.dim) == x_in.size(self.dim):
-                            # if so, it's subsetting time - tell controls the expected indeces so they can handle them
                             actual_cond_item = window.get_tensor(cond_item)
                             resized_actual_cond[key] = actual_cond_item.to(device)
                         else:
                             resized_actual_cond[key] = cond_item.to(device)
-                    # look for control
                     elif key == "control":
-                        resized_actual_cond[key] = self.prepare_control_objects(cond_item, device)
+                        resized_actual_cond[key] = self._prepare_control_objects(cond_item, device)
                     elif isinstance(cond_item, dict):
                         new_cond_item = cond_item.copy()
-                        # when in dictionary, look for tensors and CONDCrossAttn [comfy/conds.py] (has cond attr that is a tensor)
                         for cond_key, cond_value in new_cond_item.items():
                             if isinstance(cond_value, torch.Tensor):
                                 if (self.dim < cond_value.ndim and cond_value.size(self.dim) == x_in.size(self.dim)) or (cond_value.ndim < self.dim and cond_value.size(0) == x_in.size(self.dim)):
                                     new_cond_item[cond_key] = window.get_tensor(cond_value, device)
-                            # Handle audio_embed (temporal dim is 1)
-                            elif cond_key == "audio_embed" and hasattr(cond_value, "cond") and isinstance(cond_value.cond, torch.Tensor):
-                                audio_cond = cond_value.cond
-                                if audio_cond.ndim > 1 and audio_cond.size(1) == x_in.size(self.dim):
-                                    new_cond_item[cond_key] = cond_value._copy_with(window.get_tensor(audio_cond, device, dim=1))
-                            # Handle vace_context (temporal dim is 3)
-                            elif cond_key == "vace_context" and hasattr(cond_value, "cond") and isinstance(cond_value.cond, torch.Tensor):
-                                vace_cond = cond_value.cond
-                                if vace_cond.ndim >= 4 and vace_cond.size(3) == x_in.size(self.dim):
-                                    sliced_vace = window.get_tensor(vace_cond, device, dim=3, retain_index_list=self.cond_retain_index_list)
-                                    new_cond_item[cond_key] = cond_value._copy_with(sliced_vace)
-                            # if has cond that is a Tensor, check if needs to be subset
-                            elif hasattr(cond_value, "cond") and isinstance(cond_value.cond, torch.Tensor):
-                                if (self.dim < cond_value.cond.ndim and cond_value.cond.size(self.dim) == x_in.size(self.dim)) or (cond_value.cond.ndim < self.dim and cond_value.cond.size(0) == x_in.size(self.dim)):
-                                    new_cond_item[cond_key] = cond_value._copy_with(window.get_tensor(cond_value.cond, device, retain_index_list=self.cond_retain_index_list))
-                            elif cond_key == "num_video_frames":  # for SVD
-                                new_cond_item[cond_key] = cond_value._copy_with(cond_value.cond)
-                                new_cond_item[cond_key].cond = window.context_length
                         resized_actual_cond[key] = new_cond_item
                     else:
                         resized_actual_cond[key] = cond_item
                 finally:
-                    del cond_item  # just in case to prevent VRAM issues
+                    del cond_item
             resized_cond.append(resized_actual_cond)
+
         return resized_cond
 
-    def set_step(self, timestep: torch.Tensor, model_options: dict[str]):
+    def _set_step(self, timestep: torch.Tensor, model_options: dict[str]):
         mask = torch.isclose(model_options["transformer_options"]["sampling_sigmas"], timestep[0], rtol=0.0001)
         matches = torch.nonzero(mask)
         if torch.numel(matches) == 0:
-            return  # substep from multi-step sampler: keep self._step from the last full step
+            return
         self._step = int(matches[0].item())
 
-    def get_context_windows(self, model: "KModel", x_in: torch.Tensor, model_options: dict[str]) -> list[IndexListContextWindow]:
-        full_length = x_in.size(self.dim)  # TODO: choose dim based on model
-        context_windows = self.context_schedule.func(full_length, self, model_options)
+    def _get_context_windows(self, x_in: torch.Tensor, model_options: dict[str]) -> list[IndexListContextWindow]:
+        full_length = x_in.size(self.dim)
+        context_windows = _create_windows_static_standard(full_length, self, model_options)
         context_windows = [IndexListContextWindow(window, dim=self.dim, total_frames=full_length) for window in context_windows]
         return context_windows
 
     def execute(self, calc_cond_batch: Callable, model: "KModel", conds: list[list[dict]], x_in: torch.Tensor, timestep: torch.Tensor, model_options: dict[str]):
         self._model = model
-        self.set_step(timestep, model_options)
-        context_windows = self.get_context_windows(model, x_in, model_options)
+        self._set_step(timestep, model_options)
+        context_windows = self._get_context_windows(x_in, model_options)
         enumerated_context_windows = list(enumerate(context_windows))
 
         conds[0][0]["lq_latent"] = self.orig_lq_latent.clone()
         conds_final = [torch.zeros_like(x_in) for _ in conds]
-        if self.fuse_method.name == ContextFuseMethods.RELATIVE:
-            counts_final = [torch.ones(get_shape_for_dim(x_in, self.dim), device=x_in.device) for _ in conds]
-        else:
-            counts_final = [torch.zeros(get_shape_for_dim(x_in, self.dim), device=x_in.device) for _ in conds]
-        biases_final = [([0.0] * x_in.shape[self.dim]) for _ in conds]
+        counts_final = [torch.zeros(_get_shape_for_dim(x_in, self.dim), device=x_in.device) for _ in conds]
 
         for enum_window in enumerated_context_windows:
-            results = self.evaluate_context_windows(calc_cond_batch, model, x_in, conds, timestep, [enum_window], model_options)
+            results = self._evaluate_context_windows(calc_cond_batch, model, x_in, conds, timestep, [enum_window], model_options)
             for result in results:
-                self.combine_context_window_results(x_in, result.sub_conds_out, result.sub_conds, result.window, result.window_idx, len(enumerated_context_windows), timestep, conds_final, counts_final, biases_final)
+                self._combine_context_window_results(x_in, result.sub_conds_out, result.window, conds_final, counts_final)
 
-        # finalize conds
-        if self.fuse_method.name == ContextFuseMethods.RELATIVE:
-            # relative is already normalized, so return as is
-            del counts_final
-            return conds_final
-        else:
-            # normalize conds via division by context usage counts
-            for i in range(len(conds_final)):
-                conds_final[i] /= counts_final[i]
-            del counts_final
-            return conds_final
+        for i in range(len(conds_final)):
+            conds_final[i] /= counts_final[i]
+        del counts_final
 
-    def evaluate_context_windows(self, calc_cond_batch: Callable, model: "KModel", x_in: torch.Tensor, conds, timestep: torch.Tensor, enumerated_context_windows: list[tuple[int, IndexListContextWindow]], model_options, device=None, first_device=None):
+        return conds_final
+
+    def _evaluate_context_windows(self, calc_cond_batch: Callable, model: "KModel", x_in: torch.Tensor, conds, timestep: torch.Tensor, enumerated_context_windows: list[tuple[int, IndexListContextWindow]], model_options, device=None):
         results: list[ContextResults] = []
+
         for window_idx, window in enumerated_context_windows:
-            # causal_window_fix: prepend a pre-window frame that will be stripped post-forward
             anchor_applied = False
             if self.causal_window_fix:
                 anchor_idx = window.index_list[0] - 1
@@ -290,53 +165,33 @@ class IndexListContextHandler:
                     window.causal_anchor_index = anchor_idx
                     anchor_applied = True
 
-            # update exposed params
             model_options["transformer_options"]["context_window"] = window
-            # get subsections of x, timestep, conds
             sub_x = window.get_tensor(x_in, device)
             sub_timestep = window.get_tensor(timestep, device, dim=0)
-            sub_conds = [self.get_resized_cond(cond, x_in, window, device) for cond in conds]
+            sub_conds = [self._get_resized_cond(cond, x_in, window, device) for cond in conds]
 
             sub_conds_out = calc_cond_batch(model, *sub_conds, sub_x, sub_timestep, model_options)
             if device is not None:
                 for i in range(len(sub_conds_out)):
                     sub_conds_out[i] = sub_conds_out[i].to(x_in.device)
 
-            # strip causal_window_fix anchor if applied
             if anchor_applied:
                 for i in range(len(sub_conds_out)):
                     sub_conds_out[i] = sub_conds_out[i].narrow(self.dim, 1, sub_conds_out[i].shape[self.dim] - 1)
 
             results.append(ContextResults(window_idx, sub_conds_out, sub_conds, window))
+
         return results
 
-    def combine_context_window_results(self, x_in: torch.Tensor, sub_conds_out, sub_conds, window: IndexListContextWindow, window_idx: int, total_windows: int, timestep: torch.Tensor, conds_final: list[torch.Tensor], counts_final: list[torch.Tensor], biases_final: list[torch.Tensor]):
-        if self.fuse_method.name == ContextFuseMethods.RELATIVE:
-            for pos, idx in enumerate(window.index_list):
-                # bias is the influence of a specific index in relation to the whole context window
-                bias = 1 - abs(idx - (window.index_list[0] + window.index_list[-1]) / 2) / ((window.index_list[-1] - window.index_list[0] + 1e-2) / 2)
-                bias = max(1e-2, bias)
-                # take weighted average relative to total bias of current idx
-                for i in range(len(sub_conds_out)):
-                    bias_total = biases_final[i][idx]
-                    prev_weight = bias_total / (bias_total + bias)
-                    new_weight = bias / (bias_total + bias)
-                    # account for dims of tensors
-                    idx_window = tuple([slice(None)] * self.dim + [idx])
-                    pos_window = tuple([slice(None)] * self.dim + [pos])
-                    # apply new values
-                    conds_final[i][idx_window] = conds_final[i][idx_window] * prev_weight + sub_conds_out[i][pos_window] * new_weight
-                    biases_final[i][idx] = bias_total + bias
-        else:
-            # add conds and counts based on weights of fuse method
-            weights = get_context_weights(window.context_length, x_in.shape[self.dim], window.index_list, self, sigma=timestep)
-            weights_tensor = match_weights_to_dim(weights, x_in, self.dim, device=x_in.device)
-            for i in range(len(sub_conds_out)):
-                window.add_window(conds_final[i], sub_conds_out[i] * weights_tensor)
-                window.add_window(counts_final[i], weights_tensor)
+    def _combine_context_window_results(self, x_in: torch.Tensor, sub_conds_out: list[torch.Tensor], window: IndexListContextWindow, conds_final: list[torch.Tensor], counts_final: list[torch.Tensor]):
+        weights = _create_weights_pyramid(window.context_length)
+        weights_tensor = _match_weights_to_dim(weights, x_in, self.dim, device=x_in.device)
+        for i in range(len(sub_conds_out)):
+            window.add_window(conds_final[i], sub_conds_out[i] * weights_tensor)
+            window.add_window(counts_final[i], weights_tensor)
 
 
-def match_weights_to_dim(weights: list[float], x_in: torch.Tensor, dim: int, device=None) -> torch.Tensor:
+def _match_weights_to_dim(weights: list[float], x_in: torch.Tensor, dim: int, device=None) -> torch.Tensor:
     total_dims = len(x_in.shape)
     weights_tensor = torch.Tensor(weights).to(device=device)
     for _ in range(dim):
@@ -346,7 +201,7 @@ def match_weights_to_dim(weights: list[float], x_in: torch.Tensor, dim: int, dev
     return weights_tensor
 
 
-def get_shape_for_dim(x_in: torch.Tensor, dim: int) -> list[int]:
+def _get_shape_for_dim(x_in: torch.Tensor, dim: int) -> list[int]:
     total_dims = len(x_in.shape)
     shape = []
     for _ in range(dim):
@@ -357,84 +212,15 @@ def get_shape_for_dim(x_in: torch.Tensor, dim: int) -> list[int]:
     return shape
 
 
-# from https://github.com/neggles/animatediff-cli/blob/main/src/animatediff/pipelines/context.py
-def create_windows_uniform_looped(num_frames: int, handler: IndexListContextHandler, model_options: dict[str]):
+def _create_windows_static_standard(num_frames: int, handler: IndexListContextHandler, model_options: dict[str]):
     windows = []
-    if num_frames < handler.context_length:
-        windows.append(list(range(num_frames)))
-        return windows
 
-    context_stride = min(handler.context_stride, int(np.ceil(np.log2(num_frames / handler.context_length))) + 1)
-    # obtain uniform windows as normal, looping and all
-    for context_step in 1 << np.arange(context_stride):
-        pad = int(round(num_frames * ordered_halving(handler._step)))
-        for j in range(
-            int(ordered_halving(handler._step) * context_step) + pad,
-            num_frames + pad + (0 if handler.closed_loop else -handler.context_overlap),
-            (handler.context_length * context_step - handler.context_overlap),
-        ):
-            windows.append([e % num_frames for e in range(j, j + handler.context_length * context_step, context_step)])
-
-    return windows
-
-
-def create_windows_uniform_standard(num_frames: int, handler: IndexListContextHandler, model_options: dict[str]):
-    # unlike looped, uniform_straight does NOT allow windows that loop back to the beginning;
-    # instead, they get shifted to the corresponding end of the frames.
-    # in the case that a window (shifted or not) is identical to the previous one, it gets skipped.
-    windows = []
     if num_frames <= handler.context_length:
         windows.append(list(range(num_frames)))
         return windows
 
-    context_stride = min(handler.context_stride, int(np.ceil(np.log2(num_frames / handler.context_length))) + 1)
-    # first, obtain uniform windows as normal, looping and all
-    for context_step in 1 << np.arange(context_stride):
-        pad = int(round(num_frames * ordered_halving(handler._step)))
-        for j in range(
-            int(ordered_halving(handler._step) * context_step) + pad,
-            num_frames + pad + (-handler.context_overlap),
-            (handler.context_length * context_step - handler.context_overlap),
-        ):
-            windows.append([e % num_frames for e in range(j, j + handler.context_length * context_step, context_step)])
-
-    # now that windows are created, shift any windows that loop, and delete duplicate windows
-    delete_idxs = []
-    win_i = 0
-    while win_i < len(windows):
-        # if window is rolls over itself, need to shift it
-        is_roll, roll_idx = does_window_roll_over(windows[win_i], num_frames)
-        if is_roll:
-            roll_val = windows[win_i][roll_idx]  # roll_val might not be 0 for windows of higher strides
-            shift_window_to_end(windows[win_i], num_frames=num_frames)
-            # check if next window (cyclical) is missing roll_val
-            if roll_val not in windows[(win_i + 1) % len(windows)]:
-                # need to insert new window here - just insert window starting at roll_val
-                windows.insert(win_i + 1, list(range(roll_val, roll_val + handler.context_length)))
-        # delete window if it's not unique
-        for pre_i in range(0, win_i):
-            if windows[win_i] == windows[pre_i]:
-                delete_idxs.append(win_i)
-                break
-        win_i += 1
-
-    # reverse delete_idxs so that they will be deleted in an order that doesn't break idx correlation
-    delete_idxs.reverse()
-    for i in delete_idxs:
-        windows.pop(i)
-
-    return windows
-
-
-def create_windows_static_standard(num_frames: int, handler: IndexListContextHandler, model_options: dict[str]):
-    windows = []
-    if num_frames <= handler.context_length:
-        windows.append(list(range(num_frames)))
-        return windows
-    # always return the same set of windows
     delta = handler.context_length - handler.context_overlap
     for start_idx in range(0, num_frames, delta):
-        # if past the end of frames, move start_idx back to allow same context_length
         ending = start_idx + handler.context_length
         if ending >= num_frames:
             final_delta = ending - num_frames
@@ -442,38 +228,11 @@ def create_windows_static_standard(num_frames: int, handler: IndexListContextHan
             windows.append(list(range(final_start_idx, final_start_idx + handler.context_length)))
             break
         windows.append(list(range(start_idx, start_idx + handler.context_length)))
+
     return windows
 
 
-def create_windows_batched(num_frames: int, handler: IndexListContextHandler, model_options: dict[str]):
-    windows = []
-    if num_frames <= handler.context_length:
-        windows.append(list(range(num_frames)))
-        return windows
-    # always return the same set of windows;
-    # no overlap, just cut up based on context_length;
-    # last window size will be different if num_frames % opts.context_length != 0
-    for start_idx in range(0, num_frames, handler.context_length):
-        windows.append(list(range(start_idx, min(start_idx + handler.context_length, num_frames))))
-    return windows
-
-
-def create_windows_default(num_frames: int, handler: IndexListContextHandler):
-    return [list(range(num_frames))]
-
-
-def get_context_weights(length: int, full_length: int, idxs: list[int], handler: IndexListContextHandler, sigma: torch.Tensor = None):
-    return handler.fuse_method.func(length, sigma=sigma, handler=handler, full_length=full_length, idxs=idxs)
-
-
-def create_weights_flat(length: int, **kwargs) -> list[float]:
-    # weight is the same for all
-    return [1.0] * length
-
-
-def create_weights_pyramid(length: int, **kwargs) -> list[float]:
-    # weight is based on the distance away from the edge of the context window;
-    # based on weighted average concept in FreeNoise paper
+def _create_weights_pyramid(length: int) -> list[float]:
     if length % 2 == 0:
         max_weight = length // 2
         weight_sequence = list(range(1, max_weight + 1, 1)) + list(range(max_weight, 0, -1))
@@ -483,162 +242,19 @@ def create_weights_pyramid(length: int, **kwargs) -> list[float]:
     return weight_sequence
 
 
-def create_weights_overlap_linear(length: int, full_length: int, idxs: list[int], handler: IndexListContextHandler, **kwargs):
-    # based on code in Kijai's WanVideoWrapper: https://github.com/kijai/ComfyUI-WanVideoWrapper/blob/dbb2523b37e4ccdf45127e5ae33e31362f755c8e/nodes.py#L1302
-    # only expected overlap is given different weights
-    weights_torch = torch.ones((length))
-    # blend left-side on all except first window
-    if min(idxs) > 0:
-        ramp_up = torch.linspace(1e-37, 1, handler.context_overlap)
-        weights_torch[: handler.context_overlap] = ramp_up
-    # blend right-side on all except last window
-    if max(idxs) < full_length - 1:
-        ramp_down = torch.linspace(1, 1e-37, handler.context_overlap)
-        weights_torch[-handler.context_overlap :] = ramp_down
-    return weights_torch
+def _resize_cond_for_context_window(model: "KModel", cond_value: torch.Tensor, window: IndexListContextWindow, device):
+    # https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/model_base.py#L1433
 
+    dim = window.dim
+    if dim >= cond_value.ndim:
+        return None
 
-CONTEXT_MAPPING = {
-    ContextSchedules.UNIFORM_LOOPED: create_windows_uniform_looped,
-    ContextSchedules.UNIFORM_STANDARD: create_windows_uniform_standard,
-    ContextSchedules.STATIC_STANDARD: create_windows_static_standard,
-    ContextSchedules.BATCHED: create_windows_batched,
-}
+    lq_proj = model.diffusion_model.lq_proj
+    ratio = lq_proj.sr_scale * lq_proj.latent_spatial_down_factor
+    lq_size = cond_value.size(dim)
+    lq_indices = sorted({i // ratio for i in window.index_list if 0 <= i // ratio < lq_size})
+    if not lq_indices:
+        return None
 
-
-FUSE_MAPPING = {
-    ContextFuseMethods.FLAT: create_weights_flat,
-    ContextFuseMethods.PYRAMID: create_weights_pyramid,
-    ContextFuseMethods.RELATIVE: create_weights_pyramid,
-    ContextFuseMethods.OVERLAP_LINEAR: create_weights_overlap_linear,
-}
-
-
-# Returns fraction that has denominator that is a power of 2
-def ordered_halving(val):
-    # get binary value, padded with 0s for 64 bits
-    bin_str = f"{val:064b}"
-    # flip binary value, padding included
-    bin_flip = bin_str[::-1]
-    # convert binary to int
-    as_int = int(bin_flip, 2)
-    # divide by 1 << 64, equivalent to 2**64, or 18446744073709551616,
-    # or b10000000000000000000000000000000000000000000000000000000000000000 (1 with 64 zero's)
-    return as_int / (1 << 64)
-
-
-def get_missing_indexes(windows: list[list[int]], num_frames: int) -> list[int]:
-    all_indexes = list(range(num_frames))
-    for w in windows:
-        for val in w:
-            try:
-                all_indexes.remove(val)
-            except ValueError:
-                pass
-    return all_indexes
-
-
-def does_window_roll_over(window: list[int], num_frames: int) -> tuple[bool, int]:
-    prev_val = -1
-    for i, val in enumerate(window):
-        val = val % num_frames
-        if val < prev_val:
-            return True, i
-        prev_val = val
-    return False, -1
-
-
-def shift_window_to_start(window: list[int], num_frames: int):
-    start_val = window[0]
-    for i in range(len(window)):
-        # 1) subtract each element by start_val to move vals relative to the start of all frames
-        # 2) add num_frames and take modulus to get adjusted vals
-        window[i] = ((window[i] - start_val) + num_frames) % num_frames
-
-
-def shift_window_to_end(window: list[int], num_frames: int):
-    # 1) shift window to start
-    shift_window_to_start(window, num_frames)
-    end_val = window[-1]
-    end_delta = num_frames - end_val - 1
-    for i in range(len(window)):
-        # 2) add end_delta to each val to slide windows to end
-        window[i] = window[i] + end_delta
-
-
-# https://github.com/Kosinkadink/ComfyUI-AnimateDiff-Evolved/blob/90fb1331201a4b29488089e4fbffc0d82cc6d0a9/animatediff/sample_settings.py#L465
-def apply_freenoise(noise: torch.Tensor, dim: int, context_length: int, context_overlap: int, seed: int):
-    logger.info("Context windows: Applying FreeNoise")
-    generator = torch.Generator(device="cpu").manual_seed(seed)
-    latent_video_length = noise.shape[dim]
-    delta = context_length - context_overlap
-
-    for start_idx in range(0, latent_video_length - context_length, delta):
-        place_idx = start_idx + context_length
-
-        actual_delta = min(delta, latent_video_length - place_idx)
-        if actual_delta <= 0:
-            break
-
-        list_idx = torch.randperm(actual_delta, generator=generator, device="cpu") + start_idx
-
-        source_slice = [slice(None)] * noise.ndim
-        source_slice[dim] = list_idx
-        target_slice = [slice(None)] * noise.ndim
-        target_slice[dim] = slice(place_idx, place_idx + actual_delta)
-
-        noise[tuple(target_slice)] = noise[tuple(source_slice)]
-
-    return noise
-
-
-class ContextWindowsHandler:
-
-    @staticmethod
-    def execute(
-        context_length: int = 2048,
-        context_overlap: int = 512,
-        context_schedule: ContextSchedules = ContextSchedules.STATIC_STANDARD,
-        context_stride: int = 1,
-        closed_loop: bool = False,
-        fuse_method: ContextFuseMethods = ContextFuseMethods.PYRAMID,
-        dim: int = 2,
-        freenoise: bool = False,
-        cond_retain_index_list: list[int] = [],
-        split_conds_to_windows: bool = False,
-        causal_window_fix: bool = False,
-    ) -> IndexListContextHandler:
-
-        return IndexListContextHandler(
-            context_schedule=ContextSchedule(context_schedule, CONTEXT_MAPPING[context_schedule]),
-            fuse_method=ContextFuseMethod(fuse_method, FUSE_MAPPING[fuse_method]),
-            context_length=context_length,
-            context_overlap=context_overlap,
-            context_stride=context_stride,
-            closed_loop=closed_loop,
-            dim=dim,
-            freenoise=freenoise,
-            cond_retain_index_list=cond_retain_index_list,
-            split_conds_to_windows=split_conds_to_windows,
-            causal_window_fix=causal_window_fix,
-        )
-
-
-def resize_cond_for_context_window(model, cond_value, window, x_in, device, retain_index_list=[]):
-    """https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/model_base.py#L1433"""
-
-    if isinstance(cond_value, torch.Tensor):
-        lq = cond_value
-        dim = window.dim
-        if dim >= lq.ndim:
-            return None
-        lq_proj = model.diffusion_model.lq_proj
-        ratio = lq_proj.sr_scale * lq_proj.latent_spatial_down_factor
-        # Map x window indices -> lq indices (deduplicated, sorted, in-bounds).
-        lq_size = lq.size(dim)
-        lq_indices = sorted({i // ratio for i in window.index_list if 0 <= i // ratio < lq_size})
-        if not lq_indices:
-            return None
-        idx = tuple([slice(None)] * dim + [lq_indices])
-        return lq[idx].to(device)
-    return None
+    idx = tuple([slice(None)] * dim + [lq_indices])
+    return cond_value[idx].to(device)
