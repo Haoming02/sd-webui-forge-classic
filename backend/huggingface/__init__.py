@@ -11,6 +11,8 @@ class Token:
     neta_compress = os.path.join(folder, "neta.tokenizer.json.xz")
     neta_lumina = os.path.join(folder, "neta-art", "Neta-Lumina", "tokenizer", "tokenizer.json")
 
+    pid = os.path.join(folder, "nvidia", "PiD", "tokenizer", "tokenizer.json")
+
     z_compress = os.path.join(folder, "z.tokenizer.json.xz")
     z_image = os.path.join(folder, "Tongyi-MAI", "Z-Image-Turbo", "tokenizer", "tokenizer.json")
 
@@ -66,6 +68,9 @@ def process():
     if not os.path.isfile(Token.neta_lumina):
         decompress(Token.neta_compress, Token.neta_lumina)
         compare_sha256(Token.neta_lumina, sha256.neta)
+    if not os.path.isfile(Token.pid):
+        decompress(Token.neta_compress, Token.pid)
+        compare_sha256(Token.pid, sha256.neta)
     if not os.path.isfile(Token.z_image):
         decompress(Token.z_compress, Token.z_image)
         compare_sha256(Token.z_image, sha256.z)
