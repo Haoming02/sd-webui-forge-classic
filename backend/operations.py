@@ -832,13 +832,18 @@ class ForgeOperationsGGUF(ForgeOperations):
             self.weight = None
             self.bias = None
 
+            self._dtype = current_dtype
+
         def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
             if hasattr(self, "dummy"):
                 if (computation_dtype := self.dummy["dtype"]) not in [torch.float16, torch.bfloat16]:
                     computation_dtype = torch.float16
 
                 if prefix + "weight" in state_dict:
-                    self.weight = state_dict[prefix + "weight"].to(device=self.dummy["device"])
+                    _weight = state_dict[prefix + "weight"].to(device=self.dummy["device"])
+                    if not isinstance(_weight, torch.nn.Parameter):
+                        _weight = torch.nn.Parameter(_weight, requires_grad=False)
+                    self.weight = _weight
                     self.weight.computation_dtype = computation_dtype
 
                 del self.dummy
@@ -858,7 +863,8 @@ class ForgeOperationsGGUF(ForgeOperations):
         def forward(self, x):
             weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, skip_weight_dtype=True, skip_bias_dtype=True)
             with main_stream_worker(weight, bias, signal):
-                return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+                o = torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+                return o.to(dtype=self._dtype)
 
 
 # region fp8
