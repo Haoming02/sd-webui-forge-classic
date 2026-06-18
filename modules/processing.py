@@ -946,8 +946,12 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
             p.seeds = p.all_seeds[n * p.batch_size : (n + 1) * p.batch_size]
             p.subseeds = p.all_subseeds[n * p.batch_size : (n + 1) * p.batch_size]
 
-            latent_channels = shared.sd_model.forge_objects.vae.latent_channels
-            _shape = (latent_channels, _times, p.height // opt_f, p.width // opt_f) if shared.sd_model.is_wan else (latent_channels, p.height // opt_f, p.width // opt_f)
+            if args.dynamic_args.pid:
+                _shape = (3, p.height, p.width)
+            else:
+                latent_channels = shared.sd_model.forge_objects.vae.latent_channels
+                _shape = (latent_channels, _times, p.height // opt_f, p.width // opt_f) if shared.sd_model.is_wan else (latent_channels, p.height // opt_f, p.width // opt_f)
+
             p.rng = rng.ImageRNG(_shape, p.seeds, subseeds=p.subseeds, subseed_strength=p.subseed_strength, seed_resize_from_h=p.seed_resize_from_h, seed_resize_from_w=p.seed_resize_from_w)
 
             if p.scripts is not None:
@@ -1689,6 +1693,12 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
         if (args.dynamic_args.kontext or args.dynamic_args.edit) and self.denoising_strength < 0.9:
             logger.warning("Edit Models require High Denoising Strength")
 
+        if args.dynamic_args.pid:
+            args.dynamic_args.lq_latent[1] = torch.tensor([self.denoising_strength], dtype=torch.float32)
+            self.denoising_strength = 1.0
+            self.resize_mode = 3  # skip resize image
+            assert self.image_mask is None
+
         self.image_cfg_scale: float = None
 
         self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
@@ -1865,6 +1875,10 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
         if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)
+
+        if args.dynamic_args.pid:
+            self.init_latent = x.detach().clone()
+            args.dynamic_args.context_handler.orig_lq_latent = args.dynamic_args.lq_latent[0].clone()
 
         if self.initial_noise_multiplier != 1.0:
             self.extra_generation_params["Noise multiplier"] = self.initial_noise_multiplier

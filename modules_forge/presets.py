@@ -12,6 +12,7 @@ class PresetArch(Enum):
     wan = 8  # Wan2.2
     anima = 9  # Anima
     ernie = 10  # Ernie-Image
+    pid = 11  # PiD
 
     @staticmethod
     def choices() -> list[str]:
@@ -29,6 +30,7 @@ SAMPLERS = {
     PresetArch.wan: "Euler",
     PresetArch.anima: "ER SDE",
     PresetArch.ernie: "Euler",
+    PresetArch.pid: "LCM",
 }
 
 SCHEDULERS = {
@@ -42,6 +44,7 @@ SCHEDULERS = {
     PresetArch.wan: "Simple",
     PresetArch.anima: "Beta",
     PresetArch.ernie: "Simple",
+    PresetArch.pid: "Simple",
 }
 
 STEPS = {
@@ -55,6 +58,7 @@ STEPS = {
     PresetArch.wan: 4,
     PresetArch.anima: 32,
     PresetArch.ernie: 8,
+    PresetArch.pid: 4,
 }
 
 CFG = {
@@ -68,6 +72,7 @@ CFG = {
     PresetArch.wan: 1.0,
     PresetArch.anima: 4.0,
     PresetArch.ernie: 1.0,
+    PresetArch.pid: 1.0,
 }
 
 DISTILL = {
@@ -81,6 +86,7 @@ SHIFT = {
     PresetArch.wan: 5.0,
     PresetArch.anima: 3.0,
     PresetArch.ernie: 3.0,
+    PresetArch.pid: -1.5,
 }
 
 FRAMES = {

@@ -1,4 +1,4 @@
-# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.9.0/comfy/latent_formats.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/latent_formats.py
 
 import torch
 
@@ -169,3 +169,20 @@ class SDXL_Flux2(Flux2):
         super().__init__()
         self.latent_rgb_factors_reshape = None
         self.latent_channels = 32
+
+
+class RGB(LatentFormat):
+    def __init__(self):
+        self.latent_channels = 3
+        self.latent_rgb_factors = [
+            #  R    G    B
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+
+    def process_in(self, latent):
+        return latent
+
+    def process_out(self, latent):
+        return latent

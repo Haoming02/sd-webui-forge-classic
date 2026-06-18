@@ -1,0 +1,22 @@
+{
+  "scheduler": [
+    "diffusers",
+    "FlowMatchEulerDiscreteScheduler"
+  ],
+  "text_encoder": [
+    "transformers",
+    "Gemma2Model"
+  ],
+  "tokenizer": [
+    "transformers",
+    "GemmaTokenizerFast"
+  ],
+  "transformer": [
+    "diffusers",
+    "PiDTransformer2DModel"
+  ],
+  "vae": [
+    "diffusers",
+    "PiDAutoVAE"
+  ]
+}

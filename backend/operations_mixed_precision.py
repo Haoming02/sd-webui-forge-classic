@@ -20,6 +20,34 @@ from .quant_ops import (  # noqa
 )
 
 
+def _quantized_weight_state_dict(module: torch.nn.Module, sd: dict[str, torch.Tensor], prefix: str, extra_quant_conf: dict = None, extra_quant_params: tuple[str] = ()):
+    if not hasattr(module, "weight"):
+        logger.warning(f"uninitialized op {prefix}")
+        return sd
+    bias = getattr(module, "bias", None)
+    if bias is not None:
+        sd[f"{prefix}bias"] = bias
+    if module.weight is None:
+        return sd
+
+    if not isinstance(module.weight, QuantizedTensor):
+        sd[f"{prefix}weight"] = module.weight
+    else:
+        sd.update(module.weight.state_dict(f"{prefix}weight"))
+        quant_conf = {"format": module.quant_format}
+        if getattr(module, "_full_precision_mm_config", False):
+            quant_conf["full_precision_matrix_mult"] = True
+        if extra_quant_conf:
+            quant_conf.update(extra_quant_conf)
+        sd[f"{prefix}comfy_quant"] = torch.tensor(list(json.dumps(quant_conf).encode("utf-8")), dtype=torch.uint8)
+        for name in extra_quant_params:
+            value = getattr(module, name, None)
+            if value is not None:
+                sd[f"{prefix}{name}"] = value
+
+    return sd
+
+
 def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_precision_mm=False, disabled=[]):
     class MixedPrecisionOps(ForgeOperations):
         _quant_config = quant_config
@@ -155,30 +183,8 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                         missing_keys.remove(key)
 
             def state_dict(self, *args, destination=None, prefix="", **kwargs):
-                if destination is not None:
-                    sd = destination
-                else:
-                    sd = {}
-
-                if self.bias is not None:
-                    sd["{}bias".format(prefix)] = self.bias
-
-                if isinstance(self.weight, QuantizedTensor):
-                    sd_out = self.weight.state_dict("{}weight".format(prefix))
-                    for k in sd_out:
-                        sd[k] = sd_out[k]
-
-                    quant_conf = {"format": self.quant_format}
-                    if self._full_precision_mm_config:
-                        quant_conf["full_precision_matrix_mult"] = True
-                    sd["{}comfy_quant".format(prefix)] = torch.tensor(list(json.dumps(quant_conf).encode("utf-8")), dtype=torch.uint8)
-
-                    input_scale = getattr(self, "input_scale", None)
-                    if input_scale is not None:
-                        sd["{}input_scale".format(prefix)] = input_scale
-                else:
-                    sd["{}weight".format(prefix)] = self.weight
-                return sd
+                sd = destination if destination is not None else {}
+                return _quantized_weight_state_dict(self, sd, prefix, extra_quant_params=("input_scale",))
 
             def forward(self, input, *args, **kwargs):
                 input_shape = input.shape
@@ -235,5 +241,71 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                     if buf is not None:
                         self._buffers[key] = fn(buf)
                 return self
+
+        class Embedding(ForgeOperations.Embedding, ForgeWeights):
+            def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+                weight_key = f"{prefix}weight"
+                layer_conf = state_dict.pop(f"{prefix}comfy_quant", None)
+                if layer_conf is not None:
+                    layer_conf = json.loads(layer_conf.numpy().tobytes())
+
+                quant_format = layer_conf.get("format") if layer_conf is not None else None
+                manually_loaded_keys = []
+
+                if quant_format in ("float8_e4m3fn", "float8_e5m2") and weight_key in state_dict:
+                    self.quant_format = quant_format
+                    qconfig = QUANT_ALGOS[quant_format]
+                    self.layout_type = qconfig["comfy_tensor_layout"]
+                    layout_cls = get_layout_class(self.layout_type)
+                    weight = state_dict.pop(weight_key)
+                    manually_loaded_keys.append(weight_key)
+
+                    scale_key = f"{prefix}weight_scale"
+                    scale = state_dict.pop(scale_key, None)
+                    if scale is not None:
+                        scale = scale.float()
+                        manually_loaded_keys.append(scale_key)
+
+                    params = layout_cls.Params(
+                        scale=scale if scale is not None else torch.ones((), dtype=torch.float32),
+                        orig_dtype=MixedPrecisionOps._compute_dtype,
+                        orig_shape=(self.num_embeddings, self.embedding_dim),
+                    )
+                    self.weight = torch.nn.Parameter(QuantizedTensor(weight.to(dtype=qconfig["storage_t"]), qconfig["comfy_tensor_layout"], params), requires_grad=False)
+                elif layer_conf is not None:
+                    state_dict[f"{prefix}comfy_quant"] = torch.tensor(list(json.dumps(layer_conf).encode("utf-8")), dtype=torch.uint8)
+
+                super()._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+
+                for k in manually_loaded_keys:
+                    if k in missing_keys:
+                        missing_keys.remove(k)
+
+            def state_dict(self, *args, destination=None, prefix="", **kwargs):
+                sd = destination if destination is not None else {}
+                return _quantized_weight_state_dict(self, sd, prefix)
+
+            def forward(self, input):
+                weight = self.weight
+
+                if isinstance(weight, QuantizedTensor) and len(self.weight_function) == 0:
+                    qdata, _, signal = weights_manual_cast(self, device=input.device, dtype=weight.dtype)
+                    if isinstance(qdata, QuantizedTensor):
+                        scale = qdata._params.scale
+                        qdata = qdata._qdata
+                    else:
+                        scale = None
+
+                    with main_stream_worker(qdata, None, signal):
+                        x = torch.nn.functional.embedding(input, qdata, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+
+                    target_dtype = weight._params.orig_dtype
+                    x = x.to(dtype=target_dtype)
+                    if scale is not None and scale != 1.0:
+                        x = x * scale.to(dtype=target_dtype)
+
+                    return x
+
+                return super().forward(input)
 
     return MixedPrecisionOps
