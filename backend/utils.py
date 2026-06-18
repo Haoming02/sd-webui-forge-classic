@@ -82,10 +82,10 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
         for tensor in reader.tensors:
             tensor_name = str(tensor.name)
             torch_tensor = torch.from_numpy(tensor.data)
+            shape = torch.Size(tuple(int(v) for v in reversed(tensor.shape)))
             if (field := reader.get_field("general.architecture")) is not None:
                 if str(field.parts[field.data[-1]], encoding="utf-8").lower() == "sdxl":
-                    if (shape := gguf.get_orig_shape(reader, tensor_name)) is None:
-                        shape = torch.Size(tuple(int(v) for v in reversed(tensor.shape)))
+                    shape = gguf.get_orig_shape(reader, tensor_name) or shape
                     if tensor.tensor_type in {gguf.GGMLQuantizationType.F32, gguf.GGMLQuantizationType.F16}:
                         torch_tensor = torch_tensor.view(*shape)
             sd[tensor_name] = ParameterGGUF(torch_tensor, tensor_type=tensor.tensor_type, tensor_shape=shape)
