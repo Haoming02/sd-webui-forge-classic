@@ -23,6 +23,7 @@ else:
     TRITON_AVAILABLE = True
 
 _COMPILE_CONFIG_KEY = "_torch_compile_config"
+_COMPILE_WRAPPER_KEY = "_torch_compile_wrapper"
 _ORIG_APPLY_KEY = "_orig_apply_model"
 
 logger = logging.getLogger("compile")
@@ -79,11 +80,13 @@ class TorchCompileForForge(scripts.Script):
         return [preset]
 
     def process_batch(self, p, preset: str, **kwargs):
+        if preset == "Automatic":
+            return
+
         kmodel: "KModel" = p.sd_model.forge_objects.unet.model
         prev_config: tuple[str] = getattr(kmodel, _COMPILE_CONFIG_KEY, None)
-        enable: bool = (prev_config is not None) if preset == "Automatic" else (preset != "Disable")
 
-        if not enable:
+        if preset == "Disable":
             self._remove_compile_wrapper(kmodel)
             return
 
@@ -91,11 +94,8 @@ class TorchCompileForForge(scripts.Script):
             logger.error(f"{preset} does not support --cuda-malloc\nModel is not compiled...")
             return
 
-        _config: tuple[str] = (preset,)
-        if _config == prev_config:
+        if prev_config == preset and getattr(kmodel, _ORIG_APPLY_KEY, None) is not None:
             return
-
-        setattr(kmodel, _COMPILE_CONFIG_KEY, _config)
 
         if prev_config is not None:
             self._remove_compile_wrapper(kmodel)
@@ -113,29 +113,34 @@ class TorchCompileForForge(scripts.Script):
                 config = dict(backend="inductor", mode="reduce-overhead", dynamic=False, fullgraph=False)
 
         self._wrap_apply_model(kmodel, config)
+        setattr(kmodel, _COMPILE_CONFIG_KEY, preset)
 
         logger.info(f"Model Compiled ({preset})")
 
     @staticmethod
     def _wrap_apply_model(kmodel: "KModel", compile_config: dict):
-        setattr(kmodel, _ORIG_APPLY_KEY, kmodel.apply_model)
+        original_apply_model = kmodel.apply_model
+        setattr(kmodel, _ORIG_APPLY_KEY, original_apply_model)
 
-        @wraps(kmodel._orig_apply_model)
+        @wraps(original_apply_model)
         def apply_model_with_compile(*args, **kwargs):
             orig_model = get_attr(kmodel, "diffusion_model")
             compiled = torch.compile(orig_model, **compile_config)
             set_attr_raw(kmodel, "diffusion_model", compiled)
             try:
-                return kmodel._orig_apply_model(*args, **kwargs)
+                return original_apply_model(*args, **kwargs)
             finally:
                 set_attr_raw(kmodel, "diffusion_model", orig_model)
 
         kmodel.apply_model = apply_model_with_compile
+        setattr(kmodel.apply_model, _COMPILE_WRAPPER_KEY, True)
 
     @staticmethod
     def _remove_compile_wrapper(kmodel: "KModel"):
         if (orig := getattr(kmodel, _ORIG_APPLY_KEY, None)) is not None:
-            kmodel.apply_model = orig
-            delattr(kmodel, _ORIG_APPLY_KEY)
-            delattr(kmodel, _COMPILE_CONFIG_KEY)
-            logger.info("Model Decompiled")
+            if getattr(kmodel.apply_model, _COMPILE_WRAPPER_KEY, False):
+                kmodel.apply_model = orig
+
+        for attr in (_ORIG_APPLY_KEY, _COMPILE_CONFIG_KEY):
+            if hasattr(kmodel, attr):
+                delattr(kmodel, attr)

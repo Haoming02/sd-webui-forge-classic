@@ -359,12 +359,10 @@ def forge_model_reload():
 
     try:
         sd_model = forge_loader(state_dict, additional_state_dicts=additional_state_dicts)
-    except Exception as e:
+    except Exception:
         model_data.sd_model = FakeInitialModel()
         model_data.forge_hash = ""
-        errors.display(e, "forge_loader")
-        memory_management.logger.error("Failed to load diffusion model... (check README for supported models)")
-        raise BufferError("Failed to load diffusion model...") from None
+        raise
     else:
         timer.record("forge model load")
     finally:

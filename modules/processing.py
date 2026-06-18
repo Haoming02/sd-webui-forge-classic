@@ -75,7 +75,9 @@ def apply_overlay(image: Image.Image, paste_loc: tuple[int], overlay: Image.Imag
     if overlay is None:
         return image, image.copy()
 
-    if opts.img2img_inpaint_precise_mask:
+    high_prec: bool = opts.img2img_inpaint_precise_mask and isinstance(overlay, tuple)  # Extensions may override Overlay
+
+    if high_prec:
         mask: np.ndarray = overlay[1]
         overlay: Image.Image = overlay[0]
 
@@ -84,7 +86,7 @@ def apply_overlay(image: Image.Image, paste_loc: tuple[int], overlay: Image.Imag
 
     original_denoised_image = image.copy()
 
-    if opts.img2img_inpaint_precise_mask:
+    if high_prec:
         mask = np.expand_dims(mask, axis=-1)
         overlay_rgb = np.array(overlay, dtype=np.float32) / 255.0
         image_np = np.array(image, dtype=np.float32) / 255.0
@@ -642,7 +644,7 @@ def program_version() -> str:
     return f"{version}-{release}"
 
 
-def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iteration=0, position_in_batch=0, use_main_prompt=False, index=None, all_negative_prompts=None):
+def create_infotext(p: "StableDiffusionProcessing", all_prompts, all_seeds, all_subseeds, comments=None, iteration=0, position_in_batch=0, use_main_prompt=False, index=None, all_negative_prompts=None):
     """
     this function is used to generate the infotext that is stored in the generated images, it's contains the parameters that are required to generate the imagee
     Args:
@@ -744,12 +746,12 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
             "Conditional mask weight": getattr(p, "inpainting_mask_weight", shared.opts.inpainting_mask_weight) if p.is_using_inpainting_conditioning else None,
             "Clip skip": clip_skip if p.sd_model.is_sd1 else None,
             "ENSD": opts.eta_noise_seed_delta if uses_ensd else None,
-            "eps_scaling_factor": opts.scaling_factor if opts.scaling_factor > 1.0 else None,
-            "Token merging ratio": None if token_merging_ratio == 0 else token_merging_ratio,
-            "Token merging ratio hr": None if not enable_hr or token_merging_ratio_hr == 0 else token_merging_ratio_hr,
-            "Init image hash": getattr(p, "init_img_hash", None),
+            "eps_scaling_factor": opts.scaling_factor if opts.scaling_factor > 1.0 and p.sd_model.model_config.model_type.name == "EPS" else None,
+            "Token merging ratio": token_merging_ratio if token_merging_ratio > 0 else None,
+            "Token merging ratio hr": token_merging_ratio_hr if (enable_hr and token_merging_ratio_hr > 0) else None,
+            "Init image hash": getattr(p, "init_img_hash", None) if opts.save_init_img else None,
             "RNG": shared.opts.randn_source,
-            "Tiling": True if p.tiling else None,
+            "Tiling": p.sd_model.tiling_enabled if opts.tiling else None,
             **p.extra_generation_params,
             "Version": program_version() if opts.add_version_to_infotext else None,
             "User": p.user if opts.add_user_name_to_info else None,

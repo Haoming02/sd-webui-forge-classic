@@ -5,6 +5,7 @@ import gradio as gr
 import numpy as np
 from gradio_rangeslider import RangeSlider
 from lib_controlnet import external_code, global_state
+from lib_controlnet.controlnet_ui.canvas_editor import CanvasEditor
 from lib_controlnet.controlnet_ui.openpose_editor import OpenposeEditor
 from lib_controlnet.enums import HiResFixOption
 from lib_controlnet.external_code import UiControlNetUnit
@@ -165,6 +166,7 @@ class ControlNetUiGroup:
         # this counter to trigger a sync update of UiControlNetUnit.
         self.dummy_gradio_update_trigger = None
         self.enabled = None
+        self.image_group = None
         self.image = None
         self.generated_image_group = None
         self.generated_image = None
@@ -197,6 +199,7 @@ class ControlNetUiGroup:
         self.resize_mode = None
         self.use_preview_as_input = None
         self.openpose_editor = None
+        self.canvas_editor = None
         self.upload_independent_img_in_img2img = None
         self.image_upload_panel = None
         self.save_detected_map = None
@@ -222,14 +225,17 @@ class ControlNetUiGroup:
         """
         self.dummy_gradio_update_trigger = gr.Number(value=0, visible=False)
         self.openpose_editor = OpenposeEditor()
+        self.canvas_editor = CanvasEditor()
 
         with gr.Group(visible=not self.is_img2img) as self.image_upload_panel:
             self.save_detected_map = gr.Checkbox(value=True, visible=False)
 
             with gr.Row(elem_classes=["cnet-image-row"], equal_height=True):
-                with gr.Group(elem_classes=["cnet-input-image-group"]):
+                with gr.Group(elem_classes=["cnet-input-image-group"]) as self.image_group:
                     self.image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_image", elem_classes=["cnet-image"], height=384, contrast_scribbles=shared.opts.img2img_inpaint_mask_high_contrast, scribble_color=shared.opts.img2img_inpaint_mask_brush_color, scribble_color_fixed=True, scribble_alpha=shared.opts.img2img_inpaint_mask_scribble_alpha, scribble_alpha_fixed=True, scribble_softness_fixed=True, numpy=True)
                     self.openpose_editor.render_upload()
+
+                self.canvas_editor.render(elem_id_tabname, tabname)
 
                 with gr.Group(visible=False, elem_classes=["cnet-generated-image-group"]) as self.generated_image_group:
                     self.generated_image = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_generated_image", elem_classes=["cnet-image"], height=384, no_scribbles=True, no_upload=True, numpy=True)
@@ -878,19 +884,25 @@ class ControlNetUiGroup:
                 event_subscriber(fn=clear_preview, inputs=self.use_preview_as_input, outputs=[self.use_preview_as_input, self.generated_image.background], show_progress=False)
 
     def register_core_callbacks(self):
-        """Register core callbacks that only involves gradio components defined
-        within this ui group."""
+        """Register core callbacks that only involves gradio components defined within this ui group."""
         self.register_refresh_all_models()
         self.register_build_sliders()
         self.register_shift_preview()
         self.register_create_canvas()
         self.register_clear_preview()
-        self.openpose_editor.register_callbacks(
-            self.generated_image,
-            self.use_preview_as_input,
-            self.model,
-        )
         assert self.type_filter is not None
+        self.openpose_editor.register_callbacks(
+            self.generated_image.background,
+            self.use_preview_as_input,
+            self.type_filter,
+        )
+        self.canvas_editor.register_callbacks(
+            self.image,
+            self.image_group,
+            self.type_filter,
+            self.width_slider,
+            self.height_slider,
+        )
         if self.is_img2img:
             self.register_img2img_same_input()
 

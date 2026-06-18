@@ -60,7 +60,7 @@ def list_samplers():
 def list_schedulers():
     import modules.sd_schedulers
 
-    return [x.label for x in modules.sd_schedulers.schedulers]
+    return [x.label for x in modules.sd_schedulers.all_schedulers]
 
 
 def get_infotext_names():

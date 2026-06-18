@@ -18,13 +18,13 @@ QUANTS_MAPPING: dict[gguf.constants.GGMLQuantizationType, gguf.quants.__Quant] =
 
 
 class ParameterGGUF(torch.nn.Parameter):
-    def __init__(self, tensor=None, requires_grad=False, no_init=False):
+    def __init__(self, torch_tensor, *, tensor_type=None, tensor_shape=None, no_init=False):
         super().__init__()
         if no_init:
             return
 
-        self.gguf_cls = QUANTS_MAPPING.get(tensor.tensor_type, None)
-        self.real_shape = torch.Size(reversed(list(tensor.shape)))
+        self.gguf_cls: "gguf.quants.__Quant" = QUANTS_MAPPING.get(tensor_type, None)
+        self.real_shape: torch.Size = tensor_shape
         self.computation_dtype = torch.float16
         self.baked = False
 
@@ -32,8 +32,8 @@ class ParameterGGUF(torch.nn.Parameter):
     def shape(self):
         return self.real_shape
 
-    def __new__(cls, tensor=None, requires_grad=False, no_init=False):
-        return super().__new__(cls, torch.tensor(tensor.data), requires_grad=requires_grad)
+    def __new__(cls, torch_tensor, *, tensor_type=None, tensor_shape=None, no_init=False):
+        return super().__new__(cls, torch_tensor, requires_grad=False)
 
     def dequantize_as_pytorch_parameter(self):
         if self.gguf_cls is not None:
