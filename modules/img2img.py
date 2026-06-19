@@ -8,6 +8,7 @@ from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 import modules.processing as processing
 import modules.scripts
 import modules.shared as shared
+from backend.args import dynamic_args
 from modules import images
 from modules.infotext_utils import (
     create_override_settings_dict,
@@ -208,6 +209,9 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
 
     image = images.fix_image(image)
     mask = images.fix_image(mask)
+
+    if dynamic_args.pid and (selected_scale_tab != 1 or scale_by != 4.0):
+        processing.logger.warning("Resize by 4x is recommended for PiD")
 
     if selected_scale_tab == 1 and not is_batch:
         assert image, "Can't scale by because no image is selected"

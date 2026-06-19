@@ -863,6 +863,9 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
         if _is_video:
             p.do_not_save_grid = True
 
+    if args.dynamic_args.pid and isinstance(p, StableDiffusionProcessingTxt2Img):
+        raise RuntimeError("PiD does not support txt2img")
+
     if isinstance(p.prompt, list):
         assert len(p.prompt) > 0
     else:
