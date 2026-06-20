@@ -29,16 +29,20 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - [X] Support [Anima](https://huggingface.co/circlestone-labs/Anima)
 - [X] Support [Flux.2-Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B)
-    - `4B` / `9B` *(**not** `FLUX.2-Dev`)*
+    - `4B` / `9B` (**not** `FLUX.2-Dev`)
 
 > [!Important]
 > To use `Flux.2-Klein` for regular `img2img`, toggle the functionality in **Settings/Stable Diffusion**
 
 - [X] Support [Ernie-Image](https://huggingface.co/baidu/ERNIE-Image)
     - `ernie-image` / `ernie-image-turbo`
+- [X] Support [PiD](https://huggingface.co/nvidia/PiD)
+    - `sdxl` / `qwen` / `flux1` / `flux2` (**not** `PixelDiT`)
+    - only `img2img` is supported currently
 - [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
     - `z-image` / `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
+    - `14B` (**not** `5B`)
     - use `Refiner` to achieve **High Noise** / **Low Noise** switching
         - enable `Refiner` in **Settings/Refiner**
 
@@ -132,6 +136,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Implement full precision calculation for `Mask blur` blending
     - enable in **Settings/img2img**
 - [X] Support TAESD / TAEHV live preview for all models
+- [X] Support video previews for ExtraNetworks
 - [X] Support loading upscalers in `half` precision
     - speed up; reduce quality
     - enable in **Settings/Upscaling**
@@ -193,12 +198,14 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - deobfuscate
     - eraser
     - hotkeys
+    - mobile friendly
 - [X] Optimize upscaler logics
 - [X] Optimize certain operations in `Spandrel`
 - [X] Optimize certain operations for `VAE`
 - [X] Speed up model loading
-- [X] Improve memory management
 - [X] Improve color correction
+- [X] Improve memory management
+- [X] Unload all models on `OutOfMemory`
 - [X] Update the implementation for `X/Y/Z Plot`
 - [X] Update the implementation for `Soft Inpainting`
 - [X] Update the implementation for `MultiDiffusion`
@@ -358,6 +365,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 > [!Tip]
+> - For **AMD**, refer to <a href="https://github.com/CS1o/Stable-Diffusion-Info/wiki/Webui-Installation-Guides#amd-forge-neo-with-rocm"><ins>CS1o</ins> 's Guide</a>
 > - For **Linux** and **macOS**, refer to [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Unix)
 > - For **Docker** (`Nvidia`), refer to [Docker](docker/)
 
