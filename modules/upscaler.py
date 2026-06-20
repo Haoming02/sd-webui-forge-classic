@@ -34,8 +34,9 @@ class Upscaler:
 
         if self.model_path is None and self.name:
             self.model_path = os.path.join(models_path, self.name)
-        if create_dirs and self.model_path:
-            os.makedirs(self.model_path, exist_ok=True)
+        if self.model_path:
+            if create_dirs and not os.path.isdir(self.model_path):
+                os.makedirs(self.model_path)
 
     @abstractmethod
     def do_upscale(self, img: Image.Image, selected_model: str):
