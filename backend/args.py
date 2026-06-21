@@ -180,9 +180,14 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """Operations for the Diffusion Model"""
     last_extra_generation_params: dict[str, str] = {}
     """Infotext captured during `get_learned_conditioning`"""
+    loading_refiner: bool = False
+    """Do not reset when loading Refiner"""
 
     @classmethod
     def reset(cls):
+        if cls.loading_refiner:
+            return
+
         cls.ref_latents.clear()
         cls.concat_latent = None
         cls.lq_latent = [None, None]

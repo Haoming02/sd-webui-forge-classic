@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+from backend.args import dynamic_args
 from backend.sampling.sampling_function import sampling_cleanup, sampling_prepare
 from modules import devices, extra_networks, images, sd_models, sd_samplers, sd_vae_approx, sd_vae_taesd, shared
 from modules.shared import opts, state
@@ -307,10 +308,12 @@ def apply_refiner(cfg_denoiser, x, sigma):
     del cfg_denoiser.model_wrap
 
     try:
+        dynamic_args.loading_refiner = True
         main_entry.refresh_model_loading_parameters()
         sd_models.forge_model_reload()
     finally:
         main_entry.checkpoint_change(original_checkpoint, preset=None, save=False, refresh=True)
+        dynamic_args.loading_refiner = False
 
     if not cfg_denoiser.p.disable_extra_networks:
         loras = cfg_denoiser.p.extra_network_data.pop("lora", None)
