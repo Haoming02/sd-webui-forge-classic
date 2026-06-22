@@ -427,6 +427,8 @@ onOptionsChanged(function () {
 let txt2img_textarea,
     img2img_textarea = undefined;
 
+let isReloading = false;
+
 function restart_reload() {
     document.body.style.backgroundColor = "var(--background-fill-primary)";
     document.body.innerHTML =
@@ -445,9 +447,15 @@ function restart_reload() {
     };
 
     setTimeout(requestPing, 2000);
-
+    isReloading = true;
     return [];
 }
+
+window.addEventListener("beforeunload", (e) => {
+    if (isReloading || !opts.confirm_leave) return;
+    e.preventDefault();
+    e.returnValue = "";
+});
 
 // Simulate an `input` DOM event for Gradio Textbox component. Needed after you edit its contents in javascript, otherwise your edits
 // will only visible on web page and not sent to python.
