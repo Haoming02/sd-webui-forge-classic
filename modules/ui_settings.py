@@ -329,8 +329,15 @@ class UiSettings:
 
         text_set_checkpoint = gr.Textbox("", elem_id="change_checkpoint_text", visible=False)
         button_set_checkpoint = gr.Button("Change checkpoint", elem_id="change_checkpoint", visible=False)
+
+        def _change_model(ckpt: str):
+            if (model := sd_models.get_closet_checkpoint_match(ckpt)) is not None:
+                return gr.update(value=model.name)
+            gr.Warning(f'Failed to find model "{ckpt}"')
+            return gr.skip()
+
         button_set_checkpoint.click(
-            fn=lambda ckpt: ckpt.rsplit("[", 1)[0].strip(),
+            fn=_change_model,
             inputs=[text_set_checkpoint],
             outputs=[main_entry.ui_checkpoint],
             queue=False,
