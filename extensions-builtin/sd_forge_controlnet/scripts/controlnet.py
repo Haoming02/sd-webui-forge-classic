@@ -315,8 +315,25 @@ class ControlNetForForgeOfficial(scripts.Script):
         alignment_indices = [i % len(preprocessor_outputs) for i in range(p.batch_size)]
 
         def attach_extra_result_image(img: np.ndarray, is_high_res: bool = False):
-            if not shared.opts.data.get("control_net_no_detectmap", False) and ((is_high_res and hr_option.high_res_enabled) or (not is_high_res and hr_option.low_res_enabled)) and unit.save_detected_map:
+            if (is_high_res and not hr_option.high_res_enabled) or (not is_high_res and not hr_option.low_res_enabled) or not unit.save_detected_map:
+                return
+
+            if not shared.opts.data.get("control_net_no_detectmap", False):
                 p.extra_result_images.append(img)
+
+            if not shared.opts.data.get("control_net_detectmap_autosaving", False):
+                return
+
+            if (module := unit.module) == "None":
+                return
+
+            detectmap_dir = os.path.join(shared.opts.data.get("control_net_detectedmap_dir", ""), module)
+            if not os.path.isabs(detectmap_dir):
+                detectmap_dir = os.path.join(p.outpath_samples, detectmap_dir)
+
+            os.makedirs(detectmap_dir, exist_ok=True)
+            img = Image.fromarray(np.ascontiguousarray(img.clip(0, 255).astype(np.uint8)).copy())
+            images.save_image(img, detectmap_dir, module)
 
         if preprocessor_output_is_image:
             params.control_cond = []
@@ -562,7 +579,27 @@ def on_ui_settings():
         "control_net_no_detectmap",
         shared.OptionInfo(
             False,
-            "Do not append detectmap to output",
+            "Do not append DetectMap to output Gallery",
+            section=section,
+            category_id=category_id,
+        ),
+    )
+
+    shared.opts.add_option(
+        "control_net_detectmap_autosaving",
+        shared.OptionInfo(
+            False,
+            "Save DetectMap to disk",
+            section=section,
+            category_id=category_id,
+        ),
+    )
+
+    shared.opts.add_option(
+        "control_net_detectedmap_dir",
+        shared.OptionInfo(
+            "detected_maps",
+            "Directory to save DetectMap",
             section=section,
             category_id=category_id,
         ),
