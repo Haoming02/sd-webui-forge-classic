@@ -162,7 +162,7 @@ class Wan(ForgeDiffusionEngine):
             else:
                 # LastFrameToVideo
                 self.end_image = x.cpu()
-                assert self.forge_objects.unet.model.diffusion_model.in_dim == 16
+                assert self.forge_objects.unet.model.diffusion_model.in_dim == 36
 
         else:
             if b == 1:
