@@ -9,6 +9,7 @@ from PIL import Image
 from backend import memory_management
 from modules import devices, images, scripts
 from modules.processing import (
+    Processed,
     StableDiffusionProcessing,
     StableDiffusionProcessingImg2Img,
     apply_color_correction,
@@ -24,6 +25,7 @@ from modules_forge.main_entry import module_list
 
 
 class PiDForForge(scripts.Script):
+    results: list[tuple[Image.Image], str] = []
 
     def __init__(self):
         self.models: list[str] = [m for m in sorted(checkpoint_tiles(use_short=True)) if "pid" in m.lower()]
@@ -173,11 +175,12 @@ class PiDForForge(scripts.Script):
             if (processed := process_images(i2i)) is not None:
                 assert len(processed.images) == 1
                 image: Image.Image = processed.images[0]
+                info: str = processed.infotexts[0]
 
                 if cc_target is not None:
                     image = apply_color_correction(cc_target, image)
 
-                p.extra_result_images.append(image)
+                PiDForForge.results.append((image, info))
                 images.save_image(
                     image,
                     i2i.outpath_samples,
@@ -185,7 +188,7 @@ class PiDForForge(scripts.Script):
                     i2i.seed,
                     i2i.main_prompt,
                     opts.samples_format,
-                    info=processed.infotexts[0],
+                    info=info,
                     p=i2i,
                     suffix="-pid",
                 )
@@ -193,3 +196,9 @@ class PiDForForge(scripts.Script):
             logger.error(f"Error during PiD Pass:\n{e}")
         finally:
             i2i.close()
+
+    def postprocess(self, p, processed: Processed, *args):
+        for image, info in self.results:
+            processed.extra_images.append(image)
+            processed.infotexts.append(info)
+        self.results.clear()
