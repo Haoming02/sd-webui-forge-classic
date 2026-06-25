@@ -8,11 +8,7 @@ from modules.ui_common import create_refresh_button
 
 def update_interp_description(value):
     interp_description_css = "<p style='margin-bottom: 2.5em'>{}</p>"
-    interp_descriptions = {
-        "No interpolation": interp_description_css.format("No interpolation will be used. Requires one model; A. Allows for format conversion and VAE baking."),
-        "Weighted sum": interp_description_css.format("A weighted sum will be used for interpolation. Requires two models; A and B. The result is calculated as A * (1 - M) + B * M"),
-        "Add difference": interp_description_css.format("The difference between the last two models will be added to the first. Requires three models; A, B and C. The result is calculated as A + (B - C) * M")
-    }
+    interp_descriptions = {"No interpolation": interp_description_css.format("No interpolation will be used. Requires one model; A. Allows for format conversion and VAE baking."), "Weighted sum": interp_description_css.format("A weighted sum will be used for interpolation. Requires two models; A and B. The result is calculated as A * (1 - M) + B * M"), "Add difference": interp_description_css.format("The difference between the last two models will be added to the first. Requires three models; A, B and C. The result is calculated as A + (B - C) * M")}
     return interp_descriptions[value]
 
 
@@ -29,40 +25,44 @@ def modelmerger(*args):
 class UiCheckpointMerger:
     def __init__(self):
         with gr.Blocks(analytics_enabled=False) as modelmerger_interface:
-            with gr.Accordion(open=True, label='Save Current Checkpoint (including all quantization)'):
+            with gr.Accordion(open=True, label="Save Current Checkpoint (including all quantization)"):
                 with gr.Row():
-                    textbox_file_name_forge = gr.Textbox(label="Filename (will save in /models/Stable-diffusion)", value='my_model.safetensors')
-                    btn_save_unet_forge = gr.Button('Save UNet')
-                    btn_save_ckpt_forge = gr.Button('Save Checkpoint')
+                    textbox_file_name_forge = gr.Textbox(label="Filename (will save in /models/Stable-diffusion)", value="my_model.safetensors")
+                    btn_save_unet_forge = gr.Button("Save UNet")
+                    btn_save_ckpt_forge = gr.Button("Save Checkpoint")
 
                 with gr.Row():
-                    result_html = gr.HTML('Ready to save ... (Currently only support saving Flux models)')
+                    result_html = gr.HTML("Ready to save ... (Currently only support saving Flux models)")
 
                     def save_unet(filename):
                         from modules.paths import models_path
-                        long_filename = os.path.join(models_path, 'Stable-diffusion', filename)
+
+                        long_filename = os.path.join(models_path, "Stable-diffusion", filename)
                         os.makedirs(os.path.dirname(long_filename), exist_ok=True)
                         from modules import shared, sd_models
+
                         sd_models.forge_model_reload()
                         p = shared.sd_model.save_unet(long_filename)
-                        print(f'Saved UNet at: {p}')
-                        return f'Saved UNet at: {p}'
+                        print(f"Saved UNet at: {p}")
+                        return f"Saved UNet at: {p}"
 
                     def save_checkpoint(filename):
                         from modules.paths import models_path
-                        long_filename = os.path.join(models_path, 'Stable-diffusion', filename)
+
+                        long_filename = os.path.join(models_path, "Stable-diffusion", filename)
                         os.makedirs(os.path.dirname(long_filename), exist_ok=True)
                         from modules import shared
+
                         sd_models.forge_model_reload()
                         p = shared.sd_model.save_checkpoint(long_filename)
-                        print(f'Saved checkpoint at: {p}')
-                        return f'Saved checkpoint at: {p}'
+                        print(f"Saved checkpoint at: {p}")
+                        return f"Saved checkpoint at: {p}"
 
                     btn_save_unet_forge.click(save_unet, inputs=textbox_file_name_forge, outputs=result_html)
                     btn_save_ckpt_forge.click(save_checkpoint, inputs=textbox_file_name_forge, outputs=result_html)
 
             with gr.Row(equal_height=False):
-                with gr.Column(variant='compact'):
+                with gr.Column(variant="compact"):
                     self.interp_description = gr.HTML(value=update_interp_description("Weighted sum"), elem_id="modelmerger_interp_description")
 
                     with FormRow(elem_id="modelmerger_models"):
@@ -76,7 +76,7 @@ class UiCheckpointMerger:
                         create_refresh_button(self.tertiary_model_name, sd_models.list_models, lambda: {"choices": sd_models.checkpoint_tiles()}, "refresh_checkpoint_C")
 
                     self.custom_name = gr.Textbox(label="Custom Name (Optional)", elem_id="modelmerger_custom_name")
-                    self.interp_amount = gr.Slider(minimum=0.0, maximum=1.0, step=0.05, label='Multiplier (M) - set to 0 to get model A', value=0.3, elem_id="modelmerger_interp_amount")
+                    self.interp_amount = gr.Slider(minimum=0.0, maximum=1.0, step=0.05, label="Multiplier (M) - set to 0 to get model A", value=0.3, elem_id="modelmerger_interp_amount")
                     self.interp_method = gr.Radio(choices=["No interpolation", "Weighted sum", "Add difference"], value="Weighted sum", label="Interpolation Method", elem_id="modelmerger_interp_method")
                     self.interp_method.change(fn=update_interp_description, inputs=[self.interp_method], outputs=[self.interp_description])
 
@@ -102,13 +102,13 @@ class UiCheckpointMerger:
                             self.add_merge_recipe = gr.Checkbox(value=True, label="Add merge recipe metadata", elem_id="modelmerger_add_recipe")
                             self.copy_metadata_fields = gr.Checkbox(value=True, label="Copy metadata from merged models", elem_id="modelmerger_copy_metadata")
 
-                        self.metadata_json = gr.TextArea('{}', label="Metadata in JSON format")
+                        self.metadata_json = gr.TextArea("{}", label="Metadata in JSON format")
                         self.read_metadata = gr.Button("Read metadata from selected checkpoints")
 
                     with FormRow():
-                        self.modelmerger_merge = gr.Button(elem_id="modelmerger_merge", value="Merge", variant='primary')
+                        self.modelmerger_merge = gr.Button(elem_id="modelmerger_merge", value="Merge", variant="primary")
 
-                with gr.Column(variant='compact', elem_id="modelmerger_results_container"):
+                with gr.Column(variant="compact", elem_id="modelmerger_results_container"):
                     with gr.Group(elem_id="modelmerger_results_panel"):
                         self.modelmerger_result = gr.HTML(elem_id="modelmerger_result", show_label=False)
 
@@ -116,14 +116,14 @@ class UiCheckpointMerger:
         self.blocks = modelmerger_interface
 
     def setup_ui(self, dummy_component, sd_model_checkpoint_component):
-        self.checkpoint_format.change(lambda fmt: gr.update(visible=fmt == 'safetensors'), inputs=[self.checkpoint_format], outputs=[self.metadata_editor], show_progress=False)
+        self.checkpoint_format.change(lambda fmt: gr.update(visible=fmt == "safetensors"), inputs=[self.checkpoint_format], outputs=[self.metadata_editor], show_progress=False)
 
         self.read_metadata.click(extras.read_metadata, inputs=[self.primary_model_name, self.secondary_model_name, self.tertiary_model_name], outputs=[self.metadata_json])
 
-        self.modelmerger_merge.click(fn=lambda: '', inputs=[], outputs=[self.modelmerger_result])
+        self.modelmerger_merge.click(fn=lambda: "", inputs=[], outputs=[self.modelmerger_result])
         self.modelmerger_merge.click(
             fn=call_queue.wrap_gradio_gpu_call(modelmerger, extra_outputs=lambda: [gr.skip() for _ in range(4)]),
-            _js='modelmerger',
+            _js="modelmerger",
             inputs=[
                 dummy_component,
                 self.primary_model_name,
@@ -148,9 +148,8 @@ class UiCheckpointMerger:
                 self.tertiary_model_name,
                 sd_model_checkpoint_component,
                 self.modelmerger_result,
-            ]
+            ],
         )
 
         # Required as a workaround for change() event not triggering when loading values from ui-config.json
         self.interp_description.value = update_interp_description(self.interp_method.value)
-
