@@ -1,6 +1,8 @@
 from unittest.mock import patch
 
+import cv2
 import gradio as gr
+import numpy as np
 import torch
 from PIL import Image
 
@@ -9,6 +11,7 @@ from modules import devices, images, scripts
 from modules.processing import (
     StableDiffusionProcessing,
     StableDiffusionProcessingImg2Img,
+    apply_color_correction,
     decode_latent_batch,
     logger,
     process_images,
@@ -41,7 +44,9 @@ class PiDForForge(scripts.Script):
                 ckpt = gr.Dropdown(value=next(iter(self.models), None), choices=self.models, label="PiD")
                 vae = gr.Dropdown(value=next(iter(vaes), None), choices=vaes, label="VAE")
                 tec = gr.Dropdown(value=next(iter(modules), None), choices=modules, label="Gemma2 2B IT ELM")
-            degrade_sigma = gr.Slider(minimum=0.0, maximum=1.0, value=0.0, step=0.05, label="Degrade Sigma", info="(denoising strength)")
+            with gr.Row():
+                degrade_sigma = gr.Slider(minimum=0.0, maximum=1.0, value=0.0, step=0.05, label="Degrade Sigma", info="(denoising strength)")
+                cc = gr.Checkbox(True, label="Color Correction", info="(fix discoloration issue)")
 
         self.infotext_fields = [
             (prompt, "pid_prompt"),
@@ -51,8 +56,9 @@ class PiDForForge(scripts.Script):
             (degrade_sigma, "degrade_sigma"),
         ]
 
-        return [enable, prompt, ckpt, vae, tec, degrade_sigma]
+        return [enable, prompt, ckpt, vae, tec, degrade_sigma, cc]
 
+    @torch.inference_mode()
     def post_sample(
         self,
         p: StableDiffusionProcessing,
@@ -63,6 +69,7 @@ class PiDForForge(scripts.Script):
         vae: str,
         tec: str,
         degrade_sigma: float,
+        cc: bool,
     ):
         if not enable:
             return
@@ -89,6 +96,8 @@ class PiDForForge(scripts.Script):
 
         _samples = ps.samples.detach().clone()
         ps.samples = decode_latent_batch(p.sd_model, ps.samples, target_device=devices.cpu, check_for_nans=True)
+        if cc:
+            _samples_ddim = torch.stack(ps.samples).float().detach().clone().squeeze(0).add(1.0).div(2.0).cpu().numpy()
 
         for b in range(batch_size):
             if state.interrupted or state.skipped:
@@ -96,13 +105,17 @@ class PiDForForge(scripts.Script):
 
             memory_management.soft_empty_cache()
             latent = _samples[b].unsqueeze(0)
+            cc_target = None
             state.nextjob()
 
+            if cc:
+                _sample = np.clip((np.moveaxis(_samples_ddim[b], 0, 2) * 255.0).round(), 0, 255).astype(np.uint8)
+                cc_target = cv2.cvtColor(_sample, cv2.COLOR_RGB2LAB)
+
             with patch.dict(opts.data, {"multiple_tqdm": False}, clear=False):
-                self._sample_inner(p, b, latent, degrade_sigma, prompt, override_settings, extra_generation_params)
+                self._sample_inner(p, b, latent, degrade_sigma, prompt, override_settings, extra_generation_params, cc_target)
 
     @staticmethod
-    @torch.inference_mode()
     def _sample_inner(
         p: StableDiffusionProcessing,
         b: int,
@@ -111,6 +124,7 @@ class PiDForForge(scripts.Script):
         prompt: str,
         override_settings: dict,
         extra_generation_params: dict,
+        cc_target: np.ndarray,
     ):
         i2i = StableDiffusionProcessingImg2Img(
             init_images=None,
@@ -159,6 +173,10 @@ class PiDForForge(scripts.Script):
             if (processed := process_images(i2i)) is not None:
                 assert len(processed.images) == 1
                 image: Image.Image = processed.images[0]
+
+                if cc_target is not None:
+                    image = apply_color_correction(cc_target, image)
+
                 p.extra_result_images.append(image)
                 images.save_image(
                     image,
