@@ -185,6 +185,7 @@ class LLLiteModule(nn.Module):
         self.cond_emb = None
         self.current_step = 0
 
+    @torch.compiler.disable
     @torch.inference_mode()
     def forward(self, x):
         if self.num_steps > 0:

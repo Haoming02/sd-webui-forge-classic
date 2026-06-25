@@ -143,6 +143,7 @@ def attention_basic(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
     return out
 
 
+@torch.compiler.disable
 def attention_xformers(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
     b = q.shape[0]
     dim_head = q.shape[-1]
@@ -286,6 +287,7 @@ def attention_sage(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=
     return out
 
 
+@torch.compiler.disable
 def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
     if skip_reshape:
         b, _, _, dim_head = q.shape

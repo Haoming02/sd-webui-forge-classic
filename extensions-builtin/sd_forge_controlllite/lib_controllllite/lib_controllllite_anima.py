@@ -173,6 +173,7 @@ class LLLiteModuleDiT(nn.Module):
             self.org_module[0].forward = self.org_forward
             self.org_forward = None
 
+    @torch.compiler.disable
     @torch.inference_mode()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         orig_shape = x.shape
