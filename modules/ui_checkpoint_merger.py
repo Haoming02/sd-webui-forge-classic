@@ -1,9 +1,11 @@
 import os
+from functools import partial
+
 import gradio as gr
 
-from modules import sd_models, sd_vae, errors, extras, call_queue
-from modules.ui_components import FormRow
+from modules import call_queue, errors, extras, sd_models, sd_vae, shared
 from modules.ui_common import create_refresh_button
+from modules.ui_components import FormRow
 
 
 def update_interp_description(value):
@@ -25,41 +27,34 @@ def modelmerger(*args):
 class UiCheckpointMerger:
     def __init__(self):
         with gr.Blocks(analytics_enabled=False) as modelmerger_interface:
-            with gr.Accordion(open=True, label="Save Current Checkpoint (including all quantization)"):
+            with gr.Accordion(label="Save Current Model (only supports SD1 / SDXL / Flux)", open=False):
                 with gr.Row():
-                    textbox_file_name_forge = gr.Textbox(label="Filename (will save in /models/Stable-diffusion)", value="my_model.safetensors")
-                    btn_save_unet_forge = gr.Button("Save UNet")
-                    btn_save_ckpt_forge = gr.Button("Save Checkpoint")
+                    filename_forge = gr.Textbox(value="flux.safetensors", lines=1, max_lines=1, label="Filename", info='(will save in "Stable-diffusion" folder)', scale=4)
+                    btn_save_unet_forge = gr.Button("Save UNet", scale=1)
+                    btn_save_ckpt_forge = gr.Button("Save Checkpoint", scale=1)
+                result_html = gr.HTML("Pending...")
 
-                with gr.Row():
-                    result_html = gr.HTML("Ready to save ... (Currently only support saving Flux models)")
+                def save_model(filename: str, *, _unet: bool):
+                    sd_models.forge_model_reload()
 
-                    def save_unet(filename):
-                        from modules.paths import models_path
+                    long_filename = os.path.join(sd_models.model_path, filename)
+                    os.makedirs(sd_models.model_path, exist_ok=True)
 
-                        long_filename = os.path.join(models_path, "Stable-diffusion", filename)
-                        os.makedirs(os.path.dirname(long_filename), exist_ok=True)
-                        from modules import shared, sd_models
+                    try:
+                        if _unet:
+                            p = shared.sd_model.save_unet(long_filename)
+                            gr.Info("Success!", duration=5)
+                            return f'UNet saved to "{p}"'
+                        else:
+                            p = shared.sd_model.save_checkpoint(long_filename)
+                            gr.Info("Success", duration=5)
+                            return f'Checkpoint saved to "{p}"'
+                    except Exception as e:
+                        gr.Warning("Failed...", duration=5)
+                        return str(e)
 
-                        sd_models.forge_model_reload()
-                        p = shared.sd_model.save_unet(long_filename)
-                        print(f"Saved UNet at: {p}")
-                        return f"Saved UNet at: {p}"
-
-                    def save_checkpoint(filename):
-                        from modules.paths import models_path
-
-                        long_filename = os.path.join(models_path, "Stable-diffusion", filename)
-                        os.makedirs(os.path.dirname(long_filename), exist_ok=True)
-                        from modules import shared
-
-                        sd_models.forge_model_reload()
-                        p = shared.sd_model.save_checkpoint(long_filename)
-                        print(f"Saved checkpoint at: {p}")
-                        return f"Saved checkpoint at: {p}"
-
-                    btn_save_unet_forge.click(save_unet, inputs=textbox_file_name_forge, outputs=result_html)
-                    btn_save_ckpt_forge.click(save_checkpoint, inputs=textbox_file_name_forge, outputs=result_html)
+                btn_save_unet_forge.click(partial(save_model, _unet=True), inputs=filename_forge, outputs=result_html)
+                btn_save_ckpt_forge.click(partial(save_model, _unet=False), inputs=filename_forge, outputs=result_html)
 
             with gr.Row(equal_height=False):
                 with gr.Column(variant="compact"):
