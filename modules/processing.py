@@ -1653,6 +1653,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 @dataclass(repr=False)
 class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     init_images: list = None
+    init_latent: torch.Tensor = None
     resize_mode: int = 0
     denoising_strength: float = 0.75
     image_cfg_scale: float = None
@@ -1673,7 +1674,6 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     image_conditioning: torch.Tensor = field(default=None, init=False)
     init_img_hash: str = field(default=None, init=False)
     mask_for_overlay: Image = field(default=None, init=False)
-    init_latent: torch.Tensor = field(default=None, init=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -1693,6 +1693,10 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     def init(self, all_prompts, all_seeds, all_subseeds):
         self.extra_generation_params["Denoising strength"] = self.denoising_strength
 
+        self.image_cfg_scale: float = None
+
+        self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
+
         if (args.dynamic_args.kontext or args.dynamic_args.edit) and self.denoising_strength < 0.9:
             logger.warning("Edit Models require High Denoising Strength")
 
@@ -1702,9 +1706,10 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
             self.resize_mode = 3  # skip resize image
             assert self.image_mask is None
 
-        self.image_cfg_scale: float = None
+            if self.init_latent is not None:
+                args.dynamic_args.lq_latent[0] = self.init_latent.squeeze(2)
+                return
 
-        self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
         crop_region = None
 
         image_mask = self.image_mask
