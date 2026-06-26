@@ -341,7 +341,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
         # region UNet / DiT
 
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel", "PiDTransformer2DModel"]:
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel", "PiDTransformer2DModel", "Krea2Transformer2DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
             pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
@@ -403,6 +403,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.pixeldit.pid import PidNet
 
                 model_loader = lambda c: PidNet(**c)
+            elif cls_name == "Krea2Transformer2DModel":
+                from backend.nn.krea import SingleStreamDiT
+
+                model_loader = lambda c: SingleStreamDiT(**c)
 
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
