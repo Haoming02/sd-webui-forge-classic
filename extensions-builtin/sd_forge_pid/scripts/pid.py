@@ -99,7 +99,7 @@ class PiDForForge(scripts.Script):
         _samples = ps.samples.detach().clone()
         ps.samples = decode_latent_batch(p.sd_model, ps.samples, target_device=devices.cpu, check_for_nans=True)
         if cc:
-            _samples_ddim = torch.stack(ps.samples).float().detach().clone().squeeze(0).add(1.0).div(2.0).cpu().numpy()
+            _samples_ddim = torch.stack(ps.samples).float().detach().clone().squeeze(1).add(1.0).div(2.0).cpu().numpy()
 
         for b in range(batch_size):
             if state.interrupted or state.skipped:
