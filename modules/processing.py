@@ -1653,7 +1653,6 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 @dataclass(repr=False)
 class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     init_images: list = None
-    init_latent: torch.Tensor = None
     resize_mode: int = 0
     denoising_strength: float = 0.75
     image_cfg_scale: float = None
@@ -1674,6 +1673,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     image_conditioning: torch.Tensor = field(default=None, init=False)
     init_img_hash: str = field(default=None, init=False)
     mask_for_overlay: Image = field(default=None, init=False)
+    init_latent: Any = field(default=None, init=True)
 
     def __post_init__(self):
         super().__post_init__()
