@@ -10,13 +10,7 @@ import comfy.text_encoders.qwen_vl
 from .qwen35 import Qwen35VisionModel
 from .llama import BaseLlama, BaseQwen3, BaseGenerate, Llama2_, Qwen3VL_4BConfig, Qwen3VL_8BConfig
 
-
-QWEN3VL_VISION = {
-    "qwen3vl_4b": dict(hidden_size=1024, intermediate_size=4096, depth=24, deepstack_visual_indexes=[5, 11, 17]),
-    "qwen3vl_8b": dict(hidden_size=1152, intermediate_size=4304, depth=27, deepstack_visual_indexes=[8, 16, 24]),
-}
-QWEN3VL_VISION_COMMON = dict(num_heads=16, patch_size=16, temporal_patch_size=2, in_channels=3,
-                             spatial_merge_size=2, num_position_embeddings=2304)
+QWEN3VL_VISION = dict(num_heads=16, patch_size=16, temporal_patch_size=2, in_channels=3, spatial_merge_size=2, num_position_embeddings=2304, hidden_size=1024, intermediate_size=4096, depth=24, deepstack_visual_indexes=[5, 11, 17])
 
 QWEN3VL_CONFIGS = {"qwen3vl_4b": Qwen3VL_4BConfig, "qwen3vl_8b": Qwen3VL_8BConfig}
 
@@ -44,58 +38,6 @@ class Qwen3VLVisionModel(Qwen35VisionModel):
             Qwen3VLDeepstackMerger(self.hidden_size, self.spatial_merge_size, config["out_hidden_size"], device=device, dtype=dtype, ops=ops)
             for _ in self.deepstack_visual_indexes
         ])
-
-
-class Qwen3VL(BaseLlama, BaseQwen3, BaseGenerate, torch.nn.Module):
-    model_type = "qwen3vl_8b"
-
-    def __init__(self, config_dict, dtype, device, operations):
-        super().__init__()
-        config = QWEN3VL_CONFIGS[self.model_type](**config_dict)
-        self.num_layers = config.num_hidden_layers
-        self.model = Llama2_(config, device=device, dtype=dtype, ops=operations)
-        vision_config = {**QWEN3VL_VISION_COMMON, **QWEN3VL_VISION[self.model_type], "out_hidden_size": config.hidden_size}
-        self.visual = Qwen3VLVisionModel(vision_config, device=device, dtype=dtype, ops=operations)
-        self.dtype = dtype
-
-    def preprocess_embed(self, embed, device):
-        if embed["type"] == "image":
-            # Qwen3-VL normalizes to [-1, 1] (mean/std 0.5), unlike Qwen2.5-VL's CLIP normalization.
-            image, grid = comfy.text_encoders.qwen_vl.process_qwen2vl_images(embed["data"], patch_size=16, image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
-            merged, deepstack = self.visual(image.to(device, dtype=torch.float32), grid)
-            return merged, {"grid": grid, "deepstack": deepstack}
-        return None, None
-
-    def build_image_inputs(self, embeds, embeds_info):
-        # Returns (position_ids, visual_pos_masks, deepstack) for the prompt
-        images = sorted([e for e in embeds_info if e.get("type") == "image"], key=lambda e: e["index"])
-        if len(images) == 0:
-            return None, None, None
-
-        device = embeds.device
-        seq = embeds.shape[1]
-        position_ids = comfy.text_encoders.qwen_vl.qwen2vl_mrope_position_ids(embeds_info, seq, device)
-
-        # DeepStack: mask of image positions + per-vision-layer features to inject there.
-        visual_pos_masks = torch.zeros((1, seq), dtype=torch.bool, device=device)
-        deepstack = None
-        for e in images:
-            start = e["index"]
-            end = e["size"] + start
-            visual_pos_masks[0, start:end] = True
-            ds = e["extra"]["deepstack"]
-            if deepstack is None:
-                deepstack = [d for d in ds]
-            else:
-                deepstack = [torch.cat([deepstack[i], ds[i]], dim=0) for i in range(len(ds))]
-        return position_ids, visual_pos_masks, deepstack
-
-
-def _make_qwen3vl_model(model_type):
-    class Qwen3VL_(Qwen3VL):
-        pass
-    Qwen3VL_.model_type = model_type
-    return Qwen3VL_
 
 
 class Qwen3VLClipModel(sd1_clip.SDClipModel):
