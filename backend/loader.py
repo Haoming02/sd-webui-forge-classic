@@ -18,6 +18,7 @@ from backend.diffusion_engine.chroma import Chroma
 from backend.diffusion_engine.ernie import ErnieImage
 from backend.diffusion_engine.flux import Flux
 from backend.diffusion_engine.flux2 import Flux2
+from backend.diffusion_engine.krea import Krea2
 from backend.diffusion_engine.lumina import Lumina2
 from backend.diffusion_engine.mugen import Mugen
 from backend.diffusion_engine.pid import PiD
@@ -42,7 +43,7 @@ from backend.utils import (
 )
 from modules_forge.packages.comfy.utils import convert_diffusers_mmdit
 
-possible_models: tuple["ForgeDiffusionEngine"] = (StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, Lumina2, ZImage, Anima, ErnieImage, PiD)
+possible_models: tuple["ForgeDiffusionEngine"] = (StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, Krea2, Lumina2, ZImage, Anima, ErnieImage, PiD)
 
 logger = logging.getLogger("loader")
 setup_logger(logger)
