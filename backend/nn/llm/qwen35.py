@@ -12,14 +12,15 @@ QWEN3VL_VISION = dict(num_heads=16, patch_size=16, temporal_patch_size=2, in_cha
 
 
 class Qwen35VisionPatchEmbed(nn.Module):
-    def __init__(self, config, device=None, dtype=None, ops=None):
+    def __init__(self, config: dict):
         super().__init__()
+
         self.patch_size = config["patch_size"]
         self.temporal_patch_size = config["temporal_patch_size"]
         self.in_channels = config["in_channels"]
         self.embed_dim = config["hidden_size"]
         kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = ops.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True, device=device, dtype=dtype)
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
 
     def forward(self, x):
         x = x.view(-1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size)
@@ -27,19 +28,20 @@ class Qwen35VisionPatchEmbed(nn.Module):
 
 
 class Qwen35VisionMLP(nn.Module):
-    def __init__(self, hidden_size, intermediate_size, device=None, dtype=None, ops=None):
+    def __init__(self, hidden_size: int, intermediate_size: int):
         super().__init__()
 
-        self.linear_fc1 = ops.Linear(hidden_size, intermediate_size, bias=True, device=device, dtype=dtype)
-        self.linear_fc2 = ops.Linear(intermediate_size, hidden_size, bias=True, device=device, dtype=dtype)
+        self.linear_fc1 = nn.Linear(hidden_size, intermediate_size, bias=True)
+        self.linear_fc2 = nn.Linear(intermediate_size, hidden_size, bias=True)
 
     def forward(self, hidden_state):
         return self.linear_fc2(F.gelu(self.linear_fc1(hidden_state), approximate="tanh"))
 
 
 class Qwen35VisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim, theta=10000.0):
+    def __init__(self, dim: int, theta: float = 10000.0):
         super().__init__()
+
         self.dim = dim
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -51,14 +53,14 @@ class Qwen35VisionRotaryEmbedding(nn.Module):
 
 
 class Qwen35VisionAttention(nn.Module):
-    def __init__(self, hidden_size, num_heads, device=None, dtype=None, ops=None):
+    def __init__(self, hidden_size: int, num_heads: int):
         super().__init__()
 
         self.dim = hidden_size
         self.num_heads = num_heads
         self.head_dim = self.dim // self.num_heads
-        self.qkv = ops.Linear(self.dim, self.dim * 3, bias=True, device=device, dtype=dtype)
-        self.proj = ops.Linear(self.dim, self.dim, device=device, dtype=dtype)
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        self.proj = nn.Linear(self.dim, self.dim)
 
     def forward(self, x, cu_seqlens, position_embeddings, optimized_attention=None):
         seq_length = x.shape[0]
@@ -83,13 +85,13 @@ class Qwen35VisionAttention(nn.Module):
 
 
 class Qwen35VisionBlock(nn.Module):
-    def __init__(self, hidden_size, num_heads, intermediate_size, device=None, dtype=None, ops=None):
+    def __init__(self, hidden_size: int, num_heads: int, intermediate_size: int):
         super().__init__()
 
-        self.norm1 = ops.LayerNorm(hidden_size, eps=1e-6, device=device, dtype=dtype)
-        self.norm2 = ops.LayerNorm(hidden_size, eps=1e-6, device=device, dtype=dtype)
-        self.attn = Qwen35VisionAttention(hidden_size, num_heads, device=device, dtype=dtype, ops=ops)
-        self.mlp = Qwen35VisionMLP(hidden_size, intermediate_size, device=device, dtype=dtype, ops=ops)
+        self.norm1 = nn.LayerNorm(hidden_size, eps=1e-6)
+        self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6)
+        self.attn = Qwen35VisionAttention(hidden_size, num_heads)
+        self.mlp = Qwen35VisionMLP(hidden_size, intermediate_size)
 
     def forward(self, x, cu_seqlens, position_embeddings, optimized_attention=None):
         x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, optimized_attention=optimized_attention)
@@ -97,13 +99,13 @@ class Qwen35VisionBlock(nn.Module):
 
 
 class Qwen35VisionPatchMerger(nn.Module):
-    def __init__(self, hidden_size, spatial_merge_size, out_hidden_size, device=None, dtype=None, ops=None):
+    def __init__(self, hidden_size: int, spatial_merge_size: int, out_hidden_size: int):
         super().__init__()
 
         merge_dim = hidden_size * (spatial_merge_size**2)
-        self.norm = ops.LayerNorm(hidden_size, eps=1e-6, device=device, dtype=dtype)
-        self.linear_fc1 = ops.Linear(merge_dim, merge_dim, device=device, dtype=dtype)
-        self.linear_fc2 = ops.Linear(merge_dim, out_hidden_size, device=device, dtype=dtype)
+        self.norm = nn.LayerNorm(hidden_size, eps=1e-6)
+        self.linear_fc1 = nn.Linear(merge_dim, merge_dim)
+        self.linear_fc2 = nn.Linear(merge_dim, out_hidden_size)
         self.merge_dim = merge_dim
 
     def forward(self, x):
@@ -112,8 +114,9 @@ class Qwen35VisionPatchMerger(nn.Module):
 
 
 class Qwen35VisionModel(nn.Module):
-    def __init__(self, config, device=None, dtype=None, ops=None):
+    def __init__(self, config: dict):
         super().__init__()
+
         self.spatial_merge_size = config["spatial_merge_size"]
         self.patch_size = config["patch_size"]
         self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
@@ -122,12 +125,12 @@ class Qwen35VisionModel(nn.Module):
         self.num_heads = config["num_heads"]
         self.num_position_embeddings = config["num_position_embeddings"]
 
-        self.patch_embed = Qwen35VisionPatchEmbed(config, device=device, dtype=dtype, ops=ops)
-        self.pos_embed = ops.Embedding(self.num_position_embeddings, self.hidden_size, device=device, dtype=dtype)
+        self.patch_embed = Qwen35VisionPatchEmbed(config)
+        self.pos_embed = nn.Embedding(self.num_position_embeddings, self.hidden_size)
         self.num_grid_per_side = int(self.num_position_embeddings**0.5)
         self.rotary_pos_emb = Qwen35VisionRotaryEmbedding(self.hidden_size // self.num_heads // 2)
-        self.blocks = nn.ModuleList([Qwen35VisionBlock(self.hidden_size, self.num_heads, config["intermediate_size"], device=device, dtype=dtype, ops=ops) for _ in range(config["depth"])])
-        self.merger = Qwen35VisionPatchMerger(self.hidden_size, self.spatial_merge_size, config["out_hidden_size"], device=device, dtype=dtype, ops=ops)
+        self.blocks = nn.ModuleList([Qwen35VisionBlock(self.hidden_size, self.num_heads, config["intermediate_size"]) for _ in range(config["depth"])])
+        self.merger = Qwen35VisionPatchMerger(self.hidden_size, self.spatial_merge_size, config["out_hidden_size"])
         self.deepstack_visual_indexes = []
         self.deepstack_merger_list = None
 
@@ -237,12 +240,13 @@ class Qwen35VisionModel(nn.Module):
 
 
 class Qwen3VLDeepstackMerger(nn.Module):
-    def __init__(self, hidden_size, spatial_merge_size, out_hidden_size, device=None, dtype=None, ops=None):
+    def __init__(self, hidden_size: int, spatial_merge_size: int, out_hidden_size: int):
         super().__init__()
+
         self.merge_dim = hidden_size * (spatial_merge_size**2)
-        self.norm = ops.LayerNorm(self.merge_dim, eps=1e-6, device=device, dtype=dtype)
-        self.linear_fc1 = ops.Linear(self.merge_dim, self.merge_dim, device=device, dtype=dtype)
-        self.linear_fc2 = ops.Linear(self.merge_dim, out_hidden_size, device=device, dtype=dtype)
+        self.norm = nn.LayerNorm(self.merge_dim, eps=1e-6)
+        self.linear_fc1 = nn.Linear(self.merge_dim, self.merge_dim)
+        self.linear_fc2 = nn.Linear(self.merge_dim, out_hidden_size)
 
     def forward(self, x):
         x = self.norm(x.view(-1, self.merge_dim))
@@ -250,7 +254,8 @@ class Qwen3VLDeepstackMerger(nn.Module):
 
 
 class Qwen3VLVisionModel(Qwen35VisionModel):
-    def __init__(self, config, device=None, dtype=None, ops=None):
-        super().__init__(config, device=device, dtype=dtype, ops=ops)
+    def __init__(self, config: dict):
+        super().__init__(config)
+
         self.deepstack_visual_indexes = config["deepstack_visual_indexes"]
-        self.deepstack_merger_list = nn.ModuleList([Qwen3VLDeepstackMerger(self.hidden_size, self.spatial_merge_size, config["out_hidden_size"], device=device, dtype=dtype, ops=ops) for _ in self.deepstack_visual_indexes])
+        self.deepstack_merger_list = nn.ModuleList([Qwen3VLDeepstackMerger(self.hidden_size, self.spatial_merge_size, config["out_hidden_size"]) for _ in self.deepstack_visual_indexes])
