@@ -11,6 +11,8 @@ import comfy.text_encoders.qwen_vl
 
 from .llama import BaseLlama, BaseGenerate, Llama2_, MLP, RMSNorm, apply_rope
 
+QWEN3VL_VISION = dict(num_heads=16, patch_size=16, temporal_patch_size=2, in_channels=3, spatial_merge_size=2, num_position_embeddings=2304, hidden_size=1024, intermediate_size=4096, depth=24, deepstack_visual_indexes=[5, 11, 17])
+
 
 def _qwen35_layer_types(n):
     return [("full_attention" if (i + 1) % 4 == 0 else "linear_attention") for i in range(n)]
@@ -814,3 +816,28 @@ def te(dtype_llama=None, llama_quantization_metadata=None, model_type="qwen35_2b
                 model_options["quantization_metadata"] = llama_quantization_metadata
             super().__init__(device=device, dtype=dtype, model_options=model_options, model_type=model_type)
     return Qwen35TEModel_
+
+
+class Qwen3VLDeepstackMerger(nn.Module):
+    # DeepStack merger: postshuffle LayerNorm (applied after spatial merge), unlike the main merger.
+    def __init__(self, hidden_size, spatial_merge_size, out_hidden_size, device=None, dtype=None, ops=None):
+        super().__init__()
+        self.merge_dim = hidden_size * (spatial_merge_size ** 2)
+        self.norm = ops.LayerNorm(self.merge_dim, eps=1e-6, device=device, dtype=dtype)
+        self.linear_fc1 = ops.Linear(self.merge_dim, self.merge_dim, device=device, dtype=dtype)
+        self.linear_fc2 = ops.Linear(self.merge_dim, out_hidden_size, device=device, dtype=dtype)
+
+    def forward(self, x):
+        x = self.norm(x.view(-1, self.merge_dim))
+        return self.linear_fc2(F.gelu(self.linear_fc1(x)))
+
+
+class Qwen3VLVisionModel(Qwen35VisionModel):
+    # Qwen3.5 vision + DeepStack
+    def __init__(self, config, device=None, dtype=None, ops=None):
+        super().__init__(config, device=device, dtype=dtype, ops=ops)
+        self.deepstack_visual_indexes = config["deepstack_visual_indexes"]
+        self.deepstack_merger_list = nn.ModuleList([
+            Qwen3VLDeepstackMerger(self.hidden_size, self.spatial_merge_size, config["out_hidden_size"], device=device, dtype=dtype, ops=ops)
+            for _ in self.deepstack_visual_indexes
+        ])

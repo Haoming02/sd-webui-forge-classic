@@ -16,7 +16,7 @@ else:
 
 from backend.nn.anima import LLMAdapter
 from backend.nn.llm import qwen_vl
-from backend.nn.llm.qwen3vl import QWEN3VL_VISION, Qwen3VLVisionModel
+from backend.nn.llm.qwen35 import QWEN3VL_VISION, Qwen3VLVisionModel
 
 
 @dataclass
