@@ -255,12 +255,14 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name)
             return model
-        if cls_name in ["Qwen3Model", "Qwen3ForCausalLM"]:
+        if cls_name in ["Qwen3Model", "Qwen3ForCausalLM", "Qwen3VLModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen3 state dict!"
 
             config = read_arbitrary_config(config_path)
 
-            if config["hidden_size"] == 4096:
+            if cls_name == "Qwen3VLModel":
+                from backend.nn.llm.llama import Qwen3VL as QTE
+            elif config["hidden_size"] == 4096:
                 from backend.nn.llm.llama import Qwen3_8B as QTE
             elif config["hidden_size"] == 2560:
                 from backend.nn.llm.llama import Qwen3_4B as QTE
@@ -291,6 +293,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 with no_init_weights():
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, bnb_dtype=quant_config):
                         model = QTE(config)
+
+            if cls_name == "Qwen3VLModel":
+                state_dict = state_dict_prefix_replace(
+                    state_dict,
+                    {
+                        "model.language_model.": "model.",
+                        "model.visual.": "visual.",
+                        "lm_head.": "model.lm_head.",
+                    },
+                )
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
             return model
@@ -714,6 +726,11 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
             if k == "spiece_model":
                 continue
             sd[f"{text_encoder_key_prefix}gemma2_2b.{k}"] = v
+
+    elif "model.visual.deepstack_merger_list.0.norm.weight" in asd:
+        assert asd["model.visual.merger.linear_fc2.weight"].shape[0] == 2560
+        for k, v in asd.items():
+            sd[f"{text_encoder_key_prefix}qwen3vl_4b.transformer.{k}"] = v
 
     elif "model.layers.0.self_attn.k_proj.bias" in asd:
         weight = asd["model.layers.0.self_attn.k_proj.bias"]
