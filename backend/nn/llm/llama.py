@@ -16,7 +16,6 @@ else:
 
 from backend.nn.anima import LLMAdapter
 from backend.nn.llm import qwen_vl
-from backend.nn.llm.qwen35 import QWEN3VL_VISION, Qwen3VLVisionModel
 
 
 @dataclass
@@ -667,6 +666,9 @@ class Ministral3_3B(BaseLlama, nn.Module):
         self.num_layers = config.num_hidden_layers
 
         self.model = Llama2_(config)
+
+
+from backend.nn.llm.qwen35 import QWEN3VL_VISION, Qwen3VLVisionModel
 
 
 class Qwen3VL(BaseLlama, nn.Module):
