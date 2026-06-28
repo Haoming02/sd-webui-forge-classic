@@ -49,7 +49,7 @@
     1.916
   ],
   "num_res_blocks": 2,
-  "temperal_downsample": [
+  "temporal_downsample": [
     false,
     true,
     true
