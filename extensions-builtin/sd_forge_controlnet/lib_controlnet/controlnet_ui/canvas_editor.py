@@ -5,6 +5,7 @@ import gradio as gr
 import numpy as np
 from PIL import Image, ImageDraw
 
+from modules.ui_components import FormColumn
 from modules_forge.forge_canvas.canvas import ForgeCanvas
 
 COLORS = ("red", "orange", "yellow", "green", "blue", "violet", "purple")
@@ -20,9 +21,15 @@ class CanvasEditor:
     def render(self, elem_id_tabname, tabname):
         with gr.Group(elem_classes=["cnet-input-image-group"], visible=False) as self.group:
             self.canvas = ForgeCanvas(elem_id=f"{elem_id_tabname}_{tabname}_input_canvas", elem_classes=["cnet-image"], height=320, contrast_scribbles=False, scribble_color="#FF0000", scribble_color_fixed=False, scribble_alpha=255, scribble_alpha_fixed=True, scribble_softness_fixed=True, numpy=True, no_upload=True)
-            with gr.Row():
-                self.num = gr.Slider(value=0, label="Number of Subjects", minimum=0, maximum=7, step=1, info="0 for Blank Canvas")
+            with FormColumn():
                 self.clear = gr.Button("Generate Canvas", elem_id=f"{elem_id_tabname}_{tabname}_clear_canvas")
+                with gr.Accordion("Advanced Parameters", open=False):
+                    with gr.Row():
+                        self.num = gr.Slider(value=0, label="Number of Subjects", minimum=0, maximum=7, step=1, info="0 for Blank Canvas")
+                        self.height = gr.Slider(value=0.4, label="Vertical Position", minimum=0.2, maximum=0.8, step=0.05)
+                    with gr.Row():
+                        self.randomize = gr.Slider(value=0.075, label="Randomize Bias", minimum=0.0, maximum=0.5, step=0.025)
+                        self.shape = gr.Radio(choices=["Rectangle", "Oval"], value="Rectangle", label="Mask Shape")
 
     def register_callbacks(
         self,
@@ -45,7 +52,7 @@ class CanvasEditor:
 
         self.clear.click(
             fn=self._generate_canvas,
-            inputs=[width, height, self.num],
+            inputs=[width, height, self.num, self.randomize, self.height, self.shape],
             outputs=[self.canvas.background, self.canvas.foreground],
         )
 
@@ -65,11 +72,11 @@ class CanvasEditor:
         )
 
     @staticmethod
-    def _generate_canvas(w: int, h: int, n: int) -> tuple[np.ndarray, None]:
-        image = Image.new("RGB", (w, h), "white")
-
+    def _generate_canvas(w: int, h: int, n: int, r: float, v: float, s: str) -> tuple[np.ndarray, None]:
         if n == 0:
-            return gr.update(value=np.asarray(image, dtype=np.uint8)), gr.update(value=None)
+            return gr.update(value=np.ones((h, w, 3), dtype=np.uint8) * 255), gr.update(value=None)
+
+        image = Image.new("RGB", (w, h), "white")
 
         rng = random.Random(time.time())
 
@@ -77,15 +84,18 @@ class CanvasEditor:
         _w = w / n
 
         for i in range(n):
-            cx = (i + 0.5 + rng.uniform(-0.075, 0.075)) * _w
-            cy = (0.5 + rng.uniform(-0.075, 0.075)) * h
+            cx = (i + 0.5 + rng.uniform(-r, r)) * _w
+            cy = ((1.0 - v) + rng.uniform(-r, r)) * h
 
-            bw = _w * 0.85 * rng.uniform(0.85, 1.1)
-            bh = h * 0.85 * rng.uniform(0.85, 1.1)
+            bw = _w * 0.85 * rng.uniform(1.0 - r, 1.0 + r)
+            bh = h * 0.9 * rng.uniform(1.0 - r, 1.0 + r)
 
             x0, x1 = int(cx - bw / 2), int(cx + bw / 2)
             y0, y1 = int(cy - bh / 2), int(cy + bh / 2)
 
-            draw.ellipse((x0, y0, x1, y1), fill=COLORS[i])
+            if s == "Rectangle":
+                draw.rectangle((x0, y0, x1, y1), fill=COLORS[i])
+            else:
+                draw.ellipse((x0, y0, x1, y1), fill=COLORS[i])
 
         return gr.update(value=np.asarray(image, dtype=np.uint8)), gr.update(value=None)
