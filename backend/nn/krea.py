@@ -235,7 +235,7 @@ class SingleStreamDiT(nn.Module):
         H, W = x.shape[-2], x.shape[-1]
         h_, w_ = H // patch, W // patch
 
-        context = self._unpack_context(context)
+        context = self._unpack_context(context.squeeze(1))
 
         img = rearrange(x, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=patch, pw=patch)
         img = self.first(img)
