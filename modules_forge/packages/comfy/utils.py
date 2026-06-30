@@ -1,4 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/utils.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/utils.py
 
 """
 This file is part of ComfyUI.
@@ -202,7 +202,7 @@ def flux_to_diffusers(mmdit_config, output_prefix=""):
             "ff_context.net.0.proj.bias": "txt_mlp.0.bias",
             "ff_context.net.2.weight": "txt_mlp.2.weight",
             "ff_context.net.2.bias": "txt_mlp.2.bias",
-            "ff.linear_in.weight": "img_mlp.0.weight",  # LyCoris LoKr
+            "ff.linear_in.weight": "img_mlp.0.weight",
             "ff.linear_in.bias": "img_mlp.0.bias",
             "ff.linear_out.weight": "img_mlp.2.weight",
             "ff.linear_out.bias": "img_mlp.2.bias",
@@ -238,8 +238,8 @@ def flux_to_diffusers(mmdit_config, output_prefix=""):
             "proj_out.bias": "linear2.bias",
             "attn.norm_q.weight": "norm.query_norm.scale",
             "attn.norm_k.weight": "norm.key_norm.scale",
-            "attn.to_qkv_mlp_proj.weight": "linear1.weight",  # Flux 2
-            "attn.to_out.weight": "linear2.weight",  # Flux 2
+            "attn.to_qkv_mlp_proj.weight": "linear1.weight",
+            "attn.to_out.weight": "linear2.weight",
         }
 
         for k in block_map:
@@ -275,6 +275,50 @@ def flux_to_diffusers(mmdit_config, output_prefix=""):
             key_map[k[1]] = ("{}{}".format(output_prefix, k[0]), None, k[2])
         else:
             key_map[k[1]] = "{}{}".format(output_prefix, k[0])
+
+    return key_map
+
+
+def krea2_to_diffusers(mmdit_config, output_prefix=""):
+    n_layers = mmdit_config.get("layers", 0)
+    n_txt_layerwise = 2
+    n_txt_refiner = 2
+    key_map = {}
+
+    def add_block(prefix_to, prefix_from):
+        block_map = {
+            "attn.to_q": "attn.wq",
+            "attn.to_k": "attn.wk",
+            "attn.to_v": "attn.wv",
+            "attn.to_gate": "attn.gate",
+            "attn.to_out.0": "attn.wo",
+            "attn.to_out": "attn.wo",
+            "ff.gate": "mlp.gate",
+            "ff.up": "mlp.up",
+            "ff.down": "mlp.down",
+        }
+        for d, c in block_map.items():
+            key_map["{}.{}.weight".format(prefix_to, d)] = "{}{}.{}.weight".format(output_prefix, prefix_from, c)
+
+    for i in range(n_layers):
+        add_block("transformer_blocks.{}".format(i), "blocks.{}".format(i))
+    for i in range(n_txt_layerwise):
+        add_block("text_fusion.layerwise_blocks.{}".format(i), "txtfusion.layerwise_blocks.{}".format(i))
+    for i in range(n_txt_refiner):
+        add_block("text_fusion.refiner_blocks.{}".format(i), "txtfusion.refiner_blocks.{}".format(i))
+
+    MAP_BASIC = [
+        ("img_in", "first"),
+        ("time_embed.linear_1", "tmlp.0"),
+        ("time_embed.linear_2", "tmlp.2"),
+        ("time_mod_proj", "tproj.1"),
+        ("txt_in.linear_1", "txtmlp.1"),
+        ("txt_in.linear_2", "txtmlp.3"),
+        ("text_fusion.projector", "txtfusion.projector"),
+        ("final_layer.linear", "last.linear"),
+    ]
+    for d, c in MAP_BASIC:
+        key_map["{}.weight".format(d)] = "{}{}.weight".format(output_prefix, c)
 
     return key_map
 

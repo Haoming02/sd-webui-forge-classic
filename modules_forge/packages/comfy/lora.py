@@ -1,4 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.11.0/comfy/lora.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/lora.py
 
 """
 This file is part of ComfyUI.
@@ -22,7 +22,12 @@ import torch
 
 from modules_forge.packages.comfy import weight_adapter
 
-from .utils import flux_to_diffusers, unet_to_diffusers, z_image_to_diffusers
+from .utils import (
+    flux_to_diffusers,
+    krea2_to_diffusers,
+    unet_to_diffusers,
+    z_image_to_diffusers,
+)
 
 LORA_CLIP_MAP = {
     "mlp.fc1": "mlp_fc1",
@@ -248,5 +253,16 @@ def model_lora_keys_unet(model, key_map={}):
             if k.startswith("diffusion_model.") and k.endswith(".weight"):
                 key_lora = k[len("diffusion_model.") : -len(".weight")]
                 key_map["transformer.{}".format(key_lora)] = k
+
+    if "krea-2" in _model_name:
+        diffusers_keys = krea2_to_diffusers(model.diffusion_model.config, output_prefix="diffusion_model.")
+        for k in diffusers_keys:
+            if k.endswith(".weight"):
+                to = diffusers_keys[k]
+                key_lora = k[: -len(".weight")]
+                key_map["diffusion_model.{}".format(key_lora)] = to
+                key_map["transformer.{}".format(key_lora)] = to
+                key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = to
+                key_map[key_lora] = to
 
     return key_map
