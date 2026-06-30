@@ -730,7 +730,7 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
 
         filename = filename_without_extension + extension
         without_extension = filename_without_extension
-        if shared.opts.save_images_replace_action != "Replace":
+        if shared.opts.save_images_replace_action != "Override":
             n = 0
             while os.path.exists(filename):
                 n += 1
