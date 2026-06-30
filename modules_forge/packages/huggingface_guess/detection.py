@@ -1,4 +1,4 @@
-# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/model_detection.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/model_detection.py
 
 import logging
 
@@ -239,6 +239,21 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
         dit_config["num_layers"] = count_blocks(state_dict_keys, "{}transformer_blocks.".format(key_prefix) + "{}.")
         return dit_config
 
+    if "{}txtfusion.projector.weight".format(key_prefix) in state_dict_keys:  # Krea 2
+        dit_config = {}
+        dit_config["image_model"] = "krea2"
+        head_dim = 128
+        first_w = state_dict["{}first.weight".format(key_prefix)]
+        dit_config["features"] = int(first_w.shape[0])
+        dit_config["channels"] = int(first_w.shape[1]) // (2 * 2)
+        dit_config["patch"] = 2
+        dit_config["layers"] = count_blocks(state_dict_keys, "{}blocks.".format(key_prefix) + "{}.")
+        dit_config["heads"] = int(state_dict["{}blocks.0.attn.wq.weight".format(key_prefix)].shape[0]) // head_dim
+        dit_config["kvheads"] = int(state_dict["{}blocks.0.attn.wk.weight".format(key_prefix)].shape[0]) // head_dim
+        dit_config["txtlayers"] = int(state_dict["{}txtfusion.projector.weight".format(key_prefix)].shape[1])
+        dit_config["txtdim"] = int(state_dict["{}txtfusion.layerwise_blocks.0.prenorm.scale".format(key_prefix)].shape[0])
+        return dit_config
+
     if "{}layers.0.mlp.linear_fc2.weight".format(key_prefix) in state_dict_keys:  # Ernie Image
         dit_config = {"image_model": "ernie"}
         return dit_config
@@ -295,7 +310,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
 
         block_keys_output = sorted(list(filter(lambda a: a.startswith(prefix_output), state_dict_keys)))
 
-        if "{}0.op.weight".format(prefix) in block_keys:  # new layer
+        if "{}0.op.weight".format(prefix) in block_keys:
             num_res_blocks.append(last_res_blocks)
             channel_mult.append(last_channel_mult)
 

@@ -6,8 +6,8 @@ import shutil
 from huggingface_hub import snapshot_download
 
 PIPELINE_PATHS = (
-    # "black-forest-labs/FLUX.2-klein-9B",
-    "baidu/ERNIE-Image",
+    # "baidu/ERNIE-Image",
+    "krea/Krea-2-Raw",
 )
 
 for pretrained in PIPELINE_PATHS:

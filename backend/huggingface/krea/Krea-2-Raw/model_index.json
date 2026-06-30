@@ -1,0 +1,40 @@
+{
+  "_class_name": "Krea2Pipeline",
+  "_diffusers_version": "0.39.0.dev0",
+  "scheduler": [
+    "diffusers",
+    "FlowMatchEulerDiscreteScheduler"
+  ],
+  "text_encoder": [
+    "transformers",
+    "Qwen3VLModel"
+  ],
+  "text_encoder_select_layers": [
+    2,
+    5,
+    8,
+    11,
+    14,
+    17,
+    20,
+    23,
+    26,
+    29,
+    32,
+    35
+  ],
+  "tokenizer": [
+    "transformers",
+    "Qwen2Tokenizer"
+  ],
+  "transformer": [
+    "diffusers",
+    "Krea2Transformer2DModel"
+  ],
+  "vae": [
+    "diffusers",
+    "AutoencoderKLQwenImage"
+  ],
+  "is_distilled": false,
+  "patch_size": 2
+}

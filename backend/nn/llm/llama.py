@@ -88,6 +88,17 @@ class Qwen3_8BConfig:
 
 
 @dataclass
+class Qwen3VL_4BConfig(Qwen3_8BConfig):
+    max_position_embeddings: int = 262144
+    rope_theta: float = 5000000.0
+    rope_dims = [24, 20, 20]
+    interleaved_mrope = True
+    hidden_size: int = 2560
+    intermediate_size: int = 9728
+    lm_head: bool = False
+
+
+@dataclass
 class Qwen25_7BVLI_Config:
     vocab_size: int = 152064
     hidden_size: int = 3584
@@ -655,3 +666,51 @@ class Ministral3_3B(BaseLlama, nn.Module):
         self.num_layers = config.num_hidden_layers
 
         self.model = Llama2_(config)
+
+
+from backend.nn.llm.qwen35 import QWEN3VL_VISION, Qwen3VLVisionModel
+
+
+class Qwen3VL(BaseLlama, nn.Module):
+    def __init__(self, config_dict):
+        super().__init__()
+        config = Qwen3VL_4BConfig()
+
+        _config_dict = asdict(config)
+        for key, value in _config_dict.items():
+            if key in config_dict:
+                assert value == config_dict[key]
+
+        self.num_layers = config.num_hidden_layers
+        self.model = Llama2_(config)
+        vision_config = {**QWEN3VL_VISION, "out_hidden_size": config.hidden_size}
+        self.visual = Qwen3VLVisionModel(vision_config)
+
+    def preprocess_embed(self, embed, device):
+        if embed["type"] == "image":
+            image, grid = qwen_vl.process_qwen2vl_images(embed["data"], patch_size=16, image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            merged, deepstack = self.visual(image.to(device, dtype=torch.float32), grid)
+            return merged, {"grid": grid, "deepstack": deepstack}
+        return None, None
+
+    def build_image_inputs(self, embeds, embeds_info):
+        images = sorted([e for e in embeds_info if e.get("type") == "image"], key=lambda e: e["index"])
+        if len(images) == 0:
+            return None, None, None
+
+        device = embeds.device
+        seq = embeds.shape[1]
+        position_ids = qwen_vl.qwen2vl_mrope_position_ids(embeds_info, seq, device)
+
+        visual_pos_masks = torch.zeros((1, seq), dtype=torch.bool, device=device)
+        deepstack = None
+        for e in images:
+            start = e["index"]
+            end = e["size"] + start
+            visual_pos_masks[0, start:end] = True
+            ds = e["extra"]["deepstack"]
+            if deepstack is None:
+                deepstack = [d for d in ds]
+            else:
+                deepstack = [torch.cat([deepstack[i], ds[i]], dim=0) for i in range(len(ds))]
+        return position_ids, visual_pos_masks, deepstack
