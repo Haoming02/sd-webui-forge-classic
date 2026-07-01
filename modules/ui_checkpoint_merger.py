@@ -1,27 +1,49 @@
 import os
+from enum import Enum
 from functools import partial
 
 import gradio as gr
 
-from modules import call_queue, errors, extras, sd_models, sd_vae, shared
+from modules import call_queue, errors, extras, sd_models, shared
 from modules.ui_common import create_refresh_button
-from modules.ui_components import FormRow
+from modules.ui_components import FormRow, InputAccordion
 
 
-def update_interp_description(value):
-    interp_description_css = "<p style='margin-bottom: 2.5em'>{}</p>"
-    interp_descriptions = {"No interpolation": interp_description_css.format("No interpolation will be used. Requires one model; A. Allows for format conversion and VAE baking."), "Weighted sum": interp_description_css.format("A weighted sum will be used for interpolation. Requires two models; A and B. The result is calculated as A * (1 - M) + B * M"), "Add difference": interp_description_css.format("The difference between the last two models will be added to the first. Requires three models; A, B and C. The result is calculated as A + (B - C) * M")}
-    return interp_descriptions[value]
+class InterpolationMethod(Enum):
+    no_interpolation = "No Interpolation"
+    weighted_sum = "Weighted Sum"
+    add_difference = "Add Difference"
+
+    @staticmethod
+    def titles() -> list[str]:
+        return [m.value for m in InterpolationMethod]
+
+    @staticmethod
+    def desc(value: str) -> str:
+        match value:
+            case InterpolationMethod.no_interpolation.value:
+                return "Require 1 Model ; Mainly for format conversion and baking VAE"
+            case InterpolationMethod.weighted_sum.value:
+                return "Require 2 Model ; Result is calculated as A * (1 - M) + B * M"
+            case InterpolationMethod.add_difference.value:
+                return "Require 3 Model ; Result is calculated as A + (B - C) * M"
+
+
+def update_method(value: str = None) -> list[bool, bool, bool, str]:
+    return [
+        gr.update(visible=(value != InterpolationMethod.no_interpolation.value)),
+        gr.update(visible=(value != InterpolationMethod.no_interpolation.value)),
+        gr.update(visible=(value == InterpolationMethod.add_difference.value)),
+        gr.update(info=InterpolationMethod.desc(value)),
+    ]
 
 
 def modelmerger(*args):
     try:
-        results = extras.run_modelmerger(*args)
+        return extras.run_modelmerger(*args)
     except Exception as e:
-        errors.report("Error loading/saving model file", exc_info=True)
-        sd_models.list_models()  # to remove the potentially missing models from the list
-        return [*[gr.update(choices=sd_models.checkpoint_tiles()) for _ in range(4)], f"Error merging checkpoints: {e}"]
-    return results
+        errors.report("Error running ModelMerger", exc_info=True)
+        return [gr.skip(), gr.skip(), gr.skip(), gr.skip(), f"Error: {e}"]
 
 
 class UiCheckpointMerger:
@@ -29,9 +51,9 @@ class UiCheckpointMerger:
         with gr.Blocks(analytics_enabled=False) as modelmerger_interface:
             with gr.Accordion(label="Save Current Model (only supports SD1 / SDXL / Flux)", open=False):
                 with gr.Row():
-                    filename_forge = gr.Textbox(value="flux.safetensors", lines=1, max_lines=1, label="Filename", info='(will save in "Stable-diffusion" folder)', scale=4)
-                    btn_save_unet_forge = gr.Button("Save UNet", scale=1)
-                    btn_save_ckpt_forge = gr.Button("Save Checkpoint", scale=1)
+                    filename_forge = gr.Textbox(value="flux.safetensors", lines=1, max_lines=1, label="Filename", info='(will save in "Stable-diffusion" folder)', scale=2)
+                    btn_save_unet_forge = gr.Button("Save UNet Only", scale=1)
+                    btn_save_ckpt_forge = gr.Button("Save Checkpoint (UNet + Clip + VAE)", scale=1)
                 result_html = gr.HTML("Pending...")
 
                 def save_model(filename: str, *, _unet: bool):
@@ -56,69 +78,81 @@ class UiCheckpointMerger:
                 btn_save_unet_forge.click(partial(save_model, _unet=True), inputs=filename_forge, outputs=result_html)
                 btn_save_ckpt_forge.click(partial(save_model, _unet=False), inputs=filename_forge, outputs=result_html)
 
+                for comp in (filename_forge, btn_save_unet_forge, btn_save_ckpt_forge):
+                    comp.do_not_save_to_config = True
+
             with gr.Row(equal_height=False):
                 with gr.Column(variant="compact"):
-                    self.interp_description = gr.HTML(value=update_interp_description("Weighted sum"), elem_id="modelmerger_interp_description")
-
                     with FormRow(elem_id="modelmerger_models"):
-                        self.primary_model_name = gr.Dropdown(sd_models.checkpoint_tiles(), elem_id="modelmerger_primary_model_name", label="Primary model (A)")
-                        create_refresh_button(self.primary_model_name, sd_models.list_models, lambda: {"choices": sd_models.checkpoint_tiles()}, "refresh_checkpoint_A")
-
-                        self.secondary_model_name = gr.Dropdown(sd_models.checkpoint_tiles(), elem_id="modelmerger_secondary_model_name", label="Secondary model (B)")
-                        create_refresh_button(self.secondary_model_name, sd_models.list_models, lambda: {"choices": sd_models.checkpoint_tiles()}, "refresh_checkpoint_B")
-
-                        self.tertiary_model_name = gr.Dropdown(sd_models.checkpoint_tiles(), elem_id="modelmerger_tertiary_model_name", label="Tertiary model (C)")
-                        create_refresh_button(self.tertiary_model_name, sd_models.list_models, lambda: {"choices": sd_models.checkpoint_tiles()}, "refresh_checkpoint_C")
-
-                    self.custom_name = gr.Textbox(label="Custom Name (Optional)", elem_id="modelmerger_custom_name")
-                    self.interp_amount = gr.Slider(minimum=0.0, maximum=1.0, step=0.05, label="Multiplier (M) - set to 0 to get model A", value=0.3, elem_id="modelmerger_interp_amount")
-                    self.interp_method = gr.Radio(choices=["No interpolation", "Weighted sum", "Add difference"], value="Weighted sum", label="Interpolation Method", elem_id="modelmerger_interp_method")
-                    self.interp_method.change(fn=update_interp_description, inputs=[self.interp_method], outputs=[self.interp_description])
+                        self.primary_model_name = gr.Dropdown(label="Primary Model (A)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_primary_model_name", visible=True)
+                        self.secondary_model_name = gr.Dropdown(label="Secondary Model (B)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_secondary_model_name", visible=True)
+                        self.tertiary_model_name = gr.Dropdown(label="Tertiary Model (C)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_tertiary_model_name", visible=False)
+                        create_refresh_button(
+                            [self.primary_model_name, self.secondary_model_name, self.tertiary_model_name],
+                            sd_models.list_models,
+                            lambda: {"choices": sd_models.checkpoint_tiles()},
+                            "modelmerger_refresh_checkpoint",
+                        )
 
                     with FormRow():
-                        self.checkpoint_format = gr.Radio(choices=["ckpt", "safetensors"], value="safetensors", label="Checkpoint format", elem_id="modelmerger_checkpoint_format")
-                        self.save_as_half = gr.Checkbox(value=False, label="Save as float16", elem_id="modelmerger_save_as_half")
+                        self.interp_method = gr.Radio(choices=InterpolationMethod.titles(), value=InterpolationMethod.weighted_sum.value, info=InterpolationMethod.desc(InterpolationMethod.weighted_sum.value), label="Interpolation Method", elem_id="modelmerger_interp_method")
+                        self.interp_amount = gr.Slider(minimum=0.0, maximum=1.0, value=0.5, step=0.05, label="Multiplier (M)", elem_id="modelmerger_interp_amount")
+                        self.interp_method.change(fn=update_method, inputs=[self.interp_method], outputs=[self.interp_amount, self.secondary_model_name, self.tertiary_model_name, self.interp_method], show_progress=False, queue=False)
 
                     with FormRow():
-                        with gr.Column():
-                            self.config_source = gr.Radio(choices=["A, B or C", "B", "C", "Don't"], value="A, B or C", label="Copy config from", type="index", elem_id="modelmerger_config_method")
+                        self.custom_name = gr.Textbox(label="Filename to Save", lines=1, max_lines=1, elem_id="modelmerger_custom_name")
+                        self.discard_weights = gr.Textbox(label="Layers to Discard", lines=1, max_lines=3, elem_id="modelmerger_discard_weights")
 
-                        with gr.Column():
-                            with FormRow():
-                                self.bake_in_vae = gr.Dropdown(choices=["None"] + list(sd_vae.vae_dict), value="None", label="Bake in VAE", elem_id="modelmerger_bake_in_vae")
-                                create_refresh_button(self.bake_in_vae, sd_vae.refresh_vae_list, lambda: {"choices": ["None"] + list(sd_vae.vae_dict)}, "modelmerger_refresh_bake_in_vae")
-
-                    with FormRow():
-                        self.discard_weights = gr.Textbox(value="", label="Discard weights with matching name", elem_id="modelmerger_discard_weights")
-
-                    with gr.Accordion("Metadata", open=False) as metadata_editor:
+                    with InputAccordion(True, label="Save Metadata") as self.save_metadata:
                         with FormRow():
-                            self.save_metadata = gr.Checkbox(value=True, label="Save metadata", elem_id="modelmerger_save_metadata")
-                            self.add_merge_recipe = gr.Checkbox(value=True, label="Add merge recipe metadata", elem_id="modelmerger_add_recipe")
-                            self.copy_metadata_fields = gr.Checkbox(value=True, label="Copy metadata from merged models", elem_id="modelmerger_copy_metadata")
+                            self.config_source = gr.Radio(choices=["A", "B", "C", "All", "None"], value="A", label="Copy Metadata from", elem_id="modelmerger_config_method")
+                            self.add_merge_recipe = gr.Checkbox(True, label="Include Merge Recipe", elem_id="modelmerger_add_recipe")
 
                         self.metadata_json = gr.TextArea("{}", label="Metadata in JSON format")
-                        self.read_metadata = gr.Button("Read metadata from selected checkpoints")
+                        self.read_metadata = gr.Button("Read Metadata from Models")
 
                     with FormRow():
                         self.modelmerger_merge = gr.Button(elem_id="modelmerger_merge", value="Merge", variant="primary")
 
-                with gr.Column(variant="compact", elem_id="modelmerger_results_container"):
+                with gr.Column(variant="panel", elem_id="modelmerger_results_container"):
                     with gr.Group(elem_id="modelmerger_results_panel"):
-                        self.modelmerger_result = gr.HTML(elem_id="modelmerger_result", show_label=False)
+                        self.modelmerger_result = gr.HTML(value="Pending...", elem_id="modelmerger_result")
 
-        self.metadata_editor = metadata_editor
+                for comp in (
+                    self.primary_model_name,
+                    self.secondary_model_name,
+                    self.tertiary_model_name,
+                    self.interp_method,
+                    self.interp_amount,
+                    self.custom_name,
+                    self.discard_weights,
+                    self.save_metadata,
+                    self.config_source,
+                    self.add_merge_recipe,
+                    self.metadata_json,
+                    self.read_metadata,
+                    self.modelmerger_merge,
+                    self.modelmerger_result,
+                ):
+                    comp.do_not_save_to_config = True
+
         self.blocks = modelmerger_interface
 
     def setup_ui(self, dummy_component, sd_model_checkpoint_component):
-        self.checkpoint_format.change(lambda fmt: gr.update(visible=fmt == "safetensors"), inputs=[self.checkpoint_format], outputs=[self.metadata_editor], show_progress=False)
+        self.read_metadata.click(
+            fn=extras.read_metadata,
+            inputs=[self.primary_model_name, self.secondary_model_name, self.tertiary_model_name],
+            outputs=[self.metadata_json],
+        )
 
-        self.read_metadata.click(extras.read_metadata, inputs=[self.primary_model_name, self.secondary_model_name, self.tertiary_model_name], outputs=[self.metadata_json])
-
-        self.modelmerger_merge.click(fn=lambda: "", inputs=[], outputs=[self.modelmerger_result])
         self.modelmerger_merge.click(
+            fn=lambda: "",
+            outputs=[self.modelmerger_result],
+            queue=False,
+            show_progress=False,
+        ).then(
             fn=call_queue.wrap_gradio_gpu_call(modelmerger, extra_outputs=lambda: [gr.skip() for _ in range(4)]),
-            _js="modelmerger",
+            js="modelmerger",
             inputs=[
                 dummy_component,
                 self.primary_model_name,
@@ -126,15 +160,11 @@ class UiCheckpointMerger:
                 self.tertiary_model_name,
                 self.interp_method,
                 self.interp_amount,
-                self.save_as_half,
                 self.custom_name,
-                self.checkpoint_format,
                 self.config_source,
-                self.bake_in_vae,
                 self.discard_weights,
                 self.save_metadata,
                 self.add_merge_recipe,
-                self.copy_metadata_fields,
                 self.metadata_json,
             ],
             outputs=[
@@ -145,6 +175,3 @@ class UiCheckpointMerger:
                 self.modelmerger_result,
             ],
         )
-
-        # Required as a workaround for change() event not triggering when loading values from ui-config.json
-        self.interp_description.value = update_interp_description(self.interp_method.value)
