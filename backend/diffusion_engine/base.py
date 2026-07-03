@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from backend.patcher.vae import VAE
     from modules_forge.packages.huggingface_guess.model_list import BASE
 
+from safetensors.torch import save_file
+
 from backend import memory_management, utils
 
 
@@ -100,19 +102,17 @@ class ForgeDiffusionEngine:
         self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
         memory_management.logger.debug(f"Shift: {shift}")
 
-    def save_unet(self, filename):
-        import safetensors.torch as sf
-
+    def save_unet(self, filename: str) -> str:
         sd = utils.get_state_dict_after_quant(self.forge_objects.unet.model.diffusion_model)
-        sf.save_file(sd, filename)
+        save_file(sd, filename)
         return filename
 
-    def save_checkpoint(self, filename):
-        import safetensors.torch as sf
-
+    def save_checkpoint(self, filename: str) -> str:
         sd = {}
-        sd.update(utils.get_state_dict_after_quant(self.forge_objects.unet.model.diffusion_model, prefix="model.diffusion_model."))
-        sd.update(utils.get_state_dict_after_quant(self.forge_objects.clip.cond_stage_model, prefix="text_encoders."))
-        sd.update(utils.get_state_dict_after_quant(self.forge_objects.vae.first_stage_model, prefix="vae."))
-        sf.save_file(sd, filename)
+
+        sd.update(self.model_config.process_unet_state_dict_for_saving(utils.get_state_dict_after_quant(self.forge_objects.unet.model.diffusion_model)))
+        sd.update(self.model_config.process_clip_state_dict_for_saving(utils.get_state_dict_after_quant(self.forge_objects.clip.cond_stage_model)))
+        sd.update(self.model_config.process_vae_state_dict_for_saving(utils.get_state_dict_after_quant(self.forge_objects.vae.first_stage_model)))
+
+        save_file(sd, filename)
         return filename
