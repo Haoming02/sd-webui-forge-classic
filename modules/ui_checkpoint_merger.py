@@ -1,32 +1,12 @@
 import os
-from enum import Enum
 from functools import partial
 
 import gradio as gr
 
-from modules import call_queue, errors, extras, sd_models, shared
+from modules import call_queue, errors, sd_models, shared
+from modules.extras import InterpolationMethod, read_metadata, run_modelmerger
 from modules.ui_common import create_refresh_button
 from modules.ui_components import FormRow, InputAccordion
-
-
-class InterpolationMethod(Enum):
-    no_interpolation = "No Interpolation"
-    weighted_sum = "Weighted Sum"
-    add_difference = "Add Difference"
-
-    @staticmethod
-    def titles() -> list[str]:
-        return [m.value for m in InterpolationMethod]
-
-    @staticmethod
-    def desc(value: str) -> str:
-        match value:
-            case InterpolationMethod.no_interpolation.value:
-                return "Require 1 Model ; Mainly for format conversion and baking VAE"
-            case InterpolationMethod.weighted_sum.value:
-                return "Require 2 Model ; Result is calculated as A * (1 - M) + B * M"
-            case InterpolationMethod.add_difference.value:
-                return "Require 3 Model ; Result is calculated as A + (B - C) * M"
 
 
 def update_method(value: str = None) -> list[bool, bool, bool, str]:
@@ -40,7 +20,7 @@ def update_method(value: str = None) -> list[bool, bool, bool, str]:
 
 def modelmerger(*args):
     try:
-        return extras.run_modelmerger(*args)
+        return run_modelmerger(*args)
     except Exception as e:
         errors.report("Error running ModelMerger", exc_info=True)
         return [gr.skip(), gr.skip(), gr.skip(), gr.skip(), f"Error: {e}"]
@@ -84,13 +64,13 @@ class UiCheckpointMerger:
             with gr.Row(equal_height=False):
                 with gr.Column(variant="compact"):
                     with FormRow(elem_id="modelmerger_models"):
-                        self.primary_model_name = gr.Dropdown(label="Primary Model (A)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_primary_model_name", visible=True)
-                        self.secondary_model_name = gr.Dropdown(label="Secondary Model (B)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_secondary_model_name", visible=True)
-                        self.tertiary_model_name = gr.Dropdown(label="Tertiary Model (C)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_tertiary_model_name", visible=False)
+                        self.primary_model_name = gr.Dropdown(label="Primary Model (A)", choices=sorted(sd_models.checkpoint_tiles()), elem_id="modelmerger_primary_model_name", visible=True)
+                        self.secondary_model_name = gr.Dropdown(label="Secondary Model (B)", choices=sorted(sd_models.checkpoint_tiles()), elem_id="modelmerger_secondary_model_name", visible=True)
+                        self.tertiary_model_name = gr.Dropdown(label="Tertiary Model (C)", choices=sorted(sd_models.checkpoint_tiles()), elem_id="modelmerger_tertiary_model_name", visible=False)
                         create_refresh_button(
                             [self.primary_model_name, self.secondary_model_name, self.tertiary_model_name],
                             sd_models.list_models,
-                            lambda: {"choices": sd_models.checkpoint_tiles()},
+                            lambda: {"choices": sorted(sd_models.checkpoint_tiles())},
                             "modelmerger_refresh_checkpoint",
                         )
 
@@ -100,16 +80,22 @@ class UiCheckpointMerger:
                         self.interp_method.change(fn=update_method, inputs=[self.interp_method], outputs=[self.interp_amount, self.secondary_model_name, self.tertiary_model_name, self.interp_method], show_progress=False, queue=False)
 
                     with FormRow():
-                        self.custom_name = gr.Textbox(label="Filename to Save", lines=1, max_lines=1, elem_id="modelmerger_custom_name")
-                        self.discard_weights = gr.Textbox(label="Layers to Discard", lines=1, max_lines=3, elem_id="modelmerger_discard_weights")
+                        self.custom_name = gr.Textbox(label="Filename to Save", info="will be based on Interpolation Method if empty", lines=1, max_lines=1, elem_id="modelmerger_custom_name")
+                        self.discard_weights = gr.Textbox(label="Layers to Discard", info="in Regex format", lines=1, max_lines=3, elem_id="modelmerger_discard_weights")
 
                     with InputAccordion(True, label="Save Metadata") as self.save_metadata:
                         with FormRow():
-                            self.config_source = gr.Radio(choices=["A", "B", "C", "All", "None"], value="A", label="Copy Metadata from", elem_id="modelmerger_config_method")
+                            self.config_source = gr.CheckboxGroup(choices=["A", "B", "C"], value=["A", "B", "C"], label="Copy Metadata from", elem_id="modelmerger_config_method")
                             self.add_merge_recipe = gr.Checkbox(True, label="Include Merge Recipe", elem_id="modelmerger_add_recipe")
 
-                        self.metadata_json = gr.TextArea("{}", label="Metadata in JSON format")
-                        self.read_metadata = gr.Button("Read Metadata from Models")
+                        self.metadata_json = gr.TextArea(value=None, label="Metadata in JSON Format")
+                        self.read_metadata = gr.Button("Preview Metadata from Models")
+
+                        self.read_metadata.click(
+                            fn=read_metadata,
+                            inputs=[self.primary_model_name, self.secondary_model_name, self.tertiary_model_name],
+                            outputs=[self.metadata_json],
+                        )
 
                     with FormRow():
                         self.modelmerger_merge = gr.Button(elem_id="modelmerger_merge", value="Merge", variant="primary")
@@ -139,12 +125,6 @@ class UiCheckpointMerger:
         self.blocks = modelmerger_interface
 
     def setup_ui(self, dummy_component, sd_model_checkpoint_component):
-        self.read_metadata.click(
-            fn=extras.read_metadata,
-            inputs=[self.primary_model_name, self.secondary_model_name, self.tertiary_model_name],
-            outputs=[self.metadata_json],
-        )
-
         self.modelmerger_merge.click(
             fn=lambda: "",
             outputs=[self.modelmerger_result],
@@ -161,11 +141,10 @@ class UiCheckpointMerger:
                 self.interp_method,
                 self.interp_amount,
                 self.custom_name,
-                self.config_source,
                 self.discard_weights,
                 self.save_metadata,
+                self.config_source,
                 self.add_merge_recipe,
-                self.metadata_json,
             ],
             outputs=[
                 self.primary_model_name,

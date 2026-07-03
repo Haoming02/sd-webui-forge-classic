@@ -1,15 +1,20 @@
 import json
 import os
 import re
+from enum import Enum
 
 import gradio as gr
-import safetensors.torch
 import torch
 import tqdm
+from safetensors.torch import save_file
 
+from backend.state_dict import state_dict_prefix_replace
 from backend.utils import load_torch_file
-from modules import errors, images, sd_models, sd_vae, shared
+from modules import images, sd_models, shared
 from modules.ui_common import plaintext_to_html
+from modules_forge.packages.huggingface_guess.detection import (
+    unet_prefix_from_state_dict,
+)
 
 
 def run_pnginfo(image):
@@ -21,15 +26,10 @@ def run_pnginfo(image):
 
     info = ""
     for key, text in items.items():
-        info += (
-            f"""
-<div>
-<p><b>{plaintext_to_html(str(key))}</b></p>
-<p>{plaintext_to_html(str(text))}</p>
-</div>
-""".strip()
-            + "\n"
-        )
+        info += f"""<div>
+            <p><b>{plaintext_to_html(str(key))}</b></p>
+            <p>{plaintext_to_html(str(text))}</p>
+        </div>""".strip() + "\n"
 
     if len(info) == 0:
         message = "Nothing found in the image."
@@ -38,47 +38,63 @@ def run_pnginfo(image):
     return "", geninfo, info
 
 
-checkpoint_dict_skip_on_merge = ["cond_stage_model.transformer.text_model.embeddings.position_ids"]
+class InterpolationMethod(Enum):
+    no_interpolation = "No Interpolation"
+    weighted_sum = "Weighted Sum"
+    add_difference = "Add Difference"
+
+    @staticmethod
+    def titles() -> list[str]:
+        return [m.value for m in InterpolationMethod]
+
+    @staticmethod
+    def desc(value: str) -> str:
+        match value:
+            case InterpolationMethod.no_interpolation.value:
+                return "Require 1 Model ; Mainly for format conversion and baking VAE"
+            case InterpolationMethod.weighted_sum.value:
+                return "Require 2 Model ; Result is calculated as A * (1 - M) + B * M"
+            case InterpolationMethod.add_difference.value:
+                return "Require 3 Model ; Result is calculated as A + (B - C) * M"
 
 
-def to_half(tensor, enable):
-    if enable and tensor.dtype == torch.float:
-        return tensor.half()
-
-    return tensor
-
-
-def read_metadata(primary_model_name, secondary_model_name, tertiary_model_name):
+def read_metadata(primary_model_name: str, secondary_model_name: str, tertiary_model_name: str) -> str:
     metadata = {}
 
-    for checkpoint_name in [primary_model_name, secondary_model_name, tertiary_model_name]:
-        checkpoint_info = sd_models.checkpoints_list.get(checkpoint_name, None)
-        if checkpoint_info is None:
-            continue
-
-        metadata.update(checkpoint_info.metadata)
+    for checkpoint_name in (primary_model_name, secondary_model_name, tertiary_model_name):
+        if (checkpoint_info := sd_models.checkpoints_list.get(checkpoint_name, None)) is not None:
+            metadata.update({checkpoint_name: checkpoint_info.metadata})
 
     return json.dumps(metadata, indent=4, ensure_ascii=False)
 
 
-def run_modelmerger(id_task, primary_model_name, secondary_model_name, tertiary_model_name, interp_method, multiplier, save_as_half, custom_name, checkpoint_format, config_source, bake_in_vae, discard_weights, save_metadata, add_merge_recipe, copy_metadata_fields, metadata_json):
+def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str, tertiary_model_name: str, interp_method: str, multiplier: float, custom_name: str, discard_weights: str, save_metadata: bool, config_source: list[str], add_merge_recipe: bool):
     shared.state.begin(job="model-merge")
 
-    def fail(message):
+    def fail(message: str):
         shared.state.textinfo = message
         shared.state.end()
-        return [*[gr.skip() for _ in range(4)], message]
+        return [gr.skip(), gr.skip(), gr.skip(), gr.skip(), message]
 
-    def weighted_sum(theta0, theta1, alpha):
+    if not primary_model_name:
+        return fail("Failed: Missing Primary Model")
+
+    if interp_method != InterpolationMethod.no_interpolation.value and not secondary_model_name:
+        return fail("Failed: Missing Secondary Model")
+
+    if interp_method == InterpolationMethod.add_difference.value and not tertiary_model_name:
+        return fail("Failed: Missing Tertiary Model")
+
+    def weighted_sum(theta0: torch.Tensor, theta1: torch.Tensor, alpha: float) -> torch.Tensor:
         return ((1 - alpha) * theta0) + (alpha * theta1)
 
-    def get_difference(theta1, theta2):
+    def get_difference(theta1: torch.Tensor, theta2: torch.Tensor) -> torch.Tensor:
         return theta1 - theta2
 
-    def add_difference(theta0, theta1_2_diff, alpha):
+    def add_difference(theta0: torch.Tensor, theta1_2_diff: torch.Tensor, alpha: float) -> torch.Tensor:
         return theta0 + (alpha * theta1_2_diff)
 
-    def filename_weighted_sum():
+    def filename_weighted_sum() -> str:
         a = primary_model_info.model_name
         b = secondary_model_info.model_name
         Ma = round(1 - multiplier, 2)
@@ -86,141 +102,114 @@ def run_modelmerger(id_task, primary_model_name, secondary_model_name, tertiary_
 
         return f"{Ma}({a}) + {Mb}({b})"
 
-    def filename_add_difference():
+    def filename_add_difference() -> str:
         a = primary_model_info.model_name
         b = secondary_model_info.model_name
         c = tertiary_model_info.model_name
-        M = round(multiplier, 2)
+        m = round(multiplier, 2)
 
-        return f"{a} + {M}({b} - {c})"
+        return f"{a} + {m}({b} - {c})"
 
-    def filename_nothing():
+    def filename_nothing() -> str:
         return primary_model_info.model_name
 
-    theta_funcs = {
-        "Weighted sum": (filename_weighted_sum, None, weighted_sum),
-        "Add difference": (filename_add_difference, get_difference, add_difference),
-        "No interpolation": (filename_nothing, None, None),
+    THETA_FUNCS = {
+        InterpolationMethod.no_interpolation.value: (filename_nothing, None, None),
+        InterpolationMethod.weighted_sum.value: (filename_weighted_sum, None, weighted_sum),
+        InterpolationMethod.add_difference.value: (filename_add_difference, get_difference, add_difference),
     }
-    filename_generator, theta_func1, theta_func2 = theta_funcs[interp_method]
+
+    filename_generator, theta_func1, theta_func2 = THETA_FUNCS[interp_method]
     shared.state.job_count = (1 if theta_func1 else 0) + (1 if theta_func2 else 0)
 
-    if not primary_model_name:
-        return fail("Failed: Merging requires a primary model.")
-
     primary_model_info = sd_models.checkpoint_aliases[primary_model_name]
-
-    if theta_func2 and not secondary_model_name:
-        return fail("Failed: Merging requires a secondary model.")
-
     secondary_model_info = sd_models.checkpoint_aliases[secondary_model_name] if theta_func2 else None
-
-    if theta_func1 and not tertiary_model_name:
-        return fail(f"Failed: Interpolation method ({interp_method}) requires a tertiary model.")
-
     tertiary_model_info = sd_models.checkpoint_aliases[tertiary_model_name] if theta_func1 else None
-
-    result_is_inpainting_model = False
-    result_is_instruct_pix2pix_model = False
 
     if theta_func2:
         shared.state.textinfo = "Loading B"
         print(f"Loading {secondary_model_info.filename}...")
-        theta_1 = load_torch_file(secondary_model_info.filename)
+        _theta_1 = load_torch_file(secondary_model_info.filename)
+        prefix_1 = unet_prefix_from_state_dict(_theta_1)
+        theta_1 = state_dict_prefix_replace(_theta_1, {prefix_1: "model.diffusion_model."})
+        del _theta_1
     else:
         theta_1 = None
 
     if theta_func1:
         shared.state.textinfo = "Loading C"
         print(f"Loading {tertiary_model_info.filename}...")
-        theta_2 = load_torch_file(tertiary_model_info.filename)
+        _theta_2 = load_torch_file(tertiary_model_info.filename)
+        prefix_2 = unet_prefix_from_state_dict(_theta_2)
+        theta_2 = state_dict_prefix_replace(_theta_2, {prefix_2: "model.diffusion_model."})
+        del _theta_2
 
         shared.state.textinfo = "Merging B and C"
         shared.state.sampling_steps = len(theta_1.keys())
+
+        total = len(theta_1.keys())
+        missing = 0
+
         for key in tqdm.tqdm(theta_1.keys()):
-            if key in checkpoint_dict_skip_on_merge:
-                continue
-
-            if "model" in key:
-                if key in theta_2:
-                    t2 = theta_2.get(key, torch.zeros_like(theta_1[key]))
-                    theta_1[key] = theta_func1(theta_1[key], t2)
-                else:
-                    theta_1[key] = torch.zeros_like(theta_1[key])
-
             shared.state.sampling_step += 1
-        del theta_2
 
+            if key in theta_2:
+                theta_1[key] = theta_func1(theta_1[key], theta_2.pop(key))
+            else:
+                theta_1[key] = torch.zeros_like(theta_1[key])
+                missing += 1
+
+        del theta_2
         shared.state.nextjob()
+
+        if missing > total * 0.25:
+            raise SystemError("Keys Mismatch between B & C...")
 
     shared.state.textinfo = f"Loading {primary_model_info.filename}..."
     print(f"Loading {primary_model_info.filename}...")
-    theta_0 = load_torch_file(primary_model_info.filename)
+    _theta_0 = load_torch_file(primary_model_info.filename)
+    prefix_0 = unet_prefix_from_state_dict(_theta_0)
+    theta_0 = state_dict_prefix_replace(_theta_0, {prefix_0: "model.diffusion_model."})
+    del _theta_0
 
-    print("Merging...")
-    shared.state.textinfo = "Merging A and B"
-    shared.state.sampling_steps = len(theta_0.keys())
-    for key in tqdm.tqdm(theta_0.keys()):
-        if theta_1 and "model" in key and key in theta_1:
+    if theta_1 is not None:
+        _keys = list(theta_0.keys())
+        shared.state.textinfo = "Merging A and B"
+        shared.state.sampling_steps = len(_keys)
+        print("Merging...")
 
-            if key in checkpoint_dict_skip_on_merge:
+        total = len(_keys)
+        missing = 0
+
+        for key in tqdm.tqdm(_keys):
+            shared.state.sampling_step += 1
+
+            if key not in theta_1:
+                missing += 1
                 continue
 
-            a = theta_0[key]
-            b = theta_1[key]
+            a = theta_0.pop(key)
+            b = theta_1.pop(key)
 
-            # this enables merging an inpainting model (A) with another one (B);
-            # where normal model would have 4 channels, for latenst space, inpainting model would
-            # have another 4 channels for unmasked picture's latent space, plus one channel for mask, for a total of 9
-            if a.shape != b.shape and a.shape[0:1] + a.shape[2:] == b.shape[0:1] + b.shape[2:]:
-                if a.shape[1] == 4 and b.shape[1] == 9:
-                    raise RuntimeError("When merging inpainting model with a normal one, A must be the inpainting model.")
-                if a.shape[1] == 4 and b.shape[1] == 8:
-                    raise RuntimeError("When merging instruct-pix2pix model with a normal one, A must be the instruct-pix2pix model.")
+            if a.shape != b.shape:
+                raise ValueError(f"Shape Mismatch ({tuple(a.shape)} != {tuple(b.shape)})")
 
-                if a.shape[1] == 8 and b.shape[1] == 4:  # If we have an Instruct-Pix2Pix model...
-                    theta_0[key][:, 0:4, :, :] = theta_func2(a[:, 0:4, :, :], b, multiplier)  # Merge only the vectors the models have in common.  Otherwise we get an error due to dimension mismatch.
-                    result_is_instruct_pix2pix_model = True
-                else:
-                    assert a.shape[1] == 9 and b.shape[1] == 4, f"Bad dimensions for merged layer {key}: A={a.shape}, B={b.shape}"
-                    theta_0[key][:, 0:4, :, :] = theta_func2(a[:, 0:4, :, :], b, multiplier)
-                    result_is_inpainting_model = True
-            else:
-                theta_0[key] = theta_func2(a, b, multiplier)
+            theta_0[key] = theta_func2(a, b.to(a), multiplier)
 
-            theta_0[key] = to_half(theta_0[key], save_as_half)
+        del theta_1
 
-        shared.state.sampling_step += 1
-
-    del theta_1
-
-    bake_in_vae_filename = sd_vae.vae_dict.get(bake_in_vae, None)
-    if bake_in_vae_filename is not None:
-        print(f"Baking in VAE from {bake_in_vae_filename}")
-        shared.state.textinfo = "Baking in VAE"
-        vae_dict = load_torch_file(bake_in_vae_filename)
-
-        for key in vae_dict.keys():
-            theta_0_key = "first_stage_model." + key
-            if theta_0_key in theta_0:
-                theta_0[theta_0_key] = to_half(vae_dict[key], save_as_half)
-
-        del vae_dict
-
-    if save_as_half and not theta_func2:
-        for key in theta_0.keys():
-            theta_0[key] = to_half(theta_0[key], save_as_half)
+        if missing > total * 0.25:
+            raise SystemError("Keys Mismatch between A & B...")
 
     if discard_weights:
         regex = re.compile(discard_weights)
-        for key in list(theta_0):
+        for key in list(theta_0.keys()):
             if re.search(regex, key):
-                theta_0.pop(key, None)
+                theta_0.pop(key)
 
-    filename = filename_generator() if custom_name == "" else custom_name
-    filename += ".inpainting" if result_is_inpainting_model else ""
-    filename += ".instruct-pix2pix" if result_is_instruct_pix2pix_model else ""
-    filename += "." + checkpoint_format
+    filename: str = custom_name or filename_generator()
+    if not filename.endswith(".safetensors"):
+        filename += ".safetensors"
 
     output_modelname = os.path.join(sd_models.model_path, filename)
 
@@ -230,88 +219,71 @@ def run_modelmerger(id_task, primary_model_name, secondary_model_name, tertiary_
 
     metadata = {}
 
-    if save_metadata and copy_metadata_fields:
-        if primary_model_info:
+    if save_metadata:
+        if "A" in config_source and primary_model_info is not None:
             metadata.update(primary_model_info.metadata)
-        if secondary_model_info:
+        if "B" in config_source and secondary_model_info is not None:
             metadata.update(secondary_model_info.metadata)
-        if tertiary_model_info:
+        if "C" in config_source and tertiary_model_info is not None:
             metadata.update(tertiary_model_info.metadata)
 
-    if save_metadata:
-        try:
-            metadata.update(json.loads(metadata_json))
-        except Exception as e:
-            errors.display(e, "readin metadata from json")
-
-        metadata["format"] = "pt"
-
-    if save_metadata and add_merge_recipe:
-        merge_recipe = {
-            "type": "webui",  # indicate this model was merged with webui's built-in merger
-            "primary_model_hash": primary_model_info.sha256,
-            "secondary_model_hash": secondary_model_info.sha256 if secondary_model_info else None,
-            "tertiary_model_hash": tertiary_model_info.sha256 if tertiary_model_info else None,
-            "interp_method": interp_method,
-            "multiplier": multiplier,
-            "save_as_half": save_as_half,
-            "custom_name": custom_name,
-            "config_source": config_source,
-            "bake_in_vae": bake_in_vae,
-            "discard_weights": discard_weights,
-            "is_inpainting": result_is_inpainting_model,
-            "is_instruct_pix2pix": result_is_instruct_pix2pix_model,
-        }
-
-        sd_merge_models = {}
-
-        def add_model_metadata(checkpoint_info):
-            checkpoint_info.calculate_shorthash()
-            sd_merge_models[checkpoint_info.sha256] = {
-                "name": checkpoint_info.name,
-                "legacy_hash": checkpoint_info.hash,
-                "sd_merge_recipe": checkpoint_info.metadata.get("sd_merge_recipe", None),
+        if add_merge_recipe:
+            merge_recipe = {
+                "type": "Neo",
+                "interp_method": interp_method,
+                "multiplier": multiplier,
+                "discard_weights": discard_weights,
+                "config_source": config_source,
             }
 
-            sd_merge_models.update(checkpoint_info.metadata.get("sd_merge_models", {}))
+            sd_merge_models = {}
 
-        add_model_metadata(primary_model_info)
-        if secondary_model_info:
-            add_model_metadata(secondary_model_info)
-        if tertiary_model_info:
-            add_model_metadata(tertiary_model_info)
+            def add_model_metadata(key: str, checkpoint_info: sd_models.CheckpointInfo):
+                checkpoint_info.calculate_shorthash()
+                merge_recipe[key] = checkpoint_info.sha256
 
-        metadata["sd_merge_recipe"] = json.dumps(merge_recipe)
-        metadata["sd_merge_models"] = json.dumps(sd_merge_models)
+                sd_merge_models[checkpoint_info.sha256] = {
+                    "name": checkpoint_info.name,
+                    "legacy_hash": checkpoint_info.hash,
+                }
 
-    def sanitize_metadata(meta_dict: dict) -> dict | None:
+                if (r := checkpoint_info.metadata.get("sd_merge_recipe", None)) is not None:
+                    sd_merge_models["sd_merge_recipe"] = r
+                if (m := checkpoint_info.metadata.get("sd_merge_models", None)) is not None:
+                    sd_merge_models["sd_merge_models"] = m
+
+            if primary_model_info:
+                add_model_metadata("primary_model_hash", primary_model_info)
+            if secondary_model_info:
+                add_model_metadata("secondary_model_hash", secondary_model_info)
+            if tertiary_model_info:
+                add_model_metadata("tertiary_model_hash", tertiary_model_info)
+
+            metadata["sd_merge_recipe"] = json.dumps(merge_recipe)
+            metadata["sd_merge_models"] = json.dumps(sd_merge_models)
+
+    def sanitize_metadata(meta_dict: dict | None) -> dict | None:
         if not meta_dict:
             return None
+
         sanitized = {}
         for key, value in meta_dict.items():
             if value is None:
-                sanitized[key] = ""
+                continue
             elif isinstance(value, str):
                 sanitized[key] = value
             elif isinstance(value, (dict, list)):
                 sanitized[key] = json.dumps(value)
             else:
                 sanitized[key] = str(value)
+
         return sanitized
 
-    _, extension = os.path.splitext(output_modelname)
-    if extension.lower() == ".safetensors":
-        safetensors.torch.save_file(theta_0, output_modelname, metadata=sanitize_metadata(metadata))
-    else:
-        torch.save(theta_0, output_modelname)
+    save_file(theta_0, output_modelname, metadata=sanitize_metadata(metadata))
+    print(f"Checkpoint saved to {output_modelname}")
 
-    sd_models.list_models()
-    created_model = next((ckpt for ckpt in sd_models.checkpoints_list.values() if ckpt.name == filename), None)
-    if created_model:
-        created_model.calculate_shorthash()
-
-    print(f"Checkpoint saved to {output_modelname}.")
     shared.state.textinfo = "Checkpoint saved"
     shared.state.end()
+    sd_models.list_models()
 
-    return [*[gr.update(choices=sd_models.checkpoint_tiles()) for _ in range(4)], "Checkpoint saved to " + output_modelname]
+    return [gr.update(choices=sorted(sd_models.checkpoint_tiles()))] * 4 + [f"Checkpoint saved to {output_modelname}"]
