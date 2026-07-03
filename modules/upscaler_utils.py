@@ -23,8 +23,8 @@ def try_patch_spandrel():
         @wraps(_orig_init)
         def RDB5C_init(self, *args, **kwargs):
             _orig_init(self, *args, **kwargs)
-            self.nf = kwargs.get("nf", args[0])
-            self.gc = kwargs.get("gc", args[2])
+            self.nf = kwargs.get("nf", None) or args[0]
+            self.gc = kwargs.get("gc", None) or args[2]
 
         @wraps(_orig_5c_forward)
         def RDB5C_forward(self, x: torch.Tensor):
