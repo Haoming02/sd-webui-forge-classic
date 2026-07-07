@@ -37,7 +37,7 @@ class Qwen3VLTextProcessingEngine:
         self.vision_block = "<|vision_start|><|image_pad|><|vision_end|>"
 
     def tokenize(self, texts, images=[]):
-        llama_texts = [((self.image_template.replace(self.vision_block, self.vision_block * len(images), 1) if images else self.llama_template).format(text)) if text else "" for text in texts]
+        llama_texts = [((self.image_template.replace(self.vision_block, self.vision_block * len(images), 1) if images else self.llama_template).format(text)) if text else " " for text in texts]
         return self.tokenizer(llama_texts)["input_ids"]
 
     def tokenize_line(self, line: str, images=[]):
