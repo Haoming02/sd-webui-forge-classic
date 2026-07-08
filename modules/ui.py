@@ -156,7 +156,7 @@ def update_token_counter(text, steps, styles, *, is_positive=True):
         return f"<span class='gr-box gr-text-input'>?/?</span>"
 
     flat_prompts = reduce(lambda list1, list2: list1 + list2, prompt_schedules)
-    prompts = [prompt_text for step, prompt_text in flat_prompts]
+    prompts = [prompt_parser.strip_emphasis(prompt_text) for _, prompt_text in flat_prompts]
     token_count, max_length = max([get_prompt_lengths_on_ui(prompt) for prompt in prompts], key=lambda args: args[0])
     return f"<span class='gr-box gr-text-input'>{token_count}/{max_length}</span>"
 
