@@ -31,7 +31,6 @@ import comfy_aimdo.host_buffer
 import comfy_aimdo.model_vbar
 import torch
 import tqdm
-from comfy.comfy_types import UnetWrapperFunction
 from comfy.patcher_extension import CallbacksMP, PatcherInjection, WrappersMP
 
 from backend import memory_management, utils
@@ -607,7 +606,7 @@ class ModelPatcher:
     def set_model_sampler_calc_cond_batch_function(self, sampler_calc_cond_batch_function):
         self.model_options["sampler_calc_cond_batch_function"] = sampler_calc_cond_batch_function
 
-    def set_model_unet_function_wrapper(self, unet_wrapper_function: UnetWrapperFunction):
+    def set_model_unet_function_wrapper(self, unet_wrapper_function):
         self.model_options["model_function_wrapper"] = unet_wrapper_function
 
     def set_model_denoise_mask_function(self, denoise_mask_function):
