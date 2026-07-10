@@ -113,15 +113,30 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
     return (sd, metadata) if return_metadata else sd
 
 
-def set_attr(obj, attr, value):
-    set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
+ATTR_UNSET = {}
 
 
-def set_attr_raw(obj, attr, value):
+def resolve_attr(obj, attr):
     attrs = attr.split(".")
     for name in attrs[:-1]:
         obj = getattr(obj, name)
-    setattr(obj, attrs[-1], value)
+    return obj, attrs[-1]
+
+
+def set_attr_raw(obj, attr, value):
+    obj, name = resolve_attr(obj, attr)
+    prev = getattr(obj, name, ATTR_UNSET)
+    if value is ATTR_UNSET:
+        delattr(obj, name)
+    else:
+        setattr(obj, name, value)
+    return prev
+
+
+def set_attr(obj, attr, value):
+    if (not torch.is_inference_mode_enabled()) and value.is_inference():
+        value = value.clone()
+    set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
 
 
 def copy_to_param(obj, attr, value):
