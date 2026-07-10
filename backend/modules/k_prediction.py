@@ -1,18 +1,9 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.27.1/comfy/model_sampling.py
+
 import math
 
 import numpy as np
 import torch
-from diffusers import FlowMatchEulerDiscreteScheduler
-from diffusers.pipelines.flux.pipeline_flux import calculate_shift
-
-
-def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
-    betas = []
-    for i in range(num_diffusion_timesteps):
-        t1 = i / num_diffusion_timesteps
-        t2 = (i + 1) / num_diffusion_timesteps
-        betas.append(min(1 - alpha_bar(t2) / alpha_bar(t1), max_beta))
-    return np.array(betas)
 
 
 def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
@@ -32,6 +23,10 @@ def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2,
     else:
         raise ValueError(f"schedule '{schedule}' unknown.")
     return betas
+
+
+def flux_time_shift(mu: float, sigma: float, t):
+    return math.exp(mu) / (math.exp(mu) + (1 / t - 1) ** sigma)
 
 
 def time_snr_shift(alpha, t):
@@ -63,9 +58,10 @@ def rescale_zero_terminal_snr_sigmas(sigmas):
 class AbstractPrediction(torch.nn.Module):
     def __init__(self, sigma_data=1.0, prediction_type="epsilon"):
         super().__init__()
+
         self.sigma_data = sigma_data
         self.prediction_type = prediction_type
-        assert self.prediction_type in ["epsilon", "const", "v_prediction", "edm"]
+        assert self.prediction_type in ("epsilon", "v_prediction", "const")
 
     def calculate_input(self, sigma, noise):
         if self.prediction_type == "const":
@@ -78,14 +74,14 @@ class AbstractPrediction(torch.nn.Module):
         sigma = sigma.view(sigma.shape[:1] + (1,) * (model_output.ndim - 1))
         if self.prediction_type == "v_prediction":
             return model_input * self.sigma_data**2 / (sigma**2 + self.sigma_data**2) - model_output * sigma * self.sigma_data / (sigma**2 + self.sigma_data**2) ** 0.5
-        elif self.prediction_type == "edm":
-            return model_input * self.sigma_data**2 / (sigma**2 + self.sigma_data**2) + model_output * sigma * self.sigma_data / (sigma**2 + self.sigma_data**2) ** 0.5
         else:
             return model_input - model_output * sigma
 
     def noise_scaling(self, sigma, noise, latent_image, max_denoise=False):
+        sigma = sigma.view(sigma.shape[:1] + (1,) * (noise.ndim - 1))
         if self.prediction_type == "const":
-            return sigma * noise + (1.0 - sigma) * latent_image
+            noise_scale = 1.0
+            return sigma * (noise_scale * noise) + (1.0 - sigma) * latent_image
         else:
             if max_denoise:
                 noise = noise * torch.sqrt(1.0 + sigma**2.0)
@@ -97,21 +93,19 @@ class AbstractPrediction(torch.nn.Module):
 
     def inverse_noise_scaling(self, sigma, latent):
         if self.prediction_type == "const":
+            sigma = sigma.view(sigma.shape[:1] + (1,) * (latent.ndim - 1))
             return latent / (1.0 - sigma)
         else:
             return latent
 
 
 class Prediction(AbstractPrediction):
-    def __init__(self, sigma_data=1.0, prediction_type="eps", beta_schedule="linear", linear_start=0.00085, linear_end=0.012, timesteps=1000):
+    def __init__(self, sigma_data: float, prediction_type: str, beta_schedule: str, linear_start: float, linear_end: float, timesteps: int):
         super().__init__(sigma_data=sigma_data, prediction_type=prediction_type)
-        self.register_schedule(given_betas=None, beta_schedule=beta_schedule, timesteps=timesteps, linear_start=linear_start, linear_end=linear_end, cosine_s=8e-3)
+        self.register_schedule(beta_schedule=beta_schedule, timesteps=timesteps, linear_start=linear_start, linear_end=linear_end, cosine_s=8e-3)
 
-    def register_schedule(self, given_betas=None, beta_schedule="linear", timesteps=1000, linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
-        if given_betas is not None:
-            betas = given_betas
-        else:
-            betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end, cosine_s=cosine_s)
+    def register_schedule(self, beta_schedule: str, timesteps: int, linear_start: float, linear_end: float, cosine_s: float):
+        betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end, cosine_s=cosine_s)
         alphas = 1.0 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
         sigmas = ((1 - alphas_cumprod) / alphas_cumprod) ** 0.5
@@ -119,7 +113,6 @@ class Prediction(AbstractPrediction):
         self.register_buffer("alphas_cumprod", alphas_cumprod.float())
         self.register_buffer("sigmas", sigmas.float())
         self.register_buffer("log_sigmas", sigmas.log().float())
-        return
 
     def set_sigmas(self, sigmas):
         self.register_buffer("sigmas", sigmas.float())
@@ -155,139 +148,15 @@ class Prediction(AbstractPrediction):
         return self.sigma(torch.tensor(percent * 999.0)).item()
 
 
-class PredictionEDM(Prediction):
-    def timestep(self, sigma):
-        return 0.25 * sigma.log()
-
-    def sigma(self, timestep):
-        return (timestep / 0.25).exp()
-
-
-class PredictionContinuousEDM(AbstractPrediction):
-    def __init__(self, sigma_data=1.0, prediction_type="eps", sigma_min=0.002, sigma_max=120.0):
-        super().__init__(sigma_data=sigma_data, prediction_type=prediction_type)
-        self.set_parameters(sigma_min, sigma_max, sigma_data)
-
-    def set_parameters(self, sigma_min, sigma_max, sigma_data):
-        self.sigma_data = sigma_data
-        sigmas = torch.linspace(math.log(sigma_min), math.log(sigma_max), 1000).exp()
-
-        self.register_buffer("sigmas", sigmas)
-        self.register_buffer("log_sigmas", sigmas.log())
-
-    @property
-    def sigma_min(self):
-        return self.sigmas[0]
-
-    @property
-    def sigma_max(self):
-        return self.sigmas[-1]
-
-    def timestep(self, sigma):
-        return 0.25 * sigma.log()
-
-    def sigma(self, timestep):
-        return (timestep / 0.25).exp()
-
-    def percent_to_sigma(self, percent):
-        if percent <= 0.0:
-            return 999999999.9
-        if percent >= 1.0:
-            return 0.0
-        percent = 1.0 - percent
-
-        log_sigma_min = math.log(self.sigma_min)
-        return math.exp((math.log(self.sigma_max) - log_sigma_min) * percent + log_sigma_min)
-
-
-class PredictionContinuousV(PredictionContinuousEDM):
-    def timestep(self, sigma):
-        return sigma.atan() / math.pi * 2
-
-    def sigma(self, timestep):
-        return (timestep * math.pi / 2).tan()
-
-
-class PredictionFlow(AbstractPrediction):
-    def __init__(self, sigma_data=1.0, prediction_type="eps", shift=1.0, multiplier=1000, timesteps=1000):
-        super().__init__(sigma_data=sigma_data, prediction_type=prediction_type)
-        self.shift = shift
-        self.multiplier = multiplier
-        ts = self.sigma((torch.arange(1, timesteps + 1, 1) / timesteps) * multiplier)
-        self.register_buffer("sigmas", ts)
-
-    @property
-    def sigma_min(self):
-        return self.sigmas[0]
-
-    @property
-    def sigma_max(self):
-        return self.sigmas[-1]
-
-    def timestep(self, sigma):
-        return sigma * self.multiplier
-
-    def sigma(self, timestep):
-        return time_snr_shift(self.shift, timestep / self.multiplier)
-
-    def percent_to_sigma(self, percent):
-        if percent <= 0.0:
-            return 1.0
-        if percent >= 1.0:
-            return 0.0
-        return 1.0 - percent
-
-
 class PredictionFlux(AbstractPrediction):
-    def __init__(self, seq_len=4096, base_seq_len=256, max_seq_len=4096, base_shift=0.5, max_shift=1.15, pseudo_timestep_range=10000, mu=None):
-        super().__init__(sigma_data=1.0, prediction_type="const")
-        self.mu = mu
-        self.pseudo_timestep_range = pseudo_timestep_range
-        self.apply_mu_transform(seq_len=seq_len, base_seq_len=base_seq_len, max_seq_len=max_seq_len, base_shift=base_shift, max_shift=max_shift, mu=mu)
-
-    def apply_mu_transform(self, seq_len=4096, base_seq_len=256, max_seq_len=4096, base_shift=0.5, max_shift=1.15, mu=None):
-        # TODO: Add an UI option to let user choose whether to call this in each generation to bind latent size to sigmas
-        # And some cases may want their own mu values or other parameters
-        if mu is None:
-            self.mu = calculate_shift(image_seq_len=seq_len, base_seq_len=base_seq_len, max_seq_len=max_seq_len, base_shift=base_shift, max_shift=max_shift)
-        else:
-            self.mu = mu
-        sigmas = torch.arange(1, self.pseudo_timestep_range + 1, 1) / self.pseudo_timestep_range
-        sigmas = FlowMatchEulerDiscreteScheduler._time_shift_exponential(None, self.mu, 1.0, sigmas)
-        self.register_buffer("sigmas", sigmas)
-
-    @property
-    def sigma_min(self):
-        return self.sigmas[0]
-
-    @property
-    def sigma_max(self):
-        return self.sigmas[-1]
-
-    def timestep(self, sigma):
-        return sigma
-
-    def sigma(self, timestep):
-        return timestep
-
-    def percent_to_sigma(self, percent):
-        if percent <= 0.0:
-            return 1.0
-        if percent >= 1.0:
-            return 0.0
-        return 1.0 - percent
-
-
-class PredictionFlux2(AbstractPrediction):
-    """https://github.com/Comfy-Org/ComfyUI/blob/v0.11.0/comfy/model_sampling.py#L343"""
-
     def __init__(self, model_config):
         super().__init__(sigma_data=None, prediction_type="const")
+
         sampling_settings: dict = model_config.sampling_settings
         self.set_parameters(shift=sampling_settings.get("shift", 1.15))
 
-    def set_parameters(self, shift=1.15, timesteps=10000):
-        self.shift = shift
+    def set_parameters(self, *, shift=None, timesteps=10000):
+        self.shift = shift or self.shift
         ts = self.sigma((torch.arange(1, timesteps + 1, 1) / timesteps))
         self.register_buffer("sigmas", ts)
 
@@ -303,25 +172,20 @@ class PredictionFlux2(AbstractPrediction):
         return sigma
 
     def sigma(self, timestep):
-        return self.flux_time_shift(self.shift, 1.0, timestep)
+        return flux_time_shift(self.shift, 1.0, timestep)
 
     def percent_to_sigma(self, percent):
         if percent <= 0.0:
             return 1.0
         if percent >= 1.0:
             return 0.0
-        return self.flux_time_shift(self.shift, 1.0, 1.0 - percent)
-
-    @staticmethod
-    def flux_time_shift(mu: float, sigma: float, t):
-        return math.exp(mu) / (math.exp(mu) + (1 / t - 1) ** sigma)
+        return flux_time_shift(self.shift, 1.0, 1.0 - percent)
 
 
 class PredictionDiscreteFlow(AbstractPrediction):
-    """https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/model_sampling.py#L243"""
-
     def __init__(self, model_config):
         super().__init__(sigma_data=None, prediction_type="const")
+
         sampling_settings: dict = model_config.sampling_settings
         self.set_parameters(shift=sampling_settings.get("shift", 1.0), multiplier=sampling_settings.get("multiplier", 1000))
 
@@ -353,9 +217,7 @@ class PredictionDiscreteFlow(AbstractPrediction):
         return time_snr_shift(self.shift, 1.0 - percent)
 
 
-def k_prediction_from_diffusers_scheduler(scheduler):
-    if hasattr(scheduler.config, "prediction_type") and scheduler.config.prediction_type in ["epsilon", "v_prediction"]:
-        if scheduler.config.beta_schedule == "scaled_linear":
-            return Prediction(sigma_data=1.0, prediction_type=scheduler.config.prediction_type, beta_schedule="linear", linear_start=scheduler.config.beta_start, linear_end=scheduler.config.beta_end, timesteps=scheduler.config.num_train_timesteps)
-
-    raise NotImplementedError(f"Failed to recognize {scheduler}")
+def k_prediction_from_diffusers_scheduler(scheduler) -> "Prediction":
+    assert getattr(scheduler.config, "prediction_type", None) in ["epsilon", "v_prediction"]
+    assert scheduler.config.beta_schedule == "scaled_linear"
+    return Prediction(sigma_data=1.0, prediction_type=scheduler.config.prediction_type, beta_schedule="linear", linear_start=scheduler.config.beta_start, linear_end=scheduler.config.beta_end, timesteps=scheduler.config.num_train_timesteps)

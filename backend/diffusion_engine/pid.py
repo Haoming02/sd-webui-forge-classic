@@ -5,7 +5,6 @@ from backend import memory_management
 from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.misc.context_windows import IndexListContextHandler
-from backend.modules.k_prediction import PredictionDiscreteFlow
 from backend.nn.vae import AutoencoderKLFlux2, IntegratedAutoencoderKL
 from backend.nn.wan_vae import WanVAE
 from backend.patcher.clip import CLIP
@@ -38,7 +37,7 @@ class PiD(ForgeDiffusionEngine):
 
         vae = VAE(model=ae, is_wan=is_wan, is_flux2=is_flux2)
 
-        k_predictor = PredictionDiscreteFlow(estimated_config)
+        k_predictor = self._get_predictor()
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 

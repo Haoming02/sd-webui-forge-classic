@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from safetensors.torch import save_file
 
 from backend import memory_management, utils
+from backend.modules.k_prediction import PredictionDiscreteFlow, PredictionFlux
 
 
 class ForgeObjects:
@@ -44,6 +45,12 @@ class ForgeDiffusionEngine:
 
         self.ini_latent: "torch.Tensor" = None  # image from img2img input
         self.ref_latents: list["torch.Tensor"] = []  # images from ImageStitch
+
+    def _get_predictor(self) -> PredictionDiscreteFlow | PredictionFlux:
+        if self.model_config.model_type.name == "FLOW":
+            return PredictionDiscreteFlow(self.model_config)
+        else:
+            return PredictionFlux(self.model_config)
 
     def set_clip_skip(self, clip_skip):
         pass
