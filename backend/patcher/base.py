@@ -173,79 +173,6 @@ def key_param_name_to_key(key, param):
     return "{}.{}".format(key, param)
 
 
-class MemoryCounter:
-    def __init__(self, initial: int, minimum=0):
-        self.value = initial
-        self.minimum = minimum
-        # TODO: add a safe limit besides 0
-
-    def use(self, weight: torch.Tensor):
-        weight_size = weight.nelement() * weight.element_size()
-        if self.is_useable(weight_size):
-            self.decrement(weight_size)
-            return True
-        return False
-
-    def is_useable(self, used: int):
-        return self.value - used > self.minimum
-
-    def decrement(self, used: int):
-        self.value -= used
-
-
-CustomTorchDevice = collections.namedtuple("FakeDevice", ["type", "index"])("comfy-lazy-caster", 0)
-
-
-class LazyCastingParam(torch.nn.Parameter):
-    def __new__(cls, model, key, tensor):
-        return super().__new__(cls, tensor)
-
-    def __init__(self, model, key, tensor):
-        self.model = model
-        self.key = key
-
-    @property
-    def device(self):
-        return CustomTorchDevice
-
-    # safetensors will .to() us to the cpu which we catch here to cast on demand. The returned tensor is
-    # then just a short lived thing in the safetensors serialization logic inside its big for loop over
-    # all weights getting garbage collected per-weight
-    def to(self, *args, **kwargs):
-        return self.model.patch_weight_to_device(self.key, device_to=self.model.load_device, return_weight=True).to("cpu")
-
-
-class LazyCastingQuantizedParam:
-    def __init__(self, model, key):
-        self.model = model
-        self.key = key
-        self.cpu_state_dict = None
-
-    def state_dict_tensor(self, state_dict_key):
-        if self.cpu_state_dict is None:
-            weight = self.model.patch_weight_to_device(self.key, device_to=self.model.load_device, return_weight=True)
-            self.cpu_state_dict = {k: v.to("cpu") for k, v in weight.state_dict(self.key).items()}
-        return self.cpu_state_dict[state_dict_key]
-
-
-class LazyCastingParamPiece(torch.nn.Parameter):
-    def __new__(cls, caster, state_dict_key, tensor):
-        return super().__new__(cls, tensor)
-
-    def __init__(self, caster, state_dict_key, tensor):
-        self.caster = caster
-        self.state_dict_key = state_dict_key
-
-    @property
-    def device(self):
-        return CustomTorchDevice
-
-    def to(self, *args, **kwargs):
-        caster = self.caster
-        del self.caster
-        return caster.state_dict_tensor(self.state_dict_key)
-
-
 class ModelPatcher:
     def __init__(self, model, load_device, offload_device, size=0, weight_inplace_update=False):
         self.size = size
@@ -1008,46 +935,6 @@ class ModelPatcher:
     def pre_run(self):
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = self
-
-    def model_state_dict_for_saving(self, model=None, prefix=""):
-        if model is None:
-            model = self.model
-
-        original_state_dict = model.state_dict()
-        output_state_dict = {}
-        keys = list(original_state_dict)
-        while len(keys) > 0:
-            k = keys.pop(0)
-            v = original_state_dict[k]
-            op_keys = k.rsplit(".", 1)
-            if (len(op_keys) < 2) or op_keys[1] not in ["weight", "bias"]:
-                output_state_dict[k] = v
-                continue
-            try:
-                op = utils.get_attr(model, op_keys[0])
-            except:
-                output_state_dict[k] = v
-                continue
-            if not op or not hasattr(op, "comfy_cast_weights") or (hasattr(op, "comfy_patched_weights") and op.comfy_patched_weights == True):
-                output_state_dict[k] = v
-                continue
-            key = prefix + k
-            weight = utils.get_attr(self.model, key)
-            if isinstance(weight, QuantizedTensor) and k in original_state_dict:
-                qt_state_dict = weight.state_dict(k)
-                caster = LazyCastingQuantizedParam(self, key)
-                for group_key in (x for x in qt_state_dict if x in original_state_dict):
-                    if group_key in keys:
-                        keys.remove(group_key)
-                    output_state_dict.pop(group_key, "")
-                    output_state_dict[group_key] = LazyCastingParamPiece(caster, prefix + group_key, original_state_dict[group_key])
-                continue
-            output_state_dict[k] = LazyCastingParam(self, key, weight)
-        return output_state_dict
-
-    def state_dict_for_saving(self, clip_state_dict=None, vae_state_dict=None, clip_vision_state_dict=None):
-        unet_state_dict = self.model_state_dict_for_saving(self.model.diffusion_model, "diffusion_model.")
-        return self.model.state_dict_for_saving(unet_state_dict, clip_state_dict=clip_state_dict, vae_state_dict=vae_state_dict, clip_vision_state_dict=clip_vision_state_dict)
 
     def __del__(self):
         self.unpin_all_weights()
