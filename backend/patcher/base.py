@@ -22,7 +22,7 @@ import collections
 import inspect
 import logging
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from backend.operations import ForgeWeights
@@ -199,10 +199,7 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = 0
 
     def has_online_lora(self) -> bool:
-        return False  # TODO
-
-    def refresh_loras(self):
-        return  # TODO
+        return any(any(patch[-1] for patch in patches) for patches in self.patches.values())
 
     def model_size(self) -> int:
         if self.size > 0:
@@ -409,7 +406,7 @@ class ModelPatcher:
         if hasattr(self.model, "get_dtype"):
             return self.model.get_dtype()
 
-    def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
+    def add_patches(self, patches: list[dict], strength_patch: float = 1.0, strength_model: float = 1.0, *, filename: str = None, online_mode: bool = None):
         p = set()
         model_sd = self.model.state_dict()
         for k in patches:
@@ -426,7 +423,7 @@ class ModelPatcher:
             if key in model_sd:
                 p.add(k)
                 current_patches = self.patches.get(key, [])
-                current_patches.append((strength_patch, patches[k], strength_model, offset, function))
+                current_patches.append((strength_patch, patches[k], strength_model, offset, function, online_mode))
                 self.patches[key] = current_patches
 
         self.patches_uuid = uuid.uuid4()

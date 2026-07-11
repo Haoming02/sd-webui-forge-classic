@@ -291,7 +291,7 @@ def apply_refiner(cfg_denoiser, x, sigma):
             extra_networks.activate(cfg_denoiser.p, cfg_denoiser.p.extra_network_data)
 
         # 3. load the new LoRA
-        sd_model.forge_objects.unet.refresh_loras()
+        # TODO
 
         # 4. reset the current_lora_hash again for the non-refiner pass
         sd_model.current_lora_hash = str([])
