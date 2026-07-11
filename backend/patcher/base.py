@@ -199,12 +199,12 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = 0
 
     def has_online_lora(self) -> bool:
-        return False
+        return False  # TODO
 
     def refresh_loras(self):
-        return
+        return  # TODO
 
-    def model_size(self):
+    def model_size(self) -> int:
         if self.size > 0:
             return self.size
         self.size = memory_management.module_size(self.model)
@@ -239,9 +239,7 @@ class ModelPatcher:
         return n
 
     def is_clone(self, other: "ModelPatcher") -> bool:
-        if hasattr(other, "model") and self.model is other.model:
-            return True
-        return False
+        return self.model is getattr(other, "model", None)
 
     def clone_has_same_weights(self, clone: "ModelPatcher") -> bool:
         if not self.is_clone(clone):
@@ -353,7 +351,7 @@ class ModelPatcher:
         self.patches_uuid = uuid.uuid4()
 
     def get_model_object(self, name: str) -> torch.nn.Module:
-        """Retrieves a nested attribute from an object using dot notation considering object patches"""
+        """Retrieves a nested attribute from an object using dot notation (e.g. "model.layer.weight")"""
         if name in self.object_patches:
             return self.object_patches[name]
         else:
@@ -406,27 +404,6 @@ class ModelPatcher:
                 models += wrap_func.models()
 
         return models
-
-    def model_patches_call_function(self, function_name="cleanup", arguments={}):
-        to = self.model_options["transformer_options"]
-        if "patches" in to:
-            patches = to["patches"]
-            for name in patches:
-                patch_list = patches[name]
-                for i in range(len(patch_list)):
-                    if hasattr(patch_list[i], function_name):
-                        getattr(patch_list[i], function_name)(**arguments)
-        if "patches_replace" in to:
-            patches = to["patches_replace"]
-            for name in patches:
-                patch_list = patches[name]
-                for k in patch_list:
-                    if hasattr(patch_list[k], function_name):
-                        getattr(patch_list[k], function_name)(**arguments)
-        if "model_function_wrapper" in self.model_options:
-            wrap_func = self.model_options["model_function_wrapper"]
-            if hasattr(wrap_func, function_name):
-                getattr(wrap_func, function_name)(**arguments)
 
     def model_dtype(self):
         if hasattr(self.model, "get_dtype"):
@@ -652,6 +629,8 @@ class ModelPatcher:
                 self.patch_weight_to_device(key, device_to=device_to)
             if memory_management.is_device_cuda(device_to):
                 torch.cuda.synchronize()
+            elif memory_management.is_device_xpu(device_to):
+                torch.xpu.synchronize()
 
             logger.debug("lowvram: loaded module regularly {} {}".format(n, m))
             m.forge_patched_weights = True
@@ -665,12 +644,12 @@ class ModelPatcher:
             for param in params:
                 self.pin_weight_to_device(key_param_name_to_key(n, param))
 
-        usable_stat = "{:.2f} MB usable,".format(lowvram_model_memory / (1024 * 1024)) if lowvram_model_memory < 1e32 else ""
+        usable_stat = "{:.2f} MB usable, ".format(lowvram_model_memory / (1024 * 1024)) if lowvram_model_memory < 1e32 else ""
         if lowvram_counter > 0:
-            logger.info("loaded partially; {} {:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(usable_stat, mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
+            logger.info("loaded partially; {}{:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(usable_stat, mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
             self.model.model_lowvram = True
         else:
-            logger.info("loaded completely; {} {:.2f} MB loaded, full load: {}".format(usable_stat, mem_counter / (1024 * 1024), full_load))
+            logger.info("loaded completely; {}{:.2f} MB loaded, full load: {}".format(usable_stat, mem_counter / (1024 * 1024), full_load))
             self.model.model_lowvram = False
             if full_load:
                 self.model.to(device_to)
@@ -840,17 +819,6 @@ class ModelPatcher:
 
         return self.model.model_loaded_weight_memory - current_used
 
-    def pinned_memory_size(self):
-        # Pinned memory pressure tracking is only implemented for DynamicVram loading
-        return 0
-
-    def loaded_ram_size(self):
-        # Loaded RAM pressure tracking is only implemented for DynamicVram loading
-        return 0
-
-    def partially_unload_ram(self, ram_to_unload):
-        return 0
-
     def detach(self, unpatch_all=True):
         self.model_patches_to(self.offload_device)
         if unpatch_all:
@@ -863,15 +831,6 @@ class ModelPatcher:
     @property
     def current_device(self) -> torch.device:
         return self.model.device
-
-    def cleanup(self):
-        self.model_patches_call_function(function_name="cleanup")
-        if hasattr(self.model, "current_patcher"):
-            self.model.current_patcher = None
-
-    def pre_run(self):
-        if hasattr(self.model, "current_patcher"):
-            self.model.current_patcher = self
 
     def __del__(self):
         self.unpin_all_weights()
