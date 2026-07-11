@@ -22,7 +22,7 @@ import collections
 import inspect
 import logging
 import uuid
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.operations import ForgeWeights
@@ -200,6 +200,11 @@ class ModelPatcher:
 
     def has_online_lora(self) -> bool:
         return any(any(patch[-1] for patch in patches) for patches in self.patches.values())
+
+    def use_online_lora(self, key: str) -> bool:
+        if (patches := self.patches.get(key, None)) is None:
+            return False
+        return any(patch[-1] for patch in patches)
 
     def model_size(self) -> int:
         if self.size > 0:
@@ -573,14 +578,14 @@ class ModelPatcher:
                     m.bias_function = []
 
                 if weight_key in self.patches:
-                    if force_patch_weights:
+                    if force_patch_weights and not self.use_online_lora(weight_key):
                         self.patch_weight_to_device(weight_key)
                     else:
                         _, set_func, convert_func = get_key_weight(self.model, weight_key)
                         m.weight_function = [LowVramPatch(weight_key, self.patches, convert_func, set_func)]
                         patch_counter += 1
                 if bias_key in self.patches:
-                    if force_patch_weights:
+                    if force_patch_weights and not self.use_online_lora(bias_key):
                         self.patch_weight_to_device(bias_key)
                     else:
                         _, set_func, convert_func = get_key_weight(self.model, bias_key)
@@ -622,8 +627,20 @@ class ModelPatcher:
 
             for param in params:
                 key = key_param_name_to_key(n, param)
-                self.unpin_weight(key)
-                self.patch_weight_to_device(key, device_to=device_to)
+                if self.use_online_lora(key):
+                    _, set_func, convert_func = get_key_weight(self.model, key)
+
+                    if param == "weight":
+                        m.weight_function = [LowVramPatch(key, self.patches, convert_func, set_func)]
+                    else:
+                        m.bias_function = [LowVramPatch(key, self.patches, convert_func, set_func)]
+
+                    if hasattr(m, "parameters_manual_cast"):
+                        m.prev_parameters_manual_cast = m.parameters_manual_cast
+                        m.parameters_manual_cast = True
+                else:
+                    self.unpin_weight(key)
+                    self.patch_weight_to_device(key, device_to=device_to)
             if memory_management.is_device_cuda(device_to):
                 torch.cuda.synchronize()
             elif memory_management.is_device_xpu(device_to):
@@ -755,14 +772,14 @@ class ModelPatcher:
                     module_mem += move_weight_functions(m, device_to)
                     if lowvram_possible:
                         if weight_key in self.patches:
-                            if force_patch_weights:
+                            if force_patch_weights and not self.use_online_lora(weight_key):
                                 self.patch_weight_to_device(weight_key)
                             else:
                                 _, set_func, convert_func = get_key_weight(self.model, weight_key)
                                 m.weight_function.append(LowVramPatch(weight_key, self.patches, convert_func, set_func))
                                 patch_counter += 1
                         if bias_key in self.patches:
-                            if force_patch_weights:
+                            if force_patch_weights and not self.use_online_lora(bias_key):
                                 self.patch_weight_to_device(bias_key)
                             else:
                                 _, set_func, convert_func = get_key_weight(self.model, bias_key)
