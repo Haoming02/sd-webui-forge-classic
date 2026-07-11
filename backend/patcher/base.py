@@ -167,14 +167,10 @@ def key_param_name_to_key(key: str, param: str) -> str:
 
 
 class ModelPatcher:
-    def __init__(self, model, load_device, offload_device, size=0, weight_inplace_update=False):
+    def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, *, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.size = size
         self.model = model
-        if not hasattr(self.model, "device"):
-            logger.debug("Model doesn't have a device attribute.")
-            self.model.device = offload_device
-        elif self.model.device is None:
-            self.model.device = offload_device
+        self.model.device = current_device
 
         self.patches = {}
         self.backup = {}
@@ -193,18 +189,20 @@ class ModelPatcher:
 
         if not hasattr(self.model, "model_loaded_weight_memory"):
             self.model.model_loaded_weight_memory = 0
-
         if not hasattr(self.model, "lowvram_patch_counter"):
             self.model.lowvram_patch_counter = 0
-
         if not hasattr(self.model, "model_lowvram"):
             self.model.model_lowvram = False
-
         if not hasattr(self.model, "current_weight_patches_uuid"):
             self.model.current_weight_patches_uuid = None
-
         if not hasattr(self.model, "model_offload_buffer_memory"):
             self.model.model_offload_buffer_memory = 0
+
+    def has_online_lora(self) -> bool:
+        return False
+
+    def refresh_loras(self):
+        return
 
     def model_size(self):
         if self.size > 0:
@@ -217,12 +215,6 @@ class ModelPatcher:
 
     def lowvram_patch_counter(self):
         return self.model.lowvram_patch_counter
-
-    def get_free_memory(self, device):
-        return memory_management.get_free_memory(device)
-
-    def get_clone_model_override(self):
-        return self.model, (self.backup, self.backup_buffers, self.object_patches_backup, self.pinned)
 
     def clone(self):
         n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), weight_inplace_update=self.weight_inplace_update)
@@ -347,18 +339,6 @@ class ModelPatcher:
     def set_model_middle_block_after_patch(self, patch):
         self.set_model_patch(patch, "middle_block_after_patch")
 
-    def set_model_rope_options(self, scale_x, shift_x, scale_y, shift_y, scale_t, shift_t, **kwargs):
-        rope_options = self.model_options["transformer_options"].get("rope_options", {})
-        rope_options["scale_x"] = scale_x
-        rope_options["scale_y"] = scale_y
-        rope_options["scale_t"] = scale_t
-
-        rope_options["shift_x"] = shift_x
-        rope_options["shift_y"] = shift_y
-        rope_options["shift_t"] = shift_t
-
-        self.model_options["transformer_options"]["rope_options"] = rope_options
-
     def add_object_patch(self, name, obj):
         self.object_patches[name] = obj
 
@@ -373,19 +353,7 @@ class ModelPatcher:
         self.patches_uuid = uuid.uuid4()
 
     def get_model_object(self, name: str) -> torch.nn.Module:
-        """Retrieves a nested attribute from an object using dot notation considering
-        object patches.
-
-        Args:
-            name (str): The attribute path using dot notation (e.g. "model.layer.weight")
-
-        Returns:
-            The value of the requested attribute
-
-        Example:
-            patcher = ModelPatcher()
-            weight = patcher.get_model_object("layer1.conv.weight")
-        """
+        """Retrieves a nested attribute from an object using dot notation considering object patches"""
         if name in self.object_patches:
             return self.object_patches[name]
         else:
@@ -562,7 +530,7 @@ class ModelPatcher:
         for key in list(self.pinned):
             self.unpin_weight(key)
 
-    def _load_list(self, for_dynamic=False, default_device=None):
+    def _load_list(self):
         loading = []
         for n, m in self.model.named_modules():
             default = False
@@ -571,9 +539,6 @@ class ModelPatcher:
                 if name not in params:
                     default = True  # default random weights in non leaf modules
                     break
-            if default and default_device is not None:
-                for param_name, param in params.items():
-                    param.data = param.data.to(device=default_device, dtype=getattr(m, param_name + "_forge_dtype", None))
             if not default and (hasattr(m, "parameters_manual_cast") or len(params) > 0):
                 module_mem = memory_management.module_size(m)
                 module_offload_mem = module_mem
@@ -592,13 +557,7 @@ class ModelPatcher:
 
                     module_offload_mem += check_module_offload_mem("{}.weight".format(n))
                     module_offload_mem += check_module_offload_mem("{}.bias".format(n))
-                # Dynamic: small weights (<64KB) first, then larger weights prioritized by size.
-                # Non-dynamic: prioritize by module offload cost.
-                if for_dynamic:
-                    sort_criteria = (module_offload_mem >= 64 * 1024, -module_offload_mem)
-                else:
-                    sort_criteria = (module_offload_mem,)
-                loading.append(sort_criteria + (module_mem, n, m, params))
+                loading.append((module_offload_mem, module_mem, n, m, params))
         return loading
 
     def load(self, device_to=None, lowvram_model_memory=0, force_patch_weights=False, full_load=False):
@@ -899,6 +858,10 @@ class ModelPatcher:
         return self.model
 
     def current_loaded_device(self):
+        return self.model.device
+
+    @property
+    def current_device(self) -> torch.device:
         return self.model.device
 
     def cleanup(self):
