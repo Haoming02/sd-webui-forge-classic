@@ -343,6 +343,25 @@ def join_dicts(base_dict: dict | None, update_dict: dict | None) -> dict:
     return result
 
 
+def deepcopy_(obj, memo=None):
+    if memo is None:
+        memo = {}
+
+    obj_id = id(obj)
+    if obj_id in memo:
+        return memo[obj_id]
+
+    if isinstance(obj, dict):
+        res = {deepcopy_(k, memo): deepcopy_(v, memo) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        res = [deepcopy_(i, memo) for i in obj]
+    else:
+        res = obj
+
+    memo[obj_id] = res
+    return res
+
+
 def hash_tensor(x: torch.Tensor) -> int:
     if hasattr(torch, "hash_tensor"):
         return torch.hash_tensor(x.cpu()).item()

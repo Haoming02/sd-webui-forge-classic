@@ -198,9 +198,6 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.cached_patcher_init: tuple[Callable, tuple] | tuple[Callable, tuple, int] | None = None
-        self.clone_base_uuid = uuid.uuid4()
-
         if not hasattr(self.model, "model_loaded_weight_memory"):
             self.model.model_loaded_weight_memory = 0
 
@@ -215,9 +212,6 @@ class ModelPatcher:
 
         if not hasattr(self.model, "model_offload_buffer_memory"):
             self.model.model_offload_buffer_memory = 0
-
-    def is_dynamic(self):
-        return False
 
     def model_size(self):
         if self.size > 0:
@@ -237,22 +231,9 @@ class ModelPatcher:
     def get_clone_model_override(self):
         return self.model, (self.backup, self.backup_buffers, self.object_patches_backup, self.pinned)
 
-    def clone(self, disable_dynamic=False, model_override=None, force_deepcopy=False):
-        class_ = self.__class__
-        if self.is_dynamic() and disable_dynamic or force_deepcopy:
-            if self.is_dynamic() and disable_dynamic:
-                class_ = ModelPatcher
-            if model_override is None:
-                if self.cached_patcher_init is None:
-                    raise RuntimeError("Cannot create non-dynamic delegate: cached_patcher_init is not initialized.")
-                temp_model_patcher = self.cached_patcher_init[0](*self.cached_patcher_init[1], disable_dynamic=True)
-                if len(self.cached_patcher_init) > 2:
-                    temp_model_patcher = temp_model_patcher[self.cached_patcher_init[2]]
-                model_override = temp_model_patcher.get_clone_model_override()
-        if model_override is None:
-            model_override = self.get_clone_model_override()
+    def clone(self):
+        n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), weight_inplace_update=self.weight_inplace_update)
 
-        n = class_(model_override[0], self.load_device, self.offload_device, self.model_size(), weight_inplace_update=self.weight_inplace_update)
         n.patches = {}
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
@@ -260,15 +241,15 @@ class ModelPatcher:
 
         n.object_patches = self.object_patches.copy()
         n.weight_wrapper_patches = self.weight_wrapper_patches.copy()
-        n.model_options = deepcopy_list_dict(self.model_options)
+        n.model_options = utils.deepcopy_(self.model_options)
         n.parent = self
 
         n.force_cast_weights = self.force_cast_weights
 
-        n.backup, n.backup_buffers, n.object_patches_backup, n.pinned = model_override[1]
-
-        n.cached_patcher_init = self.cached_patcher_init
-        n.clone_base_uuid = self.clone_base_uuid
+        n.backup = self.backup
+        n.backup_buffers = self.backup_buffers
+        n.object_patches_backup = self.object_patches_backup
+        n.pinned = self.pinned
 
         return n
 
