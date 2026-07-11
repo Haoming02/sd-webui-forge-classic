@@ -435,6 +435,22 @@ class Anima(nn.Module):
 
         self.t_embedding_norm = nn.RMSNorm(model_channels, eps=1e-6)
 
+        self._rope_cache_key = None
+        self._rope_cache_emb = None
+        self._fbc_state = {}
+
+    def fbc_reset(self):
+        self._fbc_state = {}
+
+    def _get_rope_emb(self, x_B_T_H_W_D: torch.Tensor, device: torch.device) -> torch.Tensor:
+        # rope embeddings only depend on the token grid, not on the latent values,
+        # so they stay constant across all sampling steps of a generation
+        key = (tuple(x_B_T_H_W_D.shape[1:4]), device)
+        if self._rope_cache_key != key or self._rope_cache_emb is None:
+            self._rope_cache_emb = self.pos_embedder(x_B_T_H_W_D, device=device)
+            self._rope_cache_key = key
+        return self._rope_cache_emb
+
     def prepare_embedded_sequence(self, x_B_C_T_H_W: torch.Tensor, padding_mask: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         if padding_mask is None:
             padding_mask = torch.zeros(x_B_C_T_H_W.shape[0], 1, x_B_C_T_H_W.shape[3], x_B_C_T_H_W.shape[4], dtype=x_B_C_T_H_W.dtype, device=x_B_C_T_H_W.device)
@@ -443,7 +459,7 @@ class Anima(nn.Module):
         x_B_C_T_H_W = torch.cat([x_B_C_T_H_W, padding_mask.unsqueeze(1).repeat(1, 1, x_B_C_T_H_W.shape[2], 1, 1)], dim=1)
         x_B_T_H_W_D = self.x_embedder(x_B_C_T_H_W)
 
-        return x_B_T_H_W_D, self.pos_embedder(x_B_T_H_W_D, device=x_B_C_T_H_W.device), None
+        return x_B_T_H_W_D, self._get_rope_emb(x_B_T_H_W_D, device=x_B_C_T_H_W.device), None
 
     def unpatchify(self, x_B_T_H_W_M: torch.Tensor) -> torch.Tensor:
         x_B_C_Tt_Hp_Wp = rearrange(
@@ -480,17 +496,67 @@ class Anima(nn.Module):
         if x_B_T_H_W_D.dtype is torch.float16:
             x_B_T_H_W_D = x_B_T_H_W_D.float()
 
-        for block in self.blocks:
-            x_B_T_H_W_D = block(
-                x_B_T_H_W_D,
+        fbc = kwargs.get("transformer_options", {}).get("fbcache", None)
+        if fbc is None:
+            if self._fbc_state:
+                self._fbc_state = {}
+            for block in self.blocks:
+                x_B_T_H_W_D = block(
+                    x_B_T_H_W_D,
+                    t_embedding_B_T_D,
+                    crossattn_emb,
+                    **block_kwargs,
+                )
+        else:
+            x_B_T_H_W_D = self._forward_blocks_with_cache(x_B_T_H_W_D, t_embedding_B_T_D, crossattn_emb, block_kwargs, fbc)
+
+        x_B_T_H_W_O = self.final_layer(x_B_T_H_W_D.to(crossattn_emb.dtype), t_embedding_B_T_D, adaln_lora_B_T_3D=adaln_lora_B_T_3D)
+        x_B_C_Tt_Hp_Wp = self.unpatchify(x_B_T_H_W_O)[:, :, : orig_shape[-3], : orig_shape[-2], : orig_shape[-1]]
+        return x_B_C_Tt_Hp_Wp
+
+    @staticmethod
+    def _fbc_step_in_range(transformer_options: dict, fbc: dict) -> bool:
+        schedule = transformer_options.get("sampling_sigmas", None)
+        current = transformer_options.get("sigmas", None)
+        if schedule is None or current is None or len(schedule) < 2:
+            return True
+
+        total_steps = len(schedule) - 1
+        step = int((schedule.to(current) - current.flatten()[0]).abs().argmin().item())
+
+        if step < int(total_steps * fbc.get("start_percent", 0.0) + 0.5):
+            return False
+        return step < total_steps - 1  # always compute the final step fully
+
+    def _forward_blocks_with_cache(self, x_B_T_H_W_D: torch.Tensor, t_embedding_B_T_D: torch.Tensor, crossattn_emb: torch.Tensor, block_kwargs: dict, fbc: dict) -> torch.Tensor:
+        # First Block Cache: run only the first block, and if its residual barely
+        # changed since the last fully-computed step, reuse the cached output of the
+        # remaining blocks (https://github.com/chengzeyi/ParaAttention)
+        transformer_options = block_kwargs.get("transformer_options", {})
+        key = tuple(transformer_options.get("cond_or_uncond", (0,)))
+
+        x_after_first = self.blocks[0](x_B_T_H_W_D, t_embedding_B_T_D, crossattn_emb, **block_kwargs)
+        delta = x_after_first - x_B_T_H_W_D
+
+        state = self._fbc_state.get(key, None)
+        if state is not None and state["delta"].shape == delta.shape and state["hits"] < fbc.get("max_consecutive", 3) and self._fbc_step_in_range(transformer_options, fbc):
+            prev_delta = state["delta"]
+            rel_diff = ((delta - prev_delta).abs().mean() / prev_delta.abs().mean().clamp_min(1e-6)).item()
+            if rel_diff < fbc.get("threshold", 0.1):
+                state["hits"] += 1
+                return x_after_first + state["tail"]
+
+        x_out = x_after_first
+        for block in self.blocks[1:]:
+            x_out = block(
+                x_out,
                 t_embedding_B_T_D,
                 crossattn_emb,
                 **block_kwargs,
             )
 
-        x_B_T_H_W_O = self.final_layer(x_B_T_H_W_D.to(crossattn_emb.dtype), t_embedding_B_T_D, adaln_lora_B_T_3D=adaln_lora_B_T_3D)
-        x_B_C_Tt_Hp_Wp = self.unpatchify(x_B_T_H_W_O)[:, :, : orig_shape[-3], : orig_shape[-2], : orig_shape[-1]]
-        return x_B_C_Tt_Hp_Wp
+        self._fbc_state[key] = {"delta": delta, "tail": x_out - x_after_first, "hits": 0}
+        return x_out
 
 
 # region LLM
