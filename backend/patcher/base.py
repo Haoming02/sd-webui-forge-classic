@@ -564,28 +564,27 @@ class ModelPatcher:
             return self.model.get_dtype()
 
     def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
-        with self.use_ejected():
-            p = set()
-            model_sd = self.model.state_dict()
-            for k in patches:
-                offset = None
-                function = None
-                if isinstance(k, str):
-                    key = k
-                else:
-                    offset = k[1]
-                    key = k[0]
-                    if len(k) > 2:
-                        function = k[2]
+        p = set()
+        model_sd = self.model.state_dict()
+        for k in patches:
+            offset = None
+            function = None
+            if isinstance(k, str):
+                key = k
+            else:
+                offset = k[1]
+                key = k[0]
+                if len(k) > 2:
+                    function = k[2]
 
-                if key in model_sd:
-                    p.add(k)
-                    current_patches = self.patches.get(key, [])
-                    current_patches.append((strength_patch, patches[k], strength_model, offset, function))
-                    self.patches[key] = current_patches
+            if key in model_sd:
+                p.add(k)
+                current_patches = self.patches.get(key, [])
+                current_patches.append((strength_patch, patches[k], strength_model, offset, function))
+                self.patches[key] = current_patches
 
-            self.patches_uuid = uuid.uuid4()
-            return list(p)
+        self.patches_uuid = uuid.uuid4()
+        return list(p)
 
     def get_key_patches(self, filter_prefix=None):
         model_sd = self.model_state_dict()
@@ -608,14 +607,13 @@ class ModelPatcher:
         return p
 
     def model_state_dict(self, filter_prefix=None):
-        with self.use_ejected():
-            sd = self.model.state_dict()
-            keys = list(sd.keys())
-            if filter_prefix is not None:
-                for k in keys:
-                    if not k.startswith(filter_prefix):
-                        sd.pop(k)
-            return sd
+        sd = self.model.state_dict()
+        keys = list(sd.keys())
+        if filter_prefix is not None:
+            for k in keys:
+                if not k.startswith(filter_prefix):
+                    sd.pop(k)
+        return sd
 
     def patch_weight_to_device(self, key, device_to=None, inplace_update=False, return_weight=False, force_cast=False):
         weight, set_func, convert_func = get_key_weight(self.model, key)
@@ -703,142 +701,140 @@ class ModelPatcher:
         return loading
 
     def load(self, device_to=None, lowvram_model_memory=0, force_patch_weights=False, full_load=False):
-        with self.use_ejected():
-            mem_counter = 0
-            patch_counter = 0
-            lowvram_counter = 0
-            lowvram_mem_counter = 0
-            loading = self._load_list()
+        mem_counter = 0
+        patch_counter = 0
+        lowvram_counter = 0
+        lowvram_mem_counter = 0
+        loading = self._load_list()
 
-            load_completely = []
-            offloaded = []
-            offload_buffer = 0
-            loading.sort(reverse=True)
-            for i, x in enumerate(loading):
-                module_offload_mem, module_mem, n, m, params = x
+        load_completely = []
+        offloaded = []
+        offload_buffer = 0
+        loading.sort(reverse=True)
+        for i, x in enumerate(loading):
+            module_offload_mem, module_mem, n, m, params = x
 
-                lowvram_weight = False
+            lowvram_weight = False
 
-                potential_offload = max(offload_buffer, module_offload_mem + sum([x1[1] for x1 in loading[i + 1 : i + 1 + memory_management.NUM_STREAMS]]))
-                lowvram_fits = mem_counter + module_mem + potential_offload < lowvram_model_memory
+            potential_offload = max(offload_buffer, module_offload_mem + sum([x1[1] for x1 in loading[i + 1 : i + 1 + memory_management.NUM_STREAMS]]))
+            lowvram_fits = mem_counter + module_mem + potential_offload < lowvram_model_memory
 
-                weight_key = "{}.weight".format(n)
-                bias_key = "{}.bias".format(n)
+            weight_key = "{}.weight".format(n)
+            bias_key = "{}.bias".format(n)
 
-                if not full_load and hasattr(m, "comfy_cast_weights"):
-                    if not lowvram_fits:
-                        offload_buffer = potential_offload
-                        lowvram_weight = True
-                        lowvram_counter += 1
-                        lowvram_mem_counter += module_mem
-                        if hasattr(m, "prev_comfy_cast_weights"):  # Already lowvramed
-                            continue
-
-                cast_weight = self.force_cast_weights
-                m.comfy_force_cast_weights = self.force_cast_weights
-                if lowvram_weight:
-                    if hasattr(m, "comfy_cast_weights"):
-                        m.weight_function = []
-                        m.bias_function = []
-
-                    if weight_key in self.patches:
-                        if force_patch_weights:
-                            self.patch_weight_to_device(weight_key)
-                        else:
-                            _, set_func, convert_func = get_key_weight(self.model, weight_key)
-                            m.weight_function = [LowVramPatch(weight_key, self.patches, convert_func, set_func)]
-                            patch_counter += 1
-                    if bias_key in self.patches:
-                        if force_patch_weights:
-                            self.patch_weight_to_device(bias_key)
-                        else:
-                            _, set_func, convert_func = get_key_weight(self.model, bias_key)
-                            m.bias_function = [LowVramPatch(bias_key, self.patches, convert_func, set_func)]
-                            patch_counter += 1
-
-                    cast_weight = True
-                    offloaded.append((module_mem, n, m, params))
-                else:
-                    if hasattr(m, "comfy_cast_weights"):
-                        wipe_lowvram_weight(m)
-
-                    if full_load or lowvram_fits:
-                        mem_counter += module_mem
-                        load_completely.append((module_mem, n, m, params))
-                    else:
-                        offload_buffer = potential_offload
-
-                if cast_weight and hasattr(m, "comfy_cast_weights"):
-                    m.prev_comfy_cast_weights = m.comfy_cast_weights
-                    m.comfy_cast_weights = True
-
-                if weight_key in self.weight_wrapper_patches:
-                    m.weight_function.extend(self.weight_wrapper_patches[weight_key])
-
-                if bias_key in self.weight_wrapper_patches:
-                    m.bias_function.extend(self.weight_wrapper_patches[bias_key])
-
-                mem_counter += move_weight_functions(m, device_to)
-
-            load_completely.sort(reverse=True)
-            for x in load_completely:
-                n = x[1]
-                m = x[2]
-                params = x[3]
-                if hasattr(m, "comfy_patched_weights"):
-                    if m.comfy_patched_weights == True:
+            if not full_load and hasattr(m, "comfy_cast_weights"):
+                if not lowvram_fits:
+                    offload_buffer = potential_offload
+                    lowvram_weight = True
+                    lowvram_counter += 1
+                    lowvram_mem_counter += module_mem
+                    if hasattr(m, "prev_comfy_cast_weights"):  # Already lowvramed
                         continue
 
-                for param in params:
-                    key = key_param_name_to_key(n, param)
-                    self.unpin_weight(key)
-                    self.patch_weight_to_device(key, device_to=device_to)
-                if memory_management.is_device_cuda(device_to):
-                    torch.cuda.synchronize()
+            cast_weight = self.force_cast_weights
+            m.comfy_force_cast_weights = self.force_cast_weights
+            if lowvram_weight:
+                if hasattr(m, "comfy_cast_weights"):
+                    m.weight_function = []
+                    m.bias_function = []
 
-                logging.debug("lowvram: loaded module regularly {} {}".format(n, m))
-                m.comfy_patched_weights = True
+                if weight_key in self.patches:
+                    if force_patch_weights:
+                        self.patch_weight_to_device(weight_key)
+                    else:
+                        _, set_func, convert_func = get_key_weight(self.model, weight_key)
+                        m.weight_function = [LowVramPatch(weight_key, self.patches, convert_func, set_func)]
+                        patch_counter += 1
+                if bias_key in self.patches:
+                    if force_patch_weights:
+                        self.patch_weight_to_device(bias_key)
+                    else:
+                        _, set_func, convert_func = get_key_weight(self.model, bias_key)
+                        m.bias_function = [LowVramPatch(bias_key, self.patches, convert_func, set_func)]
+                        patch_counter += 1
 
-            for x in load_completely:
-                x[2].to(device_to)
-
-            for x in offloaded:
-                n = x[1]
-                params = x[3]
-                for param in params:
-                    self.pin_weight_to_device(key_param_name_to_key(n, param))
-
-            usable_stat = "{:.2f} MB usable,".format(lowvram_model_memory / (1024 * 1024)) if lowvram_model_memory < 1e32 else ""
-            if lowvram_counter > 0:
-                logging.info("loaded partially; {} {:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(usable_stat, mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
-                self.model.model_lowvram = True
+                cast_weight = True
+                offloaded.append((module_mem, n, m, params))
             else:
-                logging.info("loaded completely; {} {:.2f} MB loaded, full load: {}".format(usable_stat, mem_counter / (1024 * 1024), full_load))
-                self.model.model_lowvram = False
-                if full_load:
-                    self.model.to(device_to)
-                    mem_counter = self.model_size()
+                if hasattr(m, "comfy_cast_weights"):
+                    wipe_lowvram_weight(m)
 
-            self.model.lowvram_patch_counter += patch_counter
-            self.model.device = device_to
-            self.model.model_loaded_weight_memory = mem_counter
-            self.model.model_offload_buffer_memory = offload_buffer
-            self.model.current_weight_patches_uuid = self.patches_uuid
+                if full_load or lowvram_fits:
+                    mem_counter += module_mem
+                    load_completely.append((module_mem, n, m, params))
+                else:
+                    offload_buffer = potential_offload
+
+            if cast_weight and hasattr(m, "comfy_cast_weights"):
+                m.prev_comfy_cast_weights = m.comfy_cast_weights
+                m.comfy_cast_weights = True
+
+            if weight_key in self.weight_wrapper_patches:
+                m.weight_function.extend(self.weight_wrapper_patches[weight_key])
+
+            if bias_key in self.weight_wrapper_patches:
+                m.bias_function.extend(self.weight_wrapper_patches[bias_key])
+
+            mem_counter += move_weight_functions(m, device_to)
+
+        load_completely.sort(reverse=True)
+        for x in load_completely:
+            n = x[1]
+            m = x[2]
+            params = x[3]
+            if hasattr(m, "comfy_patched_weights"):
+                if m.comfy_patched_weights == True:
+                    continue
+
+            for param in params:
+                key = key_param_name_to_key(n, param)
+                self.unpin_weight(key)
+                self.patch_weight_to_device(key, device_to=device_to)
+            if memory_management.is_device_cuda(device_to):
+                torch.cuda.synchronize()
+
+            logging.debug("lowvram: loaded module regularly {} {}".format(n, m))
+            m.comfy_patched_weights = True
+
+        for x in load_completely:
+            x[2].to(device_to)
+
+        for x in offloaded:
+            n = x[1]
+            params = x[3]
+            for param in params:
+                self.pin_weight_to_device(key_param_name_to_key(n, param))
+
+        usable_stat = "{:.2f} MB usable,".format(lowvram_model_memory / (1024 * 1024)) if lowvram_model_memory < 1e32 else ""
+        if lowvram_counter > 0:
+            logging.info("loaded partially; {} {:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(usable_stat, mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
+            self.model.model_lowvram = True
+        else:
+            logging.info("loaded completely; {} {:.2f} MB loaded, full load: {}".format(usable_stat, mem_counter / (1024 * 1024), full_load))
+            self.model.model_lowvram = False
+            if full_load:
+                self.model.to(device_to)
+                mem_counter = self.model_size()
+
+        self.model.lowvram_patch_counter += patch_counter
+        self.model.device = device_to
+        self.model.model_loaded_weight_memory = mem_counter
+        self.model.model_offload_buffer_memory = offload_buffer
+        self.model.current_weight_patches_uuid = self.patches_uuid
 
     def patch_model(self, device_to=None, lowvram_model_memory=0, load_weights=True, force_patch_weights=False):
-        with self.use_ejected():
-            for k in self.object_patches:
-                old = utils.set_attr_raw(self.model, k, self.object_patches[k])
-                if k not in self.object_patches_backup:
-                    self.object_patches_backup[k] = old
+        for k in self.object_patches:
+            old = utils.set_attr_raw(self.model, k, self.object_patches[k])
+            if k not in self.object_patches_backup:
+                self.object_patches_backup[k] = old
 
-            if lowvram_model_memory == 0:
-                full_load = True
-            else:
-                full_load = False
+        if lowvram_model_memory == 0:
+            full_load = True
+        else:
+            full_load = False
 
-            if load_weights:
-                self.load(device_to, lowvram_model_memory=lowvram_model_memory, force_patch_weights=force_patch_weights, full_load=full_load)
+        if load_weights:
+            self.load(device_to, lowvram_model_memory=lowvram_model_memory, force_patch_weights=force_patch_weights, full_load=full_load)
         return self.model
 
     def unpatch_model(self, device_to=None, unpatch_weights=True):
@@ -881,110 +877,108 @@ class ModelPatcher:
         self.object_patches_backup.clear()
 
     def partially_unload(self, device_to, memory_to_free=0, force_patch_weights=False):
-        with self.use_ejected():
-            memory_freed = 0
-            patch_counter = 0
-            unload_list = self._load_list()
-            unload_list.sort()
+        memory_freed = 0
+        patch_counter = 0
+        unload_list = self._load_list()
+        unload_list.sort()
 
-            offload_buffer = self.model.model_offload_buffer_memory
-            if len(unload_list) > 0:
-                NS = memory_management.NUM_STREAMS
-                offload_weight_factor = [min(offload_buffer / (NS + 1), unload_list[0][1])] * NS
+        offload_buffer = self.model.model_offload_buffer_memory
+        if len(unload_list) > 0:
+            NS = memory_management.NUM_STREAMS
+            offload_weight_factor = [min(offload_buffer / (NS + 1), unload_list[0][1])] * NS
 
-            for unload in unload_list:
-                if memory_to_free + offload_buffer - self.model.model_offload_buffer_memory < memory_freed:
-                    break
-                module_offload_mem, module_mem, n, m, params = unload
+        for unload in unload_list:
+            if memory_to_free + offload_buffer - self.model.model_offload_buffer_memory < memory_freed:
+                break
+            module_offload_mem, module_mem, n, m, params = unload
 
-                potential_offload = module_offload_mem + sum(offload_weight_factor)
+            potential_offload = module_offload_mem + sum(offload_weight_factor)
 
-                lowvram_possible = hasattr(m, "comfy_cast_weights")
-                if hasattr(m, "comfy_patched_weights") and m.comfy_patched_weights == True:
-                    move_weight = True
-                    for param in params:
-                        key = key_param_name_to_key(n, param)
-                        bk = self.backup.get(key, None)
-                        if bk is not None:
-                            if not lowvram_possible:
-                                move_weight = False
-                                break
+            lowvram_possible = hasattr(m, "comfy_cast_weights")
+            if hasattr(m, "comfy_patched_weights") and m.comfy_patched_weights == True:
+                move_weight = True
+                for param in params:
+                    key = key_param_name_to_key(n, param)
+                    bk = self.backup.get(key, None)
+                    if bk is not None:
+                        if not lowvram_possible:
+                            move_weight = False
+                            break
 
-                            if bk.inplace_update:
-                                utils.copy_to_param(self.model, key, bk.weight)
+                        if bk.inplace_update:
+                            utils.copy_to_param(self.model, key, bk.weight)
+                        else:
+                            utils.set_attr(self.model, key, bk.weight)
+                        self.backup.pop(key)
+
+                weight_key = "{}.weight".format(n)
+                bias_key = "{}.bias".format(n)
+                if move_weight:
+                    cast_weight = self.force_cast_weights
+                    m.to(device_to)
+                    module_mem += move_weight_functions(m, device_to)
+                    if lowvram_possible:
+                        if weight_key in self.patches:
+                            if force_patch_weights:
+                                self.patch_weight_to_device(weight_key)
                             else:
-                                utils.set_attr(self.model, key, bk.weight)
-                            self.backup.pop(key)
+                                _, set_func, convert_func = get_key_weight(self.model, weight_key)
+                                m.weight_function.append(LowVramPatch(weight_key, self.patches, convert_func, set_func))
+                                patch_counter += 1
+                        if bias_key in self.patches:
+                            if force_patch_weights:
+                                self.patch_weight_to_device(bias_key)
+                            else:
+                                _, set_func, convert_func = get_key_weight(self.model, bias_key)
+                                m.bias_function.append(LowVramPatch(bias_key, self.patches, convert_func, set_func))
+                                patch_counter += 1
+                        cast_weight = True
 
-                    weight_key = "{}.weight".format(n)
-                    bias_key = "{}.bias".format(n)
-                    if move_weight:
-                        cast_weight = self.force_cast_weights
-                        m.to(device_to)
-                        module_mem += move_weight_functions(m, device_to)
-                        if lowvram_possible:
-                            if weight_key in self.patches:
-                                if force_patch_weights:
-                                    self.patch_weight_to_device(weight_key)
-                                else:
-                                    _, set_func, convert_func = get_key_weight(self.model, weight_key)
-                                    m.weight_function.append(LowVramPatch(weight_key, self.patches, convert_func, set_func))
-                                    patch_counter += 1
-                            if bias_key in self.patches:
-                                if force_patch_weights:
-                                    self.patch_weight_to_device(bias_key)
-                                else:
-                                    _, set_func, convert_func = get_key_weight(self.model, bias_key)
-                                    m.bias_function.append(LowVramPatch(bias_key, self.patches, convert_func, set_func))
-                                    patch_counter += 1
-                            cast_weight = True
+                    if cast_weight and hasattr(m, "comfy_cast_weights"):
+                        m.prev_comfy_cast_weights = m.comfy_cast_weights
+                        m.comfy_cast_weights = True
+                    m.comfy_patched_weights = False
+                    memory_freed += module_mem
+                    offload_buffer = max(offload_buffer, potential_offload)
+                    offload_weight_factor.append(module_mem)
+                    offload_weight_factor.pop(0)
+                    logging.debug("freed {}".format(n))
 
-                        if cast_weight and hasattr(m, "comfy_cast_weights"):
-                            m.prev_comfy_cast_weights = m.comfy_cast_weights
-                            m.comfy_cast_weights = True
-                        m.comfy_patched_weights = False
-                        memory_freed += module_mem
-                        offload_buffer = max(offload_buffer, potential_offload)
-                        offload_weight_factor.append(module_mem)
-                        offload_weight_factor.pop(0)
-                        logging.debug("freed {}".format(n))
+                    for param in params:
+                        self.pin_weight_to_device(key_param_name_to_key(n, param))
 
-                        for param in params:
-                            self.pin_weight_to_device(key_param_name_to_key(n, param))
-
-            self.model.model_lowvram = True
-            self.model.lowvram_patch_counter += patch_counter
-            self.model.model_loaded_weight_memory -= memory_freed
-            self.model.model_offload_buffer_memory = offload_buffer
-            logging.info("Unloaded partially: {:.2f} MB freed, {:.2f} MB remains loaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(memory_freed / (1024 * 1024), self.model.model_loaded_weight_memory / (1024 * 1024), offload_buffer / (1024 * 1024), self.model.lowvram_patch_counter))
-            return memory_freed
+        self.model.model_lowvram = True
+        self.model.lowvram_patch_counter += patch_counter
+        self.model.model_loaded_weight_memory -= memory_freed
+        self.model.model_offload_buffer_memory = offload_buffer
+        logging.info("Unloaded partially: {:.2f} MB freed, {:.2f} MB remains loaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(memory_freed / (1024 * 1024), self.model.model_loaded_weight_memory / (1024 * 1024), offload_buffer / (1024 * 1024), self.model.lowvram_patch_counter))
+        return memory_freed
 
     def partially_load(self, device_to, extra_memory=0, force_patch_weights=False):
-        with self.use_ejected(skip_and_inject_on_exit_only=True):
-            unpatch_weights = self.model.current_weight_patches_uuid is not None and (self.model.current_weight_patches_uuid != self.patches_uuid or force_patch_weights)
-            # TODO: force_patch_weights should not unload + reload full model
-            used = self.model.model_loaded_weight_memory
-            self.unpatch_model(self.offload_device, unpatch_weights=unpatch_weights)
-            if unpatch_weights:
-                extra_memory += used - self.model.model_loaded_weight_memory
+        unpatch_weights = self.model.current_weight_patches_uuid is not None and (self.model.current_weight_patches_uuid != self.patches_uuid or force_patch_weights)
+        # TODO: force_patch_weights should not unload + reload full model
+        used = self.model.model_loaded_weight_memory
+        self.unpatch_model(self.offload_device, unpatch_weights=unpatch_weights)
+        if unpatch_weights:
+            extra_memory += used - self.model.model_loaded_weight_memory
 
-            self.patch_model(load_weights=False)
-            if extra_memory < 0 and not unpatch_weights:
-                self.partially_unload(self.offload_device, -extra_memory, force_patch_weights=force_patch_weights)
-                return 0
-            full_load = False
-            if self.model.model_lowvram == False and self.model.model_loaded_weight_memory > 0:
-                return 0
-            if self.model.model_loaded_weight_memory + extra_memory > self.model_size():
-                full_load = True
-            current_used = self.model.model_loaded_weight_memory
-            try:
-                self.load(device_to, lowvram_model_memory=current_used + extra_memory, force_patch_weights=force_patch_weights, full_load=full_load)
-            except Exception as e:
-                self.detach()
-                raise e
+        self.patch_model(load_weights=False)
+        if extra_memory < 0 and not unpatch_weights:
+            self.partially_unload(self.offload_device, -extra_memory, force_patch_weights=force_patch_weights)
+            return 0
+        full_load = False
+        if self.model.model_lowvram == False and self.model.model_loaded_weight_memory > 0:
+            return 0
+        if self.model.model_loaded_weight_memory + extra_memory > self.model_size():
+            full_load = True
+        current_used = self.model.model_loaded_weight_memory
+        try:
+            self.load(device_to, lowvram_model_memory=current_used + extra_memory, force_patch_weights=force_patch_weights, full_load=full_load)
+        except Exception as e:
+            self.detach()
+            raise e
 
-            return self.model.model_loaded_weight_memory - current_used
+        return self.model.model_loaded_weight_memory - current_used
 
     def pinned_memory_size(self):
         # Pinned memory pressure tracking is only implemented for DynamicVram loading
