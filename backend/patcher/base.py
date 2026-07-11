@@ -76,7 +76,7 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     return model_options
 
 
-def wipe_lowvram_weight(m: torch.nn.Module | "ForgeWeights"):
+def wipe_lowvram_weight(m: "ForgeWeights"):
     if hasattr(m, "prev_parameters_manual_cast"):
         m.parameters_manual_cast = m.prev_parameters_manual_cast
         del m.prev_parameters_manual_cast
@@ -88,7 +88,7 @@ def wipe_lowvram_weight(m: torch.nn.Module | "ForgeWeights"):
         m.bias_function = []
 
 
-def move_weight_functions(m: torch.nn.Module | "ForgeWeights", device: torch.Device):
+def move_weight_functions(m: "ForgeWeights", device: torch.device):
     if device is None:
         return 0
 
