@@ -194,6 +194,9 @@ class ForgeOperations:
             super().__init__(*args, **kwargs)
             self.parameters_manual_cast = current_manual_cast_enabled
 
+            self.weight_forge_dtype = current_dtype
+            self.bias_forge_dtype = current_dtype
+
         def reset_parameters(self):
             return None
 

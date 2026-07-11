@@ -22,6 +22,10 @@ import collections
 import inspect
 import logging
 import uuid
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.operations import ForgeWeights
 
 import torch
 
@@ -52,6 +56,7 @@ def set_model_options_patch_replace(model_options, patch, name, block_name, numb
         block = (block_name, number, transformer_index)
     else:
         block = (block_name, number)
+
     to["patches_replace"][name][block] = patch
     model_options["transformer_options"] = to
     return model_options
@@ -71,10 +76,10 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     return model_options
 
 
-def wipe_lowvram_weight(m):
-    if hasattr(m, "prev_comfy_cast_weights"):
-        m.comfy_cast_weights = m.prev_comfy_cast_weights
-        del m.prev_comfy_cast_weights
+def wipe_lowvram_weight(m: torch.nn.Module | "ForgeWeights"):
+    if hasattr(m, "prev_parameters_manual_cast"):
+        m.parameters_manual_cast = m.prev_parameters_manual_cast
+        del m.prev_parameters_manual_cast
 
     if hasattr(m, "weight_function"):
         m.weight_function = []
@@ -83,11 +88,12 @@ def wipe_lowvram_weight(m):
         m.bias_function = []
 
 
-def move_weight_functions(m, device):
+def move_weight_functions(m: torch.nn.Module | "ForgeWeights", device: torch.Device):
     if device is None:
         return 0
 
     memory = 0
+
     if hasattr(m, "weight_function"):
         for f in m.weight_function:
             if hasattr(f, "move_to"):
@@ -97,38 +103,19 @@ def move_weight_functions(m, device):
         for f in m.bias_function:
             if hasattr(f, "move_to"):
                 memory += f.move_to(device=device)
+
     return memory
 
 
 class LowVramPatch:
-    is_lowvram_patch = True
-
     def __init__(self, key, patches, convert_func=None, set_func=None):
         self.key = key
         self.patches = patches
-        self.convert_func = convert_func  # TODO: remove
+        self.convert_func = convert_func
         self.set_func = set_func
-        self.prepared_patches = None
-
-    def memory_required(self):
-        counter = [0]
-        for patch in self.patches[self.key]:
-            prefetch_prepared_value(patch[1], counter, None, None, False)
-        return counter[0]
-
-    def prepare(self, destination, stream, copy=True, commit=True):
-        counter = [0]
-        prepared_patches = [(patch[0], prefetch_prepared_value(patch[1], counter, destination, stream, copy), patch[2], patch[3], patch[4]) for patch in self.patches[self.key]]
-        if commit:
-            self.prepared_patches = prepared_patches
-        return prepared_patches
-
-    def clear_prepared(self):
-        self.prepared_patches = None
 
     def __call__(self, weight):
-        patches = self.prepared_patches if self.prepared_patches is not None else self.patches[self.key]
-        return merge_lora_to_weight(patches, weight, self.key, intermediate_dtype=weight.dtype)
+        return merge_lora_to_weight(self.patches[self.key], weight, self.key, computation_dtype=weight.dtype)
 
 
 LOWVRAM_PATCH_ESTIMATE_MATH_FACTOR = 2
@@ -145,7 +132,7 @@ def low_vram_patch_estimate_vram(model, key):
     return weight.numel() * model_dtype.itemsize * LOWVRAM_PATCH_ESTIMATE_MATH_FACTOR
 
 
-def get_key_weight(model, key):
+def get_key_weight(model: torch.nn.Linear, key: str):
     set_func = None
     convert_func = None
     op_keys = key.rsplit(".", 1)
@@ -170,10 +157,13 @@ def get_key_weight(model, key):
     return weight, set_func, convert_func
 
 
-def key_param_name_to_key(key, param):
+def key_param_name_to_key(key: str, param: str) -> str:
     if len(key) == 0:
         return param
     return "{}.{}".format(key, param)
+
+
+# region ModelPatcher
 
 
 class ModelPatcher:
@@ -256,12 +246,12 @@ class ModelPatcher:
 
         return n
 
-    def is_clone(self, other):
+    def is_clone(self, other: "ModelPatcher") -> bool:
         if hasattr(other, "model") and self.model is other.model:
             return True
         return False
 
-    def clone_has_same_weights(self, clone: ModelPatcher):
+    def clone_has_same_weights(self, clone: "ModelPatcher") -> bool:
         if not self.is_clone(clone):
             return False
 
@@ -583,11 +573,11 @@ class ModelPatcher:
                     break
             if default and default_device is not None:
                 for param_name, param in params.items():
-                    param.data = param.data.to(device=default_device, dtype=getattr(m, param_name + "_comfy_model_dtype", None))
-            if not default and (hasattr(m, "comfy_cast_weights") or len(params) > 0):
+                    param.data = param.data.to(device=default_device, dtype=getattr(m, param_name + "_forge_dtype", None))
+            if not default and (hasattr(m, "parameters_manual_cast") or len(params) > 0):
                 module_mem = memory_management.module_size(m)
                 module_offload_mem = module_mem
-                if hasattr(m, "comfy_cast_weights"):
+                if hasattr(m, "parameters_manual_cast"):
 
                     def check_module_offload_mem(key):
                         if key in self.patches:
@@ -633,19 +623,19 @@ class ModelPatcher:
             weight_key = "{}.weight".format(n)
             bias_key = "{}.bias".format(n)
 
-            if not full_load and hasattr(m, "comfy_cast_weights"):
+            if not full_load and hasattr(m, "parameters_manual_cast"):
                 if not lowvram_fits:
                     offload_buffer = potential_offload
                     lowvram_weight = True
                     lowvram_counter += 1
                     lowvram_mem_counter += module_mem
-                    if hasattr(m, "prev_comfy_cast_weights"):  # Already lowvramed
+                    if hasattr(m, "prev_parameters_manual_cast"):  # Already lowvramed
                         continue
 
             cast_weight = self.force_cast_weights
-            m.comfy_force_cast_weights = self.force_cast_weights
+            m.forge_force_cast_weights = self.force_cast_weights
             if lowvram_weight:
-                if hasattr(m, "comfy_cast_weights"):
+                if hasattr(m, "parameters_manual_cast"):
                     m.weight_function = []
                     m.bias_function = []
 
@@ -667,7 +657,7 @@ class ModelPatcher:
                 cast_weight = True
                 offloaded.append((module_mem, n, m, params))
             else:
-                if hasattr(m, "comfy_cast_weights"):
+                if hasattr(m, "parameters_manual_cast"):
                     wipe_lowvram_weight(m)
 
                 if full_load or lowvram_fits:
@@ -676,9 +666,9 @@ class ModelPatcher:
                 else:
                     offload_buffer = potential_offload
 
-            if cast_weight and hasattr(m, "comfy_cast_weights"):
-                m.prev_comfy_cast_weights = m.comfy_cast_weights
-                m.comfy_cast_weights = True
+            if cast_weight and hasattr(m, "parameters_manual_cast"):
+                m.prev_parameters_manual_cast = m.parameters_manual_cast
+                m.parameters_manual_cast = True
 
             if weight_key in self.weight_wrapper_patches:
                 m.weight_function.extend(self.weight_wrapper_patches[weight_key])
@@ -693,8 +683,8 @@ class ModelPatcher:
             n = x[1]
             m = x[2]
             params = x[3]
-            if hasattr(m, "comfy_patched_weights"):
-                if m.comfy_patched_weights == True:
+            if hasattr(m, "forge_patched_weights"):
+                if m.forge_patched_weights == True:
                     continue
 
             for param in params:
@@ -705,7 +695,7 @@ class ModelPatcher:
                 torch.cuda.synchronize()
 
             logger.debug("lowvram: loaded module regularly {} {}".format(n, m))
-            m.comfy_patched_weights = True
+            m.forge_patched_weights = True
 
         for x in load_completely:
             x[2].to(device_to)
@@ -778,8 +768,8 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = 0
 
             for m in self.model.modules():
-                if hasattr(m, "comfy_patched_weights"):
-                    del m.comfy_patched_weights
+                if hasattr(m, "forge_patched_weights"):
+                    del m.forge_patched_weights
 
         keys = list(self.object_patches_backup.keys())
         for k in keys:
@@ -805,8 +795,8 @@ class ModelPatcher:
 
             potential_offload = module_offload_mem + sum(offload_weight_factor)
 
-            lowvram_possible = hasattr(m, "comfy_cast_weights")
-            if hasattr(m, "comfy_patched_weights") and m.comfy_patched_weights == True:
+            lowvram_possible = hasattr(m, "parameters_manual_cast")
+            if hasattr(m, "forge_patched_weights") and m.forge_patched_weights == True:
                 move_weight = True
                 for param in params:
                     key = key_param_name_to_key(n, param)
@@ -845,10 +835,10 @@ class ModelPatcher:
                                 patch_counter += 1
                         cast_weight = True
 
-                    if cast_weight and hasattr(m, "comfy_cast_weights"):
-                        m.prev_comfy_cast_weights = m.comfy_cast_weights
-                        m.comfy_cast_weights = True
-                    m.comfy_patched_weights = False
+                    if cast_weight and hasattr(m, "parameters_manual_cast"):
+                        m.prev_parameters_manual_cast = m.parameters_manual_cast
+                        m.parameters_manual_cast = True
+                    m.forge_patched_weights = False
                     memory_freed += module_mem
                     offload_buffer = max(offload_buffer, potential_offload)
                     offload_weight_factor.append(module_mem)
