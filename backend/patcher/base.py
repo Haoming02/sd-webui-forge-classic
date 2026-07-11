@@ -24,9 +24,8 @@ import logging
 import uuid
 from typing import Callable
 
-import comfy.patcher_extension
 import torch
-from comfy.patcher_extension import CallbacksMP, PatcherInjection, WrappersMP
+from comfy.patcher_extension import PatcherInjection
 
 from backend import memory_management, utils
 from backend.float import stochastic_rounding
@@ -68,10 +67,6 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     if disable_cfg1_optimization:
         model_options["disable_cfg1_optimization"] = True
     return model_options
-
-
-def create_model_options_clone(orig_model_options: dict):
-    return comfy.patcher_extension.copy_nested_dicts(orig_model_options)
 
 
 def wipe_lowvram_weight(m):
@@ -302,11 +297,6 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.attachments: dict[str] = {}
-        self.additional_models: dict[str, list[ModelPatcher]] = {}
-        self.callbacks: dict[str, dict[str, list[Callable]]] = CallbacksMP.init_callbacks()
-        self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
-
         self.is_injected = False
         self.skip_injection = False
         self.injections: dict[str, list[PatcherInjection]] = {}
@@ -380,26 +370,6 @@ class ModelPatcher:
 
         n.backup, n.backup_buffers, n.object_patches_backup, n.pinned = model_override[1]
 
-        # attachments
-        n.attachments = {}
-        for k in self.attachments:
-            if hasattr(self.attachments[k], "on_model_patcher_clone"):
-                n.attachments[k] = self.attachments[k].on_model_patcher_clone()
-            else:
-                n.attachments[k] = self.attachments[k]
-        # additional models
-        for k, c in self.additional_models.items():
-            n.additional_models[k] = [x.clone() for x in c]
-        # callbacks
-        for k, c in self.callbacks.items():
-            n.callbacks[k] = {}
-            for k1, c1 in c.items():
-                n.callbacks[k][k1] = c1.copy()
-        # sample wrappers
-        for k, w in self.wrappers.items():
-            n.wrappers[k] = {}
-            for k1, w1 in w.items():
-                n.wrappers[k][k1] = w1.copy()
         # injection
         n.is_injected = self.is_injected
         n.skip_injection = self.skip_injection
@@ -409,8 +379,6 @@ class ModelPatcher:
         n.cached_patcher_init = self.cached_patcher_init
         n.clone_base_uuid = self.clone_base_uuid
 
-        for callback in self.get_all_callbacks(CallbacksMP.ON_CLONE):
-            callback(self, n)
         return n
 
     def is_clone(self, other):
@@ -422,16 +390,6 @@ class ModelPatcher:
         if not self.is_clone(clone):
             return False
 
-        if self.attachments.keys() != clone.attachments.keys():
-            return False
-        if self.additional_models.keys() != clone.additional_models.keys():
-            return False
-        for key in self.callbacks:
-            if len(self.callbacks[key]) != len(clone.callbacks[key]):
-                return False
-        for key in self.wrappers:
-            if len(self.wrappers[key]) != len(clone.wrappers[key]):
-                return False
         if self.injections.keys() != clone.injections.keys():
             return False
 
@@ -906,9 +864,6 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = offload_buffer
             self.model.current_weight_patches_uuid = self.patches_uuid
 
-            for callback in self.get_all_callbacks(CallbacksMP.ON_LOAD):
-                callback(self, device_to, lowvram_model_memory, force_patch_weights, full_load)
-
     def patch_model(self, device_to=None, lowvram_model_memory=0, load_weights=True, force_patch_weights=False):
         with self.use_ejected():
             for k in self.object_patches:
@@ -1088,8 +1043,6 @@ class ModelPatcher:
         self.model_patches_to(self.offload_device)
         if unpatch_all:
             self.unpatch_model(self.offload_device, unpatch_weights=unpatch_all)
-        for callback in self.get_all_callbacks(CallbacksMP.ON_DETACH):
-            callback(self, unpatch_all)
         return self.model
 
     def current_loaded_device(self):
@@ -1099,60 +1052,6 @@ class ModelPatcher:
         self.model_patches_call_function(function_name="cleanup")
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-        for callback in self.get_all_callbacks(CallbacksMP.ON_CLEANUP):
-            callback(self)
-
-    def add_callback(self, call_type: str, callback: Callable):
-        self.add_callback_with_key(call_type, None, callback)
-
-    def add_callback_with_key(self, call_type: str, key: str, callback: Callable):
-        c = self.callbacks.setdefault(call_type, {}).setdefault(key, [])
-        c.append(callback)
-
-    def remove_callbacks_with_key(self, call_type: str, key: str):
-        c = self.callbacks.get(call_type, {})
-        if key in c:
-            c.pop(key)
-
-    def get_callbacks(self, call_type: str, key: str):
-        return self.callbacks.get(call_type, {}).get(key, [])
-
-    def get_all_callbacks(self, call_type: str):
-        c_list = []
-        for c in self.callbacks.get(call_type, {}).values():
-            c_list.extend(c)
-        return c_list
-
-    def add_wrapper(self, wrapper_type: str, wrapper: Callable):
-        self.add_wrapper_with_key(wrapper_type, None, wrapper)
-
-    def add_wrapper_with_key(self, wrapper_type: str, key: str, wrapper: Callable):
-        w = self.wrappers.setdefault(wrapper_type, {}).setdefault(key, [])
-        w.append(wrapper)
-
-    def remove_wrappers_with_key(self, wrapper_type: str, key: str):
-        w = self.wrappers.get(wrapper_type, {})
-        if key in w:
-            w.pop(key)
-
-    def get_wrappers(self, wrapper_type: str, key: str):
-        return self.wrappers.get(wrapper_type, {}).get(key, [])
-
-    def get_all_wrappers(self, wrapper_type: str):
-        w_list = []
-        for w in self.wrappers.get(wrapper_type, {}).values():
-            w_list.extend(w)
-        return w_list
-
-    def set_attachments(self, key: str, attachment):
-        self.attachments[key] = attachment
-
-    def remove_attachments(self, key: str):
-        if key in self.attachments:
-            self.attachments.pop(key)
-
-    def get_attachment(self, key: str):
-        return self.attachments.get(key, None)
 
     def set_injections(self, key: str, injections: list[PatcherInjection]):
         self.injections[key] = injections
@@ -1164,41 +1063,6 @@ class ModelPatcher:
     def get_injections(self, key: str):
         return self.injections.get(key, None)
 
-    def set_additional_models(self, key: str, models: list["ModelPatcher"]):
-        self.additional_models[key] = models
-
-    def remove_additional_models(self, key: str):
-        if key in self.additional_models:
-            self.additional_models.pop(key)
-
-    def get_additional_models_with_key(self, key: str):
-        return self.additional_models.get(key, [])
-
-    def get_additional_models(self):
-        all_models: list[ModelPatcher] = []
-        for models in self.additional_models.values():
-            all_models.extend(models)
-        return all_models
-
-    def get_nested_additional_models(self):
-        def _evaluate_sub_additional_models(prev_models: list[ModelPatcher], cache_set: set[ModelPatcher]):
-            """Make sure circular references do not cause infinite recursion."""
-            next_models = []
-            for model in prev_models:
-                candidates = model.get_additional_models()
-                for c in candidates:
-                    if c not in cache_set:
-                        next_models.append(c)
-                        cache_set.add(c)
-            if len(next_models) == 0:
-                return prev_models
-            return prev_models + _evaluate_sub_additional_models(next_models, cache_set)
-
-        all_models = self.get_additional_models()
-        models_set = set(all_models)
-        real_all_models = _evaluate_sub_additional_models(prev_models=all_models, cache_set=models_set)
-        return real_all_models
-
     def use_ejected(self, skip_and_inject_on_exit_only=False):
         return AutoPatcherEjector(self, skip_and_inject_on_exit_only=skip_and_inject_on_exit_only)
 
@@ -1209,9 +1073,6 @@ class ModelPatcher:
             for inj in injections:
                 inj.inject(self)
                 self.is_injected = True
-        if self.is_injected:
-            for callback in self.get_all_callbacks(CallbacksMP.ON_INJECT_MODEL):
-                callback(self)
 
     def eject_model(self):
         if not self.is_injected:
@@ -1220,14 +1081,10 @@ class ModelPatcher:
             for inj in injections:
                 inj.eject(self)
         self.is_injected = False
-        for callback in self.get_all_callbacks(CallbacksMP.ON_EJECT_MODEL):
-            callback(self)
 
     def pre_run(self):
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = self
-        for callback in self.get_all_callbacks(CallbacksMP.ON_PRE_RUN):
-            callback(self)
 
     def model_state_dict_for_saving(self, model=None, prefix=""):
         if model is None:
