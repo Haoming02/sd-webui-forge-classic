@@ -25,7 +25,6 @@ import uuid
 from typing import Callable
 
 import torch
-from comfy.patcher_extension import PatcherInjection
 
 from backend import memory_management, utils
 from backend.float import stochastic_rounding
@@ -174,31 +173,6 @@ def key_param_name_to_key(key, param):
     return "{}.{}".format(key, param)
 
 
-class AutoPatcherEjector:
-    def __init__(self, model: "ModelPatcher", skip_and_inject_on_exit_only=False):
-        self.model = model
-        self.was_injected = False
-        self.prev_skip_injection = False
-        self.skip_and_inject_on_exit_only = skip_and_inject_on_exit_only
-
-    def __enter__(self):
-        self.was_injected = False
-        self.prev_skip_injection = self.model.skip_injection
-        if self.skip_and_inject_on_exit_only:
-            self.model.skip_injection = True
-        if self.model.is_injected:
-            self.model.eject_model()
-            self.was_injected = True
-
-    def __exit__(self, *args):
-        if self.skip_and_inject_on_exit_only:
-            self.model.skip_injection = self.prev_skip_injection
-            self.model.inject_model()
-        if self.was_injected and not self.model.skip_injection:
-            self.model.inject_model()
-        self.model.skip_injection = self.prev_skip_injection
-
-
 class MemoryCounter:
     def __init__(self, initial: int, minimum=0):
         self.value = initial
@@ -297,10 +271,6 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.is_injected = False
-        self.skip_injection = False
-        self.injections: dict[str, list[PatcherInjection]] = {}
-
         self.cached_patcher_init: tuple[Callable, tuple] | tuple[Callable, tuple, int] | None = None
         self.clone_base_uuid = uuid.uuid4()
 
@@ -370,12 +340,6 @@ class ModelPatcher:
 
         n.backup, n.backup_buffers, n.object_patches_backup, n.pinned = model_override[1]
 
-        # injection
-        n.is_injected = self.is_injected
-        n.skip_injection = self.skip_injection
-        for k, i in self.injections.items():
-            n.injections[k] = i.copy()
-
         n.cached_patcher_init = self.cached_patcher_init
         n.clone_base_uuid = self.clone_base_uuid
 
@@ -388,9 +352,6 @@ class ModelPatcher:
 
     def clone_has_same_weights(self, clone: ModelPatcher):
         if not self.is_clone(clone):
-            return False
-
-        if self.injections.keys() != clone.injections.keys():
             return False
 
         if len(self.patches) == 0 and len(clone.patches) == 0:
@@ -878,11 +839,9 @@ class ModelPatcher:
 
             if load_weights:
                 self.load(device_to, lowvram_model_memory=lowvram_model_memory, force_patch_weights=force_patch_weights, full_load=full_load)
-        self.inject_model()
         return self.model
 
     def unpatch_model(self, device_to=None, unpatch_weights=True):
-        self.eject_model()
         if unpatch_weights:
             self.unpin_all_weights()
             if self.model.model_lowvram:
@@ -1039,7 +998,6 @@ class ModelPatcher:
         return 0
 
     def detach(self, unpatch_all=True):
-        self.eject_model()
         self.model_patches_to(self.offload_device)
         if unpatch_all:
             self.unpatch_model(self.offload_device, unpatch_weights=unpatch_all)
@@ -1052,35 +1010,6 @@ class ModelPatcher:
         self.model_patches_call_function(function_name="cleanup")
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-
-    def set_injections(self, key: str, injections: list[PatcherInjection]):
-        self.injections[key] = injections
-
-    def remove_injections(self, key: str):
-        if key in self.injections:
-            self.injections.pop(key)
-
-    def get_injections(self, key: str):
-        return self.injections.get(key, None)
-
-    def use_ejected(self, skip_and_inject_on_exit_only=False):
-        return AutoPatcherEjector(self, skip_and_inject_on_exit_only=skip_and_inject_on_exit_only)
-
-    def inject_model(self):
-        if self.is_injected or self.skip_injection:
-            return
-        for injections in self.injections.values():
-            for inj in injections:
-                inj.inject(self)
-                self.is_injected = True
-
-    def eject_model(self):
-        if not self.is_injected:
-            return
-        for injections in self.injections.values():
-            for inj in injections:
-                inj.eject(self)
-        self.is_injected = False
 
     def pre_run(self):
         if hasattr(self.model, "current_patcher"):
