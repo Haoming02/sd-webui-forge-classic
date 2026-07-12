@@ -45,17 +45,14 @@ except Exception:
 
 def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
     """Forge-Specific Function for on-the-fly LoRA"""
-    loras: dict[str, list] = getattr(layer, "forge_online_loras", dict())
 
     weight: torch.Tensor = getattr(layer, "weight", None)
-    weight_patches: list = loras.get("weight", None)
-    if weight is not None and weight_patches is not None:
-        weight = merge_lora_to_weight(patches=weight_patches, weight=weight, key="online_weight_lora", computation_dtype=weight.dtype)
+    for f in getattr(layer, "weight_function", []):
+        weight = f(weight)
 
     bias: torch.Tensor = getattr(layer, "bias", None)
-    bias_patches: list = loras.get("bias", None)
-    if bias is not None and bias_patches is not None:
-        bias = merge_lora_to_weight(patches=bias_patches, weight=bias, key="online_bias_lora", computation_dtype=bias.dtype)
+    for f in getattr(layer, "bias_function", []):
+        bias = f(bias)
 
     return weight, bias
 
@@ -139,17 +136,6 @@ def weights_manual_cast(
             bias = bias.to(dtype=target_dtype)
         for f in layer.bias_function:
             bias = f(bias)
-
-    loras: dict[str, list[torch.Tensor]] = getattr(layer, "forge_online_loras", dict())
-
-    weight_patches = loras.get("weight", None)
-    bias_patches = loras.get("bias", None)
-
-    if weight is not None and weight_patches is not None:
-        weight = merge_lora_to_weight(patches=weight_patches, weight=weight, key="online_weight_lora", computation_dtype=weight.dtype)
-
-    if bias is not None and bias_patches is not None:
-        bias = merge_lora_to_weight(patches=bias_patches, weight=bias, key="online_bias_lora", computation_dtype=bias.dtype)
 
     return weight, bias, (offload_stream, weight_a, bias_a)
 
@@ -386,7 +372,7 @@ if memory_management.bnb_enabled():
                 if self.bias is not None and self.bias.dtype != x.dtype:
                     self.bias = utils.tensor2parameter(self.bias.to(x.dtype))
 
-                if hasattr(self, "forge_online_loras"):
+                if self.weight_function or self.bias_function:
                     weight, bias, signal = weights_manual_cast(self, x, weight_fn=functional_dequantize_4bit, skip_bias_dtype=True)
                     with main_stream_worker(weight, bias, signal):
                         return torch.nn.functional.linear(x, weight, bias)
