@@ -75,9 +75,20 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
         import huggingface_guess
 
         from backend.loader import preprocess_state_dict
+        from backend.memory_management import LoadedModel, current_loaded_models
+        from backend.patcher.unet import UnetPatcher
         from backend.state_dict import load_state_dict, try_filter_state_dict
         from backend.utils import load_torch_file
         from modules_forge.main_entry import logger
+
+        for i, loaded_models in enumerate(current_loaded_models):
+            if isinstance(loaded_models.model, UnetPatcher):
+                idx = i
+                break
+
+        mdl: LoadedModel = current_loaded_models.pop(idx)
+        mdl.model_unload()
+        del mdl
 
         model = sd_model.forge_objects.unet.model.diffusion_model
 
