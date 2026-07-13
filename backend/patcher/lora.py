@@ -56,16 +56,8 @@ def weight_decompose(dora_scale, weight, lora_diff, alpha, strength, computation
 
 
 @torch.inference_mode()
-def merge_lora_to_weight(patches, weight, key="online_lora", computation_dtype=torch.float32):
+def merge_lora_to_weight(patches: list[tuple], weight: torch.Tensor, key: str, computation_dtype: torch.dtype = torch.float32):
     # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/lora.py#L361
-
-    weight_dtype_backup = None
-
-    if computation_dtype == weight.dtype:
-        weight = weight.clone()
-    else:
-        weight_dtype_backup = weight.dtype
-        weight = weight.to(dtype=computation_dtype)
 
     for p in patches:
         strength = p[0]
@@ -105,7 +97,6 @@ def merge_lora_to_weight(patches, weight, key="online_lora", computation_dtype=t
 
         if patch_type == "diff":
             diff: torch.Tensor = v[0]
-            # An extra flag to pad the weight if the diff's shape is larger than the weight
             do_pad_weight = len(v) > 1 and v[1]["pad_weight"]
             if do_pad_weight and diff.shape != weight.shape:
                 logger.debug("Pad weight {} from {} to shape: {}".format(key, weight.shape, diff.shape))
@@ -118,16 +109,11 @@ def merge_lora_to_weight(patches, weight, key="online_lora", computation_dtype=t
                     weight += function(strength * memory_management.cast_to_device(diff, weight.device, weight.dtype))
         elif patch_type == "set":
             weight.copy_(v[0])
-        elif patch_type == "model_as_lora":
-            raise NotImplementedError(f'"{patch_type}" is not supported...')
         else:
             raise ValueError(f'"{key}" of type "{patch_type}" is not recognized...')
 
         if old_weight is not None:
             weight = old_weight
-
-    if weight_dtype_backup is not None:
-        weight = weight.to(dtype=weight_dtype_backup)
 
     return weight
 
