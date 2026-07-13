@@ -11,6 +11,7 @@ from backend.loader_gguf import dequantize, get_orig_shape
 from backend.memory_management import logger
 from backend.operations_gguf import ParameterGGUF
 from modules_forge.packages import gguf
+from modules_forge.packages.comfy.weight_adapter.base import WeightAdapterBase
 
 if not hasattr(torch.serialization, "add_safe_globals"):
     logger.critical("Update your PyTorch...")
@@ -134,9 +135,11 @@ def set_attr_raw(obj, attr, value):
 
 
 def set_attr(obj, attr, value):
-    if (not torch.is_inference_mode_enabled()) and value.is_inference():
+    try:
+        set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
+    except RuntimeError:
         value = value.clone()
-    set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
+        set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
 
 
 def copy_to_param(obj, attr, value):
@@ -210,14 +213,12 @@ def fp16_fix(x):
     return x
 
 
-def dtype_to_element_size(dtype):
-    if isinstance(dtype, torch.dtype):
-        return torch.tensor([], dtype=dtype).element_size()
-    else:
-        raise ValueError(f"Invalid dtype: {dtype}")
+def dtype_to_element_size(dtype: torch.dtype) -> int:
+    assert isinstance(dtype, torch.dtype)
+    return torch.tensor([], dtype=dtype).element_size()
 
 
-def nested_compute_size(obj, element_size):
+def nested_compute_size(obj: dict, element_size: int) -> int:
     module_mem = 0
 
     if isinstance(obj, dict):
@@ -228,6 +229,8 @@ def nested_compute_size(obj, element_size):
             module_mem += nested_compute_size(obj[i], element_size)
     elif isinstance(obj, torch.Tensor):
         module_mem += obj.nelement() * element_size
+    elif isinstance(obj, WeightAdapterBase):
+        module_mem += nested_compute_size(obj.weights, element_size)
 
     return module_mem
 
