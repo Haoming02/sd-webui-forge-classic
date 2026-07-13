@@ -15,6 +15,7 @@ from einops.layers.torch import Rearrange
 from torch import nn
 from torchvision.transforms import InterpolationMode, functional
 
+from backend.args import dynamic_args
 from backend.attention import attention_function
 from backend.memory_management import is_device_mps
 from backend.operations import scaled_dot_product_attention
@@ -457,6 +458,13 @@ class Anima(nn.Module):
 
     def forward(self, x: torch.Tensor, timesteps: torch.Tensor, context: torch.Tensor, padding_mask: Optional[torch.Tensor] = None, **kwargs):
         orig_shape = list(x.shape)
+
+        ref_latents: list[torch.Tensor] = dynamic_args.ref_latents
+        for ref in ref_latents:
+            if x.shape[0] == 2:  # batch_cond_uncond
+                ref = torch.cat((ref, ref), dim=0)
+            x = torch.cat((x, ref.to(x)), dim=2)
+
         x = pad_to_patch_size(x, (self.patch_temporal, self.patch_spatial, self.patch_spatial))
         x_B_C_T_H_W = x
         timesteps_B_T = timesteps

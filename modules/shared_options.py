@@ -251,6 +251,7 @@ options_templates.update(
             "divmisc": OptionDiv(),
             "qwen_vae_resize": OptionInfo(False, "[Qwen-Image-Edit] Resize input image to 1 megapixel for ref_latent"),
             "klein_no_reference": OptionInfo(False, "[Klein] Disable Reference").info("disable Edit ; enable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often"),
+            "anima_do_reference": OptionInfo(False, "[Anima] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often").info("requires specfic Edit LoRA"),
         },
     )
 )
