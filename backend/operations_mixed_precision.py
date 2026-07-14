@@ -201,7 +201,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
 
             def forward(self, input, *args, **kwargs):
                 input_shape = input.shape
-                reshaped_3d = False
+                reshaped_nd = False
 
                 _use_quantized = getattr(self, "layout_type", None) is not None and not isinstance(input, QuantizedTensor) and not self._full_precision_mm and not getattr(self, "forge_force_cast_weights", False) and len(self.weight_function) == 0 and len(self.bias_function) == 0
                 quantize_input = QUANT_ALGOS.get(getattr(self, "quant_format", None), {}).get("quantize_input", True)
@@ -209,10 +209,10 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 assert not input.requires_grad
 
                 if _use_quantized and quantize_input:
-                    input_reshaped = input.reshape(-1, input_shape[2]) if input.ndim == 3 else input
+                    input_reshaped = input.reshape(-1, input_shape[-1]) if input.ndim >= 3 else input
 
                     if input_reshaped.ndim == 2:
-                        reshaped_3d = input.ndim == 3
+                        reshaped_nd = input.ndim >= 3
                         scale = getattr(self, "input_scale", None)
                         if scale is not None:
                             scale = cast_to_device(scale, input.device, None)
@@ -235,8 +235,8 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 with main_stream_worker(weight, bias, signal):
                     output = torch.nn.functional.linear(input, weight, bias)
 
-                if reshaped_3d:
-                    output = output.reshape((input_shape[0], input_shape[1], self.weight.shape[0]))
+                if reshaped_nd:
+                    output = output.reshape((*input_shape[:-1], self.weight.shape[0]))
 
                 return output
 
