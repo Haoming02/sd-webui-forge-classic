@@ -5,6 +5,7 @@ import torch
 from comfy_kitchen.tensor import (  # noqa
     QuantizedLayout,
     QuantizedTensor,
+    TensorCoreConvRotW4A4Layout,
     TensorCoreFP8Layout,
     TensorCoreMXFP8Layout,
     TensorCoreNVFP4Layout,
@@ -149,6 +150,7 @@ register_layout_class("TensorCoreFP8E4M3Layout", TensorCoreFP8E4M3Layout)
 register_layout_class("TensorCoreFP8E5M2Layout", TensorCoreFP8E5M2Layout)
 register_layout_class("TensorCoreNVFP4Layout", TensorCoreNVFP4Layout)
 register_layout_class("TensorWiseINT8Layout", TensorWiseINT8Layout)
+register_layout_class("TensorCoreConvRotW4A4Layout", TensorCoreConvRotW4A4Layout)
 register_layout_class("TensorCoreMXFP8Layout", TensorCoreMXFP8Layout)
 
 QUANT_ALGOS = {
@@ -178,6 +180,12 @@ QUANT_ALGOS = {
         "storage_t": torch.int8,
         "parameters": {"weight_scale"},
         "comfy_tensor_layout": "TensorWiseINT8Layout",
+        "quantize_input": False,
+    },
+    "convrot_w4a4": {
+        "storage_t": torch.int8,
+        "parameters": {"weight_scale"},
+        "comfy_tensor_layout": "TensorCoreConvRotW4A4Layout",
         "quantize_input": False,
     },
 }
