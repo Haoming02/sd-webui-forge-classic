@@ -60,6 +60,8 @@ class Anima(ForgeDiffusionEngine):
             samples.append(sample)
             if opts.anima_do_reference:
                 dynamic_args.ref_latents = [sample.cpu()]
+            else:
+                dynamic_args.ref_latents.clear()
 
         return torch.cat(samples).to(x)
 
