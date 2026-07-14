@@ -25,8 +25,13 @@ else:
 
 from backend.args import args
 
-if not args.enable_triton_backend:
+if args.disable_triton_backend:
     ck.registry.disable("triton")
+else:
+    try:
+        import triton  # noqa
+    except ImportError:
+        ck.registry.disable("triton")
 
 
 # region FP8 Layouts
