@@ -10,7 +10,6 @@ import torch
 
 from backend import memory_management, stream, utils
 from backend.args import args, dynamic_args
-from backend.patcher.lora import merge_lora_to_weight
 
 
 def scaled_dot_product_attention(q, k, v, *args, **kwargs):
@@ -122,6 +121,8 @@ def weights_manual_cast(
     bias_a = bias
 
     if weight_has_function:
+        if isinstance(weight, QuantizedTensor):
+            weight = weight.dequantize()
         if weight_fn is not None:
             weight = weight_fn(weight)
         if not skip_weight_dtype:

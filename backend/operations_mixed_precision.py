@@ -27,10 +27,11 @@ def _quantized_apply(module: torch.nn.Module, fn, recurse=True):
     for key, param in module._parameters.items():
         if param is None:
             continue
-        p = fn(param)
-        if (not torch.is_inference_mode_enabled()) and p.is_inference():
-            p = p.clone()
-        module.register_parameter(key, torch.nn.Parameter(p, requires_grad=False))
+        p: torch.Tensor = fn(param)
+        try:
+            module.register_parameter(key, torch.nn.Parameter(p, requires_grad=False))
+        except RuntimeError:
+            module.register_parameter(key, torch.nn.Parameter(p.clone(), requires_grad=False))
     for key, buf in module._buffers.items():
         if buf is not None:
             module._buffers[key] = fn(buf)
