@@ -19,6 +19,13 @@ from .quant_ops import (  # noqa
     get_layout_class,
 )
 
+try:
+    from .operations_triton import triton_int8_linear_per_row
+except ImportError:
+    TRITON_AVAILABLE = False
+else:
+    TRITON_AVAILABLE = True
+
 
 def _quantized_apply(module: torch.nn.Module, fn, recurse=True):
     if recurse:
@@ -204,7 +211,6 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 else:
                     self.register_parameter("bias", None)
 
-                self.tensor_class = None
                 self._full_precision_mm = MixedPrecisionOps._full_precision_mm
                 self._full_precision_mm_config = False
 
@@ -237,22 +243,21 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                             scale = cast_to_device(scale, input.device, None)
                         input = QuantizedTensor.from_float(input_reshaped, self.layout_type, scale=scale)
 
-                weight_only_quant = _use_quantized and not quantize_input and isinstance(self.weight, QuantizedTensor)
-
-                if weight_only_quant:
-                    weight, bias, signal = weights_manual_cast(
-                        self,
-                        x=None,
-                        dtype=self.weight.dtype,
-                        device=input.device,
-                        bias_dtype=input.dtype,
-                    )
-                    weight = weight.to(dtype=input.dtype)
+                if TRITON_AVAILABLE and getattr(self, "quant_format", None) == "int8_tensorwise":
+                    w = self.weight._qdata
+                    s = self.weight.params.scale
+                    output = triton_int8_linear_per_row(input, w, s, self.bias, input.dtype)
                 else:
-                    weight, bias, signal = weights_manual_cast(self, x=input)
+                    weight_only_quant = _use_quantized and not quantize_input and isinstance(self.weight, QuantizedTensor)
 
-                with main_stream_worker(weight, bias, signal):
-                    output = torch.nn.functional.linear(input, weight, bias)
+                    if weight_only_quant:
+                        weight, bias, signal = weights_manual_cast(self, x=None, dtype=self.weight.dtype, device=input.device, bias_dtype=input.dtype)
+                        weight = weight.to(dtype=input.dtype)
+                    else:
+                        weight, bias, signal = weights_manual_cast(self, x=input)
+
+                    with main_stream_worker(weight, bias, signal):
+                        output = torch.nn.functional.linear(input, weight, bias)
 
                 if reshaped_nd:
                     output = output.reshape((*input_shape[:-1], self.weight.shape[0]))
