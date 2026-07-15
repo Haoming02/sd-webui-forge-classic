@@ -16,6 +16,7 @@ from .quant_ops import (  # noqa
     QUANT_ALGOS,
     QuantizedTensor,
     TensorCoreFP8Layout,
+    TensorWiseINT8Layout,
     get_layout_class,
 )
 
@@ -245,20 +246,32 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                             scale = cast_to_device(scale, input.device, None)
                         input = QuantizedTensor.from_float(input_reshaped, self.layout_type, scale=scale)
 
-                if TRITON_AVAILABLE and getattr(self, "quant_format", None) == "int8_tensorwise":
-                    _need_cast = self.parameters_manual_cast or len(self.weight_function) > 0 or len(self.bias_function) > 0
+                _double_cast = self.parameters_manual_cast and (len(self.weight_function) > 0 or len(self.bias_function) > 0)
 
-                    if _need_cast:
+                if TRITON_AVAILABLE and getattr(self, "quant_format", None) == "int8_tensorwise" and not _double_cast:
+                    if len(self.weight_function) > 0 or len(self.bias_function) > 0:
+                        _weight, bias, signal = weights_manual_cast(self, x=None, dtype=self.weight.dtype, device=input.device, bias_dtype=input.dtype)
+                        weight, params = TensorWiseINT8Layout.quantize(
+                            tensor=_weight,
+                            scale="recalculate",
+                            is_weight=True,
+                            per_channel=True,
+                            convrot=getattr(self.weight.params, "convrot", False),
+                            convrot_groupsize=getattr(self.weight.params, "convrot_groupsize", 256),
+                        )
+                        scale: torch.Tensor = params.scale.to(device=input.device, non_blocking=True)
+                    elif self.parameters_manual_cast:
                         weight, bias, signal = weights_manual_cast(self, x=None, dtype=torch.int8, device=input.device, bias_dtype=input.dtype)
+                        scale: torch.Tensor = self.weight.params.scale.to(device=input.device, non_blocking=True)
                     else:
                         weight, bias, signal = self.weight._qdata, self.bias, None
+                        scale: torch.Tensor = self.weight.params.scale.to(device=input.device, non_blocking=True)
 
                     if getattr(self.weight.params, "convrot", False):
                         group_size: int = getattr(self.weight.params, "convrot_groupsize", 256)
                         H = build_hadamard(group_size, device=input.device, dtype=input.dtype)
                         input = rotate_activation(input, H, group_size=group_size)
 
-                    scale: torch.Tensor = self.weight.params.scale.to(device=input.device, non_blocking=True)
                     compute_dtype: torch.dtype = input.dtype if input.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
 
                     with main_stream_worker(weight, bias, signal):
