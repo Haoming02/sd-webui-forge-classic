@@ -141,6 +141,8 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
 
     dynamic_args.online_lora = lora_fp16
     logger.info(f"Patch LoRAs on-the-fly: {lora_fp16}")
+    if not ckpt.endswith(("gguf", "GGUF")) and lora_fp16:
+        logger.warning("on-the-fly WILL be slower ; enable only if you know what you are doing")
 
     processing.need_global_unload = True
 

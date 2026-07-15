@@ -258,8 +258,19 @@ def apply_refiner(cfg_denoiser, x, sigma):
         import huggingface_guess
 
         from backend.loader import preprocess_state_dict
+        from backend.memory_management import LoadedModel, current_loaded_models
+        from backend.patcher.unet import UnetPatcher
         from backend.state_dict import load_state_dict, try_filter_state_dict
         from backend.utils import load_torch_file
+
+        for i, loaded_models in enumerate(current_loaded_models):
+            if isinstance(loaded_models.model, UnetPatcher):
+                idx = i
+                break
+
+        mdl: LoadedModel = current_loaded_models.pop(idx)
+        mdl.model_unload()
+        del mdl
 
         model = sd_model.forge_objects.unet.model.diffusion_model
 
@@ -284,14 +295,14 @@ def apply_refiner(cfg_denoiser, x, sigma):
         # 1. reset the current_lora_hash so networks.py load_networks() parse the LoRA again
         sd_model.current_lora_hash = str([])
 
-        # 2. parse the LoRA to update ModelPatcher patches / online_patches
+        # 2. parse the LoRA to update ModelPatcher patches
         if not cfg_denoiser.p.disable_extra_networks:
             loras = cfg_denoiser.p.extra_network_data.pop("lora", None)
             cfg_denoiser.p.extra_network_data["lora"] = apply_lora_for_refiner(loras)
             extra_networks.activate(cfg_denoiser.p, cfg_denoiser.p.extra_network_data)
 
-        # 3. load the new LoRA
-        sd_model.forge_objects.unet.refresh_loras()
+        # 3. reload the LoRA
+        sampling_prepare(shared.sd_model.forge_objects.unet, x=x)
 
         # 4. reset the current_lora_hash again for the non-refiner pass
         sd_model.current_lora_hash = str([])

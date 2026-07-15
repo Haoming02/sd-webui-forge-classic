@@ -125,9 +125,6 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
 
     online_mode = dynamic_args.online_lora or False
 
-    if dynamic_args.ops.startswith("Mixed") or dynamic_args.ops.endswith("FP8"):
-        online_mode = False
-
     compiled_lora_targets = []
     for n, u, t in zip(networks_on_disk, unet_multipliers, te_multipliers):
         if n is None:

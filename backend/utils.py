@@ -11,6 +11,7 @@ from backend.loader_gguf import dequantize, get_orig_shape
 from backend.memory_management import logger
 from backend.operations_gguf import ParameterGGUF
 from modules_forge.packages import gguf
+from modules_forge.packages.comfy.weight_adapter.base import WeightAdapterBase
 
 if not hasattr(torch.serialization, "add_safe_globals"):
     logger.critical("Update your PyTorch...")
@@ -113,15 +114,32 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
     return (sd, metadata) if return_metadata else sd
 
 
-def set_attr(obj, attr, value):
-    set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
+ATTR_UNSET = {}
 
 
-def set_attr_raw(obj, attr, value):
+def resolve_attr(obj, attr):
     attrs = attr.split(".")
     for name in attrs[:-1]:
         obj = getattr(obj, name)
-    setattr(obj, attrs[-1], value)
+    return obj, attrs[-1]
+
+
+def set_attr_raw(obj, attr, value):
+    obj, name = resolve_attr(obj, attr)
+    prev = getattr(obj, name, ATTR_UNSET)
+    if value is ATTR_UNSET:
+        delattr(obj, name)
+    else:
+        setattr(obj, name, value)
+    return prev
+
+
+def set_attr(obj, attr, value):
+    try:
+        set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
+    except RuntimeError:
+        value = value.clone()
+        set_attr_raw(obj, attr, torch.nn.Parameter(value, requires_grad=False))
 
 
 def copy_to_param(obj, attr, value):
@@ -195,14 +213,12 @@ def fp16_fix(x):
     return x
 
 
-def dtype_to_element_size(dtype):
-    if isinstance(dtype, torch.dtype):
-        return torch.tensor([], dtype=dtype).element_size()
-    else:
-        raise ValueError(f"Invalid dtype: {dtype}")
+def dtype_to_element_size(dtype: torch.dtype) -> int:
+    assert isinstance(dtype, torch.dtype)
+    return torch.tensor([], dtype=dtype).element_size()
 
 
-def nested_compute_size(obj, element_size):
+def nested_compute_size(obj: dict, element_size: int) -> int:
     module_mem = 0
 
     if isinstance(obj, dict):
@@ -213,6 +229,8 @@ def nested_compute_size(obj, element_size):
             module_mem += nested_compute_size(obj[i], element_size)
     elif isinstance(obj, torch.Tensor):
         module_mem += obj.nelement() * element_size
+    elif isinstance(obj, WeightAdapterBase):
+        module_mem += nested_compute_size(obj.weights, element_size)
 
     return module_mem
 
@@ -326,6 +344,25 @@ def join_dicts(base_dict: dict | None, update_dict: dict | None) -> dict:
             result[key] = value
 
     return result
+
+
+def deepcopy_(obj, memo=None):
+    if memo is None:
+        memo = {}
+
+    obj_id = id(obj)
+    if obj_id in memo:
+        return memo[obj_id]
+
+    if isinstance(obj, dict):
+        res = {deepcopy_(k, memo): deepcopy_(v, memo) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        res = [deepcopy_(i, memo) for i in obj]
+    else:
+        res = obj
+
+    memo[obj_id] = res
+    return res
 
 
 def hash_tensor(x: torch.Tensor) -> int:
