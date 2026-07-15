@@ -26,6 +26,8 @@ except ImportError:
 else:
     TRITON_AVAILABLE = True
 
+from .quant_rotation import build_hadamard, rotate_activation
+
 
 def _quantized_apply(module: torch.nn.Module, fn, recurse=True):
     if recurse:
@@ -244,9 +246,23 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                         input = QuantizedTensor.from_float(input_reshaped, self.layout_type, scale=scale)
 
                 if TRITON_AVAILABLE and getattr(self, "quant_format", None) == "int8_tensorwise":
-                    w = self.weight._qdata
-                    s = self.weight.params.scale
-                    output = triton_int8_linear_per_row(input, w, s, self.bias, input.dtype)
+                    _need_cast = self.parameters_manual_cast or len(self.weight_function) > 0 or len(self.bias_function) > 0
+
+                    if _need_cast:
+                        weight, bias, signal = weights_manual_cast(self, x=None, dtype=torch.int8, device=input.device, bias_dtype=input.dtype)
+                    else:
+                        weight, bias, signal = self.weight._qdata, self.bias, None
+
+                    if getattr(self.weight.params, "convrot", False):
+                        group_size: int = getattr(self.weight.params, "convrot_groupsize", 256)
+                        H = build_hadamard(group_size, device=input.device, dtype=input.dtype)
+                        input = rotate_activation(input, H, group_size=group_size)
+
+                    scale: torch.Tensor = self.weight.params.scale.to(device=input.device, non_blocking=True)
+                    compute_dtype: torch.dtype = input.dtype if input.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
+
+                    with main_stream_worker(weight, bias, signal):
+                        output = triton_int8_linear_per_row(input, weight, scale, bias, compute_dtype)
                 else:
                     weight_only_quant = _use_quantized and not quantize_input and isinstance(self.weight, QuantizedTensor)
 
