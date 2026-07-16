@@ -60,8 +60,6 @@ class Anima(ForgeDiffusionEngine):
             samples.append(sample)
             if opts.anima_do_reference:
                 dynamic_args.ref_latents = [sample.cpu()]
-            else:
-                dynamic_args.ref_latents.clear()
 
         return torch.cat(samples).to(x)
 
@@ -76,4 +74,5 @@ class Anima(ForgeDiffusionEngine):
             sample = self.forge_objects.vae.decode(sample).movedim(-1, 2) * 2.0 - 1.0
             samples.append(sample)
 
+        dynamic_args.ref_latents.clear()
         return torch.cat(samples).to(x)
