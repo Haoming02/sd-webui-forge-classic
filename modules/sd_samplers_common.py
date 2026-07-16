@@ -283,7 +283,7 @@ def apply_refiner(cfg_denoiser, x, sigma):
 
         main_entry.logger.info("Reloading state_dict...")
         ORIGINAL_CHECKPOINT = shared.sd_model.sd_checkpoint_info.filename
-        load_state_dict(model, sd)
+        load_state_dict(model, sd, ignore_start="llm")
 
         if refiner_checkpoint_info.filename.lower().endswith(".gguf"):
 

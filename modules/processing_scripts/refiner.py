@@ -30,7 +30,13 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
         self.refresh_checkpoints()
         with InputAccordion(False, label="Refiner", elem_id=self.elem_id("enable")) as enable_refiner:
             with gr.Row():
-                refiner_checkpoint = gr.Dropdown(value="None", label="Checkpoint", info="(use model of same architecture and quantization)", elem_id=self.elem_id("checkpoint"), choices=self.ckpts)
+                refiner_checkpoint = gr.Dropdown(
+                    value="None",
+                    label="Checkpoint",
+                    info="(use model of same architecture and quantization)" if opts.refiner_fast_sd else "(use model of same architecture)",
+                    elem_id=self.elem_id("checkpoint"),
+                    choices=self.ckpts,
+                )
                 create_refresh_button(refiner_checkpoint, self.refresh_checkpoints, lambda: {"choices": self.ckpts}, self.elem_id("checkpoint_refresh"))
                 refiner_switch_at = gr.Slider(
                     value=0.875,
@@ -39,7 +45,14 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
                     maximum=1.0,
                     step=0.025,
                     elem_id=self.elem_id("switch_at"),
-                    **({"info": "(in steps)", "tooltip": "based on percentage of steps"} if opts.refiner_use_steps else {"info": "(in sigmas)", "tooltip": "Wan 2.2 T2V: 0.875 ; Wan 2.2 I2V: 0.9"}),
+                    **(
+                        {"info": "(in steps)", "tooltip": "percentage of total steps"}
+                        if opts.refiner_use_steps
+                        else {
+                            "info": "(in sigmas)",
+                            "tooltip": "Wan 2.2 I2V: 0.9" if is_img2img else "Wan 2.2 T2V: 0.875",
+                        }
+                    ),
                 )
 
         def lookup_checkpoint(title):
@@ -100,7 +113,7 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
         sd = try_filter_state_dict(sd, guess.unet_key_prefix)
 
         logger.info("Restoring state_dict...")
-        load_state_dict(model, sd)
+        load_state_dict(model, sd, ignore_start="llm")
 
         if sd_samplers_common.ORIGINAL_CHECKPOINT.lower().endswith(".gguf"):
 
