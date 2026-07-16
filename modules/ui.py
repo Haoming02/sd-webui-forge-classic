@@ -264,29 +264,27 @@ def create_ui():
                                     hr_distilled_cfg = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="Hires Distilled CFG Scale", value=3.0, elem_id="txt2img_hr_distilled_cfg")
                                     hr_cfg = gr.Slider(minimum=1.0, maximum=24.0, step=0.5, label="Hires CFG Scale", value=6.0, elem_id="txt2img_hr_cfg")
 
-                                with FormRow(elem_id="txt2img_hires_fix_row3", variant="compact", visible=shared.opts.hires_fix_show_sampler) as hr_checkpoint_container:
-                                    hr_checkpoint_name = gr.Dropdown(label="Hires Checkpoint", elem_id="hr_checkpoint", choices=["Use same checkpoint"] + modules.sd_models.checkpoint_tiles(use_short=True), value="Use same checkpoint", scale=2)
+                                with FormRow(elem_id="txt2img_hires_fix_row3", variant="compact", visible=shared.opts.hires_fix_show_sampler):
 
-                                    hr_checkpoint_refresh = ToolButton(value=refresh_symbol)
-
-                                    def get_additional_modules():
+                                    def _refresh_models():
+                                        checkpoints_list = ["Use same checkpoint"]
                                         modules_list = ["Use same choices"]
-                                        if main_entry.module_list == {}:
-                                            _, modules = main_entry.refresh_models()
-                                            modules_list += list(modules)
-                                        else:
-                                            modules_list += list(main_entry.module_list.keys())
-                                        return modules_list
+                                        checkpoints, modules = main_entry.refresh_models()
+                                        return [checkpoints_list + checkpoints, modules_list + modules]
 
-                                    modules_list = get_additional_modules()
+                                    checkpoints_list, modules_list = _refresh_models()
 
-                                    def refresh_model_and_modules():
-                                        modules_list = get_additional_modules()
-                                        return gr.update(choices=["Use same checkpoint"] + modules.sd_models.checkpoint_tiles(use_short=True)), gr.update(choices=modules_list)
+                                    hr_checkpoint_name = gr.Dropdown(label="Hires Checkpoint", elem_id="hr_checkpoint", choices=checkpoints_list, value="Use same checkpoint", scale=2)
 
                                     hr_additional_modules = gr.Dropdown(label="Hires VAE / Text Encoder", elem_id="hr_vae_te", choices=modules_list, value=["Use same choices"], multiselect=True, scale=3)
 
-                                    hr_checkpoint_refresh.click(fn=refresh_model_and_modules, outputs=[hr_checkpoint_name, hr_additional_modules], show_progress=False)
+                                    hr_checkpoint_refresh = ToolButton(value=refresh_symbol)
+
+                                    def refresh_model_and_modules():
+                                        checkpoints_list, modules_list = _refresh_models()
+                                        return gr.update(choices=checkpoints_list), gr.update(choices=modules_list)
+
+                                    hr_checkpoint_refresh.click(fn=refresh_model_and_modules, outputs=[hr_checkpoint_name, hr_additional_modules])
 
                                 with FormRow(elem_id="txt2img_hires_fix_row3b", variant="compact", visible=shared.opts.hires_fix_show_sampler) as hr_sampler_container:
                                     hr_sampler_name = gr.Dropdown(label="Hires sampling method", elem_id="hr_sampler", choices=["Use same sampler"] + sd_samplers.visible_sampler_names(), value="Use same sampler")
