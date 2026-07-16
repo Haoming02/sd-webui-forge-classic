@@ -22,12 +22,17 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Jun.]
+## Features [Jul.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
 
+- [X] Support [Krea 2](https://huggingface.co/krea/Krea-2-Turbo)
+    - `Turbo` / `Raw`
 - [X] Support [Anima](https://huggingface.co/circlestone-labs/Anima)
+- [X] Support **Anima Edit**
+    - require specific [LoRA](https://civitai.com/models/2650553/anima-edit)
+    - enable in **Settings/Stable Diffusion**
 - [X] Support [Flux.2-Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B)
     - `4B` / `9B` (**not** `FLUX.2-Dev`)
 
@@ -36,9 +41,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 - [X] Support [Ernie-Image](https://huggingface.co/baidu/ERNIE-Image)
     - `ernie-image` / `ernie-image-turbo`
-- [X] Support [PiD](https://huggingface.co/nvidia/PiD)
+- [X] Support [PiD 1.0](https://huggingface.co/nvidia/PiD)
     - `sdxl` / `qwen` / `flux1` / `flux2` (**not** `PixelDiT`)
-    - only `img2img` is supported currently
+    - use `PiD Integrated` to automatically upscale after generation
 - [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
     - `z-image` / `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
@@ -79,7 +84,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - `Neta-Lumina` / `NetaYume-Lumina`
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
 - [X] Support **MixedPrecision** Models
-    - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled`
+    - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled` / `int8_convrot` / `convrot_w4a4`
 - [X] Support [Flux.2-Small-Decoder](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/blob/main/full_encoder_small_decoder.safetensors) & [Qwen2D VAE](https://huggingface.co/Anzhc/Qwen2D-VAE/blob/main/Qwen2D_VAE.safetensors)
 
 <br>
@@ -149,6 +154,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - [SDXL](https://huggingface.co/kohya-ss/controlnet-lllite/tree/main) / [Anima](https://huggingface.co/kohya-ss/Anima-LLLite/tree/main)
 - [X] Support **Union** Controlnet
     - [SDXL](https://huggingface.co/xinsir/controlnet-union-sdxl-1.0) / [Chenkin](https://civitai.com/models/2527960/chenkin-unicontrol-xl)
+- [X] Support **Region** Controlnet
+    - [Anima](https://huggingface.co/Sen-sou/Anima-LLLite-Regional-Controlnet)
+    - use the **Region** mode to create color masks
 
 #### Removed Features
 
@@ -224,6 +232,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - change Units to `gr.Tab`
     - improve `masks` & `buttons`
     - remove multi-inputs, as they are "[misleading](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/932)"
+- [X] Checkpoint Merger Rewrite
+    - update ui
+    - support modern models
 - [X] Disable Refiner by default
     - enable again in **Settings/Refiner**
 - [X] No longer install `bitsandbytes` by default
