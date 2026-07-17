@@ -435,7 +435,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 storage_dtype = torch.bfloat16
                 logger.info(f"Using Nunchaku Model Data Type: {storage_dtype}")
             elif quant_config is not None:
-                storage_dtype = state_dict_dtype
+                storage_dtype = torch.bfloat16
                 logger.info("Using MixedPrecision for Model")
             elif state_dict_dtype in [torch.float8_e4m3fn, torch.float8_e5m2, "nf4", "fp4", "gguf"]:
                 storage_dtype = state_dict_dtype
@@ -475,7 +475,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
                 if quant_config is not None:
                     extra_dtype = quant_config
-                    to_args.clear()
                 else:
                     extra_dtype = None
 

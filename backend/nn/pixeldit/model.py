@@ -1,4 +1,6 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/ldm/pixeldit/model.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.28.0/comfy/ldm/pixeldit/model.py
+
+from abc import abstractmethod
 
 import torch
 import torch.nn as nn
@@ -176,8 +178,13 @@ class PixDiT_T2I(nn.Module):
     def _fetch_text_pos(self, length, device, dtype):
         return rope(torch.arange(length, dtype=torch.float32, device=device).reshape(1, -1), self.hidden_size // self.num_groups, self.text_rope_theta).squeeze(0).to(dtype=dtype)
 
+    @abstractmethod
     def _pre_patch_block(self, s, i, **kwargs):
-        return s
+        raise NotImplementedError
+
+    @abstractmethod
+    def _pre_pixel_blocks(self, s, **kwargs):
+        raise NotImplementedError
 
     def forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, **kwargs):
         H_orig, W_orig = x.shape[2], x.shape[3]
@@ -208,6 +215,7 @@ class PixDiT_T2I(nn.Module):
             s, y_emb = blk(s, y_emb, condition, pos_img, pos_txt, None, transformer_options=transformer_options)
         s = F.silu(t_emb + s)
 
+        s = self._pre_pixel_blocks(s, **kwargs)
         s_cond = s.view(B * L, self.hidden_size)
         x_pixels = self.pixel_embedder(x, patch_size=self.patch_size)
         for blk in self.pixel_blocks:

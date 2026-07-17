@@ -1,4 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/ldm/pixeldit/pid.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.28.0/comfy/ldm/pixeldit/pid.py
 
 import torch
 import torch.nn as nn
@@ -10,11 +10,11 @@ from .model import PixDiT_T2I
 from .modules import precompute_freqs_cis_2d
 
 
-class SigmaAwareGatePerTokenPerDim(nn.Module):
-    def __init__(self, dim: int):
+class SigmaAwareGate(nn.Module):
+    def __init__(self, dim: int, per_token: bool = False):
         super().__init__()
 
-        self.content_proj = nn.Linear(dim * 2, dim)
+        self.content_proj = nn.Linear(dim * 2, 1 if per_token else dim)
         self.log_alpha = nn.Parameter(torch.empty(()))
 
     def forward(self, x: torch.Tensor, lq: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
@@ -26,16 +26,16 @@ class SigmaAwareGatePerTokenPerDim(nn.Module):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, channels: int, num_groups: int = 4):
+    def __init__(self, channels: int, num_groups: int = 4, conv_padding_mode: str = "zeros"):
         super().__init__()
 
         self.block = nn.Sequential(
             nn.GroupNorm(num_groups, channels),
             nn.SiLU(),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, padding_mode=conv_padding_mode),
             nn.GroupNorm(num_groups, channels),
             nn.SiLU(),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, padding_mode=conv_padding_mode),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -51,9 +51,13 @@ class LQProjection2D(nn.Module):
         patch_size: int = 16,
         sr_scale: int = 4,
         latent_spatial_down_factor: int = 8,
+        latent_unpatchify_factor: int = 1,
         num_res_blocks: int = 4,
         num_outputs: int = 7,
         interval: int = 2,
+        conv_padding_mode: str = "zeros",
+        gate_per_token: bool = False,
+        pit_output: bool = False,
     ):
         super().__init__()
 
@@ -63,33 +67,35 @@ class LQProjection2D(nn.Module):
         self.patch_size = patch_size
         self.sr_scale = sr_scale
         self.latent_spatial_down_factor = latent_spatial_down_factor
+        self.latent_unpatchify_factor = latent_unpatchify_factor
         self.num_outputs = num_outputs
         self.interval = interval
 
-        z_to_patch_ratio = (sr_scale * latent_spatial_down_factor) / patch_size
+        effective_latent_channels = latent_channels // (latent_unpatchify_factor * latent_unpatchify_factor)
+        effective_spatial_down_factor = latent_spatial_down_factor // latent_unpatchify_factor
+        z_to_patch_ratio = (sr_scale * effective_spatial_down_factor) / patch_size
         self.z_to_patch_ratio = z_to_patch_ratio
         if z_to_patch_ratio >= 1:
             self.latent_fold_factor = 0
-            latent_proj_in_ch = latent_channels
+            latent_proj_in_ch = effective_latent_channels
         else:
             fold_factor = int(1 / z_to_patch_ratio)
             assert fold_factor * z_to_patch_ratio == 1.0
             self.latent_fold_factor = fold_factor
-            latent_proj_in_ch = latent_channels * fold_factor * fold_factor
+            latent_proj_in_ch = effective_latent_channels * fold_factor * fold_factor
 
         layers = [
-            nn.Conv2d(latent_proj_in_ch, hidden_dim, kernel_size=3, padding=1),
+            nn.Conv2d(latent_proj_in_ch, hidden_dim, kernel_size=3, padding=1, padding_mode=conv_padding_mode),
             nn.SiLU(),
-            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1, padding_mode=conv_padding_mode),
         ]
-
         for _ in range(num_res_blocks):
-            layers.append(ResBlock(hidden_dim))
-
+            layers.append(ResBlock(hidden_dim, conv_padding_mode=conv_padding_mode))
         self.latent_proj = nn.Sequential(*layers)
 
         self.output_heads = nn.ModuleList([nn.Linear(hidden_dim, out_dim) for _ in range(num_outputs)])
-        self.gate_modules = nn.ModuleList([SigmaAwareGatePerTokenPerDim(out_dim) for _ in range(num_outputs)])
+        self.pit_head = nn.Linear(hidden_dim, out_dim) if pit_output else None
+        self.gate_modules = nn.ModuleList([SigmaAwareGate(out_dim, per_token=gate_per_token) for _ in range(num_outputs)])
 
     def is_gate_active(self, block_idx: int) -> bool:
         return block_idx % self.interval == 0
@@ -101,6 +107,11 @@ class LQProjection2D(nn.Module):
         return self.gate_modules[out_idx](x, lq_feature, sigma)
 
     def _align_latent_to_patch_grid(self, lq_latent: torch.Tensor, pH: int, pW: int) -> torch.Tensor:
+        f = self.latent_unpatchify_factor
+        if f > 1:
+            B, C, H, W = lq_latent.shape
+            lq_latent = lq_latent.reshape(B, C // (f * f), f, f, H, W)
+            lq_latent = lq_latent.permute(0, 1, 4, 2, 5, 3).reshape(B, C // (f * f), H * f, W * f)
         B, z_dim = lq_latent.shape[:2]
         if self.z_to_patch_ratio >= 1:
             if lq_latent.shape[2] != pH or lq_latent.shape[3] != pW:
@@ -120,7 +131,10 @@ class LQProjection2D(nn.Module):
         feat = self._align_latent_to_patch_grid(lq_latent, target_pH, target_pW)
         B, C, H, W = feat.shape
         tokens = feat.permute(0, 2, 3, 1).contiguous().view(B, H * W, C)
-        return [head(tokens) for head in self.output_heads]
+        outputs = [head(tokens) for head in self.output_heads]
+        if self.pit_head is not None:
+            outputs.append(self.pit_head(tokens))
+        return outputs
 
 
 class PidNet(PixDiT_T2I):
@@ -132,6 +146,10 @@ class PidNet(PixDiT_T2I):
         lq_interval: int = 2,
         sr_scale: int = 4,
         latent_spatial_down_factor: int = 8,
+        lq_latent_unpatchify_factor: int = 1,
+        lq_conv_padding_mode: str = "zeros",
+        lq_gate_per_token: bool = False,
+        pit_lq_inject: bool = False,
         rope_ref_h: int = 1024,
         rope_ref_w: int = 1024,
         **pixdit_kwargs,
@@ -147,6 +165,8 @@ class PidNet(PixDiT_T2I):
         for blk in self.pixel_blocks:
             blk._rope_fn = _pit_rope_fn
 
+        self.pit_lq_inject = pit_lq_inject
+
         num_lq_outputs = (self.patch_depth + lq_interval - 1) // lq_interval
         self.lq_proj = LQProjection2D(
             latent_channels=lq_latent_channels,
@@ -155,10 +175,15 @@ class PidNet(PixDiT_T2I):
             patch_size=self.patch_size,
             sr_scale=sr_scale,
             latent_spatial_down_factor=latent_spatial_down_factor,
+            latent_unpatchify_factor=lq_latent_unpatchify_factor,
             num_res_blocks=lq_num_res_blocks,
             num_outputs=num_lq_outputs,
             interval=lq_interval,
+            conv_padding_mode=lq_conv_padding_mode,
+            gate_per_token=lq_gate_per_token,
+            pit_output=pit_lq_inject,
         )
+        self.pit_lq_gate = SigmaAwareGate(self.hidden_size, per_token=lq_gate_per_token) if pit_lq_inject else None
 
     def _fetch_patch_pos(self, height, width, device, dtype, **rope_opts):
         return precompute_freqs_cis_2d(
@@ -180,6 +205,11 @@ class PidNet(PixDiT_T2I):
             return s
         return self.lq_proj.gate(s, pid_lq_features[out_idx], pid_degrade_sigma, out_idx)
 
+    def _pre_pixel_blocks(self, s, pid_pit_lq_feature=None, pid_degrade_sigma=None, **kwargs):
+        if pid_pit_lq_feature is None:
+            return s
+        return self.pit_lq_gate(s, pid_pit_lq_feature, pid_degrade_sigma)
+
     def forward(self, x, timesteps, context=None, attention_mask=None, transformer_options={}, **kwargs):
         lq_latent, degrade_sigma = dynamic_args.lq_latent
         assert lq_latent is not None
@@ -196,6 +226,7 @@ class PidNet(PixDiT_T2I):
             degrade_sigma = degrade_sigma.expand(B).contiguous()
 
         lq_features = self.lq_proj(lq_latent=lq_latent.to(x), target_pH=Hs, target_pW=Ws)
+        pit_lq_feature = lq_features.pop() if self.pit_lq_inject else None
 
         return super().forward(
             x,
@@ -204,6 +235,7 @@ class PidNet(PixDiT_T2I):
             attention_mask=attention_mask,
             transformer_options=transformer_options,
             pid_lq_features=lq_features,
+            pid_pit_lq_feature=pit_lq_feature,
             pid_degrade_sigma=degrade_sigma,
             **kwargs,
         )
