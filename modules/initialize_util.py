@@ -175,12 +175,19 @@ def reserve_memory():
     set_reserved_memory(opts.setting_allocated_vram)
 
 
+def clear_references():
+    from backend.args import dynamic_args
+
+    dynamic_args.ref_latents.clear()
+
+
 def configure_opts_onchange():
     from modules import shared, ui_tempdir
 
     shared.opts.onchange("temp_dir", ui_tempdir.on_tmpdir_changed)
     shared.opts.onchange("gradio_theme", shared.reload_gradio_theme)
     shared.opts.onchange("setting_allocated_vram", reserve_memory)
+    shared.opts.onchange("anima_do_reference", clear_references)
     startup_timer.record("opts onchange")
 
 
