@@ -248,7 +248,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
 
                 _double_cast = self.parameters_manual_cast and (len(self.weight_function) > 0 or len(self.bias_function) > 0)
 
-                if TRITON_AVAILABLE and getattr(self, "quant_format", None) == "int8_tensorwise" and not _double_cast:
+                if TRITON_AVAILABLE and getattr(self, "quant_format", None) == "int8_tensorwise" and not (_double_cast or self._full_precision_mm):
                     if len(self.weight_function) > 0 or len(self.bias_function) > 0:
                         _weight, bias, signal = weights_manual_cast(self, x=None, dtype=self.weight.dtype, device=input.device, bias_dtype=input.dtype)
                         weight, params = TensorWiseINT8Layout.quantize(
