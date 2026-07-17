@@ -27,6 +27,12 @@ except ImportError:
 else:
     TRITON_AVAILABLE = True
 
+    if torch.cuda.is_available():
+        props = torch.cuda.get_device_properties()
+        if props.major < 8:
+            TRITON_AVAILABLE = False
+
+
 from .quant_rotation import build_hadamard, rotate_activation
 
 
