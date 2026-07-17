@@ -18,7 +18,11 @@ from torchvision.transforms import InterpolationMode, functional
 from backend.args import dynamic_args
 from backend.attention import attention_function
 from backend.memory_management import is_device_mps
-from backend.operations import scaled_dot_product_attention
+from backend.operations import (
+    main_stream_worker,
+    scaled_dot_product_attention,
+    weights_manual_cast,
+)
 from backend.utils import pad_to_patch_size
 
 # region DiT
@@ -128,11 +132,16 @@ class SelfCrossAttention(nn.Module):
             (q, k, v),
         )
 
-        q = self.q_norm(q)
-        k = self.k_norm(k)
-        v = self.v_norm(v)
         if self.is_SelfAttn and rope_emb is not None:
-            q, k = ck.apply_rope_split_half(q, k, rope_emb)
+            q_scale, _, q_offload_stream = weights_manual_cast(self.q_norm, q)
+            k_scale, _, k_offload_stream = weights_manual_cast(self.k_norm, k)
+            with main_stream_worker(q_scale, None, q_offload_stream), main_stream_worker(k_scale, None, k_offload_stream):
+                q, k = ck.rms_rope_split_half(q, k, rope_emb, q_scale, k_scale, self.q_norm.eps)
+        else:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
+
+        v = self.v_norm(v)
 
         return q, k, v
 
