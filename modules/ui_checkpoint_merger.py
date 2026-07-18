@@ -88,7 +88,7 @@ class UiCheckpointMerger:
                             self.config_source = gr.CheckboxGroup(choices=["A", "B", "C"], value=["A", "B", "C"], label="Copy Metadata from", elem_id="modelmerger_config_method")
                             self.add_merge_recipe = gr.Checkbox(True, label="Include Merge Recipe", elem_id="modelmerger_add_recipe")
 
-                        self.metadata_json = gr.TextArea(value=None, label="Metadata in JSON Format")
+                        self.metadata_json = gr.TextArea(value=None, label="Metadata in JSON Format", visible=False)
                         self.read_metadata = gr.Button("Preview Metadata from Models")
 
                         self.read_metadata.click(

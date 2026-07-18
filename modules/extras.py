@@ -6,15 +6,13 @@ from enum import Enum
 import gradio as gr
 import torch
 import tqdm
+from huggingface_guess.detection import unet_prefix_from_state_dict
 from safetensors.torch import save_file
 
 from backend.state_dict import state_dict_prefix_replace
 from backend.utils import load_torch_file
 from modules import images, sd_models, shared
 from modules.ui_common import plaintext_to_html
-from modules_forge.packages.huggingface_guess.detection import (
-    unet_prefix_from_state_dict,
-)
 
 
 def run_pnginfo(image):
@@ -51,7 +49,7 @@ class InterpolationMethod(Enum):
     def desc(value: str) -> str:
         match value:
             case InterpolationMethod.no_interpolation.value:
-                return "Require 1 Model ; Mainly for format conversion and baking VAE"
+                return "Require 1 Model ; Mainly for format conversion"
             case InterpolationMethod.weighted_sum.value:
                 return "Require 2 Model ; Result is calculated as A * (1 - M) + B * M"
             case InterpolationMethod.add_difference.value:
@@ -65,7 +63,7 @@ def read_metadata(primary_model_name: str, secondary_model_name: str, tertiary_m
         if (checkpoint_info := sd_models.checkpoints_list.get(checkpoint_name, None)) is not None:
             metadata.update({checkpoint_name: checkpoint_info.metadata})
 
-    return json.dumps(metadata, indent=4, ensure_ascii=False)
+    return gr.update(value=json.dumps(metadata, indent=4, ensure_ascii=False), visible=True)
 
 
 def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str, tertiary_model_name: str, interp_method: str, multiplier: float, custom_name: str, discard_weights: str, save_metadata: bool, config_source: list[str], add_merge_recipe: bool):
@@ -86,13 +84,13 @@ def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str,
         return fail("Failed: Missing Tertiary Model")
 
     def weighted_sum(theta0: torch.Tensor, theta1: torch.Tensor, alpha: float) -> torch.Tensor:
-        return ((1 - alpha) * theta0) + (alpha * theta1)
+        return torch.lerp(theta0, theta1, alpha)
 
     def get_difference(theta1: torch.Tensor, theta2: torch.Tensor) -> torch.Tensor:
-        return theta1 - theta2
+        return torch.subtract(theta1, theta2)
 
     def add_difference(theta0: torch.Tensor, theta1_2_diff: torch.Tensor, alpha: float) -> torch.Tensor:
-        return theta0 + (alpha * theta1_2_diff)
+        return torch.add(theta0, theta1_2_diff, alpha=alpha)
 
     def filename_weighted_sum() -> str:
         a = primary_model_info.model_name
@@ -126,37 +124,43 @@ def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str,
     secondary_model_info = sd_models.checkpoint_aliases[secondary_model_name] if theta_func2 else None
     tertiary_model_info = sd_models.checkpoint_aliases[tertiary_model_name] if theta_func1 else None
 
+    def _load_state_dict(filename: str) -> dict[str, torch.Tensor]:
+        sd = load_torch_file(filename)
+        prefix = unet_prefix_from_state_dict(sd)
+        return state_dict_prefix_replace(sd, {prefix: "model.diffusion_model."})
+
     if theta_func2:
         shared.state.textinfo = "Loading B"
         print(f"Loading {secondary_model_info.filename}...")
-        _theta_1 = load_torch_file(secondary_model_info.filename)
-        prefix_1 = unet_prefix_from_state_dict(_theta_1)
-        theta_1 = state_dict_prefix_replace(_theta_1, {prefix_1: "model.diffusion_model."})
-        del _theta_1
+        theta_1 = _load_state_dict(secondary_model_info.filename)
     else:
         theta_1 = None
 
     if theta_func1:
+        _keys = list(theta_1.keys())
+
         shared.state.textinfo = "Loading C"
         print(f"Loading {tertiary_model_info.filename}...")
-        _theta_2 = load_torch_file(tertiary_model_info.filename)
-        prefix_2 = unet_prefix_from_state_dict(_theta_2)
-        theta_2 = state_dict_prefix_replace(_theta_2, {prefix_2: "model.diffusion_model."})
-        del _theta_2
+        theta_2 = _load_state_dict(tertiary_model_info.filename)
 
         shared.state.textinfo = "Merging B and C"
-        shared.state.sampling_steps = len(theta_1.keys())
-
-        total = len(theta_1.keys())
+        shared.state.sampling_steps = total = len(_keys)
         missing = 0
 
-        for key in tqdm.tqdm(theta_1.keys()):
+        for key in tqdm.tqdm(_keys):
             shared.state.sampling_step += 1
 
             if key in theta_2:
-                theta_1[key] = theta_func1(theta_1[key], theta_2.pop(key))
+                a = theta_1.pop(key)
+                b = theta_2.pop(key)
+
+                if a.shape != b.shape:
+                    raise ValueError(f"Shape Mismatch ({tuple(a.shape)} != {tuple(b.shape)})")
+
+                theta_1[key] = theta_func1(a.float(), b.float()).to(a)
             else:
-                theta_1[key] = torch.zeros_like(theta_1[key])
+                w = theta_1.pop(key)
+                theta_1[key] = torch.zeros_like(w)
                 missing += 1
 
         del theta_2
@@ -165,20 +169,15 @@ def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str,
         if missing > total * 0.25:
             raise SystemError("Keys Mismatch between B & C...")
 
-    shared.state.textinfo = f"Loading {primary_model_info.filename}..."
+    shared.state.textinfo = "Loading A"
     print(f"Loading {primary_model_info.filename}...")
-    _theta_0 = load_torch_file(primary_model_info.filename)
-    prefix_0 = unet_prefix_from_state_dict(_theta_0)
-    theta_0 = state_dict_prefix_replace(_theta_0, {prefix_0: "model.diffusion_model."})
-    del _theta_0
+    theta_0 = _load_state_dict(primary_model_info.filename)
 
-    if theta_1 is not None:
+    if theta_func2:
         _keys = list(theta_0.keys())
-        shared.state.textinfo = "Merging A and B"
-        shared.state.sampling_steps = len(_keys)
-        print("Merging...")
 
-        total = len(_keys)
+        shared.state.textinfo = "Merging A and B"
+        shared.state.sampling_steps = total = len(_keys)
         missing = 0
 
         for key in tqdm.tqdm(_keys):
@@ -194,9 +193,10 @@ def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str,
             if a.shape != b.shape:
                 raise ValueError(f"Shape Mismatch ({tuple(a.shape)} != {tuple(b.shape)})")
 
-            theta_0[key] = theta_func2(a, b.to(a), multiplier)
+            theta_0[key] = theta_func2(a.float(), b.float(), multiplier).to(a)
 
         del theta_1
+        shared.state.nextjob()
 
         if missing > total * 0.25:
             raise SystemError("Keys Mismatch between A & B...")
@@ -213,7 +213,6 @@ def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str,
 
     output_modelname = os.path.join(sd_models.model_path, filename)
 
-    shared.state.nextjob()
     shared.state.textinfo = "Saving"
     print(f"Saving to {output_modelname}...")
 
@@ -282,8 +281,8 @@ def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str,
     save_file(theta_0, output_modelname, metadata=sanitize_metadata(metadata))
     print(f"Checkpoint saved to {output_modelname}")
 
-    shared.state.textinfo = "Checkpoint saved"
+    shared.state.textinfo = "Checkpoint Saved"
     shared.state.end()
-    sd_models.list_models()
 
+    sd_models.list_models()
     return [gr.update(choices=sorted(sd_models.checkpoint_tiles()))] * 4 + [f"Checkpoint saved to {output_modelname}"]
