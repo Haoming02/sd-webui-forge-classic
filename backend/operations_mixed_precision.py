@@ -21,7 +21,7 @@ from .quant_ops import (  # noqa
 )
 
 try:
-    from .operations_triton import triton_int8_linear_per_row
+    from .operations_triton import triton_int8_linear, triton_int8_linear_per_row
 except ImportError:
     TRITON_AVAILABLE = False
 else:
@@ -114,6 +114,7 @@ def _load_quantized_module(module: torch.nn.Module, super_load, state_dict: dict
             scale = pop_scale("weight_scale")
             if scale is None:
                 raise ValueError(f"Missing INT8 weight scale for layer {layer_name}")
+            module._per_row = scale.dim() == 2 and scale.shape[1] == 1
             scales = {"scale": scale}
             params_conf = layer_conf.get("params", {})
             if not isinstance(params_conf, dict):
@@ -281,7 +282,10 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                     compute_dtype: torch.dtype = input.dtype if input.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
 
                     with main_stream_worker(weight, bias, signal):
-                        output = triton_int8_linear_per_row(input, weight, scale, bias, compute_dtype)
+                        if self._per_row:
+                            output = triton_int8_linear_per_row(input, weight, scale, bias, compute_dtype)
+                        else:
+                            output = triton_int8_linear(input, weight, scale, bias, compute_dtype)
                 else:
                     weight_only_quant = _use_quantized and not quantize_input and isinstance(self.weight, QuantizedTensor)
 
