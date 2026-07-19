@@ -1,23 +1,17 @@
-let promptTokenCountUpdateFunctions = {};
+const promptTokenCountUpdateFunctions = {};
 
 function update_txt2img_tokens(...args) {
     // Called from Gradio
     update_token_counter("txt2img_token_button");
     update_token_counter("txt2img_negative_token_button");
-    if (args.length == 2) {
-        return args[0];
-    }
-    return args;
+    return (args.length === 2) ? args[0] : args;
 }
 
 function update_img2img_tokens(...args) {
     // Called from Gradio
     update_token_counter("img2img_token_button");
     update_token_counter("img2img_negative_token_button");
-    if (args.length == 2) {
-        return args[0];
-    }
-    return args;
+    return (args.length === 2) ? args[0] : args;
 }
 
 function update_token_counter(button_id) {
@@ -54,7 +48,7 @@ function setupTokenCounting(id, id_counter, id_button) {
     prompt.parentElement.insertBefore(counter, prompt);
     prompt.parentElement.style.position = "relative";
 
-    let func = onEdit(id, textarea, 600, function () {
+    let func = onEdit(id, textarea, 1000, function () {
         if (counter.classList.contains("token-counter-visible")) {
             gradioApp().getElementById(id_button)?.click();
         }
@@ -67,25 +61,14 @@ function toggleTokenCountingVisibility(id, id_counter, id_button) {
     let counter = gradioApp().getElementById(id_counter);
 
     counter.style.display = opts.disable_token_counters ? "none" : "block";
-    counter.classList.toggle(
-        "token-counter-visible",
-        !opts.disable_token_counters,
-    );
+    counter.classList.toggle("token-counter-visible", !opts.disable_token_counters);
 }
 
 function runCodeForTokenCounters(fun) {
     fun("txt2img_prompt", "txt2img_token_counter", "txt2img_token_button");
-    fun(
-        "txt2img_neg_prompt",
-        "txt2img_negative_token_counter",
-        "txt2img_negative_token_button",
-    );
+    fun("txt2img_neg_prompt", "txt2img_negative_token_counter", "txt2img_negative_token_button");
     fun("img2img_prompt", "img2img_token_counter", "img2img_token_button");
-    fun(
-        "img2img_neg_prompt",
-        "img2img_negative_token_counter",
-        "img2img_negative_token_button",
-    );
+    fun("img2img_neg_prompt", "img2img_negative_token_counter", "img2img_negative_token_button");
 }
 
 onUiLoaded(function () {

@@ -51,10 +51,7 @@ function createVisualizationTable(data, cutoff = 0, sort = "") {
         return Math.max(a, b.parts.length);
     }, 0);
 
-    let cols = createRow(table, "th", [
-        cutoff === 0 ? "key" : "record",
-        cutoff === 0 ? "value" : "seconds",
-    ]);
+    let cols = createRow(table, "th", [cutoff === 0 ? "key" : "record", cutoff === 0 ? "value" : "seconds"]);
     cols[0].colSpan = maxLength;
 
     function arraysEqual(a, b) {
@@ -63,11 +60,7 @@ function createVisualizationTable(data, cutoff = 0, sort = "") {
 
     let addLevel = function (level, parent, hide) {
         let matching = items.filter(function (x) {
-            return (
-                x.parts[level] &&
-                !x.parts[level + 1] &&
-                arraysEqual(x.parts.slice(0, level), parent)
-            );
+            return x.parts[level] && !x.parts[level + 1] && arraysEqual(x.parts.slice(0, level), parent);
         });
         if (sort === "number") {
             matching = matching.sort(function (a, b) {

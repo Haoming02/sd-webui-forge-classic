@@ -6,12 +6,8 @@ function closeModal() {
 function showModal(event) {
     const source = event.target || event.srcElement;
     const modalImage = gradioApp().getElementById("modalImage");
-    const modalToggleLivePreviewBtn = gradioApp().getElementById(
-        "modal_toggle_live_preview",
-    );
-    modalToggleLivePreviewBtn.innerHTML = opts.js_live_preview_in_modal_lightbox
-        ? "&#x1F5C7;"
-        : "&#x1F5C6;";
+    const modalToggleLivePreviewBtn = gradioApp().getElementById("modal_toggle_live_preview");
+    modalToggleLivePreviewBtn.innerHTML = opts.js_live_preview_in_modal_lightbox ? "&#x1F5C7;" : "&#x1F5C6;";
     const lb = gradioApp().getElementById("lightboxModal");
     modalImage.src = source.src;
     if (modalImage.style.display === "none") {
@@ -23,10 +19,7 @@ function showModal(event) {
     const tabTxt2Img = gradioApp().getElementById("tab_txt2img");
     const tabImg2Img = gradioApp().getElementById("tab_img2img");
     // show the save button in modal only on txt2img or img2img tabs
-    if (
-        tabTxt2Img.style.display != "none" ||
-        tabImg2Img.style.display != "none"
-    ) {
+    if (tabTxt2Img.style.display != "none" || tabImg2Img.style.display != "none") {
         gradioApp().getElementById("modal_save").style.display = "inline";
     } else {
         gradioApp().getElementById("modal_save").style.display = "none";
@@ -46,10 +39,7 @@ function updateOnBackgroundChange() {
         if (opts.js_live_preview_in_modal_lightbox && preview.length > 0) {
             // show preview image if available
             modalImage.src = preview[preview.length - 1].src;
-        } else if (
-            currentButton?.children?.length > 0 &&
-            modalImage.src != currentButton.children[0].src
-        ) {
+        } else if (currentButton?.children?.length > 0 && modalImage.src != currentButton.children[0].src) {
             modalImage.src = currentButton.children[0].src;
             if (modalImage.style.display === "none") {
                 const modal = gradioApp().getElementById("lightboxModal");
@@ -66,8 +56,7 @@ function modalImageSwitch(offset) {
         let result = selected_gallery_index();
 
         if (result != -1) {
-            let nextButton =
-                galleryButtons[negmod(result + offset, galleryButtons.length)];
+            let nextButton = galleryButtons[negmod(result + offset, galleryButtons.length)];
             nextButton.click();
             const modalImage = gradioApp().getElementById("modalImage");
             const modal = gradioApp().getElementById("lightboxModal");
@@ -154,10 +143,7 @@ function setupImageForLightbox(e) {
         function (evt) {
             if (!opts.js_modal_lightbox || evt.button != 0) return;
 
-            modalZoomSet(
-                gradioApp().getElementById("modalImage"),
-                opts.js_modal_lightbox_initially_zoomed,
-            );
+            modalZoomSet(gradioApp().getElementById("modalImage"), opts.js_modal_lightbox_initially_zoomed);
             evt.preventDefault();
             showModal(evt);
         },
@@ -171,22 +157,14 @@ function modalZoomSet(modalImage, enable) {
 
 function modalZoomToggle(event) {
     let modalImage = gradioApp().getElementById("modalImage");
-    modalZoomSet(
-        modalImage,
-        !modalImage.classList.contains("modalImageFullscreen"),
-    );
+    modalZoomSet(modalImage, !modalImage.classList.contains("modalImageFullscreen"));
     event.stopPropagation();
 }
 
 function modalLivePreviewToggle(event) {
-    const modalToggleLivePreview = gradioApp().getElementById(
-        "modal_toggle_live_preview",
-    );
-    opts.js_live_preview_in_modal_lightbox =
-        !opts.js_live_preview_in_modal_lightbox;
-    modalToggleLivePreview.innerHTML = opts.js_live_preview_in_modal_lightbox
-        ? "&#x1F5C7;"
-        : "&#x1F5C6;";
+    const modalToggleLivePreview = gradioApp().getElementById("modal_toggle_live_preview");
+    opts.js_live_preview_in_modal_lightbox = !opts.js_live_preview_in_modal_lightbox;
+    modalToggleLivePreview.innerHTML = opts.js_live_preview_in_modal_lightbox ? "&#x1F5C7;" : "&#x1F5C6;";
     event.stopPropagation();
 }
 

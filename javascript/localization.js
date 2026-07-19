@@ -13,8 +13,7 @@ let ignore_ids_for_localization = {
 };
 
 let re_num = /^[.\d]+$/;
-let re_emoji =
-    /[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F9B0}-\u{1F9B3}]/u;
+let re_emoji = /[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\u{1F9B0}-\u{1F9B3}]/u;
 
 let original_lines = {};
 let translated_lines = {};
@@ -36,12 +35,7 @@ function canBeTranslated(node, text) {
     if (!node.parentElement) return false;
 
     let parentType = node.parentElement.nodeName;
-    if (
-        parentType == "SCRIPT" ||
-        parentType == "STYLE" ||
-        parentType == "TEXTAREA"
-    )
-        return false;
+    if (parentType == "SCRIPT" || parentType == "STYLE" || parentType == "TEXTAREA") return false;
 
     if (parentType == "OPTION" || parentType == "SPAN") {
         let pnode = node;
@@ -113,9 +107,7 @@ function localizeWholePage() {
     processNode(gradioApp());
 
     function elem(comp) {
-        let elem_id = comp.props.elem_id
-            ? comp.props.elem_id
-            : "component-" + comp.id;
+        let elem_id = comp.props.elem_id ? comp.props.elem_id : "component-" + comp.id;
         return gradioApp().getElementById(elem_id);
     }
 
@@ -164,10 +156,7 @@ function download_localization() {
     let text = JSON.stringify(dumpTranslations(), null, 4);
 
     let element = document.createElement("a");
-    element.setAttribute(
-        "href",
-        "data:text/plain;charset=utf-8," + encodeURIComponent(text),
-    );
+    element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(text));
     element.setAttribute("download", "localization.json");
     element.style.display = "none";
     document.body.appendChild(element);

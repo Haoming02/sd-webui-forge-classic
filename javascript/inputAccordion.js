@@ -6,9 +6,7 @@ function inputAccordionChecked(id, checked) {
 
 function setupAccordion(accordion) {
     let labelWrap = accordion.querySelector(".label-wrap");
-    let gradioCheckbox = gradioApp().querySelector(
-        "#" + accordion.id + "-checkbox input",
-    );
+    let gradioCheckbox = gradioApp().querySelector("#" + accordion.id + "-checkbox input");
     let extra = gradioApp().querySelector("#" + accordion.id + "-extra");
     let span = labelWrap.querySelector("span");
     let linked = true;
@@ -46,8 +44,7 @@ function setupAccordion(accordion) {
     visibleCheckbox.type = "checkbox";
     visibleCheckbox.checked = isOpen();
     visibleCheckbox.id = accordion.id + "-visible-checkbox";
-    visibleCheckbox.className =
-        gradioCheckbox.className + " input-accordion-checkbox";
+    visibleCheckbox.className = gradioCheckbox.className + " input-accordion-checkbox";
     span.insertBefore(visibleCheckbox, span.firstChild);
 
     accordion.visibleCheckbox = visibleCheckbox;

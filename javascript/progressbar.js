@@ -34,11 +34,7 @@ function pad2(x) {
 function formatTime(secs) {
     if (secs > 3600) {
         return (
-            pad2(Math.floor(secs / 60 / 60)) +
-            ":" +
-            pad2(Math.floor(secs / 60) % 60) +
-            ":" +
-            pad2(Math.floor(secs) % 60)
+            pad2(Math.floor(secs / 60 / 60)) + ":" + pad2(Math.floor(secs / 60) % 60) + ":" + pad2(Math.floor(secs) % 60)
         );
     } else if (secs > 60) {
         return pad2(Math.floor(secs / 60)) + ":" + pad2(Math.floor(secs) % 60);
@@ -78,21 +74,13 @@ function randomId() {
 // starts sending progress requests to "/internal/progress" uri, creating progressbar above progressbarContainer element and
 // preview inside gallery element. Cleans up all created stuff when the task is over and calls atEnd.
 // calls onProgress every time there is a progress update
-function requestProgress(
-    id_task,
-    progressbarContainer,
-    gallery,
-    atEnd,
-    onProgress,
-    inactivityTimeout = 40,
-) {
+function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgress, inactivityTimeout = 40) {
     let dateStart = new Date();
     let wasEverActive = false;
     let parentProgressbar = progressbarContainer.parentNode;
     let wakeLock = null;
 
-    if (gallery && gallery.classList.contains("hidden"))
-        gallery = gallery.parentElement.querySelector(".gradio-video");
+    if (gallery && gallery.classList.contains("hidden")) gallery = gallery.parentElement.querySelector(".gradio-video");
 
     let requestWakeLock = async function () {
         if (!opts.prevent_screen_sleep_during_generation || wakeLock) return;
@@ -177,11 +165,7 @@ function requestProgress(
                     return;
                 }
 
-                if (
-                    elapsedFromStart > inactivityTimeout &&
-                    !res.queued &&
-                    !res.active
-                ) {
+                if (elapsedFromStart > inactivityTimeout && !res.queued && !res.active) {
                     removeProgressBar();
                     return;
                 }
