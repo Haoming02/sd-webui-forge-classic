@@ -141,10 +141,13 @@ def weights_manual_cast(
     return weight, bias, (offload_stream, weight_a, bias_a)
 
 
+import torch.compiler
+
 @contextlib.contextmanager
 def main_stream_worker(weight, bias, offload_stream: tuple[torch.Stream, torch.Tensor, torch.Tensor]):
     yield
-    if offload_stream is None:
+    is_compiling = torch.compiler.is_compiling() if hasattr(torch, "compiler") else False
+    if is_compiling or offload_stream is None:
         return
     os, weight_a, bias_a = offload_stream
     if os is None:

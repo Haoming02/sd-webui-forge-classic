@@ -26,7 +26,11 @@ def build_hadamard(
     import math
 
     cache_key = (size, str(device), dtype)
-    if cache_key in _HADAMARD_CACHE:
+    
+    import torch.compiler
+    is_compiling = torch.compiler.is_compiling() if hasattr(torch, "compiler") else False
+
+    if not is_compiling and cache_key in _HADAMARD_CACHE:
         return _HADAMARD_CACHE[cache_key]
 
     if size < 4 or (size & (size - 1)) != 0 or math.log(size, 4) % 1 != 0:
@@ -46,7 +50,9 @@ def build_hadamard(
 
     # Normalize to make it orthogonal
     H_normalized = H / (size**0.5)
-    _HADAMARD_CACHE[cache_key] = H_normalized
+    
+    if not is_compiling:
+        _HADAMARD_CACHE[cache_key] = H_normalized
 
     return H_normalized
 

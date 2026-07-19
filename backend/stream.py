@@ -27,6 +27,10 @@ def get_vae_stream():
 
 
 def should_use_stream():
+    import torch.compiler
+    is_compiling = torch.compiler.is_compiling() if hasattr(torch, "compiler") else False
+    if is_compiling:
+        return False
     return current_stream is not None and mover_stream is not None
 
 
