@@ -1,9 +1,12 @@
 // attaches listeners to the txt2img and img2img galleries to update displayed generation param text when the image changes
 
-let txt2img_gallery,
-    img2img_gallery,
-    modal = undefined;
-onAfterUiUpdate(function () {
+let txt2img_gallery = undefined;
+let img2img_gallery = undefined;
+let modal = undefined;
+
+onUiLoaded(setupListeners);
+
+function setupListeners() {
     if (!txt2img_gallery) {
         txt2img_gallery = attachGalleryListeners("txt2img");
     }
@@ -17,17 +20,14 @@ onAfterUiUpdate(function () {
             attributeFilter: ["style"],
         });
     }
-});
+
+    if (!txt2img_gallery || !img2img_gallery || !modal) setTimeout(setupListeners, 50);
+}
 
 let modalObserver = new MutationObserver(function (mutations) {
     mutations.forEach(function (mutationRecord) {
-        let selectedTab = gradioApp().querySelector(
-            "#tabs div button.selected",
-        )?.innerText;
-        if (
-            mutationRecord.target.style.display === "none" &&
-            (selectedTab === "txt2img" || selectedTab === "img2img")
-        ) {
+        let selectedTab = gradioApp().querySelector("#tabs div button.selected")?.innerText;
+        if (mutationRecord.target.style.display === "none" && (selectedTab === "txt2img" || selectedTab === "img2img")) {
             gradioApp()
                 .getElementById(selectedTab + "_generation_info_button")
                 ?.click();

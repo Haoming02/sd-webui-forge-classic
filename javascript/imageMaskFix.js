@@ -3,15 +3,13 @@
  * @see https://github.com/gradio-app/gradio/issues/1721
  */
 function imageMaskResize() {
-    const canvases = gradioApp().querySelectorAll(
-        "#img2maskimg .touch-none canvas",
-    );
-    if (!canvases.length) {
+    const allCanvas = gradioApp().querySelectorAll("#img2maskimg .touch-none canvas");
+    if (!allCanvas.length) {
         window.removeEventListener("resize", imageMaskResize);
         return;
     }
 
-    const wrapper = canvases[0].closest(".touch-none");
+    const wrapper = allCanvas[0].closest(".touch-none");
     const previewImage = wrapper.previousElementSibling;
 
     if (!previewImage.complete) {
@@ -33,7 +31,7 @@ function imageMaskResize() {
     wrapper.style.left = `0px`;
     wrapper.style.top = `0px`;
 
-    canvases.forEach((c) => {
+    allCanvas.forEach((c) => {
         c.style.width = c.style.height = "";
         c.style.maxWidth = "100%";
         c.style.maxHeight = "100%";

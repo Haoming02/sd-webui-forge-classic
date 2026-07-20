@@ -4,10 +4,7 @@ function keyupEditOrder(event) {
     if (!opts.keyedit_move) return;
 
     let target = event.originalTarget || event.composedPath()[0];
-    if (
-        !target.matches("*:is([id*='_toprow'] [id*='_prompt'], .prompt) textarea")
-    )
-        return;
+    if (!target.matches("*:is([id*='_toprow'] [id*='_prompt'], .prompt) textarea")) return;
     if (!event.altKey) return;
 
     let isLeft = event.key == "ArrowLeft";
@@ -26,8 +23,7 @@ function keyupEditOrder(event) {
     if (isLeft && indexStart > 0) {
         items.splice(indexStart - 1, 0, ...items.splice(indexStart, range));
         target.value = items.join();
-        target.selectionStart =
-            items.slice(0, indexStart - 1).join().length + (indexStart == 1 ? 0 : 1);
+        target.selectionStart = items.slice(0, indexStart - 1).join().length + (indexStart == 1 ? 0 : 1);
         target.selectionEnd = items.slice(0, indexEnd).join().length;
     } else if (isRight && indexEnd < items.length - 1) {
         items.splice(indexStart + 1, 0, ...items.splice(indexStart, range));

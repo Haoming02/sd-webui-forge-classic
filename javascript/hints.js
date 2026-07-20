@@ -49,9 +49,8 @@ function updateTooltip(element) {
             if (element.classList.contains("block")) break;
         }
         const fields = element.querySelectorAll("input");
-        for (const field of fields)
-            field.title = tooltip;
-    } catch { };
+        for (const field of fields) field.title = tooltip;
+    } catch { }
 }
 
 const tooltipCheckNodes = new Set();
@@ -65,17 +64,11 @@ function processTooltipCheckNodes() {
 onUiUpdate(function (mutationRecords) {
     for (const record of mutationRecords) {
         for (const node of record.addedNodes) {
-            if (
-                node.nodeType === Node.ELEMENT_NODE &&
-                !node.classList.contains("hide")
-            ) {
+            if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains("hide")) {
                 if (!node.title) {
-                    if (["SPAN", "BUTTON", "P"].includes(node.tagName))
-                        tooltipCheckNodes.add(node);
+                    if (["SPAN", "BUTTON", "P"].includes(node.tagName)) tooltipCheckNodes.add(node);
                 }
-                node
-                    .querySelectorAll("span, button, p")
-                    .forEach((n) => tooltipCheckNodes.add(n));
+                node.querySelectorAll("span, button, p").forEach((n) => tooltipCheckNodes.add(n));
             }
         }
     }

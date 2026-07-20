@@ -4,56 +4,55 @@
 // If there's a mismatch, the keyword counter turns red, and if you hover on it, a tooltip tells you what's wrong.
 
 (function () {
-    const pairs = [
-        ['(', ')', 'round brackets'],
-        ['[', ']', 'square brackets'],
-        ['{', '}', 'curly brackets']
-    ];
+    const pairs = Object.freeze([
+        ["(", ")", "round brackets"],
+        ["[", "]", "square brackets"],
+        ["{", "}", "curly brackets"],
+    ]);
 
     function checkBrackets(textArea, counterElem) {
-        const counts = {};
-        const errors = new Set();
+        const counts = [0, 0, 0];
+        const errors = [];
+        const text = textArea.value;
         let i = 0;
 
-        while (i < textArea.value.length) {
-            let char = textArea.value[i];
-            let escaped = false;
-            while (char === '\\' && i + 1 < textArea.value.length) {
-                escaped = !escaped;
+        while (i < text.length) {
+            let char = text[i];
+            let backslash = 0;
+
+            while (char === "\\" && i + 1 < text.length) {
                 i++;
-                char = textArea.value[i];
+                backslash++;
+                char = text[i];
             }
 
-            if (escaped) {
+            if (backslash % 2 === 1) {
                 i++;
                 continue;
             }
 
-            for (const [open, close, label] of pairs) {
+            for (const [idx, [open, close, label]] of pairs.entries()) {
                 if (char === open) {
-                    counts[label] = (counts[label] || 0) + 1;
+                    counts[idx]++;
                 } else if (char === close) {
-                    counts[label] = (counts[label] || 0) - 1;
-                    if (counts[label] < 0)
-                        errors.add(`Incorrect order of ${label}.`);
+                    counts[idx]--;
+                    if (counts[idx] < 0) errors.push(`Incorrect order of ${label}.`);
                 }
             }
 
             i++;
         }
 
-        for (const [open, close, label] of pairs) {
-            if (counts[label] == undefined)
-                continue;
-
-            if (counts[label] > 0)
-                errors.add(`${open} ... ${close} - Detected ${counts[label]} more opening than closing ${label}.`);
-            else if (counts[label] < 0)
-                errors.add(`${open} ... ${close} - Detected ${-counts[label]} more closing than opening ${label}.`);
+        for (const [idx, [open, close, label]] of pairs.entries()) {
+            if (counts[idx] === 0) continue;
+            else if (counts[idx] > 0)
+                errors.push(`${open} ... ${close} - Detected ${counts[idx]} more opening than closing ${label}.`);
+            else if (counts[idx] < 0)
+                errors.push(`${open} ... ${close} - Detected ${-counts[idx]} more closing than opening ${label}.`);
         }
 
-        counterElem.title = [...errors].join('\n');
-        counterElem.classList.toggle('error', errors.size !== 0);
+        counterElem.title = [...errors].join("\n");
+        counterElem.classList.toggle("error", errors.length > 0);
     }
 
     function setupBracketChecking(id_prompt, id_counter) {
@@ -61,13 +60,13 @@
         const counter = gradioApp().getElementById(id_counter);
 
         if (textarea && counter)
-            onEdit(`${id_prompt}_BracketChecking`, textarea, 600, () => checkBrackets(textarea, counter));
+            onEdit(`${id_prompt}_BracketChecking`, textarea, 1000, () => checkBrackets(textarea, counter));
     }
 
-    onUiLoaded(function () {
-        setupBracketChecking('txt2img_prompt', 'txt2img_token_counter');
-        setupBracketChecking('txt2img_neg_prompt', 'txt2img_negative_token_counter');
-        setupBracketChecking('img2img_prompt', 'img2img_token_counter');
-        setupBracketChecking('img2img_neg_prompt', 'img2img_negative_token_counter');
+    onUiLoaded(() => {
+        setupBracketChecking("txt2img_prompt", "txt2img_token_counter");
+        setupBracketChecking("txt2img_neg_prompt", "txt2img_negative_token_counter");
+        setupBracketChecking("img2img_prompt", "img2img_token_counter");
+        setupBracketChecking("img2img_neg_prompt", "img2img_negative_token_counter");
     });
 })();

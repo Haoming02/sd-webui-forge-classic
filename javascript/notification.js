@@ -19,9 +19,7 @@ onAfterUiUpdate(function () {
         }
     }
 
-    const galleryPreviews = gradioApp().querySelectorAll(
-        'div[id^="tab_"] div[id$="_results"] .thumbnail-item > img',
-    );
+    const galleryPreviews = gradioApp().querySelectorAll('div[id^="tab_"] div[id$="_results"] .thumbnail-item > img');
 
     if (galleryPreviews == null) return;
 

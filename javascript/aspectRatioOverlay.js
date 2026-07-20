@@ -21,29 +21,19 @@ function dimensionChange(e, is_width, is_height) {
     let tabIndex = get_tab_index("mode_img2img");
     if (tabIndex == 0) {
         // img2img
-        targetElement = gradioApp().querySelector(
-            "#img2img_image div.forge-image-container img",
-        );
+        targetElement = gradioApp().querySelector("#img2img_image div.forge-image-container img");
     } else if (tabIndex == 1) {
         // Sketch
-        targetElement = gradioApp().querySelector(
-            "#img2img_sketch div.forge-image-container img",
-        );
+        targetElement = gradioApp().querySelector("#img2img_sketch div.forge-image-container img");
     } else if (tabIndex == 2) {
         // Inpaint
-        targetElement = gradioApp().querySelector(
-            "#img2maskimg div.forge-image-container img",
-        );
+        targetElement = gradioApp().querySelector("#img2maskimg div.forge-image-container img");
     } else if (tabIndex == 3) {
         // Inpaint sketch
-        targetElement = gradioApp().querySelector(
-            "#inpaint_sketch div.forge-image-container img",
-        );
+        targetElement = gradioApp().querySelector("#inpaint_sketch div.forge-image-container img");
     } else if (tabIndex == 4) {
         // Inpaint upload
-        targetElement = gradioApp().querySelector(
-            "#img_inpaint_base div[data-testid=image] img",
-        );
+        targetElement = gradioApp().querySelector("#img_inpaint_base div[data-testid=image] img");
     }
 
     if (targetElement) {
@@ -104,12 +94,10 @@ onAfterUiUpdate(function () {
             inputs.forEach(function (e) {
                 let is_width =
                     (e.parentElement.id == "img2img_width" && e.type == "range") ||
-                    (e.parentElement.parentElement.parentElement.id == "img2img_width" &&
-                        e.type == "number");
+                    (e.parentElement.parentElement.parentElement.id == "img2img_width" && e.type == "number");
                 let is_height =
                     (e.parentElement.id == "img2img_height" && e.type == "range") ||
-                    (e.parentElement.parentElement.parentElement.id == "img2img_height" &&
-                        e.type == "number");
+                    (e.parentElement.parentElement.parentElement.id == "img2img_height" && e.type == "number");
 
                 if ((is_width || is_height) && !e.classList.contains("scrollwatch")) {
                     e.addEventListener("input", function (e) {

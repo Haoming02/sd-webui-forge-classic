@@ -1,9 +1,7 @@
 function extensions_apply(_disabled_list, _update_list, disable_all) {
     let disable = [];
     let update = [];
-    const extensions_input = gradioApp().querySelectorAll(
-        '#extensions input[type="checkbox"]',
-    );
+    const extensions_input = gradioApp().querySelectorAll('#extensions input[type="checkbox"]');
     if (extensions_input.length == 0) {
         throw Error("Extensions page not yet loaded.");
     }
@@ -40,12 +38,7 @@ function extensions_check() {
         });
 
     let id = randomId();
-    requestProgress(
-        id,
-        gradioApp().getElementById("extensions_installed_html"),
-        null,
-        function () { },
-    );
+    requestProgress(id, gradioApp().getElementById("extensions_installed_html"), null, function () { });
 
     return [id, JSON.stringify(disable)];
 }
@@ -61,11 +54,7 @@ function install_extension_from_index(button, url) {
     gradioApp().querySelector("#install_extension_button").click();
 }
 
-function config_state_confirm_restore(
-    _,
-    config_state_name,
-    config_restore_type,
-) {
+function config_state_confirm_restore(_, config_state_name, config_restore_type) {
     if (config_state_name == "Current") {
         return [false, config_state_name, config_restore_type];
     }
@@ -77,11 +66,7 @@ function config_state_confirm_restore(
     } else {
         restored = "the webui version and all saved extension versions";
     }
-    let confirmed = confirm(
-        "Are you sure you want to restore from this state?\nThis will reset " +
-        restored +
-        ".",
-    );
+    let confirmed = confirm("Are you sure you want to restore from this state?\nThis will reset " + restored + ".");
     if (confirmed) {
         restart_reload();
         gradioApp()
@@ -103,15 +88,12 @@ function toggle_all_extensions(event) {
 
 function toggle_extension() {
     let all_extensions_toggled = true;
-    for (const checkbox_el of gradioApp().querySelectorAll(
-        "#extensions .extension_toggle",
-    )) {
+    for (const checkbox_el of gradioApp().querySelectorAll("#extensions .extension_toggle")) {
         if (!checkbox_el.checked) {
             all_extensions_toggled = false;
             break;
         }
     }
 
-    gradioApp().querySelector("#extensions .all_extensions_toggle").checked =
-        all_extensions_toggled;
+    gradioApp().querySelector("#extensions .all_extensions_toggle").checked = all_extensions_toggled;
 }

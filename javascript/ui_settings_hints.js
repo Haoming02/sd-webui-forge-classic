@@ -42,10 +42,7 @@ onOptionsChanged(function () {
                 comment.className = "settings-comment";
                 comment.innerHTML = commentAfter;
                 span.parentElement.insertBefore(comment, span.nextSibling);
-                span.parentElement.insertBefore(
-                    document.createTextNode("\xa0"),
-                    span.nextSibling,
-                );
+                span.parentElement.insertBefore(document.createTextNode("\xa0"), span.nextSibling);
             }
         });
 });

@@ -21,24 +21,17 @@ function settingsShowOneTab() {
 
 onUiLoaded(function () {
     let edit = gradioApp().querySelector("#settings_search");
-    let editTextarea = gradioApp().querySelector(
-        "#settings_search > label > input",
-    );
-    let buttonShowAllPages = gradioApp().getElementById(
-        "settings_show_all_pages",
-    );
+    let editTextarea = gradioApp().querySelector("#settings_search > label > input");
+    let buttonShowAllPages = gradioApp().getElementById("settings_show_all_pages");
     let settings_tabs = gradioApp().querySelector("#settings div");
 
-    onEdit("settingsSearch", editTextarea, 300, function () {
+    onEdit("settingsSearch", editTextarea, 500, function () {
         let searchText = (editTextarea.value || "").trim().toLowerCase();
 
         gradioApp()
-            .querySelectorAll(
-                "#settings > div[id^=settings_] div[id^=column_settings_] > *",
-            )
+            .querySelectorAll("#settings > div[id^=settings_] div[id^=column_settings_] > *")
             .forEach(function (elem) {
-                let visible =
-                    elem.textContent.trim().toLowerCase().indexOf(searchText) != -1;
+                let visible = elem.textContent.trim().toLowerCase().indexOf(searchText) != -1;
                 elem.style.display = visible ? "" : "none";
             });
 

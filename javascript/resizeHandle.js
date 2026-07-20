@@ -37,21 +37,14 @@
     }
 
     function afterResize(parent) {
-        if (
-            displayResizeHandle(parent) &&
-            parent.style.gridTemplateColumns !=
-            parent.style.originalGridTemplateColumns
-        ) {
+        if (displayResizeHandle(parent) && parent.style.gridTemplateColumns != parent.style.originalGridTemplateColumns) {
             const oldParentWidth = R.parentWidth;
             const newParentWidth = parent.offsetWidth;
             const widthL = parseInt(parent.style.gridTemplateColumns.split(" ")[0]);
 
             const ratio = newParentWidth / oldParentWidth;
 
-            const newWidthL = Math.max(
-                Math.floor(ratio * widthL),
-                parent.minLeftColWidth,
-            );
+            const newWidthL = Math.max(Math.floor(ratio * widthL), parent.minLeftColWidth);
             setLeftColGridTemplate(parent, newWidthL);
 
             R.parentWidth = newParentWidth;
@@ -63,8 +56,7 @@
             evt.preventDefault();
             evt.stopPropagation();
 
-            parent.style.gridTemplateColumns =
-                parent.style.originalGridTemplateColumns;
+            parent.style.gridTemplateColumns = parent.style.originalGridTemplateColumns;
         }
 
         const leftCol = parent.firstElementChild;
@@ -82,8 +74,7 @@
             parent.needHideOnMoblie = true;
         } else {
             leftColTemplate = parent.children[0].style.flexBasis;
-            parent.minLeftColWidth =
-                parent.children[0].style.flexBasis.slice(0, -2) / 2;
+            parent.minLeftColWidth = parent.children[0].style.flexBasis.slice(0, -2) / 2;
             parent.minRightColWidth = 0;
             parent.needHideOnMoblie = false;
         }
@@ -109,10 +100,7 @@
                     if (evt.changedTouches.length !== 1) return;
 
                     const currentTime = new Date().getTime();
-                    if (
-                        R.lastTapTime &&
-                        currentTime - R.lastTapTime <= DOUBLE_TAP_DELAY
-                    ) {
+                    if (R.lastTapTime && currentTime - R.lastTapTime <= DOUBLE_TAP_DELAY) {
                         onDoubleClick(evt);
                         return;
                     }
@@ -164,10 +152,7 @@
                     delta = R.screenX - evt.changedTouches[0].screenX;
                 }
                 const leftColWidth = Math.max(
-                    Math.min(
-                        R.leftColStartWidth - delta,
-                        R.parent.offsetWidth - R.parent.minRightColWidth - PAD,
-                    ),
+                    Math.min(R.leftColStartWidth - delta, R.parent.offsetWidth - R.parent.minRightColWidth - PAD),
                     R.parent.minLeftColWidth,
                 );
                 setLeftColGridTemplate(R.parent, leftColWidth);
@@ -209,10 +194,7 @@
 
 function setupAllResizeHandles() {
     for (let elem of gradioApp().querySelectorAll(".resize-handle-row")) {
-        if (
-            !elem.querySelector(".resize-handle") &&
-            !elem.children[0].classList.contains("hidden")
-        ) {
+        if (!elem.querySelector(".resize-handle") && !elem.children[0].classList.contains("hidden")) {
             setupResizeHandle(elem);
         }
     }

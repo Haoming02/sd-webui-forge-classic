@@ -38,11 +38,7 @@ let contextMenuInit = function () {
         gradioApp().appendChild(contextMenu);
     }
 
-    function appendContextMenuOption(
-        targetElementSelector,
-        entryName,
-        entryFunction,
-    ) {
+    function appendContextMenuOption(targetElementSelector, entryName, entryFunction) {
         let currentItems = menuSpecs.get(targetElementSelector);
 
         if (!currentItems) {
@@ -110,11 +106,7 @@ let contextMenuInit = function () {
         eventListenerApplied = true;
     }
 
-    return [
-        appendContextMenuOption,
-        removeContextMenuOption,
-        addContextMenuEventListener,
-    ];
+    return [appendContextMenuOption, removeContextMenuOption, addContextMenuEventListener];
 };
 
 let initResponse = contextMenuInit();
@@ -143,31 +135,15 @@ let regen_img2img = null;
             }, 500);
         }
     };
-    appendContextMenuOption(
-        "#txt2img_generate",
-        "Generate forever",
-        generateOnRepeat_txt2img,
-    );
-    appendContextMenuOption(
-        "#txt2img_interrupt",
-        "Generate forever",
-        generateOnRepeat_txt2img,
-    );
+    appendContextMenuOption("#txt2img_generate", "Generate forever", generateOnRepeat_txt2img);
+    appendContextMenuOption("#txt2img_interrupt", "Generate forever", generateOnRepeat_txt2img);
 
     let cancel_regen_txt2img = function () {
         clearInterval(regen_txt2img);
         regen_txt2img = null;
     };
-    appendContextMenuOption(
-        "#txt2img_interrupt",
-        "Cancel generate forever",
-        cancel_regen_txt2img,
-    );
-    appendContextMenuOption(
-        "#txt2img_generate",
-        "Cancel generate forever",
-        cancel_regen_txt2img,
-    );
+    appendContextMenuOption("#txt2img_interrupt", "Cancel generate forever", cancel_regen_txt2img);
+    appendContextMenuOption("#txt2img_generate", "Cancel generate forever", cancel_regen_txt2img);
 
     let generateOnRepeat_img2img = function () {
         if (regen_txt2img == null && regen_img2img == null) {
@@ -185,31 +161,15 @@ let regen_img2img = null;
             }, 500);
         }
     };
-    appendContextMenuOption(
-        "#img2img_generate",
-        "Generate forever",
-        generateOnRepeat_img2img,
-    );
-    appendContextMenuOption(
-        "#img2img_interrupt",
-        "Generate forever",
-        generateOnRepeat_img2img,
-    );
+    appendContextMenuOption("#img2img_generate", "Generate forever", generateOnRepeat_img2img);
+    appendContextMenuOption("#img2img_interrupt", "Generate forever", generateOnRepeat_img2img);
 
     let cancel_regen_img2img = function () {
         clearInterval(regen_img2img);
         regen_img2img = null;
     };
-    appendContextMenuOption(
-        "#img2img_interrupt",
-        "Cancel generate forever",
-        cancel_regen_img2img,
-    );
-    appendContextMenuOption(
-        "#img2img_generate",
-        "Cancel generate forever",
-        cancel_regen_img2img,
-    );
+    appendContextMenuOption("#img2img_interrupt", "Cancel generate forever", cancel_regen_img2img);
+    appendContextMenuOption("#img2img_generate", "Cancel generate forever", cancel_regen_img2img);
 })();
 
 onAfterUiUpdate(addContextMenuEventListener);
