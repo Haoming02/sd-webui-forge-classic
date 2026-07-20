@@ -26,8 +26,8 @@ def get_vae_stream():
         return torch.xpu.Stream(device=device, priority=1)
 
 
-def should_use_stream():
-    return current_stream is not None and mover_stream is not None
+def should_use_stream() -> bool:
+    return current_stream is not None and mover_stream is not None and not torch.compiler.is_compiling()
 
 
 current_stream = get_current_stream()

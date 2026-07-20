@@ -92,7 +92,7 @@ def weights_manual_cast(
     if skip_bias_dtype or bias_has_function:
         bias_args.pop("dtype")
 
-    if stream.should_use_stream() and not torch.compiler.is_compiling():
+    if stream.should_use_stream():
         offload_stream = memory_management.get_offload_stream(target_device)
         context = stream.stream_context()(offload_stream)
     else:
