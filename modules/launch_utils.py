@@ -53,7 +53,7 @@ def check_python_version():
 
 
 def git_tag():
-    return forge_version.version
+    return f"{forge_version.version} {forge_version.release}"
 
 
 def run(command, desc=None, errdesc=None, custom_env=None, live: bool = default_command_live) -> str:
