@@ -30,3 +30,13 @@ __pycache__
 /webui-user.bat
 /webui-user.sh
 notification.mp3
+/triton_cache
+/torchinductor_cache
+*.gitignore
+/extensions-builtin/sd-forge-beta57
+/graphify-out
+<<<<<<< Updated upstream
+/temp_repos/
+=======
+/temp_repos/
+>>>>>>> Stashed changes
