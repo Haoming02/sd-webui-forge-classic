@@ -144,7 +144,7 @@ function keyupEditAttention(event) {
 
     if (text[selectionEnd] != ":") return;
     const weightLength = text.slice(selectionEnd + 1).indexOf(closeCharacter) + 1;
-    const weight = parseFloat(text.slice(selectionEnd + 1, selectionEnd + weightLength));
+    let weight = parseFloat(text.slice(selectionEnd + 1, selectionEnd + weightLength));
     if (isNaN(weight)) return;
 
     weight += isPlus ? delta : -delta;
