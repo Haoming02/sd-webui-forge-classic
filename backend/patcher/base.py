@@ -170,7 +170,10 @@ class ModelPatcher:
     def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, *, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.size = size
         self.model = model
-        self.model.device = current_device
+        try:
+            self.model.device = current_device
+        except AttributeError:
+            pass  # transformers models have device as a read-only property
 
         self.patches = {}
         self.backup = {}
@@ -670,7 +673,10 @@ class ModelPatcher:
                 mem_counter = self.model_size()
 
         self.model.lowvram_patch_counter += patch_counter
-        self.model.device = device_to
+        try:
+            self.model.device = device_to
+        except AttributeError:
+            pass  # transformers models have device as a read-only property
         self.model.model_loaded_weight_memory = mem_counter
         self.model.model_offload_buffer_memory = offload_buffer
         self.model.current_weight_patches_uuid = self.patches_uuid
@@ -715,7 +721,10 @@ class ModelPatcher:
 
             if device_to is not None:
                 self.model.to(device_to)
-                self.model.device = device_to
+                try:
+                    self.model.device = device_to
+                except AttributeError:
+                    pass  # transformers models have device as a read-only property
             self.model.model_loaded_weight_memory = 0
             self.model.model_offload_buffer_memory = 0
 
@@ -847,5 +856,6 @@ class ModelPatcher:
         return self.model.device
 
     def __del__(self):
-        self.unpin_all_weights()
+        if hasattr(self, 'pinned'):
+            self.unpin_all_weights()
         self.detach(unpatch_all=False)
