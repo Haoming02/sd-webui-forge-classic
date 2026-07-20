@@ -11,6 +11,7 @@ import torch
 _HADAMARD_CACHE: dict[tuple[int, str, torch.dtype], torch.Tensor] = {}
 
 
+@torch.compiler.disable
 def build_hadamard(
     size: int,
     device: str | torch.device = "cpu",
