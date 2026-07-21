@@ -166,8 +166,6 @@ class CFGDenoiser(torch.nn.Module):
 
             denoised = blended_latent
 
-        self.sampler.last_latent = denoised
-
         after_cfg_callback_params = AfterCFGCallbackParams(denoised, state.sampling_step, state.sampling_steps)
         cfg_after_cfg_callback(after_cfg_callback_params)
         denoised = after_cfg_callback_params.x

@@ -98,7 +98,6 @@ class CompVisSampler(sd_samplers_common.Sampler):
             extra_params_kwargs["is_img2img"] = True
 
         self.model_wrap_cfg.init_latent = x
-        self.last_latent = x
         self.sampler_extra_args = {
             "cond": conditioning,
             "image_cond": image_conditioning,
@@ -133,7 +132,6 @@ class CompVisSampler(sd_samplers_common.Sampler):
         if "timesteps" in parameters:
             extra_params_kwargs["timesteps"] = timesteps
 
-        self.last_latent = x
         self.sampler_extra_args = {
             "cond": conditioning,
             "image_cond": image_conditioning,

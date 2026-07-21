@@ -371,7 +371,6 @@ class Sampler:
         self.stop_at = None
         self.eta = None
         self.config: SamplerData = None  # set by the function calling the constructor
-        self.last_latent = None
         self.s_min_uncond = None
         self.s_churn = 0.0
         self.s_tmin = 0.0
@@ -410,9 +409,9 @@ class Sampler:
             return func()
         except RecursionError:
             print("Encountered RecursionError during sampling; try to use a smaller rho value instead")
-            return self.last_latent
+            return state.current_latent
         except InterruptedException:
-            return self.last_latent
+            return state.current_latent
 
     def number_of_needed_noises(self, p):
         return p.steps

@@ -181,7 +181,6 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
             extra_params_kwargs["solver_type"] = "heun"
 
         self.model_wrap_cfg.init_latent = x
-        self.last_latent = x
         self.sampler_extra_args = {
             "cond": conditioning,
             "image_cond": image_conditioning,
@@ -236,7 +235,6 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
         if self.config.options.get("solver_type", None) == "heun":
             extra_params_kwargs["solver_type"] = "heun"
 
-        self.last_latent = x
         self.sampler_extra_args = {
             "cond": conditioning,
             "image_cond": image_conditioning,
