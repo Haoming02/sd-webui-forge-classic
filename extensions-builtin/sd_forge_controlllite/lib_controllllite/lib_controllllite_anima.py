@@ -295,7 +295,7 @@ class ControlNetLLLiteDiT(nn.Module):
                     continue
                 is_self_attn = bool(module.is_SelfAttn)
                 for child_name, child in module.named_children():
-                    if not isinstance(child, nn.Linear):
+                    if "Linear" not in child.__class__.__name__:
                         continue
                     if not self._attn_atomic_match(is_self_attn, child_name, atomics):
                         continue
@@ -304,7 +304,7 @@ class ControlNetLLLiteDiT(nn.Module):
 
             elif want_mlp and cls == TARGET_MLP_CLASS:
                 child = getattr(module, "layer1", None)
-                if not isinstance(child, nn.Linear):
+                if "Linear" not in child.__class__.__name__:
                     continue
                 full_name = f"lllite_dit.{name}.layer1".replace(".", "_")
                 modules.append(LLLiteModuleDiT(full_name, child, cond_emb_dim, mlp_dim, dropout, multiplier))
