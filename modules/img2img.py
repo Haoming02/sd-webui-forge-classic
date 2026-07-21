@@ -213,12 +213,13 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
         processing.logger.warning("Resize by 4x is recommended for PiD")
 
     if selected_scale_tab == 1 and not is_batch:
-        assert image, "Can't scale by because no image is selected"
+        assert image, 'Failed to "Resize by" because no input image is provided'
+        assert not inpaint_full_res, '"Only masked" does not support "Resize by"'
 
         width = sRound(image.width * scale_by)
         height = sRound(image.height * scale_by)
 
-    assert 0.0 <= denoising_strength <= 1.0, "can only work with strength in [0.0, 1.0]"
+    assert 0.0 <= denoising_strength <= 1.0, "Denoising Strength only supports [0.0, 1.0]"
 
     p = StableDiffusionProcessingImg2Img(
         outpath_samples=opts.outdir_samples or opts.outdir_img2img_samples,
