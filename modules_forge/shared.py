@@ -48,7 +48,7 @@ def add_supported_preprocessor(preprocessor: "Preprocessor"):
 
 
 def add_supported_control_model(control_model: "ControlModelPatcher"):
-    supported_control_models.append(control_model)
+    supported_control_models.insert(0, control_model)
 
 
 def try_load_supported_control_model(ckpt_path: os.PathLike):

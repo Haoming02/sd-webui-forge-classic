@@ -100,6 +100,6 @@ class ControlLLLitePatcher(ControlModelPatcher):
         process.sd_model.forge_objects.unet = unet
 
 
-add_supported_control_model(ControlLLLiteAnimaPatcher)
-
 add_supported_control_model(ControlLLLitePatcher)
+
+add_supported_control_model(ControlLLLiteAnimaPatcher)

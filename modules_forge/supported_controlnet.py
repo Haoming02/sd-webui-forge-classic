@@ -143,13 +143,11 @@ class ControlNetPatcher(ControlModelPatcher):
             prefix = "control_model."
         elif key in controlnet_data:
             prefix = ""
-        else:
-            net = load_t2i_adapter(controlnet_data)
-            if net is None:
-                if not any(k.startswith("lllite") for k in controlnet_data):  # LLLite
-                    logger.error("Could not detect Control model type...")
-                return None
+        elif (net := load_t2i_adapter(controlnet_data)) is not None:
             return ControlNetPatcher(net)
+        else:
+            logger.error("Could not detect Control model type...")
+            return None
 
         if controlnet_config is None:
             unet_dtype = memory_management.unet_dtype()
