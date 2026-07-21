@@ -5,29 +5,19 @@
 # License: MIT
 
 
+import math
+
 import torch
 
 # Cache Hadamard matrices by (size, device, dtype) to avoid recomputation
 _HADAMARD_CACHE: dict[tuple[int, str, torch.dtype], torch.Tensor] = {}
 
 
-def build_hadamard(
-    size: int,
-    device: str | torch.device = "cpu",
-    dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    """Build a normalized REGULAR orthogonal Hadamard matrix (ConvRot).
+def build_hadamard(size: int, device: str | torch.device = "cpu", dtype: torch.dtype = torch.float32) -> torch.Tensor:
 
-    Size must be a power of 4 (e.g., 4, 16, 64, 256, 1024...).
-    Uses the Kronecker construction from Theorem 3.3 to avoid the all-1s
-    column of standard Sylvester Hadamard matrices, which amplifies
-    row-wise outliers in diffusion models.
-    """
-    import math
-
-    cache_key = (size, str(device), dtype)
-    if not torch.compiler.is_compiling() and cache_key in _HADAMARD_CACHE:
-        return _HADAMARD_CACHE[cache_key]
+    if not torch.compiler.is_compiling():
+        if (cache_key := (size, str(device), dtype)) in _HADAMARD_CACHE:
+            return _HADAMARD_CACHE[cache_key]
 
     if size < 4 or (size & (size - 1)) != 0 or math.log(size, 4) % 1 != 0:
         raise ValueError(f"Regular Hadamard size must be a power of 4, got {size}")
@@ -53,23 +43,7 @@ def build_hadamard(
     return H_normalized
 
 
-def rotate_activation(
-    x: torch.Tensor,
-    H: torch.Tensor,
-    group_size: int,
-) -> torch.Tensor:
-    """Rotate activation online: x_rot = x @ H_block.
-
-    Group-wise Hadamard spreads outliers across channels within each group.
-
-    Args:
-        x: Shape (..., features). Last dim must be divisible by group_size.
-        H: Normalized Hadamard matrix, shape (group_size, group_size).
-        group_size: Group size for block-diagonal rotation.
-
-    Returns:
-        Rotated activation, same shape as input.
-    """
+def rotate_activation(x: torch.Tensor, H: torch.Tensor, group_size: int) -> torch.Tensor:
     orig_shape = x.shape
     features = orig_shape[-1]
     if features % group_size != 0:
