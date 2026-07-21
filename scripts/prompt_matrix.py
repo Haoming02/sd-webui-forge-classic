@@ -1,10 +1,16 @@
+import logging
 import math
 
 import gradio as gr
+
 import modules.scripts as scripts
+from backend.logging import setup_logger
 from modules import images
 from modules.processing import fix_seed, process_images
 from modules.shared import opts, state
+
+logger = logging.getLogger("PromptMatrix")
+setup_logger(logger)
 
 
 def draw_xy_grid(xs, ys, x_label, y_label, cell):
@@ -76,10 +82,14 @@ class PromptMatrix(scripts.Script):
 
             all_prompts.append(delimiter.join(selected_prompts))
 
+        if p.batch_size > 1:
+            logger.warning("Enforcing Batch Size of 1")
+            p.batch_size = 1
+
         p.n_iter = math.ceil(len(all_prompts) / p.batch_size)
         p.do_not_save_grid = True
 
-        print(f"PromptMatrix: creating {len(all_prompts)} images in {p.n_iter} batches")
+        logger.info(f"Creating {len(all_prompts)} images in {p.n_iter} batches")
 
         if prompt_type == "positive":
             p.prompt = all_prompts
