@@ -1013,7 +1013,7 @@ class ScriptRunner:
             except Exception:
                 errors.report(f"Error running before_hr: {script.filename}", exc_info=True)
 
-    def setup_scrips(self, p, *, is_ui=True):
+    def setup_scripts(self, p, *, is_ui=True):
         for script in self.ordered_scripts("setup"):
             if not is_ui and script.setup_for_ui_only:
                 continue

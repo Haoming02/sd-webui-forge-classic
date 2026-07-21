@@ -311,7 +311,7 @@ class StableDiffusionProcessing:
     def setup_scripts(self):
         self.scripts_setup_complete = True
 
-        self.scripts.setup_scrips(self, is_ui=not self.is_api)
+        self.scripts.setup_scripts(self, is_ui=not self.is_api)
 
     def comment(self, text):
         self.comments[text] = 1
