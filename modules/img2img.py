@@ -214,7 +214,8 @@ def img2img_function(id_task: str, request: gr.Request, mode: int, prompt: str, 
 
     if selected_scale_tab == 1 and not is_batch:
         assert image, 'Failed to "Resize by" because no input image is provided'
-        assert not inpaint_full_res, '"Only masked" does not support "Resize by"'
+        if mode in (2, 3, 4):
+            assert not inpaint_full_res, '"Only masked" does not support "Resize by"'
 
         width = sRound(image.width * scale_by)
         height = sRound(image.height * scale_by)
