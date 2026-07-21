@@ -170,7 +170,7 @@ class ModelPatcher:
     def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, *, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.size = size
         self.model = model
-        self.model.device = current_device
+        self.current_device = current_device or offload_device
 
         self.patches = {}
         self.backup = {}
@@ -670,7 +670,7 @@ class ModelPatcher:
                 mem_counter = self.model_size()
 
         self.model.lowvram_patch_counter += patch_counter
-        self.model.device = device_to
+        self.current_device = device_to
         self.model.model_loaded_weight_memory = mem_counter
         self.model.model_offload_buffer_memory = offload_buffer
         self.model.current_weight_patches_uuid = self.patches_uuid
@@ -715,7 +715,7 @@ class ModelPatcher:
 
             if device_to is not None:
                 self.model.to(device_to)
-                self.model.device = device_to
+                self.current_device = device_to
             self.model.model_loaded_weight_memory = 0
             self.model.model_offload_buffer_memory = 0
 
@@ -840,11 +840,7 @@ class ModelPatcher:
         return self.model
 
     def current_loaded_device(self):
-        return self.model.device
-
-    @property
-    def current_device(self) -> torch.device:
-        return self.model.device
+        return self.current_device
 
     def __del__(self):
         self.unpin_all_weights()
