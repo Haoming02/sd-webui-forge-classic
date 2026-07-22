@@ -37,6 +37,7 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
                     choices=self.ckpts,
                 )
                 create_refresh_button(refiner_checkpoint, self.refresh_checkpoints, lambda: {"choices": self.ckpts}, self.elem_id("checkpoint_refresh"))
+            with gr.Row():
                 refiner_switch_at = gr.Slider(
                     value=0.875,
                     label="Switch at",
@@ -52,6 +53,15 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
                             "tooltip": "Wan 2.2 I2V: 0.9" if is_img2img else "Wan 2.2 T2V: 0.875",
                         }
                     ),
+                )
+                refiner_cfg = gr.Slider(
+                    value=0.0,
+                    label="Refiner CFG Scale",
+                    minimum=0.0,
+                    maximum=24.0,
+                    step=0.5,
+                    elem_id=self.elem_id("cfg"),
+                    info="use original if < 1.0",
                 )
 
             with gr.Accordion(label="LoRA Replacements", open=True):
@@ -84,11 +94,12 @@ Use this setting to load different LoRAs between the normal pass and the refiner
             PasteField(enable_refiner, lambda d: "Refiner" in d),
             PasteField(refiner_checkpoint, lambda d: lookup_checkpoint(d.get("Refiner")), api="refiner_checkpoint"),
             PasteField(refiner_switch_at, "Refiner switch at", api="refiner_switch_at"),
+            PasteField(refiner_cfg, "Refiner CFG scale", api="refiner_cfg"),
         ]
 
-        return [enable_refiner, refiner_checkpoint, refiner_switch_at, replacements]
+        return [enable_refiner, refiner_checkpoint, refiner_switch_at, refiner_cfg, replacements]
 
-    def setup(self, p, enable_refiner: bool, refiner_checkpoint: str, refiner_switch_at: float, replacements: str):
+    def setup(self, p, enable_refiner: bool, refiner_checkpoint: str, refiner_switch_at: float, refiner_cfg: float, replacements: str):
         if not enable_refiner or refiner_checkpoint in (None, "", "None"):
             p.refiner_checkpoint = None
             p.refiner_switch_at = None
@@ -97,6 +108,7 @@ Use this setting to load different LoRAs between the normal pass and the refiner
         # actual implementation is in sd_samplers_common.py / apply_refiner()
         p.refiner_checkpoint = refiner_checkpoint
         p.refiner_switch_at = refiner_switch_at
+        p.refiner_cfg = None if (refiner_cfg < 1.0) else refiner_cfg
         shared.opts.set("refiner_lora_replacement", replacements.strip())
         shared.opts.save(shared.config_filename)
 

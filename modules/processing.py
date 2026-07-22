@@ -183,6 +183,7 @@ class StableDiffusionProcessing:
     sampler_index: int = None
     refiner_checkpoint: str = None
     refiner_switch_at: float = None
+    refiner_cfg: float = None
     token_merging_ratio = 0
     token_merging_ratio_hr = 0
     disable_extra_networks: bool = False

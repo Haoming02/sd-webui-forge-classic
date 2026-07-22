@@ -58,6 +58,8 @@ class CFGDenoiser(torch.nn.Module):
 
         self.classic_ddim_eps_estimation = False
 
+        self._refiner_pass = False
+
     @property
     def inner_model(self):
         raise NotImplementedError()
@@ -112,6 +114,7 @@ class CFGDenoiser(torch.nn.Module):
         if sd_samplers_common.apply_refiner(self, x, sigma[0]):
             cond = self.sampler.sampler_extra_args["cond"]
             uncond = self.sampler.sampler_extra_args["uncond"]
+            self._refiner_pass = True
 
         cond_composition, cond = prompt_parser.reconstruct_multicond_batch(cond, self.step)
         uncond = prompt_parser.reconstruct_cond_batch(uncond, self.step) if uncond is not None else None
@@ -130,9 +133,10 @@ class CFGDenoiser(torch.nn.Module):
         denoiser_params = CFGDenoiserParams(x, image_cond, sigma, state.sampling_step, state.sampling_steps, cond, uncond, self)
         cfg_denoiser_callback(denoiser_params)
 
-        # NGMS
         if self.p.is_hr_pass == True:
             cond_scale = self.p.hr_cfg
+        if self._refiner_pass:
+            cond_scale = self.p.refiner_cfg or cond_scale
 
         if 0 < self.step / self.total_steps <= opts.skip_early_cond:
             cond_scale = 1.0
