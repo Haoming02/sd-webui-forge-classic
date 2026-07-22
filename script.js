@@ -21,9 +21,7 @@ function get_uiCurrentTab() {
  * Get the first currently visible top-level UI tab content (e.g. the div hosting the "txt2img" UI).
  */
 function get_uiCurrentTabContent() {
-    return gradioApp().querySelector(
-        '#tabs > .tabitem[id^=tab_]:not([style*="display: none"])',
-    );
+    return gradioApp().querySelector('#tabs > .tabitem[id^=tab_]:not([style*="display: none"])');
 }
 
 const uiUpdateCallbacks = [];
@@ -32,7 +30,6 @@ const uiLoadedCallbacks = [];
 const uiTabChangeCallbacks = [];
 const optionsChangedCallbacks = [];
 const optionsAvailableCallbacks = [];
-let uiAfterUpdateTimeout = null;
 let uiCurrentTab = null;
 
 /**
@@ -74,11 +71,12 @@ function onUiTabChange(callback) {
 /**
  * Register callback to be called when the options are changed.
  * The callback receives no arguments.
- * @param callback
  */
 function onOptionsChanged(callback) {
     optionsChangedCallbacks.push(callback);
 }
+
+let opts = {};
 
 /**
  * Register callback to be called when the options (in opts global variable) are available.
@@ -86,7 +84,7 @@ function onOptionsChanged(callback) {
  * If you register the callback after the options are available, it's just immediately called.
  */
 function onOptionsAvailable(callback) {
-    if (Object.keys(opts).length != 0) {
+    if (Object.keys(opts).length > 0) {
         callback();
         return;
     }
@@ -104,17 +102,18 @@ function executeCallbacks(queue, arg) {
     }
 }
 
+let uiAfterUpdateTimeout = null;
+
 /**
  * Schedule the execution of the callbacks registered with onAfterUiUpdate.
- * The callbacks are executed after a short while, unless another call to this function
- * is made before that time. IOW, the callbacks are executed only once, even
- * when there are multiple mutations observed.
+ * The callbacks are executed after a short while, unless another call to this function is made.
+ * TL;DR: The callbacks are executed only once even when there are multiple mutations observed.
  */
 function scheduleAfterUiUpdateCallbacks() {
     clearTimeout(uiAfterUpdateTimeout);
     uiAfterUpdateTimeout = setTimeout(function () {
         executeCallbacks(uiAfterUpdateCallbacks);
-    }, 200);
+    }, 250);
 }
 
 let executedOnLoaded = false;
@@ -137,26 +136,20 @@ document.addEventListener("DOMContentLoaded", function () {
     mutationObserver.observe(gradioApp(), { childList: true, subtree: true });
 });
 
-/**
- * Add keyboard shortcuts:
- * Ctrl+Enter to start/restart a generation
- * Alt/Option+Enter to skip a generation
- * Esc to interrupt a generation
- */
+// Keyboard Shortcuts:
+// - Ctrl + Enter to start/restart a generation
+// - Alt / Option + Enter to skip a generation
+// - Esc to interrupt a generation
+
 document.addEventListener("keydown", function (e) {
-    const isEnter = e.key === 'Enter' || e.code === 'Enter';
+    const isEnter = e.key === "Enter" || e.code === "Enter";
     const isCtrlKey = e.metaKey || e.ctrlKey;
     const isAltKey = e.altKey;
     const isEsc = e.key === "Escape";
 
-    const generateButton = get_uiCurrentTabContent().querySelector(
-        "button[id$=_generate]",
-    );
-    const interruptButton = get_uiCurrentTabContent().querySelector(
-        "button[id$=_interrupt]",
-    );
-    const skipButton =
-        get_uiCurrentTabContent().querySelector("button[id$=_skip]");
+    const generateButton = get_uiCurrentTabContent().querySelector("button[id$=_generate]");
+    const interruptButton = get_uiCurrentTabContent().querySelector("button[id$=_interrupt]");
+    const skipButton = get_uiCurrentTabContent().querySelector("button[id$=_skip]");
 
     if (isCtrlKey && isEnter) {
         e.preventDefault();
@@ -165,10 +158,7 @@ document.addEventListener("keydown", function (e) {
             if (opts.ctrl_enter_interrupt) return;
             const callback = (mutationList) => {
                 for (const mutation of mutationList) {
-                    if (
-                        mutation.type === "attributes" &&
-                        mutation.attributeName === "style"
-                    ) {
+                    if (mutation.type === "attributes" && mutation.attributeName === "style") {
                         if (interruptButton.style.display === "none") {
                             generateButton.click();
                             observer.disconnect();
@@ -202,7 +192,7 @@ document.addEventListener("keydown", function (e) {
 });
 
 /**
- * checks that a UI element is not in another hidden element or tab content
+ * Check whether an UI element is not in another hidden element or tab content
  */
 function uiElementIsVisible(el) {
     if (el === document) {

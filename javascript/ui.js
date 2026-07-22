@@ -330,8 +330,6 @@ function confirm_clear_prompt(prompt, negative_prompt) {
     return [prompt, negative_prompt];
 }
 
-let opts = {};
-
 function load_webui_settings() {
     const json_elem = gradioApp().getElementById("settings_json");
     if (json_elem == null) {

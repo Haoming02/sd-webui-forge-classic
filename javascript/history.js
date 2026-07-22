@@ -86,16 +86,5 @@
         for (const id of IDs) new TextboxHistory(id);
     }
 
-    onUiLoaded(() => {
-        function checkSettings() {
-            if (Object.keys(opts).length === 0) {
-                setTimeout(checkSettings, 100);
-                return;
-            }
-
-            if (opts.undo_redo) setup();
-        }
-
-        checkSettings();
-    });
+    onOptionsAvailable(() => { if (opts.undo_redo) setup(); });
 })();
