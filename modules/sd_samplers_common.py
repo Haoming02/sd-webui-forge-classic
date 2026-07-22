@@ -260,7 +260,7 @@ def apply_refiner(cfg_denoiser, x, sigma):
         from backend.loader import preprocess_state_dict
         from backend.memory_management import LoadedModel, current_loaded_models
         from backend.patcher.unet import UnetPatcher
-        from backend.state_dict import load_state_dict, try_filter_state_dict
+        from backend.state_dict import convert_quantization, load_state_dict, try_filter_state_dict
         from backend.utils import load_torch_file
 
         for i, loaded_models in enumerate(current_loaded_models):
@@ -274,7 +274,8 @@ def apply_refiner(cfg_denoiser, x, sigma):
 
         model = sd_model.forge_objects.unet.model.diffusion_model
 
-        sd = load_torch_file(refiner_checkpoint_info.filename)
+        sd, metadata = load_torch_file(refiner_checkpoint_info.filename, return_metadata=True)
+        sd, metadata = convert_quantization(sd, metadata)
         sd = preprocess_state_dict(sd)
 
         guess = huggingface_guess.guess(sd)

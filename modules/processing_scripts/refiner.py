@@ -90,7 +90,7 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
         from backend.loader import preprocess_state_dict
         from backend.memory_management import LoadedModel, current_loaded_models
         from backend.patcher.unet import UnetPatcher
-        from backend.state_dict import load_state_dict, try_filter_state_dict
+        from backend.state_dict import convert_quantization, load_state_dict, try_filter_state_dict
         from backend.utils import load_torch_file
         from modules_forge.main_entry import logger
 
@@ -105,7 +105,8 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
 
         model = sd_model.forge_objects.unet.model.diffusion_model
 
-        sd = load_torch_file(sd_samplers_common.ORIGINAL_CHECKPOINT)
+        sd, metadata = load_torch_file(sd_samplers_common.ORIGINAL_CHECKPOINT, return_metadata=True)
+        sd, metadata = convert_quantization(sd, metadata)
         sd = preprocess_state_dict(sd)
 
         guess = huggingface_guess.guess(sd)
