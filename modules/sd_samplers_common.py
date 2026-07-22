@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.diffusion_engine.base import ForgeDiffusionEngine
+    from modules.sd_samplers_cfg_denoiser import CFGDenoiser
 
 import k_diffusion.sampling
 import numpy as np
@@ -226,7 +227,7 @@ def apply_lora_for_refiner(loras: list[extra_networks.ExtraNetworkParams]):
 ORIGINAL_CHECKPOINT: str = None
 
 
-def apply_refiner(cfg_denoiser, x, sigma):
+def apply_refiner(cfg_denoiser: "CFGDenoiser", x: torch.Tensor, sigma: torch.Tensor) -> bool:
     if not (refiner_switch_at := cfg_denoiser.p.refiner_switch_at):
         return False
 
@@ -241,7 +242,7 @@ def apply_refiner(cfg_denoiser, x, sigma):
     if ORIGINAL_CHECKPOINT is not None:
         return False
 
-    refiner_checkpoint_info = cfg_denoiser.p.refiner_checkpoint_info
+    refiner_checkpoint_info: sd_models.CheckpointInfo = cfg_denoiser.p.refiner_checkpoint_info
     if refiner_checkpoint_info is None or shared.sd_model.sd_checkpoint_info == refiner_checkpoint_info:
         return False
 
