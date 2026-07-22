@@ -176,6 +176,7 @@ options_templates.update(
             "dump_stacks_on_signal": OptionInfo(False, "Print the stack trace before terminating the webui via Ctrl + C"),
             "confirm_leave": OptionInfo(False, "Show a browser confirmation before leaving the page"),
             "no_spellcheck": OptionInfo(False, "Disable auto-correct / spellcheck for prompt fields").needs_reload_ui(),
+            "keep_alive": OptionInfo(False, "Keep generating even when the WebUI browser tab is not in focus").info('for "Generate forever"').needs_reload_ui(),
             "undo_redo": OptionInfo(False, "Enable undo / redo history for prompt fields").needs_reload_ui(),
         },
     )
