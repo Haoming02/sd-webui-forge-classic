@@ -38,13 +38,14 @@ class CFGDenoiser(torch.nn.Module):
 
     def __init__(self, sampler):
         super().__init__()
+
         self.model_wrap = None
         self.mask = None
         self.nmask = None
         self.init_latent = None
+
         self.steps = None
         """number of steps as specified by user in UI"""
-
         self.total_steps = None
         """expected number of calls to denoiser calculated from self.steps and specifics of the selected sampler"""
 
@@ -54,12 +55,6 @@ class CFGDenoiser(torch.nn.Module):
         self.padded_cond_uncond_v0 = False
         self.sampler = sampler
         self.p = None
-
-        self.need_last_noise_uncond = False
-        self.last_noise_uncond = None
-
-        # Backward Compatibility
-        self.mask_before_denoising = False
 
         self.classic_ddim_eps_estimation = False
 
@@ -150,9 +145,6 @@ class CFGDenoiser(torch.nn.Module):
 
         extra_model_options = kwargs.get("model_options", {})
         denoised, cond_pred, uncond_pred = sampling_function(self, denoiser_params=denoiser_params, cond_scale=cond_scale, cond_composition=cond_composition, extra_model_options=extra_model_options)
-
-        if self.need_last_noise_uncond:
-            self.last_noise_uncond = (x - uncond_pred) / sigma[:, None, None, None]
 
         if self.mask is not None:
             blended_latent = denoised * self.nmask + self.init_latent * self.mask
