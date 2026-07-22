@@ -1,10 +1,13 @@
 import inspect
+import re
 from collections import namedtuple
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.diffusion_engine.base import ForgeDiffusionEngine
     from modules.sd_samplers_cfg_denoiser import CFGDenoiser
+
+from functools import lru_cache
 
 import k_diffusion.sampling
 import numpy as np
@@ -13,7 +16,16 @@ from PIL import Image
 
 from backend.args import dynamic_args
 from backend.sampling.sampling_function import sampling_cleanup, sampling_prepare
-from modules import devices, extra_networks, images, sd_models, sd_samplers, sd_vae_approx, sd_vae_taesd, shared
+from modules import (
+    devices,
+    extra_networks,
+    images,
+    sd_models,
+    sd_samplers,
+    sd_vae_approx,
+    sd_vae_taesd,
+    shared,
+)
 from modules.shared import opts, state
 from modules_forge import main_entry
 
@@ -199,27 +211,43 @@ def replace_torchsde_browinan():
 replace_torchsde_browinan()
 
 
-def _parse_replacements() -> list[tuple[str, str]]:
-    replacements = []
-    for entry in opts.refiner_lora_replacement.split("\n"):
-        before, after = entry.split("=", 1)
-        replacements.append((before.strip(), after.strip()))
-    return replacements
+@lru_cache(maxsize=1, typed=False)
+def _parse_replacements(setting: str) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, float]]]:
+    remove, replace, append = [], [], []
+
+    for entry in setting.split("\n"):
+        if m := re.search(r"^\s*(.+?)\s*([=+])\s*(.+?)\s*$", entry):
+            if m.group(2) == "=":
+                replace.append((m.group(1), m.group(3)))
+            if m.group(2) == "+":
+                append.append((m.group(1), float(m.group(3))))
+        elif entry.startswith("-"):
+            remove.append(entry[1:].strip())
+
+    return remove, replace, append
 
 
-def apply_lora_for_refiner(loras: list[extra_networks.ExtraNetworkParams]):
+def apply_lora_for_refiner(loras: list[extra_networks.ExtraNetworkParams]) -> list[extra_networks.ExtraNetworkParams]:
     if not loras:
         return []
 
-    lora_replacements = _parse_replacements()
-    result = []
+    _remove, _replace, _append = _parse_replacements(opts.refiner_lora_replacement.strip())
 
+    result = []
     for lora in loras:
-        items: list[str | float] = lora.items
+        items: list[str, float] = lora.items
         assert isinstance(items[0], str)
-        for before, after in lora_replacements:
+
+        if any(key in items[0] for key in _remove):
+            continue
+
+        for before, after in _replace:
             items[0] = items[0].replace(before, after)
+
         result.append(extra_networks.ExtraNetworkParams(items))
+
+    for name, weight in _append:
+        result.append(extra_networks.ExtraNetworkParams([name, weight]))
 
     return result
 
@@ -261,7 +289,11 @@ def apply_refiner(cfg_denoiser: "CFGDenoiser", x: torch.Tensor, sigma: torch.Ten
         from backend.loader import preprocess_state_dict
         from backend.memory_management import LoadedModel, current_loaded_models
         from backend.patcher.unet import UnetPatcher
-        from backend.state_dict import convert_quantization, load_state_dict, try_filter_state_dict
+        from backend.state_dict import (
+            convert_quantization,
+            load_state_dict,
+            try_filter_state_dict,
+        )
         from backend.utils import load_torch_file
 
         for i, loaded_models in enumerate(current_loaded_models):
