@@ -114,8 +114,8 @@ class TextFusionBlock(nn.Module):
         self.mlp = SwiGLU(features, multiplier, bias)
 
     def forward(self, x, mask=None, transformer_options={}):
-        x = x + self.attn(self.prenorm(x), mask=mask, transformer_options=transformer_options)
-        x = x + self.mlp(self.postnorm(x))
+        x.add_(self.attn(self.prenorm(x), mask=mask, transformer_options=transformer_options))
+        x.add_(self.mlp(self.postnorm(x)))
         return x
 
 
@@ -151,8 +151,8 @@ class SingleStreamBlock(nn.Module):
 
     def forward(self, x, vec, freqs, mask=None, transformer_options={}):
         prescale, preshift, pregate, postscale, postshift, postgate = self.mod(vec)
-        x = x + pregate * self.attn((1 + prescale) * self.prenorm(x) + preshift, freqs, mask, transformer_options=transformer_options)
-        x = x + postgate * self.mlp((1 + postscale) * self.postnorm(x) + postshift)
+        x.addcmul_(pregate, self.attn(torch.addcmul(preshift, 1 + prescale, self.prenorm(x)), freqs, mask, transformer_options=transformer_options))
+        x.addcmul_(postgate, self.mlp(torch.addcmul(postshift, 1 + postscale, self.postnorm(x))))
         return x
 
 
@@ -166,7 +166,7 @@ class LastLayer(nn.Module):
 
     def forward(self, x, tvec):
         scale, shift = self.modulation(tvec)
-        x = (1 + scale) * self.norm(x) + shift
+        x = torch.addcmul(shift, 1 + scale, self.norm(x))
         return self.linear(x)
 
 
