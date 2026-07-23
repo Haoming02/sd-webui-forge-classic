@@ -1,8 +1,9 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/ldm/lumina/model.py
+# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ldm/lumina/model.py
 # Reference: https://github.com/Alpha-VLLM/Lumina-Image-2.0
 
 import math
 
+import comfy_kitchen as ck
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,6 +11,7 @@ from einops import repeat
 
 from backend.attention import attention_function
 from backend.nn.flux import EmbedND, apply_rope
+from backend.operations import main_stream_worker, weights_manual_cast
 from backend.utils import fp16_fix as clamp_fp16
 from backend.utils import pad_to_patch_size
 
@@ -57,6 +59,7 @@ class JointAttention(nn.Module):
         self.n_local_kv_heads = self.n_kv_heads
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = dim // n_heads
+        self.qk_norm = qk_norm
 
         self.qkv = nn.Linear(dim, (n_heads + self.n_kv_heads + self.n_kv_heads) * self.head_dim, bias=False)
         self.out = nn.Linear(n_heads * self.head_dim, dim, bias=out_bias)
@@ -83,10 +86,20 @@ class JointAttention(nn.Module):
         xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
 
-        xq = self.q_norm(xq)
-        xk = self.k_norm(xk)
-
-        xq, xk = apply_rope(xq, xk, freqs_cis)
+        if self.qk_norm:
+            q_scale, _, q_offload_stream = weights_manual_cast(self.q_norm, xq)
+            k_scale, _, k_offload_stream = weights_manual_cast(self.k_norm, xk)
+            epsilon = self.q_norm.eps if self.q_norm.eps is not None else torch.finfo(torch.float32).eps
+            with main_stream_worker(q_scale, None, q_offload_stream), main_stream_worker(k_scale, None, k_offload_stream):
+                if self.n_local_heads == self.n_local_kv_heads:
+                    xq, xk = ck.rms_rope(xq, xk, freqs_cis, q_scale, k_scale, epsilon)
+                else:
+                    xq = ck.rms_rope1(xq, freqs_cis, q_scale, epsilon)
+                    xk = ck.rms_rope1(xk, freqs_cis, k_scale, epsilon)
+        else:
+            xq = self.q_norm(xq)
+            xk = self.k_norm(xk)
+            xq, xk = apply_rope(xq, xk, freqs_cis)
 
         n_rep = self.n_local_heads // self.n_local_kv_heads
         if n_rep >= 1:
