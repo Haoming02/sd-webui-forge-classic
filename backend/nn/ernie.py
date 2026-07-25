@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from backend.attention import attention_function
 from backend.memory_management import supports_fp64
+from backend.operations import main_stream_worker, weights_manual_cast
 
 
 def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
@@ -121,11 +122,16 @@ class ErnieImageAttention(nn.Module):
         query = q_flat.view(B, S, self.heads, self.head_dim)
         key = k_flat.view(B, S, self.heads, self.head_dim)
 
-        query = self.norm_q(query)
-        key = self.norm_k(key)
-
         if image_rotary_emb is not None:
-            query, key = ck.apply_rope_split_half(query, key, image_rotary_emb)
+            q_scale, _, q_offload_stream = weights_manual_cast(self.norm_q, query)
+            k_scale, _, k_offload_stream = weights_manual_cast(self.norm_k, key)
+            with main_stream_worker(q_scale, None, q_offload_stream), main_stream_worker(k_scale, None, k_offload_stream):
+                query, key = ck.rms_rope_split_half(query, key, image_rotary_emb, q_scale, k_scale, self.norm_q.eps)
+        else:
+            query = self.norm_q(query)
+            key = self.norm_k(key)
+            if image_rotary_emb is not None:
+                query, key = ck.apply_rope_split_half(query, key, image_rotary_emb)
 
         q_flat = query.reshape(B, S, -1)
         k_flat = key.reshape(B, S, -1)
@@ -247,18 +253,8 @@ class ErnieImageModel(nn.Module):
         text_ids[:, :, 0] = torch.linspace(0, Tmax - 1, steps=Tmax, device=x.device, dtype=torch.float32)
         index = float(Tmax)
 
-        transformer_options = kwargs.get("transformer_options", {})
-        rope_options = transformer_options.get("rope_options", None)
-
         h_len, w_len = float(Hp), float(Wp)
         h_offset, w_offset = 0.0, 0.0
-
-        if rope_options is not None:
-            h_len = (h_len - 1.0) * rope_options.get("scale_y", 1.0) + 1.0
-            w_len = (w_len - 1.0) * rope_options.get("scale_x", 1.0) + 1.0
-            index += rope_options.get("shift_t", 0.0)
-            h_offset += rope_options.get("shift_y", 0.0)
-            w_offset += rope_options.get("shift_x", 0.0)
 
         image_ids = torch.zeros((Hp, Wp, 3), device=device, dtype=torch.float32)
         image_ids[:, :, 0] = image_ids[:, :, 1] + index
