@@ -37,6 +37,8 @@ RUN groupadd -g 100 users 2>/dev/null || true \
 WORKDIR /home/forge/sd-webui
 
 # Clone at build time
+# Bust the cache below whenever upstream neo moves
+ADD https://api.github.com/repos/Haoming02/sd-webui-forge-classic/commits/neo /tmp/neo-rev.json
 RUN git clone --branch neo --depth 1 --filter blob:none \
         https://github.com/Haoming02/sd-webui-forge-classic.git . \
     && chown -R 99:100 /home/forge
