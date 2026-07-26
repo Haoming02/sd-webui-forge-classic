@@ -36,6 +36,9 @@ RUN groupadd -g 100 users 2>/dev/null || true \
 
 WORKDIR /home/forge/sd-webui
 
+# Invalidate the cache when upstream (Neo) updates
+ADD https://api.github.com/repos/Haoming02/sd-webui-forge-classic/commits/neo /tmp/neo-rev.json
+
 # Clone at build time
 RUN git clone --branch neo --depth 1 --filter blob:none \
         https://github.com/Haoming02/sd-webui-forge-classic.git . \
