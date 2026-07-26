@@ -76,16 +76,16 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     return model_options
 
 
-def wipe_lowvram_weight(m: "ForgeWeights"):
+def wipe_lowvram_weight(m: "ForgeWeights", *, clear: bool = False):
     if hasattr(m, "prev_parameters_manual_cast"):
         m.parameters_manual_cast = m.prev_parameters_manual_cast
         del m.prev_parameters_manual_cast
 
     if hasattr(m, "weight_function"):
-        m.weight_function = []
+        m.weight_function = [] if clear else [p for p in m.weight_function if p.online]
 
     if hasattr(m, "bias_function"):
-        m.bias_function = []
+        m.bias_function = [] if clear else [p for p in m.bias_function if p.online]
 
 
 def move_weight_functions(m: "ForgeWeights", device: torch.device):
@@ -108,11 +108,12 @@ def move_weight_functions(m: "ForgeWeights", device: torch.device):
 
 
 class LowVramPatch:
-    def __init__(self, key, patches, convert_func=None, set_func=None):
+    def __init__(self, key, patches, convert_func=None, set_func=None, *, online=False):
         self.key = key
         self.patches = patches
         self.convert_func = convert_func
         self.set_func = set_func
+        self.online = online
 
     def __call__(self, weight):
         return merge_lora_to_weight(self.patches[self.key], weight, self.key, computation_dtype=weight.dtype)
@@ -631,9 +632,9 @@ class ModelPatcher:
                     _, set_func, convert_func = get_key_weight(self.model, key)
 
                     if param == "weight":
-                        m.weight_function = [LowVramPatch(key, self.patches, convert_func, set_func)]
+                        m.weight_function = [LowVramPatch(key, self.patches, convert_func, set_func, online=True)]
                     else:
-                        m.bias_function = [LowVramPatch(key, self.patches, convert_func, set_func)]
+                        m.bias_function = [LowVramPatch(key, self.patches, convert_func, set_func, online=True)]
 
                     if hasattr(m, "parameters_manual_cast"):
                         m.prev_parameters_manual_cast = m.parameters_manual_cast
@@ -696,7 +697,7 @@ class ModelPatcher:
             if self.model.model_lowvram:
                 for m in self.model.modules():
                     move_weight_functions(m, device_to)
-                    wipe_lowvram_weight(m)
+                    wipe_lowvram_weight(m, clear=True)
 
                 self.model.model_lowvram = False
                 self.model.lowvram_patch_counter = 0
