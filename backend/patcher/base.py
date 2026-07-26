@@ -76,39 +76,20 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     return model_options
 
 
-def wipe_lowvram_weight(m: "ForgeWeights", *, clear: bool = False):
+def reset_weight_functions(m: "ForgeWeights", *, wipe: bool = False):
     if hasattr(m, "prev_parameters_manual_cast"):
         m.parameters_manual_cast = m.prev_parameters_manual_cast
         del m.prev_parameters_manual_cast
 
     if hasattr(m, "weight_function"):
-        m.weight_function = [] if clear else [p for p in m.weight_function if p.online]
+        m.weight_function = [] if wipe else [p for p in m.weight_function if p.online]
 
     if hasattr(m, "bias_function"):
-        m.bias_function = [] if clear else [p for p in m.bias_function if p.online]
+        m.bias_function = [] if wipe else [p for p in m.bias_function if p.online]
 
 
-def move_weight_functions(m: "ForgeWeights", device: torch.device):
-    if device is None:
-        return 0
-
-    memory = 0
-
-    if hasattr(m, "weight_function"):
-        for f in m.weight_function:
-            if hasattr(f, "move_to"):
-                memory += f.move_to(device=device)
-
-    if hasattr(m, "bias_function"):
-        for f in m.bias_function:
-            if hasattr(f, "move_to"):
-                memory += f.move_to(device=device)
-
-    return memory
-
-
-class LowVramPatch:
-    def __init__(self, key, patches, convert_func=None, set_func=None, *, online=False):
+class WeightPatch:
+    def __init__(self, key: str, patches: dict[str, torch.Tensor], convert_func=None, set_func=None, *, online: bool = False):
         self.key = key
         self.patches = patches
         self.convert_func = convert_func
@@ -178,7 +159,7 @@ class ModelPatcher:
         self.backup_buffers = {}
         self.object_patches = {}
         self.object_patches_backup = {}
-        self.weight_wrapper_patches = {}
+
         self.model_options = {"transformer_options": {}}
         self.load_device = load_device
         self.offload_device = offload_device
@@ -208,9 +189,8 @@ class ModelPatcher:
         return any(patch[-1] for patch in patches)
 
     def model_size(self) -> int:
-        if self.size > 0:
-            return self.size
-        self.size = memory_management.module_size(self.model)
+        if self.size == 0:
+            self.size = memory_management.module_size(self.model)
         return self.size
 
     def loaded_size(self):
@@ -228,7 +208,7 @@ class ModelPatcher:
         n.patches_uuid = self.patches_uuid
 
         n.object_patches = self.object_patches.copy()
-        n.weight_wrapper_patches = self.weight_wrapper_patches.copy()
+
         n.model_options = utils.deepcopy_(self.model_options)
         n.parent = self
 
@@ -244,19 +224,6 @@ class ModelPatcher:
     def is_clone(self, other: "ModelPatcher") -> bool:
         return self.model is getattr(other, "model", None)
 
-    def clone_has_same_weights(self, clone: "ModelPatcher") -> bool:
-        if not self.is_clone(clone):
-            return False
-
-        if len(self.patches) == 0 and len(clone.patches) == 0:
-            return True
-
-        if self.patches_uuid == clone.patches_uuid:
-            if len(self.patches) != len(clone.patches):
-                logger.warning("WARNING: something went wrong, same patch uuid but different length of patches.")
-            else:
-                return True
-
     def memory_required(self, input_shape):
         return self.model.memory_required(input_shape=input_shape)
 
@@ -265,7 +232,7 @@ class ModelPatcher:
 
     def set_model_sampler_cfg_function(self, sampler_cfg_function, disable_cfg1_optimization=False):
         if len(inspect.signature(sampler_cfg_function).parameters) == 3:
-            self.model_options["sampler_cfg_function"] = lambda args: sampler_cfg_function(args["cond"], args["uncond"], args["cond_scale"])  # Old way
+            self.model_options["sampler_cfg_function"] = lambda args: sampler_cfg_function(args["cond"], args["uncond"], args["cond_scale"])
         else:
             self.model_options["sampler_cfg_function"] = sampler_cfg_function
         if disable_cfg1_optimization:
@@ -342,16 +309,6 @@ class ModelPatcher:
 
     def add_object_patch(self, name, obj):
         self.object_patches[name] = obj
-
-    def set_model_compute_dtype(self, dtype):
-        self.add_object_patch("manual_cast_dtype", dtype)
-        if dtype is not None:
-            self.force_cast_weights = True
-        self.patches_uuid = uuid.uuid4()  # TODO: optimize by preventing a full model reload for this
-
-    def add_weight_wrapper(self, name, function):
-        self.weight_wrapper_patches[name] = self.weight_wrapper_patches.get(name, []) + [function]
-        self.patches_uuid = uuid.uuid4()
 
     def get_model_object(self, name: str) -> torch.nn.Module:
         """Retrieves a nested attribute from an object using dot notation (e.g. "model.layer.weight")"""
@@ -435,35 +392,6 @@ class ModelPatcher:
         self.patches_uuid = uuid.uuid4()
         return list(p)
 
-    def get_key_patches(self, filter_prefix=None):
-        model_sd = self.model_state_dict()
-        p = {}
-        for k in model_sd:
-            if filter_prefix is not None:
-                if not k.startswith(filter_prefix):
-                    continue
-            bk = self.backup.get(k, None)
-            weight, set_func, convert_func = get_key_weight(self.model, k)
-            if bk is not None:
-                weight = bk.weight
-            if convert_func is None:
-                convert_func = lambda a, **kwargs: a
-
-            if k in self.patches:
-                p[k] = [(weight, convert_func)] + self.patches[k]
-            else:
-                p[k] = [(weight, convert_func)]
-        return p
-
-    def model_state_dict(self, filter_prefix=None):
-        sd = self.model.state_dict()
-        keys = list(sd.keys())
-        if filter_prefix is not None:
-            for k in keys:
-                if not k.startswith(filter_prefix):
-                    sd.pop(k)
-        return sd
-
     def patch_weight_to_device(self, key, device_to=None, inplace_update=False, return_weight=False, force_cast=False):
         weight, set_func, convert_func = get_key_weight(self.model, key)
         if key not in self.patches and not force_cast:
@@ -496,13 +424,13 @@ class ModelPatcher:
             return set_func(out_weight, inplace_update=inplace_update, seed=string_to_seed(key), return_weight=return_weight)
 
     def pin_weight_to_device(self, key):
-        weight, set_func, convert_func = get_key_weight(self.model, key)
+        weight, _, _ = get_key_weight(self.model, key)
         if memory_management.pin_memory(weight):
             self.pinned.add(key)
 
     def unpin_weight(self, key):
         if key in self.pinned:
-            weight, set_func, convert_func = get_key_weight(self.model, key)
+            weight, _, _ = get_key_weight(self.model, key)
             memory_management.unpin_memory(weight)
             self.pinned.remove(key)
 
@@ -517,7 +445,7 @@ class ModelPatcher:
             params = {name: param for name, param in m.named_parameters(recurse=False)}
             for name, param in m.named_parameters(recurse=True):
                 if name not in params:
-                    default = True  # default random weights in non leaf modules
+                    default = True
                     break
             if not default and (hasattr(m, "parameters_manual_cast") or len(params) > 0):
                 module_mem = memory_management.module_size(m)
@@ -568,7 +496,7 @@ class ModelPatcher:
                     lowvram_weight = True
                     lowvram_counter += 1
                     lowvram_mem_counter += module_mem
-                    if hasattr(m, "prev_parameters_manual_cast"):  # Already lowvramed
+                    if hasattr(m, "prev_parameters_manual_cast"):
                         continue
 
             cast_weight = self.force_cast_weights
@@ -583,21 +511,21 @@ class ModelPatcher:
                         self.patch_weight_to_device(weight_key)
                     else:
                         _, set_func, convert_func = get_key_weight(self.model, weight_key)
-                        m.weight_function = [LowVramPatch(weight_key, self.patches, convert_func, set_func)]
+                        m.weight_function = [WeightPatch(weight_key, self.patches, convert_func, set_func)]
                         patch_counter += 1
                 if bias_key in self.patches:
                     if force_patch_weights and not self.use_online_lora(bias_key):
                         self.patch_weight_to_device(bias_key)
                     else:
                         _, set_func, convert_func = get_key_weight(self.model, bias_key)
-                        m.bias_function = [LowVramPatch(bias_key, self.patches, convert_func, set_func)]
+                        m.bias_function = [WeightPatch(bias_key, self.patches, convert_func, set_func)]
                         patch_counter += 1
 
                 cast_weight = True
                 offloaded.append((module_mem, n, m, params))
             else:
                 if hasattr(m, "parameters_manual_cast"):
-                    wipe_lowvram_weight(m)
+                    reset_weight_functions(m)
 
                 if full_load or lowvram_fits:
                     mem_counter += module_mem
@@ -608,14 +536,6 @@ class ModelPatcher:
             if cast_weight and hasattr(m, "parameters_manual_cast"):
                 m.prev_parameters_manual_cast = m.parameters_manual_cast
                 m.parameters_manual_cast = True
-
-            if weight_key in self.weight_wrapper_patches:
-                m.weight_function.extend(self.weight_wrapper_patches[weight_key])
-
-            if bias_key in self.weight_wrapper_patches:
-                m.bias_function.extend(self.weight_wrapper_patches[bias_key])
-
-            mem_counter += move_weight_functions(m, device_to)
 
         load_completely.sort(reverse=True)
         for x in load_completely:
@@ -632,9 +552,9 @@ class ModelPatcher:
                     _, set_func, convert_func = get_key_weight(self.model, key)
 
                     if param == "weight":
-                        m.weight_function = [LowVramPatch(key, self.patches, convert_func, set_func, online=True)]
+                        m.weight_function = [WeightPatch(key, self.patches, convert_func, set_func, online=True)]
                     else:
-                        m.bias_function = [LowVramPatch(key, self.patches, convert_func, set_func, online=True)]
+                        m.bias_function = [WeightPatch(key, self.patches, convert_func, set_func, online=True)]
 
                     if hasattr(m, "parameters_manual_cast"):
                         m.prev_parameters_manual_cast = m.parameters_manual_cast
@@ -642,6 +562,7 @@ class ModelPatcher:
                 else:
                     self.unpin_weight(key)
                     self.patch_weight_to_device(key, device_to=device_to)
+
             if memory_management.is_device_cuda(device_to):
                 torch.cuda.synchronize()
             elif memory_management.is_device_xpu(device_to):
@@ -696,8 +617,7 @@ class ModelPatcher:
             self.unpin_all_weights()
             if self.model.model_lowvram:
                 for m in self.model.modules():
-                    move_weight_functions(m, device_to)
-                    wipe_lowvram_weight(m, clear=True)
+                    reset_weight_functions(m, wipe=True)
 
                 self.model.model_lowvram = False
                 self.model.lowvram_patch_counter = 0
@@ -770,21 +690,20 @@ class ModelPatcher:
                 if move_weight:
                     cast_weight = self.force_cast_weights
                     m.to(device_to)
-                    module_mem += move_weight_functions(m, device_to)
                     if lowvram_possible:
                         if weight_key in self.patches:
                             if force_patch_weights and not self.use_online_lora(weight_key):
                                 self.patch_weight_to_device(weight_key)
                             else:
                                 _, set_func, convert_func = get_key_weight(self.model, weight_key)
-                                m.weight_function.append(LowVramPatch(weight_key, self.patches, convert_func, set_func))
+                                m.weight_function.append(WeightPatch(weight_key, self.patches, convert_func, set_func))
                                 patch_counter += 1
                         if bias_key in self.patches:
                             if force_patch_weights and not self.use_online_lora(bias_key):
                                 self.patch_weight_to_device(bias_key)
                             else:
                                 _, set_func, convert_func = get_key_weight(self.model, bias_key)
-                                m.bias_function.append(LowVramPatch(bias_key, self.patches, convert_func, set_func))
+                                m.bias_function.append(WeightPatch(bias_key, self.patches, convert_func, set_func))
                                 patch_counter += 1
                         cast_weight = True
 
@@ -810,7 +729,7 @@ class ModelPatcher:
 
     def partially_load(self, device_to, extra_memory=0, force_patch_weights=False):
         unpatch_weights = self.model.current_weight_patches_uuid is not None and (self.model.current_weight_patches_uuid != self.patches_uuid or force_patch_weights)
-        # TODO: force_patch_weights should not unload + reload full model
+
         used = self.model.model_loaded_weight_memory
         self.unpatch_model(self.offload_device, unpatch_weights=unpatch_weights)
         if unpatch_weights:
@@ -826,6 +745,7 @@ class ModelPatcher:
         if self.model.model_loaded_weight_memory + extra_memory > self.model_size():
             full_load = True
         current_used = self.model.model_loaded_weight_memory
+
         try:
             self.load(device_to, lowvram_model_memory=current_used + extra_memory, force_patch_weights=force_patch_weights, full_load=full_load)
         except Exception as e:
@@ -839,9 +759,6 @@ class ModelPatcher:
         if unpatch_all:
             self.unpatch_model(self.offload_device, unpatch_weights=unpatch_all)
         return self.model
-
-    def current_loaded_device(self):
-        return self.current_device
 
     def __del__(self):
         self.unpin_all_weights()
