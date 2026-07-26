@@ -76,10 +76,12 @@ class BOFTAdapter(WeightAdapterBase):
             # for Q = -Q^T
             q = blocks - blocks.transpose(-1, -2)
             normed_q = q
-            if alpha > 0:  # alpha in boft/bboft is for constraint
+            # alpha in boft/bboft is the constraint, lycoris stores it unscaled
+            constraint = alpha * block_num * boft_b
+            if constraint > 0:
                 q_norm = torch.norm(q) + 1e-8
-                if q_norm > alpha:
-                    normed_q = q * alpha / q_norm
+                if q_norm > constraint:
+                    normed_q = q * constraint / q_norm
             # use float() to prevent unsupported type in .inverse()
             r = (I + normed_q) @ (I - normed_q).float().inverse()
             r = r.to(weight)
@@ -106,5 +108,11 @@ class BOFTAdapter(WeightAdapterBase):
             else:
                 weight += function((strength * lora_diff).type(weight.dtype))
         except Exception as e:
+            from backend.memory_management import is_oom
+
+            if is_oom(e):
+                raise
+
             logging.error("ERROR {} {} {}".format(self.name, key, e))
+
         return weight

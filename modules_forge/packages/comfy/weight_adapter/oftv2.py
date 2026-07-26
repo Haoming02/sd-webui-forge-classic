@@ -206,6 +206,11 @@ class OFTv2Adapter(WeightAdapterBase):
                 weight += function((lora_diff * strength).type(weight.dtype))
 
         except Exception as e:
-            logging.error(f"ERROR applying OFTv2 for {key}: {e}", exc_info=True)
+            from backend.memory_management import is_oom
+
+            if is_oom(e):
+                raise
+
+            logging.error("ERROR {} {} {}".format(self.name, key, e))
 
         return weight

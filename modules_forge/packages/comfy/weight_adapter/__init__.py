@@ -1,4 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/tree/v0.3.77/comfy/weight_adapter
+# https://github.com/Comfy-Org/ComfyUI/tree/master/comfy/weight_adapter
 
 from typing import Final
 
@@ -20,20 +20,3 @@ adapters: Final[list[type[WeightAdapterBase]]] = [
     OFTAdapter,
     OFTv2Adapter,
 ]
-
-adapter_maps: Final[dict[str, type[WeightAdapterBase]]] = {
-    "LoRA": LoRAAdapter,
-    "LoHa": LoHaAdapter,
-    "LoKr": LoKrAdapter,
-    "OFT": OFTAdapter,
-    "OFTv2": OFTv2Adapter,
-    # "GLoRA": GLoRAAdapter,
-    # "BOFT": BOFTAdapter,
-}
-
-
-__all__ = [
-    "WeightAdapterBase",
-    "adapters",
-    "adapter_maps",
-] + [a.__name__ for a in adapters]

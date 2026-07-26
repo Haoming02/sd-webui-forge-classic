@@ -5,63 +5,7 @@ import torch
 
 from backend import memory_management
 
-from .base import (
-    WeightAdapterBase,
-    WeightAdapterTrainBase,
-    factorization,
-    weight_decompose,
-)
-
-
-class OFTDiff(WeightAdapterTrainBase):
-    def __init__(self, weights):
-        super().__init__()
-        # Unpack weights tuple from LoHaAdapter
-        blocks, rescale, alpha, _ = weights
-
-        # Create trainable parameters
-        self.oft_blocks = torch.nn.Parameter(blocks)
-        if rescale is not None:
-            self.rescale = torch.nn.Parameter(rescale)
-            self.rescaled = True
-        else:
-            self.rescaled = False
-        self.block_num, self.block_size, _ = blocks.shape
-        self.constraint = float(alpha)
-        self.alpha = torch.nn.Parameter(torch.tensor(alpha), requires_grad=False)
-
-    def __call__(self, w):
-        org_dtype = w.dtype
-        I = torch.eye(self.block_size, device=self.oft_blocks.device)
-
-        ## generate r
-        # for Q = -Q^T
-        q = self.oft_blocks - self.oft_blocks.transpose(1, 2)
-        normed_q = q
-        if self.constraint:
-            q_norm = torch.norm(q) + 1e-8
-            if q_norm > self.constraint:
-                normed_q = q * self.constraint / q_norm
-        # use float() to prevent unsupported type
-        r = (I + normed_q) @ (I - normed_q).float().inverse()
-
-        ## Apply chunked matmul on weight
-        _, *shape = w.shape
-        org_weight = w.to(dtype=r.dtype)
-        org_weight = org_weight.unflatten(0, (self.block_num, self.block_size))
-        # Init R=0, so add I on it to ensure the output of step0 is original model output
-        weight = torch.einsum(
-            "k n m, k n ... -> k m ...",
-            r,
-            org_weight,
-        ).flatten(0, 1)
-        if self.rescaled:
-            weight = self.rescale * weight
-        return weight.to(org_dtype)
-
-    def passive_memory_usage(self):
-        """Calculates memory usage of the trainable parameters."""
-        return sum(param.numel() * param.element_size() for param in self.parameters())
+from .base import WeightAdapterBase, weight_decompose
 
 
 class OFTAdapter(WeightAdapterBase):
@@ -70,16 +14,6 @@ class OFTAdapter(WeightAdapterBase):
     def __init__(self, loaded_keys, weights):
         self.loaded_keys = loaded_keys
         self.weights = weights
-
-    @classmethod
-    def create_train(cls, weight, rank=1, alpha=1.0):
-        out_dim = weight.shape[0]
-        block_size, block_num = factorization(out_dim, rank)
-        block = torch.zeros(block_num, block_size, block_size, device=weight.device, dtype=torch.float32)
-        return OFTDiff((block, None, alpha, None))
-
-    def to_train(self):
-        return OFTDiff(self.weights)
 
     @classmethod
     def load(
@@ -144,17 +78,21 @@ class OFTAdapter(WeightAdapterBase):
             # for Q = -Q^T
             q = blocks - blocks.transpose(1, 2)
             normed_q = q
-            if alpha > 0:  # alpha in oft/boft is for constraint
+            # alpha in oft/boft is the constraint, lycoris stores it unscaled
+            constraint = alpha * block_num * block_size
+            if constraint > 0:
                 q_norm = torch.norm(q) + 1e-8
-                if q_norm > alpha:
-                    normed_q = q * alpha / q_norm
+                if q_norm > constraint:
+                    normed_q = q * constraint / q_norm
             # use float() to prevent unsupported type in .inverse()
             r = (I + normed_q) @ (I - normed_q).float().inverse()
             r = r.to(weight)
+            # Create I in weight's dtype for the einsum
+            I_w = torch.eye(block_size, device=weight.device, dtype=weight.dtype)
             _, *shape = weight.shape
             lora_diff = torch.einsum(
                 "k n m, k n ... -> k m ...",
-                (r * strength) - strength * I,
+                (r * strength) - strength * I_w,
                 weight.view(block_num, block_size, *shape),
             ).view(-1, *shape)
             if dora_scale is not None:
@@ -162,5 +100,11 @@ class OFTAdapter(WeightAdapterBase):
             else:
                 weight += function((strength * lora_diff).type(weight.dtype))
         except Exception as e:
+            from backend.memory_management import is_oom
+
+            if is_oom(e):
+                raise
+
             logging.error("ERROR {} {} {}".format(self.name, key, e))
+
         return weight

@@ -91,5 +91,11 @@ class GLoRAAdapter(WeightAdapterBase):
             else:
                 weight += function(((strength * alpha) * lora_diff).type(weight.dtype))
         except Exception as e:
+            from backend.memory_management import is_oom
+
+            if is_oom(e):
+                raise
+
             logging.error("ERROR {} {} {}".format(self.name, key, e))
+
         return weight

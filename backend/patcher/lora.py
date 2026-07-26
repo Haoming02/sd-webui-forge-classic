@@ -32,30 +32,6 @@ def string_to_seed(data):
 
 
 @torch.inference_mode()
-def weight_decompose(dora_scale, weight, lora_diff, alpha, strength, computation_dtype, function):
-    # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/weight_adapter/base.py#L62
-
-    dora_scale = memory_management.cast_to_device(dora_scale, weight.device, computation_dtype)
-    lora_diff *= alpha
-    weight_calc = weight + function(lora_diff).type(weight.dtype)
-
-    wd_on_output_axis = dora_scale.shape[0] == weight_calc.shape[0]
-    if wd_on_output_axis:
-        weight_norm = weight.reshape(weight.shape[0], -1).norm(dim=1, keepdim=True).reshape(weight.shape[0], *[1] * (weight.dim() - 1))
-    else:
-        weight_norm = weight_calc.transpose(0, 1).reshape(weight_calc.shape[1], -1).norm(dim=1, keepdim=True).reshape(weight_calc.shape[1], *[1] * (weight_calc.dim() - 1)).transpose(0, 1)
-    weight_norm = weight_norm + torch.finfo(weight.dtype).eps
-
-    weight_calc *= (dora_scale / weight_norm).type(weight.dtype)
-    if strength != 1.0:
-        weight_calc -= weight
-        weight += strength * (weight_calc)
-    else:
-        weight[:] = weight_calc
-    return weight
-
-
-@torch.inference_mode()
 def merge_lora_to_weight(patches: list[tuple], weight: torch.Tensor, key: str, computation_dtype: torch.dtype = torch.float32):
     # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.77/comfy/lora.py#L361
 
