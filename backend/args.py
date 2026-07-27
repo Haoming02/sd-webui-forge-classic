@@ -45,9 +45,9 @@ fpunet_group.add_argument("--fp8_e5m2-unet", action="store_true", help="Store th
 fpunet_group.add_argument("--fp8_e8m0fnu-unet", action="store_true", help="Store the diffusion model in fp8_e8m0fnu")
 
 fpvae_group = parser.add_mutually_exclusive_group()
-fpvae_group.add_argument("--fp32-vae", action="store_true", help="Run the VAE in full precision fp32")
-fpvae_group.add_argument("--bf16-vae", action="store_true", help="Run the VAE in bf16")
-fpvae_group.add_argument("--fp16-vae", action="store_true", help="Run the VAE in fp16 (might cause black images)")
+fpvae_group.add_argument("--fp32-vae", action="store_true", help="Store the VAE in full precision fp32")
+fpvae_group.add_argument("--bf16-vae", action="store_true", help="Store the VAE in bf16")
+fpvae_group.add_argument("--fp16-vae", action="store_true", help="Store the VAE in fp16 (might cause black images)")
 
 parser.add_argument("--cpu-vae", action="store_true", help="Run the VAE on the CPU")
 
@@ -61,7 +61,7 @@ fpte_group.add_argument("--fp8_e5m2-text-enc", action="store_true", help="Store 
 parser.add_argument("--cpu-text-enc", action="store_true", help="Run the text encoder on the CPU")
 
 parser.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override sageattention/flash_attn/xformers)")
-parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention (meant to use with PyTorch cross attention)")
+parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention (meant to be used with --use-pytorch-cross-attention)")
 parser.add_argument("--force-upcast-attention", action="store_true", help="Always upcast to fp32 during attention")
 
 parser.add_argument("--sage", action="store_true", help="install sageattention")
@@ -81,7 +81,6 @@ parser.add_argument("--deterministic", action="store_true", help="Use slower det
 vram_group = parser.add_mutually_exclusive_group()
 vram_group.add_argument("--gpu-only", action="store_true", help="Store and run everything on the GPU")
 vram_group.add_argument("--highvram", action="store_true", help="Keeps models in VRAM after usage")
-vram_group.add_argument("--normalvram", action="store_true", help="Force NORMAL_VRAM in case LOW_VRAM gets automatically enabled")
 vram_group.add_argument("--lowvram", action="store_true", help="Split the diffusion model in parts to use less VRAM")
 vram_group.add_argument("--novram", action="store_true", help="When even LOW_VRAM is still not enough")
 vram_group.add_argument("--cpu", action="store_true", help="Use the CPU for everything (slow)")
