@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
 
 from .mmdit import FeedForwardSwiGLU, TimestepEmbedder
@@ -15,7 +16,6 @@ from .modules import (
     PiTBlock,
     PixelTokenEmbedder,
     apply_adaln_,
-    apply_rope,
     attention_function,
     precompute_freqs_cis_2d,
     rope,
@@ -57,9 +57,9 @@ class MMDiTJointAttention(nn.Module):
         qy = self.q_norm_y(qy)
         ky = self.k_norm_y(ky)
 
-        qx, kx = apply_rope(qx, kx, pos_img[None, None])
+        qx, kx = ck.apply_rope(qx, kx, pos_img[None, None])
         if pos_txt is not None:
-            qy, ky = apply_rope(qy, ky, pos_txt[None, None])
+            qy, ky = ck.apply_rope(qy, ky, pos_txt[None, None])
 
         q_joint = torch.cat([qy, qx], dim=2)
         k_joint = torch.cat([ky, kx], dim=2)

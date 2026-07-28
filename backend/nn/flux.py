@@ -5,19 +5,19 @@ import math
 from dataclasses import dataclass
 
 import torch
-from comfy_kitchen import apply_rope, apply_rope1  # noqa
 from einops import rearrange, repeat
 from torch import nn
 
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.attention import attention_function
+from backend.quant_ops import ck
 from backend.utils import fp16_fix, pad_to_patch_size
 
 
 def attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, pe: torch.Tensor, mask=None, transformer_options={}) -> torch.Tensor:
     if pe is not None:
-        q, k = apply_rope(q, k, pe)
+        q, k = ck.apply_rope(q, k, pe)
     heads = q.shape[1]
     x = attention_function(q, k, v, heads, skip_reshape=True, mask=mask, transformer_options=transformer_options)
     return x

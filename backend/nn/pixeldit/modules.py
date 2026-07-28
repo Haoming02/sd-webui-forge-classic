@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 
 from backend.attention import attention_function
-from backend.nn.flux import apply_rope, rope
+from backend.nn.flux import rope
+from backend.quant_ops import ck
 
 from .mmdit import Mlp, get_1d_sincos_pos_embed_from_grid_torch
 
@@ -59,7 +60,7 @@ class RotaryAttention(nn.Module):
         D = self.head_dim
         qkv = self.qkv(x).reshape(B, N, 3, H, D).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
-        q, k = apply_rope(self.q_norm(q), self.k_norm(k), pos[None, None])
+        q, k = ck.apply_rope(self.q_norm(q), self.k_norm(k), pos[None, None])
         x = attention_function(q, k, v, H, mask=mask, skip_reshape=True, transformer_options=transformer_options)
 
         return self.proj(x)

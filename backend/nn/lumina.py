@@ -3,15 +3,15 @@
 
 import math
 
-import comfy_kitchen as ck
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import repeat
 
 from backend.attention import attention_function
-from backend.nn.flux import EmbedND, apply_rope
+from backend.nn.flux import EmbedND
 from backend.operations import main_stream_worker, weights_manual_cast
+from backend.quant_ops import ck
 from backend.utils import fp16_fix as clamp_fp16
 from backend.utils import pad_to_patch_size
 
@@ -99,7 +99,7 @@ class JointAttention(nn.Module):
         else:
             xq = self.q_norm(xq)
             xk = self.k_norm(xk)
-            xq, xk = apply_rope(xq, xk, freqs_cis)
+            xq, xk = ck.apply_rope(xq, xk, freqs_cis)
 
         n_rep = self.n_local_heads // self.n_local_kv_heads
         if n_rep >= 1:

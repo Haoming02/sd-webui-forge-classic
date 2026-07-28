@@ -8,7 +8,6 @@
 import math
 from typing import Callable, Optional
 
-import comfy_kitchen as ck
 import torch
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
@@ -23,6 +22,7 @@ from backend.operations import (
     scaled_dot_product_attention,
     weights_manual_cast,
 )
+from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
 from modules.shared import opts
 

@@ -9,7 +9,8 @@ from einops import rearrange
 
 from backend.attention import attention_function
 from backend.memory_management import cast_to
-from backend.nn.flux import EmbedND, apply_rope, timestep_embedding
+from backend.nn.flux import EmbedND, timestep_embedding
+from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
 
 
@@ -72,7 +73,7 @@ class Attention(nn.Module):
         v = rearrange(v, "B L (H D) -> B H L D", H=self.kvheads)
         q, k = self.qknorm(q, k)
         if freqs is not None:
-            q, k = apply_rope(q, k, freqs)
+            q, k = ck.apply_rope(q, k, freqs)
         if self.kvheads != self.heads:
             rep = self.heads // self.kvheads
             k = k.repeat_interleave(rep, dim=1)

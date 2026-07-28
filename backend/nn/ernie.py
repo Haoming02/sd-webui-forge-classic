@@ -2,7 +2,6 @@
 
 import math
 
-import comfy_kitchen as ck
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,6 +9,7 @@ import torch.nn.functional as F
 from backend.attention import attention_function
 from backend.memory_management import supports_fp64
 from backend.operations import main_stream_worker, weights_manual_cast
+from backend.quant_ops import ck
 
 
 def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
