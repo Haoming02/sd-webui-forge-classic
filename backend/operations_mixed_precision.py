@@ -4,6 +4,7 @@ import json
 
 import torch
 
+from backend.args import args
 from backend.memory_management import cast_to_device, logger
 
 from .operations import (
@@ -20,20 +21,25 @@ from .quant_ops import (  # noqa
     get_layout_class,
 )
 
-try:
-    from .operations_triton import triton_int8_linear, triton_int8_linear_per_row
-except ImportError:
+# TODO: Delete all these junks once comfy_kitchen fix AMD support...
+
+if args.disable_int8_override:
     TRITON_AVAILABLE = False
 else:
-    TRITON_AVAILABLE = True
+    try:
+        from .operations_triton import triton_int8_linear, triton_int8_linear_per_row
+    except ImportError:
+        TRITON_AVAILABLE = False
+    else:
+        TRITON_AVAILABLE = True
 
-    if torch.cuda.is_available():
-        props = torch.cuda.get_device_properties()
-        if props.major < 8:
-            TRITON_AVAILABLE = False
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties()
+            if props.major < 8:
+                TRITON_AVAILABLE = False
 
-
-from .quant_rotation import build_hadamard, rotate_activation
+        if TRITON_AVAILABLE:
+            from .quant_rotation import build_hadamard, rotate_activation
 
 
 def _quantized_apply(module: torch.nn.Module, fn, recurse=True):

@@ -401,8 +401,13 @@ except Exception:
     torch_device_name = ""
     logger.warning("Could not determine default device...")
 
-if "rtx" in torch_device_name.lower() and not args.cuda_malloc:
-    logger.warning("Hint: your device supports --cuda-malloc for potential speed improvements")
+if "rtx" in torch_device_name.lower():
+    if not args.cuda_malloc:
+        logger.warning("Hint: your device supports --cuda-malloc for potential speed improvements")
+
+    props = torch.cuda.get_device_properties()
+    if props.major >= 8 and not args.disable_int8_override:
+        logger.warning("Hint: your device supports --disable-int8-override for potential speed improvements (when using int8 models)")
 
 
 def bake_gguf_model(model):
