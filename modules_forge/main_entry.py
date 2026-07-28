@@ -37,16 +37,6 @@ forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
     "float8-e5m2 (fp16 LoRA)": (torch.float8_e5m2, True),
 }
 
-if memory_management.bnb_enabled():
-    forge_unet_storage_dtype_options.update(
-        {
-            "bnb-nf4": ("nf4", False),
-            "bnb-nf4 (fp16 LoRA)": ("nf4", True),
-            "bnb-fp4": ("fp4", False),
-            "bnb-fp4 (fp16 LoRA)": ("fp4", True),
-        }
-    )
-
 
 module_list: dict[str, os.PathLike] = {}
 

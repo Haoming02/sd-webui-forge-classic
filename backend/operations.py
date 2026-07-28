@@ -161,7 +161,6 @@ def main_stream_worker(weight, bias, offload_stream: tuple[torch.Stream, torch.T
 current_device: torch.device = None
 current_dtype: torch.dtype = None
 current_manual_cast_enabled: bool = False
-current_bnb_dtype: str = None
 
 
 # region Forge OPs
@@ -350,48 +349,6 @@ class ForgeOperations:
                     return torch.nn.functional.embedding(x, weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
             else:
                 return super().forward(x)
-
-
-# region BnB
-
-
-if memory_management.bnb_enabled():
-
-    from backend.operations_bnb import (
-        ForgeLoader4Bit,
-        functional_dequantize_4bit,
-        functional_linear_4bits,
-    )
-
-    class ForgeOperationsBNB4bits(ForgeOperations):
-        class Linear(ForgeLoader4Bit, ForgeWeights):
-            def __init__(self, *args, **kwargs):
-                super().__init__(device=current_device, dtype=current_dtype, quant_type=current_bnb_dtype)
-                self.parameters_manual_cast = current_manual_cast_enabled
-
-            def forward(self, x):
-                if self.bias is not None and self.bias.dtype != x.dtype:
-                    self.bias = utils.tensor2parameter(self.bias.to(x.dtype))
-
-                if self.weight_function or self.bias_function:
-                    weight, bias, signal = weights_manual_cast(self, x, weight_fn=functional_dequantize_4bit, skip_bias_dtype=True)
-                    with main_stream_worker(weight, bias, signal):
-                        return torch.nn.functional.linear(x, weight, bias)
-
-                if not self.parameters_manual_cast:
-                    return functional_linear_4bits(x, self.weight, self.bias)
-                elif not self.weight.bnb_quantized:
-                    assert x.device.type == "cuda", "BnB must use CUDA as Computation Device"
-                    layer_original_device = self.weight.device
-                    self.weight = self.weight._quantize(x.device)
-                    bias = self.bias.to(x.device) if self.bias is not None else None
-                    out = functional_linear_4bits(x, self.weight, bias)
-                    self.weight = self.weight.to(layer_original_device)
-                    return out
-                else:
-                    weight, bias, signal = weights_manual_cast(self, x, skip_weight_dtype=True, skip_bias_dtype=True)
-                    with main_stream_worker(weight, bias, signal):
-                        return functional_linear_4bits(x, weight, bias)
 
 
 # region GGUF
@@ -642,12 +599,12 @@ class TiledOperations(ForgeOperations):
 
 
 @contextlib.contextmanager
-def using_forge_operations(operations=None, device=None, dtype=None, manual_cast_enabled=False, bnb_dtype=None):
-    global current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype
+def using_forge_operations(operations=None, device=None, dtype=None, manual_cast_enabled=False, extra_dtype=None):
+    global current_device, current_dtype, current_manual_cast_enabled
 
-    current_device, current_dtype, current_manual_cast_enabled, current_bnb_dtype = device, dtype, manual_cast_enabled, bnb_dtype
+    current_device, current_dtype, current_manual_cast_enabled = device, dtype, manual_cast_enabled
 
-    if isinstance(bnb_dtype, dict):
+    if isinstance(extra_dtype, dict):
         # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/ops.py#L950
 
         _device = memory_management.get_torch_device()
@@ -665,16 +622,13 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
             disabled.add("float8_e4m3fn")
             disabled.add("float8_e5m2")
 
-        _full: bool = bnb_dtype.pop("TE", False)  # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/sd1_clip.py#L114
-        operations = mixed_precision_ops(quant_config=bnb_dtype, compute_dtype=_dtype, full_precision_mm=_full, disabled=disabled)
+        _full: bool = extra_dtype.pop("TE", False)  # https://github.com/Comfy-Org/ComfyUI/blob/v0.16.4/comfy/sd1_clip.py#L114
+        operations = mixed_precision_ops(quant_config=extra_dtype, compute_dtype=_dtype, full_precision_mm=_full, disabled=disabled)
 
     if operations is None:
-        if bnb_dtype in ["gguf"]:
+        if extra_dtype in ["gguf"]:
             operations = ForgeOperationsGGUF
-        elif bnb_dtype in ["nf4", "fp4"]:
-            assert memory_management.bnb_enabled(), 'Install the "bitsandbytes" package with --bnb'
-            operations = ForgeOperationsBNB4bits
-        elif bnb_dtype in ["vae"] and args.tiled_conv2d:
+        elif extra_dtype in ["vae"] and args.tiled_conv2d:
             memory_management.logger.info(f"Using TiledOperations ({args.tiled_conv2d}) for VAE")
             operations = TiledOperations
         elif dtype is torch.float8_e4m3fn and args.fast_fp8 and memory_management.supports_fp8_compute(memory_management.get_torch_device()):

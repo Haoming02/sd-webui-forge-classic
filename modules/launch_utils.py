@@ -40,16 +40,14 @@ def check_python_version():
     if not (major == 3 and minor == 13):
         import modules.errors
 
-        modules.errors.print_error_explanation(
-            f"""
+        modules.errors.print_error_explanation(f"""
             This program is tested with 3.13.12 Python, but you have {major}.{minor}.{micro}.
             If you encounter any error regarding unsuccessful package/library installation,
             please downgrade (or upgrade) to the latest version of 3.13 Python,
             and delete the current Python "venv" folder in WebUI's directory.
 
             Use --skip-python-version-check to suppress this warning
-            """
-        )
+            """)
 
 
 def git_tag():
@@ -289,7 +287,6 @@ def prepare_environment():
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
     torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
-    bnb_package = os.environ.get("BNB_PACKAGE", "bitsandbytes==0.49.2")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.0")
     gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_rangeslider==0.0.8")
@@ -407,14 +404,6 @@ assert cuda or xpu or mps
             print("Failed to install nunchaku; Please manually install it")
         else:
             startup_timer.record("install nunchaku")
-
-    if args.bnb and not is_installed("bitsandbytes"):
-        try:
-            run_pip(f"install {bnb_package}", "bitsandbytes")
-        except RuntimeError:
-            print("Failed to install bitsandbytes; Please manually install it")
-        else:
-            startup_timer.record("install bitsandbytes")
 
     if not is_installed("ngrok") and args.ngrok:
         run_pip("install ngrok", "ngrok")
