@@ -45,13 +45,8 @@ class Lumina2(ForgeDiffusionEngine):
         return token_count, max(999, token_count)
 
     @torch.inference_mode()
-    def encode_first_stage(self, x):
-        sample = self.forge_objects.vae.encode(x.movedim(1, -1) * 0.5 + 0.5)
+    def encode_first_stage(self, x: torch.Tensor):
+        start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
+        sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
-        return sample.to(x)
-
-    @torch.inference_mode()
-    def decode_first_stage(self, x):
-        sample = self.forge_objects.vae.first_stage_model.process_out(x)
-        sample = self.forge_objects.vae.decode(sample).movedim(-1, 1) * 2.0 - 1.0
         return sample.to(x)

@@ -86,17 +86,20 @@ class QwenImage(ForgeDiffusionEngine):
         height = round(samples.shape[2] * scale_by)
 
         s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
-        _vision = s.movedim(1, -1)
+        _vision = s.movedim(1, -1)[:, :, :, :3]
+
+        width = samples.shape[3]
+        height = samples.shape[2]
 
         if opts.qwen_vae_resize:
             total = int(1024 * 1024)
-            scale_by = math.sqrt(total / (samples.shape[3] * samples.shape[2]))
-            width = round(samples.shape[3] * scale_by / 32.0) * 32
-            height = round(samples.shape[2] * scale_by / 32.0) * 32
+            scale_by = math.sqrt(total / (width * height))
+            width *= scale_by
+            height *= scale_by
 
-            s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
-        else:
-            s = samples.clone()
+        width = round(width / 16.0) * 16
+        height = round(height / 16.0) * 16
+        s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
         sample = self.forge_objects.vae.encode(s.movedim(1, -1)[:, :, :, :3])
         _latent = self.forge_objects.vae.first_stage_model.process_in(sample)
 
@@ -106,10 +109,7 @@ class QwenImage(ForgeDiffusionEngine):
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
-        if x.size(0) > 1:
-            x = x[0].unsqueeze(0)  # enforce batch_size of 1
-
-        start_image = x.movedim(1, -1) * 0.5 + 0.5
+        start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
         sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample)
 
@@ -119,10 +119,4 @@ class QwenImage(ForgeDiffusionEngine):
             else:
                 self.ini_latent = start_image.cpu()
 
-        return sample.to(x)
-
-    @torch.inference_mode()
-    def decode_first_stage(self, x):
-        sample = self.forge_objects.vae.first_stage_model.process_out(x)
-        sample = self.forge_objects.vae.decode(sample).movedim(-1, 2) * 2.0 - 1.0
         return sample.to(x)

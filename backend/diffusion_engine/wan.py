@@ -148,9 +148,8 @@ class Wan(ForgeDiffusionEngine):
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
         b, _, h, w = x.shape
-        if x.size(0) > 1:
-            x = x[0].unsqueeze(0)  # enforce batch_size of 1
-        x = x.mul(0.5).add(0.5)
+        # enforce batch_size of 1
+        x = x[0].unsqueeze(0).mul(0.5).add(0.5)
 
         if dynamic_args.is_referencing:
             if b == 1:
@@ -178,10 +177,4 @@ class Wan(ForgeDiffusionEngine):
         latent = torch.zeros([1, 16, ((b - 1) // 4) + 1, h // 8, w // 8], device=self.forge_objects.vae.device)
         self.image_to_video(b, list(latent.shape))
         sample = self.forge_objects.vae.first_stage_model.process_in(latent)
-        return sample.to(x)
-
-    @torch.inference_mode()
-    def decode_first_stage(self, x):
-        sample = self.forge_objects.vae.first_stage_model.process_out(x)
-        sample = self.forge_objects.vae.decode(sample).movedim(-1, 2) * 2.0 - 1.0
         return sample.to(x)
