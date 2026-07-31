@@ -165,6 +165,8 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """Wan 2.2"""
     pid: bool = False
     """PiD"""
+    krea2: bool = False
+    """Krea 2"""
     ref_latents: list["torch.Tensor"] = []
     """Reference Latent(s) for Flux Kontext / Qwen-Image-Edit / Flux.2 Klein"""
     concat_latent: "torch.Tensor" = None
