@@ -62,7 +62,7 @@ class Qwen35VisionAttention(nn.Module):
         self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
         self.proj = nn.Linear(self.dim, self.dim)
 
-    def forward(self, x, cu_seqlens, position_embeddings, optimized_attention=None):
+    def forward(self, x, cu_seqlens, position_embeddings):
         seq_length = x.shape[0]
         query_states, key_states, value_states = self.qkv(x).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         query_states, key_states = apply_rope(query_states, key_states, position_embeddings)
@@ -77,7 +77,7 @@ class Qwen35VisionAttention(nn.Module):
             q = q.transpose(0, 1).unsqueeze(0)
             k = k.transpose(0, 1).unsqueeze(0)
             v = v.transpose(0, 1).unsqueeze(0)
-            attn_outputs.append(optimized_attention(q, k, v, self.num_heads, skip_reshape=True))
+            attn_outputs.append(attention_function(q, k, v, self.num_heads, skip_reshape=True))
 
         attn_output = torch.cat(attn_outputs, dim=1)
         attn_output = attn_output.reshape(seq_length, -1)
@@ -93,8 +93,8 @@ class Qwen35VisionBlock(nn.Module):
         self.attn = Qwen35VisionAttention(hidden_size, num_heads)
         self.mlp = Qwen35VisionMLP(hidden_size, intermediate_size)
 
-    def forward(self, x, cu_seqlens, position_embeddings, optimized_attention=None):
-        x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, optimized_attention=optimized_attention)
+    def forward(self, x, cu_seqlens, position_embeddings):
+        x = x + self.attn(self.norm1(x), cu_seqlens=cu_seqlens, position_embeddings=position_embeddings)
         return x + self.mlp(self.norm2(x))
 
 
@@ -227,10 +227,10 @@ class Qwen35VisionModel(nn.Module):
         position_embeddings = (cos, sin[..., :sin_half], -sin[..., sin_half:])
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(dim=0, dtype=torch.int32)
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        optimized_attention = attention_function(x.device, mask=False, small_input=True)
+
         deepstack_features = []
         for layer_num, blk in enumerate(self.blocks):
-            x = blk(x, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, optimized_attention=optimized_attention)
+            x = blk(x, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings)
             if self.deepstack_merger_list is not None and layer_num in self.deepstack_visual_indexes:
                 deepstack_features.append(self.deepstack_merger_list[self.deepstack_visual_indexes.index(layer_num)](x))
         merged = self.merger(x)
