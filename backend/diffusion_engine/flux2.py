@@ -44,11 +44,14 @@ class Flux2(ForgeDiffusionEngine):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
 
         if not prompt.is_negative_prompt:
-            _references = [*self.ref_latents]
-            if self.ini_latent is not None:
-                _references.insert(0, self.ini_latent)
-                self.ini_latent = None
-            dynamic_args.ref_latents = _references.copy()
+            if opts.klein_no_reference:
+                dynamic_args.ref_latents.clear()
+            else:
+                _references = [*self.ref_latents]
+                if self.ini_latent is not None:
+                    _references.insert(0, self.ini_latent)
+                    self.ini_latent = None
+                dynamic_args.ref_latents = _references.copy()
 
         return self.text_processing_engine_gemma(prompt)
 

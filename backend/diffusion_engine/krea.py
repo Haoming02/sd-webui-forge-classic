@@ -52,7 +52,7 @@ class Krea2(ForgeDiffusionEngine):
                 _references.insert(0, self.ini_latent)
                 self.ini_latent = None
 
-            if _references:
+            if opts.krea2_do_reference and bool(_references):
                 return self.get_learned_conditioning_with_image(prompt, _references)
             else:
                 dynamic_args.ref_latents.clear()

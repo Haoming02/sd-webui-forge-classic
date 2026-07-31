@@ -388,7 +388,7 @@ class QwenImageTransformer2DModel(nn.Module):
         img_ids[:, :, 2] = img_ids[:, :, 2] + torch.linspace(w_offset, w_len - 1 + w_offset, steps=w_len, device=x.device, dtype=x.dtype).unsqueeze(0) - (w_len // 2)
         return hidden_states, repeat(img_ids, "h w c -> b (h w) c", b=bs), orig_shape
 
-    def forward(self, x, timesteps, context, attention_mask=None, guidance: torch.Tensor = None, ref_latents=None, transformer_options={}, control=None, **kwargs):
+    def forward(self, x, timesteps, context, attention_mask=None, guidance: torch.Tensor = None, transformer_options={}, control=None, **kwargs):
         timestep = timesteps
         encoder_hidden_states = context
         encoder_hidden_states_mask = attention_mask
@@ -396,9 +396,9 @@ class QwenImageTransformer2DModel(nn.Module):
         hidden_states, img_ids, orig_shape = self.process_img(x)
         num_embeds = hidden_states.shape[1]
 
-        ref_latents = ref_latents or dynamic_args.ref_latents
+        ref_latents: list[torch.Tensor] = dynamic_args.ref_latents
 
-        if ref_latents is not None:
+        if bool(ref_latents):
             h = 0
             w = 0
             index = 0

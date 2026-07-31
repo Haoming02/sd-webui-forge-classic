@@ -576,7 +576,7 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         img_ids[:, :, 2] = img_ids[:, :, 2] + torch.linspace(w_offset, w_len - 1 + w_offset, steps=steps_w, device=x.device, dtype=torch.float32).unsqueeze(0)
         return img, repeat(img_ids, "h w c -> b (h w) c", b=bs)
 
-    def forward(self, x, timestep, context, y=None, guidance=None, ref_latents=None, control=None, transformer_options={}, **kwargs):
+    def forward(self, x, timestep, context, y=None, guidance=None, control=None, transformer_options={}, **kwargs):
         bs, c, h_orig, w_orig = x.shape
         patch_size = self.patch_size
 
@@ -585,9 +585,9 @@ class IntegratedFluxTransformer2DModel(nn.Module):
         img, img_ids = self.process_img(x)
         img_tokens = img.shape[1]
 
-        ref_latents: list[torch.Tensor] = ref_latents or dynamic_args.ref_latents
+        ref_latents: list[torch.Tensor] = dynamic_args.ref_latents
 
-        if ref_latents is not None:
+        if bool(ref_latents):
             h = 0
             w = 0
             index = 0

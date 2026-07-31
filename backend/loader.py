@@ -888,6 +888,7 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
     backend.args.dynamic_args.klein = "klein" in repo_name
     backend.args.dynamic_args.wan = "Wan" in repo_name
     backend.args.dynamic_args.pid = "PiD" in repo_name
+    backend.args.dynamic_args.anima = "Anima" in repo_name
     backend.args.dynamic_args.krea2 = "Krea-2" in repo_name
 
     if "xl" in repo_name and "rectified" in str(sd).lower():

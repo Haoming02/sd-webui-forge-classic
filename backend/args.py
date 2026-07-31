@@ -165,6 +165,8 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """Wan 2.2"""
     pid: bool = False
     """PiD"""
+    anima: bool = False
+    """Anima"""
     krea2: bool = False
     """Krea 2"""
     ref_latents: list["torch.Tensor"] = []

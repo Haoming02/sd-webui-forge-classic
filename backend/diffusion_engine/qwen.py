@@ -52,7 +52,7 @@ class QwenImage(ForgeDiffusionEngine):
                 _references.insert(0, self.ini_latent)
                 self.ini_latent = None
 
-            if _references:
+            if dynamic_args.edit and bool(_references):
                 return self.get_learned_conditioning_with_image(prompt, _references)
             else:
                 dynamic_args.ref_latents.clear()
