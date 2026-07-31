@@ -225,18 +225,13 @@ class SingleStreamDiT(nn.Module):
         )
 
     def forward(self, x, timesteps, context, attention_mask=None, transformer_options={}, **kwargs):
-        temporal = x.ndim == 5
-        if temporal:
-            b5, c5, t5, h5, w5 = x.shape
-            x = x.reshape(b5 * t5, c5, h5, w5)
+        x = x.squeeze(2)
         bs, c, H_orig, W_orig = x.shape
         patch = self.patch
 
         x = pad_to_patch_size(x, (patch, patch))
         H, W = x.shape[-2], x.shape[-1]
         h_, w_ = H // patch, W // patch
-
-        context = self._unpack_context(context.squeeze(1))
 
         img = rearrange(x, "b c (h ph) (w pw) -> b (h w) (c ph pw)", ph=patch, pw=patch)
         img = self.first(img)
@@ -267,12 +262,5 @@ class SingleStreamDiT(nn.Module):
         out = final[:, txtlen : txtlen + imglen, :]
         out = rearrange(out, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h_, w=w_, ph=patch, pw=patch, c=self.channels)
         out = out[:, :, :H_orig, :W_orig]
-        if temporal:
-            out = out.reshape(b5, t5, self.channels, H_orig, W_orig).movedim(1, 2)
-        return out
 
-    def _unpack_context(self, context):
-        b, seq, fused = context.shape
-        if fused != self.txtlayers * self.txtdim:
-            raise ValueError(f"Krea2 expects conditioning with {self.txtlayers}x{self.txtdim}={self.txtlayers * self.txtdim} " f"features (a {self.txtlayers}-layer Qwen3-VL stack) but got {fused}. " f"Load the text encoder with CLIPLoader type 'krea2'.")
-        return context.reshape(b, seq, self.txtlayers, self.txtdim)
+        return out.unsqueeze(2)

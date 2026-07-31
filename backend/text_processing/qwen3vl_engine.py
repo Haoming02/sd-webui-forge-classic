@@ -94,6 +94,11 @@ class Qwen3VLTextProcessingEngine:
 
                     z = self.process_tokens([tokens], [multipliers])
                     z = self.strip_template(z, tokens)
+
+                    b, seq, fuse = z.shape
+                    assert b == 1 and fuse == 12 * 2560
+                    z = z.reshape(b * seq, 12, 2560)
+
                     line_z_values.append(z)
                 cache[line] = line_z_values
 
