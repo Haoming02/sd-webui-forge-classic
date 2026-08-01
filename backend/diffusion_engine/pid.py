@@ -77,7 +77,7 @@ class PiD(ForgeDiffusionEngine):
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
-        start_image = self._validate(x[:1]).movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
+        start_image = self._validate(x[:1]).movedim(0, -1).mul_(0.5).add_(0.5).unsqueeze(0)
         sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample).squeeze(2)
         dynamic_args.lq_latent[0] = sample.detach().clone()

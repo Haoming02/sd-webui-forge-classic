@@ -113,13 +113,6 @@ class StableDiffusionXL(ForgeDiffusionEngine):
         _, token_count = self.text_processing_engine_l.process_texts([prompt])
         return token_count, self.text_processing_engine_l.get_target_prompt_token_count(token_count)
 
-    @torch.inference_mode()
-    def encode_first_stage(self, x: torch.Tensor):
-        start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
-        sample = self.forge_objects.vae.encode(start_image)
-        sample = self.forge_objects.vae.first_stage_model.process_in(sample)
-        return sample.to(x)
-
 
 class StableDiffusionXLRefiner(ForgeDiffusionEngine):
     matched_guesses = [model_list.SDXLRefiner]
@@ -196,10 +189,3 @@ class StableDiffusionXLRefiner(ForgeDiffusionEngine):
     def get_prompt_lengths_on_ui(self, prompt):
         _, token_count = self.text_processing_engine_g.process_texts([prompt])
         return token_count, self.text_processing_engine_g.get_target_prompt_token_count(token_count)
-
-    @torch.inference_mode()
-    def encode_first_stage(self, x: torch.Tensor):
-        start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
-        sample = self.forge_objects.vae.encode(start_image)
-        sample = self.forge_objects.vae.first_stage_model.process_in(sample)
-        return sample.to(x)

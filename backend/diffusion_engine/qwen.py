@@ -109,14 +109,11 @@ class QwenImage(ForgeDiffusionEngine):
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
-        start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
-        sample = self.forge_objects.vae.encode(start_image)
-        sample = self.forge_objects.vae.first_stage_model.process_in(sample)
-
         if dynamic_args.edit:
+            start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
             if dynamic_args.is_referencing:
                 self.ref_latents.append(start_image.cpu())
             else:
                 self.ini_latent = start_image.cpu()
 
-        return sample.to(x)
+        return super().encode_first_stage(x)

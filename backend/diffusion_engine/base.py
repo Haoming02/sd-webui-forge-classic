@@ -66,14 +66,26 @@ class ForgeDiffusionEngine:
     def get_learned_conditioning(self, prompt: list[str]):
         raise NotImplementedError
 
-    @abstractmethod
-    def encode_first_stage(self, x):
-        raise NotImplementedError
+    @torch.inference_mode()
+    def encode_first_stage(self, x: torch.Tensor):
+        if self.is_wan:  # otherwise image batch turns into video...
+            samples: list[torch.Tensor] = []
+            for i in range(x.size(0)):
+                start_image = x[i : i + 1].movedim(1, -1).mul(0.5).add(0.5)
+                sample = self.forge_objects.vae.encode(start_image)
+                sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+                samples.append(sample)
+            return torch.cat(samples, dim=0).to(x)
+        else:
+            start_image = x.movedim(1, -1).mul(0.5).add(0.5)
+            sample = self.forge_objects.vae.encode(start_image)
+            sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+            return sample.to(x)
 
     @torch.inference_mode()
     def decode_first_stage(self, x: torch.Tensor):
         sample = self.forge_objects.vae.first_stage_model.process_out(x)
-        sample = self.forge_objects.vae.decode(sample).movedim(-1, (2 if self.is_wan else 1)).mul(2.0).sub(1.0)
+        sample = self.forge_objects.vae.decode(sample).movedim(-1, (2 if self.is_wan else 1)).mul_(2.0).sub_(1.0)
         return sample.to(x)
 
     def get_prompt_lengths_on_ui(self, prompt):

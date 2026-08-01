@@ -62,14 +62,13 @@ class Flux2(ForgeDiffusionEngine):
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
-        start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
-        sample = self.forge_objects.vae.encode(start_image)
-        sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+        samples: torch.Tensor = super().encode_first_stage(x)
 
         if not opts.klein_no_reference:
+            sample = samples[0].detach().clone().unsqueeze(0).cpu()
             if dynamic_args.is_referencing:
-                self.ref_latents.append(sample.cpu())
+                self.ref_latents.append(sample)
             else:
-                self.ini_latent = sample.cpu()
+                self.ini_latent = sample
 
-        return sample.to(x)
+        return samples

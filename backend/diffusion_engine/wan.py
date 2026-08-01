@@ -148,8 +148,7 @@ class Wan(ForgeDiffusionEngine):
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
         b, _, h, w = x.shape
-        # enforce batch_size of 1
-        x = x[0].unsqueeze(0).mul(0.5).add(0.5)
+        x = x[0].mul(0.5).add(0.5).unsqueeze(0)  # enforce batch_size of 1
 
         if dynamic_args.is_referencing:
             if b == 1:
