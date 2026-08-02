@@ -250,8 +250,8 @@ re_requirement = re.compile(r"\s*(\S+)\s*==\s*([^\s;]+)\s*")
 
 def requirements_met(requirements_file):
     """
-    Does a simple parse of a requirements.txt file to determine if all rerqirements in it
-    are already installed. Returns True if so, False if not installed or parsing fails.
+    Does a simple parse of a requirements.txt file to determine
+    whether all dependencies are already installed.
     """
 
     import importlib.metadata
@@ -285,15 +285,15 @@ def requirements_met(requirements_file):
 
 def prepare_environment():
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
+    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.13.0+cu130 torchvision==0.28.0+cu130 --extra-index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
 
-    packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.0")
+    packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.2")
     gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_rangeslider==0.0.8")
     requirements_file = os.environ.get("REQS_FILE", "requirements.txt")
 
     try:
-        # the existence of this file is a signal to webui.sh/bat that webui needs to be restarted when it stops execution
+        # the existence of this file is a signal that webui needs to be restarted when it stops execution
         os.remove(os.path.join(script_path, "tmp", "restart"))
         os.environ.setdefault("SD_WEBUI_RESTARTING", "1")
     except OSError:
@@ -310,7 +310,12 @@ def prepare_environment():
     print(f"Version: {tag}")
 
     if args.reinstall_torch or not is_installed("torch") or not is_installed("torchvision"):
-        run(f'"{python}" -m {torch_command}', "Installing torch and torchvision", "Couldn't install torch", live=True)
+        # TODO: Yeet Nunchaku...
+        if args.nunchaku:
+            torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
+            print("(using an older version of PyTorch due to Nunchaku dependency...)")
+
+        run(f'"{python}" -m {torch_command}', "Installing PyTorch", "Couldn't install PyTorch", live=True)
         startup_timer.record("install torch")
 
     if not args.skip_torch_cuda_test:
@@ -325,8 +330,8 @@ assert cuda or xpu or mps
         success, err = check_run_python(TORCH_CHECK, return_error=True)
         if not success:
             if "older driver" in str(err).lower():
-                raise SystemError("Please update your GPU driver to support cu130 ; or manually install older PyTorch")
-            raise RuntimeError("PyTorch is not able to access GPU")
+                raise SystemError("Please update your GPU driver or manually install older version of PyTorch")
+            raise RuntimeError("PyTorch is not able to access any compute device (GPU)")
         startup_timer.record("torch GPU test")
 
     if not is_installed("packaging"):
@@ -335,39 +340,25 @@ assert cuda or xpu or mps
     ver_PY = f"cp{sys.version_info.major}{sys.version_info.minor}"
     ver_SAGE = "2.2.0"
     ver_FLASH = "2.8.3"
-    ver_TRITON = "3.6.0"
+    ver_TRITON = "3.7.1"
     ver_NUNCHAKU = "1.2.1"
     ver_TORCH, ver_CUDA = _torch_version()
     v_TORCH = ver_TORCH.rsplit(".", 1)[0]
     v_CUDA = f"{ver_CUDA[0:-1]}.{ver_CUDA[-1]}"
 
     if os.name == "nt":
-        ver_TRITON += ".post26"
+        ver_TRITON += ".post27"
 
-        sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post4/sageattention-{ver_SAGE}+{ver_CUDA}torch2.9.0andhigher.post4-cp39-abi3-win_amd64.whl")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.6/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post6/sageattention-{ver_SAGE}+{ver_CUDA}torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.52/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows=={ver_TRITON}")
         nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
 
     else:
         sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.4/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.47/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
         nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
-
-    def _verify_nunchaku() -> bool:
-        if not is_installed("nunchaku"):
-            return False
-
-        import importlib.metadata
-
-        import packaging.version
-
-        ver_installed: str = importlib.metadata.version("nunchaku")
-        current: tuple[int] = packaging.version.parse(ver_installed)
-        target: tuple[int] = packaging.version.parse(ver_NUNCHAKU)
-
-        return current >= target
 
     if args.xformers and (not is_installed("xformers") or args.reinstall_xformers):
         run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
@@ -397,7 +388,7 @@ assert cuda or xpu or mps
         else:
             startup_timer.record("install flash_attn")
 
-    if args.nunchaku and not _verify_nunchaku():
+    if args.nunchaku and not is_installed("nunchaku"):
         try:
             run_pip(f"install {nunchaku_package}", "nunchaku")
         except RuntimeError:
@@ -405,7 +396,7 @@ assert cuda or xpu or mps
         else:
             startup_timer.record("install nunchaku")
 
-    if not is_installed("ngrok") and args.ngrok:
+    if args.ngrok and not is_installed("ngrok"):
         run_pip("install ngrok", "ngrok")
         startup_timer.record("install ngrok")
 
