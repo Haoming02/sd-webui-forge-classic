@@ -21,26 +21,6 @@ from .quant_ops import (  # noqa
     get_layout_class,
 )
 
-# TODO: Delete all these junks once comfy_kitchen fix AMD support...
-
-if args.disable_int8_override:
-    TRITON_AVAILABLE = False
-else:
-    try:
-        from .operations_triton import triton_int8_linear, triton_int8_linear_per_row
-    except ImportError:
-        TRITON_AVAILABLE = False
-    else:
-        TRITON_AVAILABLE = True
-
-        if torch.cuda.is_available():
-            props = torch.cuda.get_device_properties()
-            if props.major < 8:
-                TRITON_AVAILABLE = False
-
-        if TRITON_AVAILABLE:
-            from .quant_rotation import build_hadamard, rotate_activation
-
 
 def _quantized_apply(module: torch.nn.Module, fn, recurse=True):
     if recurse:
@@ -259,50 +239,16 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                             scale = cast_to_device(scale, input.device, None)
                         input = QuantizedTensor.from_float(input_reshaped, self.layout_type, scale=scale)
 
-                _double_cast = self.parameters_manual_cast and (len(self.weight_function) > 0 or len(self.bias_function) > 0)
+                weight_only_quant = _use_quantized and not quantize_input and isinstance(self.weight, QuantizedTensor)
 
-                if TRITON_AVAILABLE and getattr(self, "quant_format", None) == "int8_tensorwise" and not (_double_cast or self._full_precision_mm):
-                    if len(self.weight_function) > 0 or len(self.bias_function) > 0:
-                        _weight, bias, signal = weights_manual_cast(self, x=None, dtype=self.weight.dtype, device=input.device, bias_dtype=input.dtype)
-                        weight, params = TensorWiseINT8Layout.quantize(
-                            tensor=_weight,
-                            scale="recalculate",
-                            is_weight=True,
-                            per_channel=True,
-                            convrot=getattr(self.weight.params, "convrot", False),
-                            convrot_groupsize=getattr(self.weight.params, "convrot_groupsize", 256),
-                        )
-                        scale: torch.Tensor = params.scale.to(device=input.device, non_blocking=True)
-                    elif self.parameters_manual_cast:
-                        weight, bias, signal = weights_manual_cast(self, x=None, dtype=torch.int8, device=input.device, bias_dtype=input.dtype)
-                        scale: torch.Tensor = self.weight.params.scale.to(device=input.device, non_blocking=True)
-                    else:
-                        weight, bias, signal = self.weight._qdata, self.bias, None
-                        scale: torch.Tensor = self.weight.params.scale.to(device=input.device, non_blocking=True)
-
-                    if getattr(self.weight.params, "convrot", False):
-                        group_size: int = getattr(self.weight.params, "convrot_groupsize", 256)
-                        H = build_hadamard(group_size, device=input.device, dtype=input.dtype)
-                        input = rotate_activation(input, H, group_size=group_size)
-
-                    compute_dtype: torch.dtype = input.dtype if input.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
-
-                    with main_stream_worker(weight, bias, signal):
-                        if self._per_row:
-                            output = triton_int8_linear_per_row(input, weight, scale, bias, compute_dtype)
-                        else:
-                            output = triton_int8_linear(input, weight, scale, bias, compute_dtype)
+                if weight_only_quant:
+                    weight, bias, signal = weights_manual_cast(self, x=None, dtype=self.weight.dtype, device=input.device, bias_dtype=input.dtype)
+                    weight = weight.to(dtype=input.dtype)
                 else:
-                    weight_only_quant = _use_quantized and not quantize_input and isinstance(self.weight, QuantizedTensor)
+                    weight, bias, signal = weights_manual_cast(self, x=input)
 
-                    if weight_only_quant:
-                        weight, bias, signal = weights_manual_cast(self, x=None, dtype=self.weight.dtype, device=input.device, bias_dtype=input.dtype)
-                        weight = weight.to(dtype=input.dtype)
-                    else:
-                        weight, bias, signal = weights_manual_cast(self, x=input)
-
-                    with main_stream_worker(weight, bias, signal):
-                        output = torch.nn.functional.linear(input, weight, bias)
+                with main_stream_worker(weight, bias, signal):
+                    output = torch.nn.functional.linear(input, weight, bias)
 
                 if reshaped_nd:
                     output = output.reshape((*input_shape[:-1], self.weight.shape[0]))
@@ -339,7 +285,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 quant_format = layer_conf.get("format") if layer_conf is not None else None
                 manually_loaded_keys = []
 
-                if quant_format in ("float8_e4m3fn", "float8_e5m2") and weight_key in state_dict:
+                if quant_format in ("float8_e4m3fn", "float8_e5m2", "int8_tensorwise") and weight_key in state_dict:
                     self.quant_format = quant_format
                     qconfig = QUANT_ALGOS[quant_format]
                     self.layout_type = qconfig["comfy_tensor_layout"]
@@ -353,10 +299,16 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                         scale = scale.float()
                         manually_loaded_keys.append(scale_key)
 
+                    extra = {}
+                    if quant_format == "int8_tensorwise" and layer_conf.get("convrot", False):
+                        extra["convrot"] = True
+                        extra["convrot_groupsize"] = int(layer_conf.get("convrot_groupsize", 256))
+
                     params = layout_cls.Params(
                         scale=scale if scale is not None else torch.ones((), dtype=torch.float32),
                         orig_dtype=MixedPrecisionOps._compute_dtype,
                         orig_shape=(self.num_embeddings, self.embedding_dim),
+                        **extra,
                     )
                     self.weight = torch.nn.Parameter(QuantizedTensor(weight.to(dtype=qconfig["storage_t"]), qconfig["comfy_tensor_layout"], params), requires_grad=False)
                 elif layer_conf is not None:
@@ -378,12 +330,17 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 if isinstance(weight, QuantizedTensor) and len(self.weight_function) == 0:
                     qdata, _, signal = weights_manual_cast(self, device=input.device, dtype=weight.dtype)
                     if isinstance(qdata, QuantizedTensor):
-                        scale = qdata._params.scale
+                        params = qdata._params
+                        scale = params.scale
                         qdata = qdata._qdata
                     else:
+                        params = weight._params
                         scale = None
 
                     with main_stream_worker(qdata, None, signal):
+                        if self.quant_format == "int8_tensorwise":
+                            return get_layout_class(self.layout_type).dequantize_embedding(qdata, params, input)
+
                         x = torch.nn.functional.embedding(input, qdata, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
                     target_dtype = weight._params.orig_dtype
