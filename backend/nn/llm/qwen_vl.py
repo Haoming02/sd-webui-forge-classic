@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 from backend.memory_management import pytorch_attention_enabled
 
-if pytorch_attention_enabled:
+if pytorch_attention_enabled():
     from backend.attention import attention_pytorch as attention_function
 else:
     from backend.attention import attention_basic as attention_function

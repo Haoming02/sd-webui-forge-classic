@@ -78,6 +78,27 @@ def exists(val) -> bool:
     return val is not None
 
 
+def _heads_from_dim(tensor, dim_head):
+    inner_dim = tensor.shape[-1]
+    assert inner_dim % dim_head == 0
+    return inner_dim // dim_head
+
+
+def _reshape_qkv_to_heads(q, k, v, b, heads, dim_head, enable_gqa=False, expand_kv=True):
+    q = q.unsqueeze(3).reshape(b, -1, heads, dim_head)
+    if enable_gqa:
+        key_heads = _heads_from_dim(k, dim_head)
+        value_heads = _heads_from_dim(v, dim_head)
+    else:
+        key_heads = heads
+        value_heads = heads
+    k = k.unsqueeze(3).reshape(b, -1, key_heads, dim_head)
+    v = v.unsqueeze(3).reshape(b, -1, value_heads, dim_head)
+    if enable_gqa and expand_kv:
+        k, v = operations.repeat_kv_for_gqa(k, v, heads, -2)
+    return q, k, v
+
+
 if memory_management.is_nvidia():
     SDP_BATCH_LIMIT = 2**15
 else:
@@ -96,19 +117,19 @@ def attention_basic(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
         b, _, dim_head = q.shape
         dim_head //= heads
 
-    scale = dim_head**-0.5
+    scale = kwargs.get("scale", dim_head**-0.5)
 
     h = heads
     if skip_reshape:
+        if kwargs.get("enable_gqa", False):
+            k, v = operations.repeat_kv_for_gqa(k, v, q.shape[-3], -3)
         q, k, v = map(
             lambda t: t.reshape(b * heads, -1, dim_head),
             (q, k, v),
         )
     else:
-        q, k, v = map(
-            lambda t: t.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(),
-            (q, k, v),
-        )
+        q, k, v = _reshape_qkv_to_heads(q, k, v, b, heads, dim_head, kwargs.get("enable_gqa", False))
+        q, k, v = map(lambda t: t.permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(), (q, k, v))
 
     if attn_precision == torch.float32:
         sim = einsum("b i d, b j d -> b i j", q.float(), k.float()) * scale
@@ -206,10 +227,8 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
     else:
         b, _, dim_head = q.shape
         dim_head //= heads
-        q, k, v = map(
-            lambda t: t.view(b, -1, heads, dim_head).transpose(1, 2),
-            (q, k, v),
-        )
+        q, k, v = _reshape_qkv_to_heads(q, k, v, b, heads, dim_head, kwargs.get("enable_gqa", False), expand_kv=False)
+        q, k, v = map(lambda t: t.transpose(1, 2), (q, k, v))
 
     if mask is not None:
         if mask.ndim == 2:
@@ -217,8 +236,11 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
         if mask.ndim == 3:
             mask = mask.unsqueeze(1)
 
+    sdpa_keys = ("scale", "enable_gqa")
+    sdpa_extra = {k: v for k, v in kwargs.items() if k in sdpa_keys}
+
     if SDP_BATCH_LIMIT >= b:
-        out = operations.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
+        out = operations.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False, **sdpa_extra)
         if not skip_output_reshape:
             out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
     else:
@@ -229,7 +251,7 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
                 if mask.shape[0] > 1:
                     m = mask[i : i + SDP_BATCH_LIMIT]
 
-            out[i : i + SDP_BATCH_LIMIT] = operations.scaled_dot_product_attention(q[i : i + SDP_BATCH_LIMIT], k[i : i + SDP_BATCH_LIMIT], v[i : i + SDP_BATCH_LIMIT], attn_mask=m, dropout_p=0.0, is_causal=False).transpose(1, 2).reshape(-1, q.shape[2], heads * dim_head)
+            out[i : i + SDP_BATCH_LIMIT] = operations.scaled_dot_product_attention(q[i : i + SDP_BATCH_LIMIT], k[i : i + SDP_BATCH_LIMIT], v[i : i + SDP_BATCH_LIMIT], attn_mask=m, dropout_p=0.0, is_causal=False, **sdpa_extra).transpose(1, 2).reshape(-1, q.shape[2], heads * dim_head)
 
     return out
 

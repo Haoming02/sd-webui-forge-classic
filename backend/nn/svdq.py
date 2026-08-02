@@ -245,12 +245,14 @@ class SVDQT5(nn.Module):
 # region Qwen
 
 
-from backend.memory_management import xformers_enabled
+from backend.memory_management import pytorch_attention_enabled, xformers_enabled
 
 if xformers_enabled():
     from backend.attention import attention_xformers as attention_function
-else:
+elif pytorch_attention_enabled():
     from backend.attention import attention_pytorch as attention_function
+else:
+    from backend.attention import attention_basic as attention_function
 
 from backend.nn.flux import EmbedND
 from backend.nn.qwen import (

@@ -24,7 +24,6 @@ from backend.operations import (
 )
 from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
-from modules.shared import opts
 
 # region DiT
 
