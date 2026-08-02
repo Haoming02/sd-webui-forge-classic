@@ -316,23 +316,30 @@ def reconstruct_cond_batch(c: list[list[ScheduledPromptConditioning]], current_s
     return res
 
 
-def stack_conds(tensors):
+def stack_conds(tensors: list[torch.Tensor]) -> torch.Tensor:
     try:
-        result = torch.stack(tensors)
-    except:
-        # if prompts have wildly different lengths above the limit we'll get tensors of different shapes
-        # and won't be able to torch.stack them. So this fixes that.
-        token_count = max([x.shape[0] for x in tensors])
-        for i in range(len(tensors)):
-            if tensors[i].shape[0] != token_count:
-                last_vector = tensors[i][-1:]
-                last_vector_repeated = last_vector.repeat([token_count - tensors[i].shape[0], 1])
-                tensors[i] = torch.vstack([tensors[i], last_vector_repeated])
-        result = torch.stack(tensors)
-    return result
+        return torch.stack(tensors)
+    except Exception:
+        # handle prompts with different lengths (e.g. LLM)
+
+        token_count: int = max([x.shape[0] for x in tensors])
+        new_tensors: list[torch.Tensor] = []
+
+        for x in tensors:
+            if x.shape[0] == token_count:
+                new_tensors.append(x)
+            else:
+                diff = token_count - x.shape[0]
+                last_vector = x[-1:]
+                repeats = [diff] + [1] * (x.dim() - 1)
+                last_vector_repeated = last_vector.repeat(repeats)
+                x_padded = torch.cat([x, last_vector_repeated], dim=0)
+                new_tensors.append(x_padded)
+
+        return torch.stack(new_tensors)
 
 
-def reconstruct_multicond_batch(c: MulticondLearnedConditioning, current_step):
+def reconstruct_multicond_batch(c: MulticondLearnedConditioning, current_step: int):
     param = c.batch[0][0].schedules[0].cond
 
     tensors = []
