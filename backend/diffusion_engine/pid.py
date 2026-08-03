@@ -1,5 +1,5 @@
 import torch
-from huggingface_guess import model_list
+from huggingface_guess import latent, model_list
 
 from backend import memory_management
 from backend.args import dynamic_args
@@ -12,7 +12,6 @@ from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
 from backend.text_processing.gemma_it_engine import GemmaTextProcessingEngine
 from modules.shared import opts
-from modules_forge.packages.huggingface_guess import latent
 
 
 class PiD(ForgeDiffusionEngine):
@@ -77,7 +76,7 @@ class PiD(ForgeDiffusionEngine):
 
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
-        start_image = self._validate(x[:1]).movedim(1, -1).mul_(0.5).add_(0.5).unsqueeze(0)
+        start_image = self._validate(x[:1]).movedim(1, -1).mul_(0.5).add_(0.5)
         sample = self.forge_objects.vae.encode(start_image)
         sample = self.forge_objects.vae.first_stage_model.process_in(sample).squeeze(2)
         dynamic_args.lq_latent[0] = sample.detach().clone()
