@@ -710,12 +710,8 @@ def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
 
     model_sampling = model.inner_model.predictor
     is_const = _is_const(model_sampling)
-    if is_const:
-        # Const predictors use alpha = 1 - sigma and lambda = log(alpha / sigma).
-        sigmas = offset_first_sigma_for_snr(sigmas, model_sampling)
-        t_fn = partial(sigma_to_half_log_snr, model_sampling=model_sampling)
-    else:
-        t_fn = lambda sigma: sigma.log().neg()
+    sigmas = offset_first_sigma_for_snr(sigmas, model_sampling)
+    t_fn = partial(sigma_to_half_log_snr, model_sampling=model_sampling)
 
     old_uncond_denoised = None
     uncond_denoised = None
@@ -735,7 +731,6 @@ def sample_dpmpp_2m_cfg_pp(model, x, sigmas, extra_args=None, callback=None, dis
 
         if is_const:
             if sigmas[i + 1] == 0:
-                # Lambda is undefined at sigma = 0; the terminal denoising step is exact.
                 x = denoised
             else:
                 t, t_next = t_fn(sigmas[i]), t_fn(sigmas[i + 1])
