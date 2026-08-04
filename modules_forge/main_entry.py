@@ -140,6 +140,10 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
 def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> bool:
     """`ckpt_name` accepts valid aliases; returns `True` if checkpoint changed"""
     new_ckpt_info = sd_models.get_closet_checkpoint_match(ckpt_name)
+    if new_ckpt_info is None:
+        # never let an empty / unresolvable dropdown wipe the saved checkpoint
+        return False
+
     current_ckpt_info = sd_models.get_closet_checkpoint_match(getattr(shared.opts, "sd_model_checkpoint", ""))
     if new_ckpt_info == current_ckpt_info:
         return False
@@ -283,11 +287,19 @@ def on_preset_change(preset: str):
     batch_args_i2i = batch_args_t2i.copy()
     batch_args_i2i["value"] = getattr(shared.opts, f"{preset}_i2i_batch_size", 1)
 
+    # These options are registered with empty defaults (`None` / `[]`), so a preset that has
+    # never been configured reads back as blank. Blank must mean "inherit what is loaded now",
+    # otherwise switching to a fresh preset wipes the checkpoint and the VAE / text encoders,
+    # leaving a model that cannot load at all.
+    preset_ckpt = getattr(shared.opts, f"forge_checkpoint_{preset}", None) or shared.opts.sd_model_checkpoint
+    preset_modules = getattr(shared.opts, f"forge_additional_modules_{preset}", None) or getattr(shared.opts, "forge_additional_modules", [])
+    preset_dtype = getattr(shared.opts, f"forge_unet_storage_dtype_{preset}", None) or "Automatic"
+
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
-        gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),
-        gr.update(value=[os.path.basename(m) for m in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]),
-        gr.update(value=getattr(shared.opts, f"forge_unet_storage_dtype_{preset}", "Automatic")),
+        gr.update(value=preset_ckpt),
+        gr.update(value=[os.path.basename(m) for m in preset_modules]),
+        gr.update(value=preset_dtype),
         # ui_txt2img_steps, ui_txt2img_hr_steps, ui_img2img_steps
         gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_step", 20)) > 0 else gr.skip(),
         gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_hr_step", 20)) > 0 else gr.skip(),
