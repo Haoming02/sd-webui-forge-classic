@@ -3,7 +3,7 @@ Pillow==12.3.0
 accelerate==1.14.0
 audioop-lts==0.2.2;python_version>="3.13"
 av==17.1.0
-comfy-kitchen==0.2.26
+comfy-kitchen==0.2.27
 diffusers==0.37.1
 diskcache==5.6.3
 einops==0.8.2

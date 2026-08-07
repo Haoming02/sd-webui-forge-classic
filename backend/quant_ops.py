@@ -3,6 +3,7 @@
 import comfy_kitchen as ck
 import torch
 from comfy_kitchen.tensor import (  # noqa
+    AsymW4A8Int8Layout,
     QuantizedTensor,
     TensorCoreConvRotW4A4Layout,
     TensorCoreFP8Layout,
@@ -47,6 +48,7 @@ register_layout_class("TensorCoreNVFP4Layout", TensorCoreNVFP4Layout)
 register_layout_class("TensorCoreMXFP8Layout", TensorCoreMXFP8Layout)
 register_layout_class("TensorWiseINT8Layout", TensorWiseINT8Layout)
 register_layout_class("TensorCoreConvRotW4A4Layout", TensorCoreConvRotW4A4Layout)
+register_layout_class("AsymW4A8Int8Layout", AsymW4A8Int8Layout)
 
 
 QUANT_ALGOS = {
@@ -62,7 +64,7 @@ QUANT_ALGOS = {
     },
     "nvfp4": {
         "storage_t": torch.uint8,
-        "parameters": {"weight_scale", "weight_scale_2", "input_scale"},
+        "parameters": {"weight_scale", "weight_scale_2", "input_scale", "pre_quant_scale"},
         "comfy_tensor_layout": "TensorCoreNVFP4Layout",
         "group_size": 16,
     },
@@ -82,6 +84,12 @@ QUANT_ALGOS = {
         "storage_t": torch.int8,
         "parameters": {"weight_scale"},
         "comfy_tensor_layout": "TensorCoreConvRotW4A4Layout",
+        "quantize_input": False,
+    },
+    "asym_w4a8_int8": {
+        "storage_t": torch.int8,
+        "parameters": {"weight_scale"},
+        "comfy_tensor_layout": "AsymW4A8Int8Layout",
         "quantize_input": False,
     },
 }
