@@ -108,7 +108,7 @@ def detect_quantization(state_dict: dict[str, torch.Tensor], *, is_unet: bool = 
     return None
 
 
-def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict) -> dict[str, torch.Tensor]:
+def convert_quantization(state_dict: dict[str, torch.Tensor], metadata: dict) -> tuple[dict[str, torch.Tensor], dict]:
     # https://github.com/Comfy-Org/ComfyUI/blob/v0.19.0/comfy/utils.py#L1358
     if metadata is None:
         metadata = {}
