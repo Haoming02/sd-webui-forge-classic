@@ -25,7 +25,7 @@ setup_logger(logger)
 load_lora_state_dict = functools.partial(load_torch_file, safe_load=True)
 
 
-def process_anima(lora: dict[str, torch.Tensor]):
+def process_anima(lora: dict[str, torch.Tensor], blocks: int):
     # LLMAdapter was moved from transformer to text_encoder
 
     keys = list(lora.keys())
@@ -34,6 +34,31 @@ def process_anima(lora: dict[str, torch.Tensor]):
             lora[k.replace("diffusion_model", "text_encoders.qwen3_06b")] = lora.pop(k)
         elif k.startswith("lora_unet_llm_adapter"):
             lora[k.replace("lora_unet_llm_adapter", "lora_te_llm_adapter")] = lora.pop(k)
+
+    if blocks == 28:
+        return
+
+    from modules_forge.packages.huggingface_guess.detection import count_blocks
+
+    if count_blocks(lora, "lora_unet_blocks_" + "{}") == blocks:
+        return
+
+    logger.warning("Re-Mapping 28-Block Anima LoRA to 40-Block")
+
+    temp = lora.copy()
+    keys = list(temp.keys())
+
+    MAPPING = [0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 22, 23, 24, 24, 25, 26, 27]
+
+    for i in range(blocks):
+        a = f"lora_unet_blocks_{MAPPING[i]}"
+        b = f"lora_unet_blocks_{i}"
+
+        for k in keys:
+            if a in k:
+                lora[k.replace(a, b)] = temp[k].clone()
+
+    del temp
 
 
 def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, torch.Tensor], strength_model: float, strength_clip: float, filename: str = "default", online_mode: bool = False):
@@ -46,8 +71,8 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
     unet_keys = model_lora_keys_unet(model.model) if model is not None else {}
     clip_keys = model_lora_keys_clip(clip.cond_stage_model) if clip is not None else {}
 
-    if model.model.diffusion_model.__class__.__name__ == "Anima":
-        process_anima(lora)
+    if dynamic_args.anima:
+        process_anima(lora, len(model.model.diffusion_model.blocks))
 
     lora_unmatch = lora
     lora_unet, lora_unmatch = load_lora(lora_unmatch, unet_keys)
