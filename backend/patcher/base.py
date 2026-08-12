@@ -615,11 +615,11 @@ class ModelPatcher:
         if unpatch_weights:
             self.unpin_all_weights()
             if self.model.model_lowvram:
-                for m in self.model.modules():
-                    reset_weight_functions(m, wipe=True)
-
                 self.model.model_lowvram = False
                 self.model.lowvram_patch_counter = 0
+
+            for m in self.model.modules():
+                reset_weight_functions(m, wipe=True)
 
             keys = list(self.backup.keys())
 
