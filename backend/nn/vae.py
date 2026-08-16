@@ -31,8 +31,7 @@ class DiagonalGaussianDistribution:
             self.var = self.std = torch.zeros_like(self.mean).to(device=self.parameters.device)
 
     def sample(self):
-        x = self.mean + self.std * torch.randn(self.mean.shape).to(device=self.parameters.device)
-        return x
+        return torch.addcmul(self.mean, self.std, torch.randn(self.mean.shape).to(device=self.parameters.device))
 
     def mode(self):
         return self.mean
@@ -372,7 +371,7 @@ class AutoencoderKLFlux2(IntegratedAutoencoderKL):
         z = self.preprocess_decode(z)
         s = torch.sqrt(memory_management.cast_to(self.bn.running_var.view(1, -1, 1, 1), dtype=z.dtype, device=z.device) + self.bn_eps)
         m = memory_management.cast_to(self.bn.running_mean.view(1, -1, 1, 1), dtype=z.dtype, device=z.device)
-        z = z * s + m
+        z = torch.addcmul(m, z, s)
         z = rearrange(
             z,
             "... (c pi pj) i j -> ... c (i pi) (j pj)",
