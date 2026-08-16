@@ -25,6 +25,11 @@ from backend.operations import (
 from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
 
+
+def _fn(x: torch.Tensor, _norm: nn.Module, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+    return torch.addcmul(z, _norm(x), 1 + y)
+
+
 # region DiT
 
 
@@ -241,15 +246,11 @@ class FinalLayer(nn.Module):
             nn.Linear(adaln_lora_dim, self.n_adaln_chunks * hidden_size, bias=False),
         )
 
-    @staticmethod
-    def _fn(x: torch.Tensor, _norm: nn.Module, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
-        return _norm(x) * (1 + y) + z
-
     def forward(self, x_B_T_H_W_D: torch.Tensor, emb_B_T_D: torch.Tensor, adaln_lora_B_T_3D: Optional[torch.Tensor] = None):
         shift_B_T_D, scale_B_T_D = (self.adaln_modulation(emb_B_T_D) + adaln_lora_B_T_3D[:, :, : 2 * self.hidden_size]).chunk(2, dim=-1)
         shift_B_T_1_1_D, scale_B_T_1_1_D = rearrange(shift_B_T_D, "b t d -> b t 1 1 d"), rearrange(scale_B_T_D, "b t d -> b t 1 1 d")
 
-        x_B_T_H_W_D = self._fn(x_B_T_H_W_D, self.layer_norm, scale_B_T_1_1_D, shift_B_T_1_1_D)
+        x_B_T_H_W_D = _fn(x_B_T_H_W_D, self.layer_norm, scale_B_T_1_1_D, shift_B_T_1_1_D)
         x_B_T_H_W_O = self.linear(x_B_T_H_W_D)
         return x_B_T_H_W_O
 
@@ -282,10 +283,6 @@ class Block(nn.Module):
             nn.Linear(x_dim, adaln_lora_dim, bias=False),
             nn.Linear(adaln_lora_dim, 3 * x_dim, bias=False),
         )
-
-    @staticmethod
-    def _fn(x, _norm, y, z):
-        return _norm(x) * (1 + y) + z
 
     def forward(
         self,
@@ -320,7 +317,7 @@ class Block(nn.Module):
 
         B, T, H, W, D = x_B_T_H_W_D.shape
 
-        normalized_x_B_T_H_W_D = self._fn(
+        normalized_x_B_T_H_W_D = _fn(
             x_B_T_H_W_D,
             self.layer_norm_self_attn,
             scale_self_attn_B_T_1_1_D,
@@ -341,7 +338,7 @@ class Block(nn.Module):
         x_B_T_H_W_D = torch.addcmul(x_B_T_H_W_D, gate_self_attn_B_T_1_1_D.to(residual_dtype), result_B_T_H_W_D.to(residual_dtype))
 
         def _x_fn(_x_B_T_H_W_D: torch.Tensor, layer_norm_cross_attn: Callable, _scale_cross_attn_B_T_1_1_D: torch.Tensor, _shift_cross_attn_B_T_1_1_D: torch.Tensor, transformer_options: Optional[dict] = {}) -> torch.Tensor:
-            _normalized_x_B_T_H_W_D = self._fn(_x_B_T_H_W_D, layer_norm_cross_attn, _scale_cross_attn_B_T_1_1_D, _shift_cross_attn_B_T_1_1_D)
+            _normalized_x_B_T_H_W_D = _fn(_x_B_T_H_W_D, layer_norm_cross_attn, _scale_cross_attn_B_T_1_1_D, _shift_cross_attn_B_T_1_1_D)
             _result_B_T_H_W_D = rearrange(
                 self.cross_attn(
                     rearrange(_normalized_x_B_T_H_W_D.to(compute_dtype), "b t h w d -> b (t h w) d"),
@@ -365,7 +362,7 @@ class Block(nn.Module):
         )
         x_B_T_H_W_D = torch.addcmul(x_B_T_H_W_D, gate_cross_attn_B_T_1_1_D.to(residual_dtype), result_B_T_H_W_D.to(residual_dtype))
 
-        normalized_x_B_T_H_W_D = self._fn(
+        normalized_x_B_T_H_W_D = _fn(
             x_B_T_H_W_D,
             self.layer_norm_mlp,
             scale_mlp_B_T_1_1_D,
@@ -450,7 +447,7 @@ class Anima(nn.Module):
             padding_mask = torch.zeros(x_B_C_T_H_W.shape[0], 1, x_B_C_T_H_W.shape[3], x_B_C_T_H_W.shape[4], dtype=x_B_C_T_H_W.dtype, device=x_B_C_T_H_W.device)
         else:
             padding_mask = functional.resize(padding_mask, list(x_B_C_T_H_W.shape[-2:]), interpolation=InterpolationMode.NEAREST)
-        x_B_C_T_H_W = torch.cat([x_B_C_T_H_W, padding_mask.unsqueeze(1).repeat(1, 1, x_B_C_T_H_W.shape[2], 1, 1)], dim=1)
+        x_B_C_T_H_W = torch.cat([x_B_C_T_H_W, padding_mask.unsqueeze(1).expand(-1, -1, x_B_C_T_H_W.shape[2], -1, -1)], dim=1)
         x_B_T_H_W_D = self.x_embedder(x_B_C_T_H_W)
 
         return x_B_T_H_W_D, self.pos_embedder(x_B_T_H_W_D, device=x_B_C_T_H_W.device), None
@@ -521,8 +518,7 @@ def rotate_half(x):
 def apply_rotary_pos_emb(x, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    x_embed = (x * cos) + (rotate_half(x) * sin)
-    return x_embed
+    return torch.addcmul(x * cos, rotate_half(x), sin)
 
 
 class RotaryEmbedding(nn.Module):
@@ -620,17 +616,17 @@ class TransformerBlock(nn.Module):
         self.norm_mlp = nn.LayerNorm(model_dim) if layer_norm else nn.RMSNorm(model_dim, eps=1e-6)
         self.mlp = nn.Sequential(nn.Linear(model_dim, int(model_dim * mlp_ratio)), nn.GELU(), nn.Linear(int(model_dim * mlp_ratio), model_dim))
 
-    def forward(self, x, context, target_attention_mask=None, source_attention_mask=None, position_embeddings=None, position_embeddings_context=None):
+    def forward(self, x: torch.Tensor, context, target_attention_mask=None, source_attention_mask=None, position_embeddings=None, position_embeddings_context=None):
         if self.use_self_attn:
             normed = self.norm_self_attn(x)
             attn_out = self.self_attn(normed, mask=target_attention_mask, position_embeddings=position_embeddings, position_embeddings_context=position_embeddings)
-            x = x + attn_out
+            x.add_(attn_out)
 
         normed = self.norm_cross_attn(x)
         attn_out = self.cross_attn(normed, mask=source_attention_mask, context=context, position_embeddings=position_embeddings, position_embeddings_context=position_embeddings_context)
-        x = x + attn_out
+        x.add_(attn_out)
 
-        x = x + self.mlp(self.norm_mlp(x))
+        x.add_(self.mlp(self.norm_mlp(x)))
         return x
 
     def init_weights(self):
