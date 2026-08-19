@@ -34,11 +34,8 @@ import comfy.model_management
 import comfy.ops
 import comfy.patcher_extension
 import comfy.utils
-from comfy.comfy_types import UnetWrapperFunction
 from comfy.quant_ops import QuantizedTensor
 from comfy.patcher_extension import CallbacksMP, PatcherInjection, WrappersMP
-
-import comfy_aimdo.model_vbar
 
 
 def set_model_options_patch_replace(model_options, patch, name, block_name, number, transformer_index=None):
@@ -321,16 +318,6 @@ class ModelPatcher:
     def lowvram_patch_counter(self):
         return self.model.lowvram_patch_counter
 
-    def get_free_memory(self, device):
-        # Prioritize batching (incl. CFG/conds etc) over keeping the model resident. In
-        # the vast majority of setups a little bit of offloading on the giant model more
-        # than pays for CFG. So return everything both torch and Aimdo could give us
-        aimdo_mem = 0
-        if comfy.memory_management.aimdo_enabled:
-            aimdo_device = device.index if getattr(device, "type", None) == "cuda" else None
-            aimdo_mem = comfy_aimdo.model_vbar.vbars_analyze(aimdo_device)
-        return comfy.model_management.get_free_memory(device) + aimdo_mem
-
     def get_clone_model_override(self):
         return self.model, (self.backup, self.backup_buffers, self.object_patches_backup, self.pinned)
 
@@ -553,7 +540,7 @@ class ModelPatcher:
     def set_model_sampler_calc_cond_batch_function(self, sampler_calc_cond_batch_function):
         self.model_options["sampler_calc_cond_batch_function"] = sampler_calc_cond_batch_function
 
-    def set_model_unet_function_wrapper(self, unet_wrapper_function: UnetWrapperFunction):
+    def set_model_unet_function_wrapper(self, unet_wrapper_function):
         self.model_options["model_function_wrapper"] = unet_wrapper_function
 
     def set_model_denoise_mask_function(self, denoise_mask_function):
