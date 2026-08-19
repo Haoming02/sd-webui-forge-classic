@@ -32,7 +32,6 @@ import comfy.model_management
 import comfy.ops
 import comfy.utils
 from comfy.quant_ops import QuantizedTensor
-from comfy.patcher_extension import WrappersMP
 
 
 def set_model_options_patch_replace(model_options, patch, name, block_name, number, transformer_index=None):
@@ -226,8 +225,6 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
-
         self.cached_patcher_init: tuple[Callable, tuple] | tuple[Callable, tuple, int] | None = None
         self.is_multigpu_base_clone = False
         self.clone_base_uuid = uuid.uuid4()
@@ -294,12 +291,6 @@ class ModelPatcher:
         n.force_cast_weights = self.force_cast_weights
 
         n.backup, n.backup_buffers, n.object_patches_backup, n.pinned = model_override[1]
-
-        # sample wrappers
-        for k, w in self.wrappers.items():
-            n.wrappers[k] = {}
-            for k1, w1 in w.items():
-                n.wrappers[k][k1] = w1.copy()
 
         n.cached_patcher_init = self.cached_patcher_init
         n.is_multigpu_base_clone = self.is_multigpu_base_clone
@@ -967,27 +958,6 @@ class ModelPatcher:
         self.model_patches_call_function(function_name="cleanup")
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-
-    def add_wrapper(self, wrapper_type: str, wrapper: Callable):
-        self.add_wrapper_with_key(wrapper_type, None, wrapper)
-
-    def add_wrapper_with_key(self, wrapper_type: str, key: str, wrapper: Callable):
-        w = self.wrappers.setdefault(wrapper_type, {}).setdefault(key, [])
-        w.append(wrapper)
-
-    def remove_wrappers_with_key(self, wrapper_type: str, key: str):
-        w = self.wrappers.get(wrapper_type, {})
-        if key in w:
-            w.pop(key)
-
-    def get_wrappers(self, wrapper_type: str, key: str):
-        return self.wrappers.get(wrapper_type, {}).get(key, [])
-
-    def get_all_wrappers(self, wrapper_type: str):
-        w_list = []
-        for w in self.wrappers.get(wrapper_type, {}).values():
-            w_list.extend(w)
-        return w_list
 
     def pre_run(self):
         if hasattr(self.model, "current_patcher"):
