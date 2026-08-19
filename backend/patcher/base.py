@@ -102,36 +102,18 @@ class LowVramPatch:
     def __init__(self, key, patches, convert_func=None, set_func=None):
         self.key = key
         self.patches = patches
-        self.convert_func = convert_func  # TODO: remove
+        self.convert_func = convert_func
         self.set_func = set_func
-        self.prepared_patches = None
-
-    def memory_required(self):
-        counter = [0]
-        for patch in self.patches[self.key]:
-            comfy.lora.prefetch_prepared_value(patch[1], counter, None, None, False)
-        return counter[0]
-
-    def prepare(self, destination, stream, copy=True, commit=True):
-        counter = [0]
-        prepared_patches = [(patch[0], comfy.lora.prefetch_prepared_value(patch[1], counter, destination, stream, copy), patch[2], patch[3], patch[4]) for patch in self.patches[self.key]]
-        if commit:
-            self.prepared_patches = prepared_patches
-        return prepared_patches
-
-    def clear_prepared(self):
-        self.prepared_patches = None
 
     def __call__(self, weight):
-        patches = self.prepared_patches if self.prepared_patches is not None else self.patches[self.key]
-        return merge_lora_to_weight(patches, weight, self.key, intermediate_dtype=weight.dtype)
+        return merge_lora_to_weight(self.patches[self.key], weight, self.key, intermediate_dtype=weight.dtype)
 
 
 LOWVRAM_PATCH_ESTIMATE_MATH_FACTOR = 2
 
 
 def low_vram_patch_estimate_vram(model, key):
-    weight, set_func, convert_func = get_key_weight(model, key)
+    weight, _, _ = get_key_weight(model, key)
     if weight is None:
         return 0
     model_dtype = getattr(model, "manual_cast_dtype", torch.float32)
@@ -170,26 +152,6 @@ def key_param_name_to_key(key, param):
     if len(key) == 0:
         return param
     return "{}.{}".format(key, param)
-
-
-class MemoryCounter:
-    def __init__(self, initial: int, minimum=0):
-        self.value = initial
-        self.minimum = minimum
-        # TODO: add a safe limit besides 0
-
-    def use(self, weight: torch.Tensor):
-        weight_size = weight.nelement() * weight.element_size()
-        if self.is_useable(weight_size):
-            self.decrement(weight_size)
-            return True
-        return False
-
-    def is_useable(self, used: int):
-        return self.value - used > self.minimum
-
-    def decrement(self, used: int):
-        self.value -= used
 
 
 class ModelPatcher:
@@ -534,7 +496,7 @@ class ModelPatcher:
                 if not k.startswith(filter_prefix):
                     continue
             bk = self.backup.get(k, None)
-            weight, set_func, convert_func = get_key_weight(self.model, k)
+            weight, _, convert_func = get_key_weight(self.model, k)
             if bk is not None:
                 weight = bk.weight
             if convert_func is None:
@@ -587,13 +549,13 @@ class ModelPatcher:
             return set_func(out_weight, inplace_update=inplace_update, seed=string_to_seed(key), return_weight=return_weight)
 
     def pin_weight_to_device(self, key):
-        weight, set_func, convert_func = get_key_weight(self.model, key)
+        weight, _, _ = get_key_weight(self.model, key)
         if memory_management.pin_memory(weight):
             self.pinned.add(key)
 
     def unpin_weight(self, key):
         if key in self.pinned:
-            weight, set_func, convert_func = get_key_weight(self.model, key)
+            weight, _, _ = get_key_weight(self.model, key)
             memory_management.unpin_memory(weight)
             self.pinned.remove(key)
 
