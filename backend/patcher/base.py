@@ -251,8 +251,6 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.attachments: dict[str] = {}
-        self.additional_models: dict[str, list[ModelPatcher]] = {}
         self.callbacks: dict[str, dict[str, list[Callable]]] = CallbacksMP.init_callbacks()
         self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
 
@@ -327,16 +325,6 @@ class ModelPatcher:
 
         n.backup, n.backup_buffers, n.object_patches_backup, n.pinned = model_override[1]
 
-        # attachments
-        n.attachments = {}
-        for k in self.attachments:
-            if hasattr(self.attachments[k], "on_model_patcher_clone"):
-                n.attachments[k] = self.attachments[k].on_model_patcher_clone()
-            else:
-                n.attachments[k] = self.attachments[k]
-        # additional models
-        for k, c in self.additional_models.items():
-            n.additional_models[k] = [x.clone() for x in c]
         # callbacks
         for k, c in self.callbacks.items():
             n.callbacks[k] = {}
@@ -1080,16 +1068,6 @@ class ModelPatcher:
             w_list.extend(w)
         return w_list
 
-    def set_attachments(self, key: str, attachment):
-        self.attachments[key] = attachment
-
-    def remove_attachments(self, key: str):
-        if key in self.attachments:
-            self.attachments.pop(key)
-
-    def get_attachment(self, key: str):
-        return self.attachments.get(key, None)
-
     def set_injections(self, key: str, injections: list[PatcherInjection]):
         self.injections[key] = injections
 
@@ -1099,41 +1077,6 @@ class ModelPatcher:
 
     def get_injections(self, key: str):
         return self.injections.get(key, None)
-
-    def set_additional_models(self, key: str, models: list["ModelPatcher"]):
-        self.additional_models[key] = models
-
-    def remove_additional_models(self, key: str):
-        if key in self.additional_models:
-            self.additional_models.pop(key)
-
-    def get_additional_models_with_key(self, key: str):
-        return self.additional_models.get(key, [])
-
-    def get_additional_models(self):
-        all_models: list[ModelPatcher] = []
-        for models in self.additional_models.values():
-            all_models.extend(models)
-        return all_models
-
-    def get_nested_additional_models(self):
-        def _evaluate_sub_additional_models(prev_models: list[ModelPatcher], cache_set: set[ModelPatcher]):
-            """Make sure circular references do not cause infinite recursion."""
-            next_models = []
-            for model in prev_models:
-                candidates = model.get_additional_models()
-                for c in candidates:
-                    if c not in cache_set:
-                        next_models.append(c)
-                        cache_set.add(c)
-            if len(next_models) == 0:
-                return prev_models
-            return prev_models + _evaluate_sub_additional_models(next_models, cache_set)
-
-        all_models = self.get_additional_models()
-        models_set = set(all_models)
-        real_all_models = _evaluate_sub_additional_models(prev_models=all_models, cache_set=models_set)
-        return real_all_models
 
     def use_ejected(self, skip_and_inject_on_exit_only=False):
         return AutoPatcherEjector(self, skip_and_inject_on_exit_only=skip_and_inject_on_exit_only)
