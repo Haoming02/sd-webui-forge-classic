@@ -158,21 +158,19 @@ def key_param_name_to_key(key, param):
 
 
 class ModelPatcher:
-    def __init__(self, model, load_device, offload_device, size=0, weight_inplace_update=False):
+    def __init__(self, model: torch.nn.Module, load_device: torch.device, offload_device: torch.device, size: int = 0, *, current_device: torch.device = None, weight_inplace_update: bool = False):
         self.size = size
         self.model = model
-        if not hasattr(self.model, "device"):
-            logger.debug("Model doesn't have a device attribute.")
-            self.model.device = offload_device
-        elif self.model.device is None:
-            self.model.device = offload_device
+        self.current_device = current_device or offload_device
 
         self.patches = {}
         self.backup = {}
         self.backup_buffers = {}
         self.object_patches = {}
         self.object_patches_backup = {}
+
         self.weight_wrapper_patches = {}
+
         self.model_options = {"transformer_options": {}}
         self.load_device = load_device
         self.offload_device = offload_device
@@ -184,16 +182,12 @@ class ModelPatcher:
 
         if not hasattr(self.model, "model_loaded_weight_memory"):
             self.model.model_loaded_weight_memory = 0
-
         if not hasattr(self.model, "lowvram_patch_counter"):
             self.model.lowvram_patch_counter = 0
-
         if not hasattr(self.model, "model_lowvram"):
             self.model.model_lowvram = False
-
         if not hasattr(self.model, "current_weight_patches_uuid"):
             self.model.current_weight_patches_uuid = None
-
         if not hasattr(self.model, "model_offload_buffer_memory"):
             self.model.model_offload_buffer_memory = 0
 
@@ -672,8 +666,8 @@ class ModelPatcher:
                 self.model.to(device_to)
                 mem_counter = self.model_size()
 
+        self.current_device = device_to
         self.model.lowvram_patch_counter += patch_counter
-        self.model.device = device_to
         self.model.model_loaded_weight_memory = mem_counter
         self.model.model_offload_buffer_memory = offload_buffer
         self.model.current_weight_patches_uuid = self.patches_uuid
@@ -718,7 +712,7 @@ class ModelPatcher:
 
             if device_to is not None:
                 self.model.to(device_to)
-                self.model.device = device_to
+                self.current_device = device_to
             self.model.model_loaded_weight_memory = 0
             self.model.model_offload_buffer_memory = 0
 
@@ -841,9 +835,6 @@ class ModelPatcher:
         if unpatch_all:
             self.unpatch_model(self.offload_device, unpatch_weights=unpatch_all)
         return self.model
-
-    def current_loaded_device(self):
-        return self.model.device
 
     def cleanup(self):
         self.model_patches_call_function(function_name="cleanup")
