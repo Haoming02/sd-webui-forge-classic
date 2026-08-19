@@ -22,7 +22,6 @@ import collections
 import inspect
 import logging
 import uuid
-from typing import Callable
 
 import torch
 
@@ -179,10 +178,6 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.cached_patcher_init: tuple[Callable, tuple] | tuple[Callable, tuple, int] | None = None
-        self.is_multigpu_base_clone = False
-        self.clone_base_uuid = uuid.uuid4()
-
         if not hasattr(self.model, "model_loaded_weight_memory"):
             self.model.model_loaded_weight_memory = 0
 
@@ -197,9 +192,6 @@ class ModelPatcher:
 
         if not hasattr(self.model, "model_offload_buffer_memory"):
             self.model.model_offload_buffer_memory = 0
-
-    def is_dynamic(self):
-        return False
 
     def model_size(self):
         if self.size > 0:
@@ -216,22 +208,9 @@ class ModelPatcher:
     def get_clone_model_override(self):
         return self.model, (self.backup, self.backup_buffers, self.object_patches_backup, self.pinned)
 
-    def clone(self, disable_dynamic=False, model_override=None, force_deepcopy=False):
-        class_ = self.__class__
-        if self.is_dynamic() and disable_dynamic or force_deepcopy:
-            if self.is_dynamic() and disable_dynamic:
-                class_ = ModelPatcher
-            if model_override is None:
-                if self.cached_patcher_init is None:
-                    raise RuntimeError("Cannot create non-dynamic delegate: cached_patcher_init is not initialized.")
-                temp_model_patcher = self.cached_patcher_init[0](*self.cached_patcher_init[1], disable_dynamic=True)
-                if len(self.cached_patcher_init) > 2:
-                    temp_model_patcher = temp_model_patcher[self.cached_patcher_init[2]]
-                model_override = temp_model_patcher.get_clone_model_override()
-        if model_override is None:
-            model_override = self.get_clone_model_override()
+    def clone(self):
+        n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), current_device=self.current_device, weight_inplace_update=self.weight_inplace_update)
 
-        n = class_(model_override[0], self.load_device, self.offload_device, self.model_size(), weight_inplace_update=self.weight_inplace_update)
         n.patches = {}
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
@@ -244,11 +223,10 @@ class ModelPatcher:
 
         n.force_cast_weights = self.force_cast_weights
 
-        n.backup, n.backup_buffers, n.object_patches_backup, n.pinned = model_override[1]
-
-        n.cached_patcher_init = self.cached_patcher_init
-        n.is_multigpu_base_clone = self.is_multigpu_base_clone
-        n.clone_base_uuid = self.clone_base_uuid
+        n.backup = self.backup
+        n.backup_buffers = self.backup_buffers
+        n.object_patches_backup = self.object_patches_backup
+        n.pinned = self.pinned
 
         return n
 
@@ -348,18 +326,6 @@ class ModelPatcher:
     def set_model_middle_block_after_patch(self, patch):
         self.set_model_patch(patch, "middle_block_after_patch")
 
-    def set_model_rope_options(self, scale_x, shift_x, scale_y, shift_y, scale_t, shift_t, **kwargs):
-        rope_options = self.model_options["transformer_options"].get("rope_options", {})
-        rope_options["scale_x"] = scale_x
-        rope_options["scale_y"] = scale_y
-        rope_options["scale_t"] = scale_t
-
-        rope_options["shift_x"] = shift_x
-        rope_options["shift_y"] = shift_y
-        rope_options["shift_t"] = shift_t
-
-        self.model_options["transformer_options"]["rope_options"] = rope_options
-
     def add_object_patch(self, name, obj):
         self.object_patches[name] = obj
 
@@ -374,19 +340,7 @@ class ModelPatcher:
         self.patches_uuid = uuid.uuid4()
 
     def get_model_object(self, name: str) -> torch.nn.Module:
-        """Retrieves a nested attribute from an object using dot notation considering
-        object patches.
-
-        Args:
-            name (str): The attribute path using dot notation (e.g. "model.layer.weight")
-
-        Returns:
-            The value of the requested attribute
-
-        Example:
-            patcher = ModelPatcher()
-            weight = patcher.get_model_object("layer1.conv.weight")
-        """
+        """Retrieves a nested attribute from an object using dot notation (e.g. `model.layer.weight`)"""
         if name in self.object_patches:
             return self.object_patches[name]
         else:
@@ -685,8 +639,11 @@ class ModelPatcher:
                 key = key_param_name_to_key(n, param)
                 self.unpin_weight(key)
                 self.patch_weight_to_device(key, device_to=device_to)
+
             if memory_management.is_device_cuda(device_to):
                 torch.cuda.synchronize()
+            elif memory_management.is_device_xpu(device_to):
+                torch.xpu.synchronize()
 
             logging.debug("lowvram: loaded module regularly {} {}".format(n, m))
             m.comfy_patched_weights = True
