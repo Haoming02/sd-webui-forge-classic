@@ -174,10 +174,9 @@ class ModelPatcher:
         if not hasattr(self.model, "model_offload_buffer_memory"):
             self.model.model_offload_buffer_memory = 0
 
-    def model_size(self):
-        if self.size > 0:
-            return self.size
-        self.size = memory_management.module_size(self.model)
+    def model_size(self) -> int:
+        if self.size == 0:
+            self.size = memory_management.module_size(self.model)
         return self.size
 
     def loaded_size(self):
@@ -185,9 +184,6 @@ class ModelPatcher:
 
     def lowvram_patch_counter(self):
         return self.model.lowvram_patch_counter
-
-    def get_clone_model_override(self):
-        return self.model, (self.backup, self.backup_buffers, self.object_patches_backup, self.pinned)
 
     def clone(self):
         n = self.__class__(self.model, self.load_device, self.offload_device, self.model_size(), current_device=self.current_device, weight_inplace_update=self.weight_inplace_update)
@@ -211,10 +207,8 @@ class ModelPatcher:
 
         return n
 
-    def is_clone(self, other):
-        if hasattr(other, "model") and self.model is other.model:
-            return True
-        return False
+    def is_clone(self, other: "ModelPatcher") -> bool:
+        return self.model is getattr(other, "model", None)
 
     def memory_required(self, input_shape):
         return self.model.memory_required(input_shape=input_shape)
@@ -272,14 +266,6 @@ class ModelPatcher:
     def set_model_attn2_output_patch(self, patch):
         self.set_model_patch(patch, "attn2_output_patch")
 
-    def set_model_optimized_attention(self, optimized_attention):
-        def optimized_attention_override(_, *args, **kwargs):
-            return optimized_attention(*args, **kwargs)
-
-        if hasattr(optimized_attention, "container_function") and optimized_attention.container_function is not None:
-            optimized_attention_override.container_function = optimized_attention.container_function
-        self.model_options["transformer_options"]["optimized_attention_override"] = optimized_attention_override
-
     def set_model_input_block_patch(self, patch):
         self.set_model_patch(patch, "input_block_patch")
 
@@ -309,12 +295,6 @@ class ModelPatcher:
 
     def add_object_patch(self, name, obj):
         self.object_patches[name] = obj
-
-    def set_model_compute_dtype(self, dtype):
-        self.add_object_patch("manual_cast_dtype", dtype)
-        if dtype is not None:
-            self.force_cast_weights = True
-        self.patches_uuid = uuid.uuid4()
 
     def add_weight_wrapper(self, name, function):
         self.weight_wrapper_patches[name] = self.weight_wrapper_patches.get(name, []) + [function]
@@ -442,15 +422,6 @@ class ModelPatcher:
             else:
                 p[k] = [(weight, convert_func)]
         return p
-
-    def model_state_dict(self, filter_prefix=None):
-        sd = self.model.state_dict()
-        keys = list(sd.keys())
-        if filter_prefix is not None:
-            for k in keys:
-                if not k.startswith(filter_prefix):
-                    sd.pop(k)
-        return sd
 
     def patch_weight_to_device(self, key, device_to=None, inplace_update=False, return_weight=False, force_cast=False):
         weight, set_func, convert_func = get_key_weight(self.model, key)
