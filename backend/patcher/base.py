@@ -27,11 +27,12 @@ from typing import Callable
 import torch
 
 import comfy.float
-import comfy.lora
 import comfy.model_management
 import comfy.ops
 import comfy.utils
 from comfy.quant_ops import QuantizedTensor
+
+from backend.patcher.lora import merge_lora_to_weight, string_to_seed
 
 
 def set_model_options_patch_replace(model_options, patch, name, block_name, number, transformer_index=None):
@@ -99,11 +100,6 @@ def move_weight_functions(m, device):
     return memory
 
 
-def string_to_seed(data):
-    logging.warning("WARNING: string_to_seed has moved from comfy.model_patcher to comfy.utils")
-    return comfy.utils.string_to_seed(data)
-
-
 class LowVramPatch:
     is_lowvram_patch = True
 
@@ -132,7 +128,7 @@ class LowVramPatch:
 
     def __call__(self, weight):
         patches = self.prepared_patches if self.prepared_patches is not None else self.patches[self.key]
-        return comfy.lora.calculate_weight(patches, weight, self.key, intermediate_dtype=weight.dtype)
+        return merge_lora_to_weight(patches, weight, self.key, intermediate_dtype=weight.dtype)
 
 
 LOWVRAM_PATCH_ESTIMATE_MATH_FACTOR = 2
@@ -581,10 +577,10 @@ class ModelPatcher:
         if convert_func is not None:
             temp_weight = convert_func(temp_weight, inplace=True)
 
-        out_weight = comfy.lora.calculate_weight(self.patches[key], temp_weight, key) if key in self.patches else temp_weight
+        out_weight = merge_lora_to_weight(self.patches[key], temp_weight, key) if key in self.patches else temp_weight
         if set_func is None:
             if key in self.patches:
-                out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=comfy.utils.string_to_seed(key))
+                out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
             if return_weight:
                 return out_weight
             elif inplace_update:
@@ -592,7 +588,7 @@ class ModelPatcher:
             else:
                 comfy.utils.set_attr_param(self.model, key, out_weight)
         else:
-            return set_func(out_weight, inplace_update=inplace_update, seed=comfy.utils.string_to_seed(key), return_weight=return_weight)
+            return set_func(out_weight, inplace_update=inplace_update, seed=string_to_seed(key), return_weight=return_weight)
 
     def pin_weight_to_device(self, key):
         weight, set_func, convert_func = get_key_weight(self.model, key)
@@ -930,17 +926,6 @@ class ModelPatcher:
 
         return self.model.model_loaded_weight_memory - current_used
 
-    def pinned_memory_size(self):
-        # Pinned memory pressure tracking is only implemented for DynamicVram loading
-        return 0
-
-    def loaded_ram_size(self):
-        # Loaded RAM pressure tracking is only implemented for DynamicVram loading
-        return 0
-
-    def partially_unload_ram(self, ram_to_unload):
-        return 0
-
     def detach(self, unpatch_all=True):
         self.model_patches_to(self.offload_device)
         if unpatch_all:
@@ -950,30 +935,10 @@ class ModelPatcher:
     def current_loaded_device(self):
         return self.model.device
 
-    def calculate_weight(self, patches, weight, key, intermediate_dtype=torch.float32):
-        logging.warning("The ModelPatcher.calculate_weight function is deprecated, please use: comfy.lora.calculate_weight instead")
-        return comfy.lora.calculate_weight(patches, weight, key, intermediate_dtype=intermediate_dtype)
-
     def cleanup(self):
         self.model_patches_call_function(function_name="cleanup")
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-
-    def pre_run(self):
-        if hasattr(self.model, "current_patcher"):
-            self.model.current_patcher = self
-
-    def prepare_state(self, timestep, model_options):
-        ignore_multigpu = model_options.get("ignore_multigpu", False)
-
-        if not ignore_multigpu and "multigpu_clones" in model_options:
-            model_options["ignore_multigpu"] = True
-            try:
-                for p in model_options["multigpu_clones"].values():
-                    p: ModelPatcher
-                    p.prepare_state(timestep, model_options)
-            finally:
-                model_options.pop("ignore_multigpu", None)
 
     def __del__(self):
         self.unpin_all_weights()
