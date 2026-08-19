@@ -82,23 +82,6 @@ def wipe_lowvram_weight(m):
         m.bias_function = []
 
 
-def move_weight_functions(m, device):
-    if device is None:
-        return 0
-
-    memory = 0
-    if hasattr(m, "weight_function"):
-        for f in m.weight_function:
-            if hasattr(f, "move_to"):
-                memory += f.move_to(device=device)
-
-    if hasattr(m, "bias_function"):
-        for f in m.bias_function:
-            if hasattr(f, "move_to"):
-                memory += f.move_to(device=device)
-    return memory
-
-
 class LowVramPatch:
     is_lowvram_patch = True
 
@@ -622,8 +605,6 @@ class ModelPatcher:
             if bias_key in self.weight_wrapper_patches:
                 m.bias_function.extend(self.weight_wrapper_patches[bias_key])
 
-            mem_counter += move_weight_functions(m, device_to)
-
         load_completely.sort(reverse=True)
         for x in load_completely:
             n = x[1]
@@ -692,7 +673,6 @@ class ModelPatcher:
             self.unpin_all_weights()
             if self.model.model_lowvram:
                 for m in self.model.modules():
-                    move_weight_functions(m, device_to)
                     wipe_lowvram_weight(m)
 
                 self.model.model_lowvram = False
@@ -766,7 +746,7 @@ class ModelPatcher:
                 if move_weight:
                     cast_weight = self.force_cast_weights
                     m.to(device_to)
-                    module_mem += move_weight_functions(m, device_to)
+
                     if lowvram_possible:
                         if weight_key in self.patches:
                             if force_patch_weights:
