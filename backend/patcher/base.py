@@ -265,7 +265,7 @@ class ModelPatcher:
 
     def set_model_sampler_cfg_function(self, sampler_cfg_function, disable_cfg1_optimization=False):
         if len(inspect.signature(sampler_cfg_function).parameters) == 3:
-            self.model_options["sampler_cfg_function"] = lambda args: sampler_cfg_function(args["cond"], args["uncond"], args["cond_scale"])  # Old way
+            self.model_options["sampler_cfg_function"] = lambda args: sampler_cfg_function(args["cond"], args["uncond"], args["cond_scale"])
         else:
             self.model_options["sampler_cfg_function"] = sampler_cfg_function
         if disable_cfg1_optimization:
@@ -367,7 +367,7 @@ class ModelPatcher:
         self.add_object_patch("manual_cast_dtype", dtype)
         if dtype is not None:
             self.force_cast_weights = True
-        self.patches_uuid = uuid.uuid4()  # TODO: optimize by preventing a full model reload for this
+        self.patches_uuid = uuid.uuid4()
 
     def add_weight_wrapper(self, name, function):
         self.weight_wrapper_patches[name] = self.weight_wrapper_patches.get(name, []) + [function]
@@ -563,18 +563,15 @@ class ModelPatcher:
         for key in list(self.pinned):
             self.unpin_weight(key)
 
-    def _load_list(self, for_dynamic=False, default_device=None):
+    def _load_list(self):
         loading = []
         for n, m in self.model.named_modules():
             default = False
             params = {name: param for name, param in m.named_parameters(recurse=False)}
-            for name, param in m.named_parameters(recurse=True):
+            for name, _ in m.named_parameters(recurse=True):
                 if name not in params:
-                    default = True  # default random weights in non leaf modules
+                    default = True
                     break
-            if default and default_device is not None:
-                for param_name, param in params.items():
-                    param.data = param.data.to(device=default_device, dtype=getattr(m, param_name + "_comfy_model_dtype", None))
             if not default and (hasattr(m, "comfy_cast_weights") or len(params) > 0):
                 module_mem = memory_management.module_size(m)
                 module_offload_mem = module_mem
@@ -593,12 +590,8 @@ class ModelPatcher:
 
                     module_offload_mem += check_module_offload_mem("{}.weight".format(n))
                     module_offload_mem += check_module_offload_mem("{}.bias".format(n))
-                # Dynamic: small weights (<64KB) first, then larger weights prioritized by size.
-                # Non-dynamic: prioritize by module offload cost.
-                if for_dynamic:
-                    sort_criteria = (module_offload_mem >= 64 * 1024, -module_offload_mem)
-                else:
-                    sort_criteria = (module_offload_mem,)
+
+                sort_criteria = (module_offload_mem,)
                 loading.append(sort_criteria + (module_mem, n, m, params))
         return loading
 
@@ -630,7 +623,7 @@ class ModelPatcher:
                     lowvram_weight = True
                     lowvram_counter += 1
                     lowvram_mem_counter += module_mem
-                    if hasattr(m, "prev_comfy_cast_weights"):  # Already lowvramed
+                    if hasattr(m, "prev_comfy_cast_weights"):
                         continue
 
             cast_weight = self.force_cast_weights
@@ -858,7 +851,7 @@ class ModelPatcher:
 
     def partially_load(self, device_to, extra_memory=0, force_patch_weights=False):
         unpatch_weights = self.model.current_weight_patches_uuid is not None and (self.model.current_weight_patches_uuid != self.patches_uuid or force_patch_weights)
-        # TODO: force_patch_weights should not unload + reload full model
+
         used = self.model.model_loaded_weight_memory
         self.unpatch_model(self.offload_device, unpatch_weights=unpatch_weights)
         if unpatch_weights:
