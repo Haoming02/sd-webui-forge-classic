@@ -32,7 +32,7 @@ import comfy.model_management
 import comfy.ops
 import comfy.utils
 from comfy.quant_ops import QuantizedTensor
-from comfy.patcher_extension import CallbacksMP, PatcherInjection, WrappersMP
+from comfy.patcher_extension import PatcherInjection, WrappersMP
 
 
 def set_model_options_patch_replace(model_options, patch, name, block_name, number, transformer_index=None):
@@ -251,7 +251,6 @@ class ModelPatcher:
         self.parent = None
         self.pinned = set()
 
-        self.callbacks: dict[str, dict[str, list[Callable]]] = CallbacksMP.init_callbacks()
         self.wrappers: dict[str, dict[str, list[Callable]]] = WrappersMP.init_wrappers()
 
         self.is_injected = False
@@ -325,11 +324,6 @@ class ModelPatcher:
 
         n.backup, n.backup_buffers, n.object_patches_backup, n.pinned = model_override[1]
 
-        # callbacks
-        for k, c in self.callbacks.items():
-            n.callbacks[k] = {}
-            for k1, c1 in c.items():
-                n.callbacks[k][k1] = c1.copy()
         # sample wrappers
         for k, w in self.wrappers.items():
             n.wrappers[k] = {}
@@ -345,8 +339,6 @@ class ModelPatcher:
         n.is_multigpu_base_clone = self.is_multigpu_base_clone
         n.clone_base_uuid = self.clone_base_uuid
 
-        for callback in self.get_all_callbacks(CallbacksMP.ON_CLONE):
-            callback(self, n)
         return n
 
     def is_clone(self, other):
@@ -826,9 +818,6 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = offload_buffer
             self.model.current_weight_patches_uuid = self.patches_uuid
 
-            for callback in self.get_all_callbacks(CallbacksMP.ON_LOAD):
-                callback(self, device_to, lowvram_model_memory, force_patch_weights, full_load)
-
     def patch_model(self, device_to=None, lowvram_model_memory=0, load_weights=True, force_patch_weights=False):
         with self.use_ejected():
             for k in self.object_patches:
@@ -1008,8 +997,6 @@ class ModelPatcher:
         self.model_patches_to(self.offload_device)
         if unpatch_all:
             self.unpatch_model(self.offload_device, unpatch_weights=unpatch_all)
-        for callback in self.get_all_callbacks(CallbacksMP.ON_DETACH):
-            callback(self, unpatch_all)
         return self.model
 
     def current_loaded_device(self):
@@ -1023,29 +1010,6 @@ class ModelPatcher:
         self.model_patches_call_function(function_name="cleanup")
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = None
-        for callback in self.get_all_callbacks(CallbacksMP.ON_CLEANUP):
-            callback(self)
-
-    def add_callback(self, call_type: str, callback: Callable):
-        self.add_callback_with_key(call_type, None, callback)
-
-    def add_callback_with_key(self, call_type: str, key: str, callback: Callable):
-        c = self.callbacks.setdefault(call_type, {}).setdefault(key, [])
-        c.append(callback)
-
-    def remove_callbacks_with_key(self, call_type: str, key: str):
-        c = self.callbacks.get(call_type, {})
-        if key in c:
-            c.pop(key)
-
-    def get_callbacks(self, call_type: str, key: str):
-        return self.callbacks.get(call_type, {}).get(key, [])
-
-    def get_all_callbacks(self, call_type: str):
-        c_list = []
-        for c in self.callbacks.get(call_type, {}).values():
-            c_list.extend(c)
-        return c_list
 
     def add_wrapper(self, wrapper_type: str, wrapper: Callable):
         self.add_wrapper_with_key(wrapper_type, None, wrapper)
@@ -1088,9 +1052,6 @@ class ModelPatcher:
             for inj in injections:
                 inj.inject(self)
                 self.is_injected = True
-        if self.is_injected:
-            for callback in self.get_all_callbacks(CallbacksMP.ON_INJECT_MODEL):
-                callback(self)
 
     def eject_model(self):
         if not self.is_injected:
@@ -1099,19 +1060,14 @@ class ModelPatcher:
             for inj in injections:
                 inj.eject(self)
         self.is_injected = False
-        for callback in self.get_all_callbacks(CallbacksMP.ON_EJECT_MODEL):
-            callback(self)
 
     def pre_run(self):
         if hasattr(self.model, "current_patcher"):
             self.model.current_patcher = self
-        for callback in self.get_all_callbacks(CallbacksMP.ON_PRE_RUN):
-            callback(self)
 
     def prepare_state(self, timestep, model_options):
         ignore_multigpu = model_options.get("ignore_multigpu", False)
-        for callback in self.get_all_callbacks(CallbacksMP.ON_PREPARE_STATE):
-            callback(self, timestep, model_options)
+
         if not ignore_multigpu and "multigpu_clones" in model_options:
             model_options["ignore_multigpu"] = True
             try:
