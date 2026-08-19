@@ -26,9 +26,7 @@ from typing import Callable
 
 import torch
 
-import comfy.utils
-
-from backend import memory_management
+from backend import memory_management, utils
 from backend.patcher.lora import merge_lora_to_weight, string_to_seed
 from backend.quant_ops import QuantizedTensor, stochastic_rounding
 
@@ -148,9 +146,9 @@ def get_key_weight(model, key):
     convert_func = None
     op_keys = key.rsplit(".", 1)
     if len(op_keys) < 2:
-        weight = comfy.utils.get_attr(model, key)
+        weight = utils.get_attr(model, key)
     else:
-        op = comfy.utils.get_attr(model, op_keys[0])
+        op = utils.get_attr(model, op_keys[0])
         try:
             set_func = getattr(op, "set_{}".format(op_keys[1]))
         except AttributeError:
@@ -163,7 +161,7 @@ def get_key_weight(model, key):
 
         weight = getattr(op, op_keys[1])
         if convert_func is not None:
-            weight = comfy.utils.get_attr(model, key)
+            weight = utils.get_attr(model, key)
 
     return weight, set_func, convert_func
 
@@ -279,7 +277,7 @@ class ModelPatcher:
 
         n.object_patches = self.object_patches.copy()
         n.weight_wrapper_patches = self.weight_wrapper_patches.copy()
-        n.model_options = comfy.utils.deepcopy_list_dict(self.model_options)
+        n.model_options = utils.deepcopy_(self.model_options)
         n.parent = self
 
         n.force_cast_weights = self.force_cast_weights
@@ -433,7 +431,7 @@ class ModelPatcher:
             if name in self.object_patches_backup:
                 return self.object_patches_backup[name]
             else:
-                return comfy.utils.get_attr(self.model, name)
+                return utils.get_attr(self.model, name)
 
     def model_patches_to(self, device):
         to = self.model_options["transformer_options"]
@@ -582,9 +580,9 @@ class ModelPatcher:
             if return_weight:
                 return out_weight
             elif inplace_update:
-                comfy.utils.copy_to_param(self.model, key, out_weight)
+                utils.copy_to_param(self.model, key, out_weight)
             else:
-                comfy.utils.set_attr_param(self.model, key, out_weight)
+                utils.set_attr(self.model, key, out_weight)
         else:
             return set_func(out_weight, inplace_update=inplace_update, seed=string_to_seed(key), return_weight=return_weight)
 
@@ -766,7 +764,7 @@ class ModelPatcher:
 
     def patch_model(self, device_to=None, lowvram_model_memory=0, load_weights=True, force_patch_weights=False):
         for k in self.object_patches:
-            old = comfy.utils.set_attr(self.model, k, self.object_patches[k])
+            old = utils.set_attr_raw(self.model, k, self.object_patches[k])
             if k not in self.object_patches_backup:
                 self.object_patches_backup[k] = old
 
@@ -795,9 +793,9 @@ class ModelPatcher:
             for k in keys:
                 bk = self.backup[k]
                 if bk.inplace_update:
-                    comfy.utils.copy_to_param(self.model, k, bk.weight)
+                    utils.copy_to_param(self.model, k, bk.weight)
                 else:
-                    comfy.utils.set_attr_param(self.model, k, bk.weight)
+                    utils.set_attr(self.model, k, bk.weight)
 
             self.model.current_weight_patches_uuid = None
             self.backup.clear()
@@ -814,7 +812,7 @@ class ModelPatcher:
 
         keys = list(self.object_patches_backup.keys())
         for k in keys:
-            comfy.utils.set_attr(self.model, k, self.object_patches_backup[k])
+            utils.set_attr_raw(self.model, k, self.object_patches_backup[k])
 
         self.object_patches_backup.clear()
 
@@ -848,9 +846,9 @@ class ModelPatcher:
                             break
 
                         if bk.inplace_update:
-                            comfy.utils.copy_to_param(self.model, key, bk.weight)
+                            utils.copy_to_param(self.model, key, bk.weight)
                         else:
-                            comfy.utils.set_attr_param(self.model, key, bk.weight)
+                            utils.set_attr(self.model, key, bk.weight)
                         self.backup.pop(key)
 
                 weight_key = "{}.weight".format(n)
