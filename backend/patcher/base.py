@@ -26,13 +26,11 @@ from typing import Callable
 
 import torch
 
-import comfy.float
-import comfy.model_management
-import comfy.ops
 import comfy.utils
-from comfy.quant_ops import QuantizedTensor
 
+from backend import memory_management
 from backend.patcher.lora import merge_lora_to_weight, string_to_seed
+from backend.quant_ops import QuantizedTensor, stochastic_rounding
 
 
 def set_model_options_patch_replace(model_options, patch, name, block_name, number, transformer_index=None):
@@ -246,7 +244,7 @@ class ModelPatcher:
     def model_size(self):
         if self.size > 0:
             return self.size
-        self.size = comfy.model_management.module_size(self.model)
+        self.size = memory_management.module_size(self.model)
         return self.size
 
     def loaded_size(self):
@@ -569,9 +567,9 @@ class ModelPatcher:
         if key not in self.backup and not return_weight:
             self.backup[key] = collections.namedtuple("Dimension", ["weight", "inplace_update"])(weight.to(device=self.offload_device, copy=inplace_update), inplace_update)
 
-        temp_dtype = comfy.model_management.lora_compute_dtype(device_to) if key in self.patches else None
+        temp_dtype = memory_management.lora_compute_dtype(device_to) if key in self.patches else None
         if device_to is not None:
-            temp_weight = comfy.model_management.cast_to_device(weight, device_to, temp_dtype, copy=True)
+            temp_weight = memory_management.cast_to_device(weight, device_to, temp_dtype, copy=True)
         else:
             temp_weight = weight.to(temp_dtype, copy=True)
         if convert_func is not None:
@@ -580,7 +578,7 @@ class ModelPatcher:
         out_weight = merge_lora_to_weight(self.patches[key], temp_weight, key) if key in self.patches else temp_weight
         if set_func is None:
             if key in self.patches:
-                out_weight = comfy.float.stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
+                out_weight = stochastic_rounding(out_weight, weight.dtype, seed=string_to_seed(key))
             if return_weight:
                 return out_weight
             elif inplace_update:
@@ -592,13 +590,13 @@ class ModelPatcher:
 
     def pin_weight_to_device(self, key):
         weight, set_func, convert_func = get_key_weight(self.model, key)
-        if comfy.model_management.pin_memory(weight):
+        if memory_management.pin_memory(weight):
             self.pinned.add(key)
 
     def unpin_weight(self, key):
         if key in self.pinned:
             weight, set_func, convert_func = get_key_weight(self.model, key)
-            comfy.model_management.unpin_memory(weight)
+            memory_management.unpin_memory(weight)
             self.pinned.remove(key)
 
     def unpin_all_weights(self):
@@ -618,7 +616,7 @@ class ModelPatcher:
                 for param_name, param in params.items():
                     param.data = param.data.to(device=default_device, dtype=getattr(m, param_name + "_comfy_model_dtype", None))
             if not default and (hasattr(m, "comfy_cast_weights") or len(params) > 0):
-                module_mem = comfy.model_management.module_size(m)
+                module_mem = memory_management.module_size(m)
                 module_offload_mem = module_mem
                 if hasattr(m, "comfy_cast_weights"):
 
@@ -660,7 +658,7 @@ class ModelPatcher:
 
             lowvram_weight = False
 
-            potential_offload = max(offload_buffer, module_offload_mem + sum([x1[1] for x1 in loading[i + 1 : i + 1 + comfy.model_management.NUM_STREAMS]]))
+            potential_offload = max(offload_buffer, module_offload_mem + sum([x1[1] for x1 in loading[i + 1 : i + 1 + memory_management.NUM_STREAMS]]))
             lowvram_fits = mem_counter + module_mem + potential_offload < lowvram_model_memory
 
             weight_key = "{}.weight".format(n)
@@ -730,13 +728,11 @@ class ModelPatcher:
                 if m.comfy_patched_weights == True:
                     continue
 
-            for param, param_value in params.items():
-                if hasattr(m, "comfy_cast_weights") and getattr(param_value, "is_meta", False):
-                    comfy.ops.disable_weight_init._zero_init_parameter(m, param)
+            for param in params.keys():
                 key = key_param_name_to_key(n, param)
                 self.unpin_weight(key)
                 self.patch_weight_to_device(key, device_to=device_to)
-            if comfy.model_management.is_device_cuda(device_to):
+            if memory_management.is_device_cuda(device_to):
                 torch.cuda.synchronize()
 
             logging.debug("lowvram: loaded module regularly {} {}".format(n, m))
@@ -830,7 +826,7 @@ class ModelPatcher:
 
         offload_buffer = self.model.model_offload_buffer_memory
         if len(unload_list) > 0:
-            NS = comfy.model_management.NUM_STREAMS
+            NS = memory_management.NUM_STREAMS
             offload_weight_factor = [min(offload_buffer / (NS + 1), unload_list[0][1])] * NS
 
         for unload in unload_list:
