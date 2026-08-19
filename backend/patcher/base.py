@@ -92,7 +92,7 @@ class LowVramPatch:
         self.set_func = set_func
 
     def __call__(self, weight):
-        return merge_lora_to_weight(self.patches[self.key], weight, self.key, intermediate_dtype=weight.dtype)
+        return merge_lora_to_weight(self.patches[self.key], weight, self.key, computation_dtype=weight.dtype)
 
 
 LOWVRAM_PATCH_ESTIMATE_MATH_FACTOR = 2
