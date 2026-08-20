@@ -440,7 +440,7 @@ class Llama2_(nn.Module):
         if embeds is not None:
             x = embeds
         else:
-            x = self.embed_tokens(x, out_dtype=dtype)
+            x = self.embed_tokens(x).to(dtype=dtype)
 
         if self.normalize_in:
             x *= self.config.hidden_size**0.5
