@@ -1,11 +1,9 @@
 import os
 
-import comfy.ops
 import torch
 import traceback
 import zipfile
 from . import model_management
-import json
 import logging
 import numbers
 import re
@@ -80,44 +78,14 @@ class ClipTokenWeightEncoder:
 
 
 class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
-    LAYERS = ["last", "pooled", "hidden", "all"]
-
-    def __init__(self, device="cpu", max_length=77, freeze=True, layer="last", layer_idx=None, textmodel_json_config=None, dtype=None, model_class=NotImplementedError, special_tokens={"start": 49406, "end": 49407, "pad": 49407}, layer_norm_hidden_state=True, enable_attention_masks=False, zero_out_masked=False, return_projected_pooled=True, return_attention_masks=False, model_options={}):  # clip-vit-base-patch32
+    def __init__(self, model: torch.nn.Module, max_length=77, layer="last", layer_idx=None, special_tokens={"start": 49406, "end": 49407, "pad": 49407}, layer_norm_hidden_state=True, enable_attention_masks=False, zero_out_masked=False, return_projected_pooled=True, return_attention_masks=False):
         super().__init__()
 
-        if textmodel_json_config is None:
-            textmodel_json_config = os.path.join(os.path.dirname(os.path.realpath(__file__)), "sd1_clip_config.json")
-            if "model_name" not in model_options:
-                model_options = {**model_options, "model_name": "clip_l"}
-
-        if isinstance(textmodel_json_config, dict):
-            config = textmodel_json_config
-        else:
-            with open(textmodel_json_config) as f:
-                config = json.load(f)
-
-        te_model_options = model_options.get("{}_model_config".format(model_options.get("model_name", "")), {})
-        for k, v in te_model_options.items():
-            config[k] = v
-
-        operations = model_options.get("custom_operations", None)
-        quant_config = model_options.get("quantization_metadata", None)
-
-        if operations is None:
-            if quant_config is not None:
-                operations = comfy.ops.mixed_precision_ops(quant_config, dtype, full_precision_mm=True)
-                logging.info("Using MixedPrecisionOps for text encoder")
-            else:
-                operations = comfy.ops.manual_cast
-
-        self.operations = operations
-        self.transformer = model_class(config, dtype, device, self.operations)
+        self.transformer = model
+        self.freeze()
 
         self.num_layers = self.transformer.num_layers
-
         self.max_length = max_length
-        if freeze:
-            self.freeze()
         self.layer = layer
         self.layer_idx = None
         self.special_tokens = special_tokens
@@ -139,7 +107,6 @@ class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
 
     def freeze(self):
         self.transformer = self.transformer.eval()
-        # self.train = disabled_train
         for param in self.parameters():
             param.requires_grad = False
 
@@ -488,12 +455,12 @@ def load_embed(embedding_name, embedding_directory, embedding_size, embed_key=No
 
 
 class SDTokenizer:
-    def __init__(self, tokenizer_path=None, max_length=77, pad_with_end=True, embedding_directory=None, embedding_size=768, embedding_key="clip_l", tokenizer_class=NotImplementedError, has_start_token=True, has_end_token=True, pad_to_max_length=True, min_length=None, pad_token=None, end_token=None, start_token=None, min_padding=None, pad_left=False, disable_weights=False, tokenizer_data={}, tokenizer_args={}):
-        if tokenizer_path is None:
-            tokenizer_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "sd1_tokenizer")
-        self.tokenizer = tokenizer_class.from_pretrained(tokenizer_path, **tokenizer_args)
-        self.max_length = tokenizer_data.get("{}_max_length".format(embedding_key), max_length)
-        self.min_length = tokenizer_data.get("{}_min_length".format(embedding_key), min_length)
+    def __init__(self, model: torch.nn.Module, max_length=77, pad_with_end=True, embedding_directory=None, embedding_size=768, embedding_key="clip_l", has_start_token=True, has_end_token=True, pad_to_max_length=True, min_length=None, pad_token=None, end_token=None, start_token=None, min_padding=None, pad_left=False, disable_weights=False):
+
+        self.tokenizer = model
+
+        self.max_length = max_length
+        self.min_length = min_length
         self.end_token = None
         self.min_padding = min_padding
         self.pad_left = pad_left
