@@ -1,9 +1,5 @@
 import logging
 import numbers
-import os
-import re
-import traceback
-import zipfile
 
 import torch
 
@@ -342,121 +338,8 @@ def unescape_important(text):
     return text
 
 
-def safe_load_embed_zip(embed_path):
-    with zipfile.ZipFile(embed_path) as myzip:
-        names = list(filter(lambda a: "data/" in a, myzip.namelist()))
-        names.reverse()
-        for n in names:
-            with myzip.open(n) as myfile:
-                data = myfile.read()
-                number = len(data) // 4
-                length_embed = 1024  # sd2.x
-                if number < 768:
-                    continue
-                if number % 768 == 0:
-                    length_embed = 768  # sd1.x
-                num_embeds = number // length_embed
-                embed = torch.frombuffer(data, dtype=torch.float)
-                out = embed.reshape((num_embeds, length_embed)).clone()
-                del embed
-                return out
-
-
-def expand_directory_list(directories):
-    dirs = set()
-    for x in directories:
-        dirs.add(x)
-        for root, subdir, file in os.walk(x, followlinks=True):
-            dirs.add(root)
-    return list(dirs)
-
-
-def bundled_embed(embed, prefix, suffix):  # bundled embedding in lora format
-    out_list = []
-    for k in embed:
-        if k.startswith(prefix) and k.endswith(suffix):
-            out_list.append(embed[k])
-    if len(out_list) == 0:
-        return None
-
-    return torch.cat(out_list, dim=0)
-
-
-def load_embed(embedding_name, embedding_directory, embedding_size, embed_key=None):
-    if isinstance(embedding_directory, str):
-        embedding_directory = [embedding_directory]
-
-    embedding_directory = expand_directory_list(embedding_directory)
-
-    valid_file = None
-    for embed_dir in embedding_directory:
-        embed_path = os.path.abspath(os.path.join(embed_dir, embedding_name))
-        embed_dir = os.path.abspath(embed_dir)
-        try:
-            if os.path.commonpath((embed_dir, embed_path)) != embed_dir:
-                continue
-        except:
-            continue
-        if not os.path.isfile(embed_path):
-            extensions = [".safetensors", ".pt", ".bin"]
-            for x in extensions:
-                t = embed_path + x
-                if os.path.isfile(t):
-                    valid_file = t
-                    break
-        else:
-            valid_file = embed_path
-        if valid_file is not None:
-            break
-
-    if valid_file is None:
-        return None
-
-    embed_path = valid_file
-
-    embed_out = None
-
-    try:
-        if embed_path.lower().endswith(".safetensors"):
-            import safetensors.torch
-
-            embed = safetensors.torch.load_file(embed_path, device="cpu")
-        else:
-            try:
-                embed = torch.load(embed_path, weights_only=True, map_location="cpu")
-            except:
-                embed_out = safe_load_embed_zip(embed_path)
-    except Exception:
-        logging.warning("{}\n\nerror loading embedding, skipping loading: {}".format(traceback.format_exc(), embedding_name))
-        return None
-
-    if embed_out is None:
-        if "string_to_param" in embed:
-            values = embed["string_to_param"].values()
-            embed_out = next(iter(values))
-        elif isinstance(embed, list):
-            out_list = []
-            for x in range(len(embed)):
-                for k in embed[x]:
-                    t = embed[x][k]
-                    if t.shape[-1] != embedding_size:
-                        continue
-                    out_list.append(t.reshape(-1, t.shape[-1]))
-            embed_out = torch.cat(out_list, dim=0)
-        elif embed_key is not None and embed_key in embed:
-            embed_out = embed[embed_key]
-        else:
-            embed_out = bundled_embed(embed, "bundle_emb.", ".string_to_param.*")
-            if embed_out is None:
-                embed_out = bundled_embed(embed, "bundle_emb.", ".{}".format(embed_key))
-            if embed_out is None:
-                values = embed.values()
-                embed_out = next(iter(values))
-    return embed_out
-
-
 class SDTokenizer:
-    def __init__(self, model: torch.nn.Module, max_length=77, pad_with_end=True, embedding_directory=None, embedding_size=768, embedding_key="clip_l", has_start_token=True, has_end_token=True, pad_to_max_length=True, min_length=None, pad_token=None, end_token=None, start_token=None, min_padding=None, pad_left=False, disable_weights=False):
+    def __init__(self, model: torch.nn.Module, max_length=77, pad_with_end=True, has_start_token=True, has_end_token=True, pad_to_max_length=True, min_length=None, pad_token=None, end_token=None, start_token=None, min_padding=None, pad_left=False, disable_weights=False):
 
         self.tokenizer = model
 
@@ -504,35 +387,9 @@ class SDTokenizer:
 
         vocab = self.tokenizer.get_vocab()
         self.inv_vocab = {v: k for k, v in vocab.items()}
-        self.embedding_directory = embedding_directory
         self.max_word_length = 8
-        self.embedding_identifier = "embedding:"
-        self.embedding_size = embedding_size
-        self.embedding_key = embedding_key
 
         self.disable_weights = disable_weights
-
-    def _try_get_embedding(self, embedding_name: str):
-        """
-        Takes a potential embedding name and tries to retrieve it.
-        Returns a Tuple consisting of the embedding, the cleaned embedding name, and any leftover string, embedding can be None.
-        """
-        split_embed = embedding_name.split()
-        embedding_name = split_embed[0]
-        leftover = " ".join(split_embed[1:])
-
-        match = re.search(r"[<\[]", embedding_name)
-        if match is not None:
-            leftover = embedding_name[match.start() :] + (" " + leftover if leftover else "")
-            embedding_name = embedding_name[: match.start()]
-
-        embed = load_embed(embedding_name, self.embedding_directory, self.embedding_size, self.embedding_key)
-        if embed is None:
-            stripped = embedding_name.strip(",")
-            if len(stripped) < len(embedding_name):
-                embed = load_embed(stripped, self.embedding_directory, self.embedding_size, self.embedding_key)
-                return (embed, embedding_name, "{} {}".format(embedding_name[len(stripped) :], leftover))
-        return (embed, embedding_name, leftover)
 
     def pad_tokens(self, tokens, amount):
         if self.pad_left:
@@ -541,17 +398,15 @@ class SDTokenizer:
         else:
             tokens.extend([(self.pad_token, 1.0, 0)] * amount)
 
-    def tokenize_with_weights(self, text: str, return_word_ids=False, tokenizer_options={}, **kwargs):
+    def tokenize_with_weights(self, text: str, return_word_ids=False, **kwargs):
         """
         Takes a prompt and converts it to a list of (token, weight, word id) elements.
         Tokens can both be integer tokens and pre computed CLIP tensors.
         Word id values are unique per word and embedding, where the id 0 is reserved for non word tokens.
         Returned list has the dimensions NxM where M is the input size of CLIP
         """
-        min_length = tokenizer_options.get("{}_min_length".format(self.embedding_key), self.min_length)
-        min_padding = tokenizer_options.get("{}_min_padding".format(self.embedding_key), self.min_padding)
-
-        min_length = kwargs.get("min_length", min_length)
+        min_length = kwargs.get("min_length", self.min_length)
+        min_padding = self.min_padding
 
         text = escape_important(text)
         if kwargs.get("disable_weights", self.disable_weights):
@@ -562,35 +417,12 @@ class SDTokenizer:
         # tokenize words
         tokens = []
         for weighted_segment, weight in parsed_weights:
-            to_tokenize = unescape_important(weighted_segment)
-            split = re.split(r"(?<=\s){}".format(re.escape(self.embedding_identifier)), to_tokenize)
-            to_tokenize = [split[0]]
-            for i in range(1, len(split)):
-                to_tokenize.append("{}{}".format(self.embedding_identifier, split[i]))
+            if (word := unescape_important(weighted_segment)) == "":
+                continue
 
-            to_tokenize = [x for x in to_tokenize if x != ""]
-            for word in to_tokenize:
-                # if we find an embedding, deal with the embedding
-                if word.startswith(self.embedding_identifier) and self.embedding_directory is not None:
-                    embedding_name = word[len(self.embedding_identifier) :].strip("\n")
-                    embed, embedding_name, leftover = self._try_get_embedding(embedding_name)
-                    if embed is None:
-                        logging.warning(f"warning, embedding:{embedding_name} does not exist, ignoring")
-                    else:
-                        if len(embed.shape) == 1:
-                            tokens.append([(embed, weight)])
-                        else:
-                            tokens.append([(embed[x], weight) for x in range(embed.shape[0])])
-                    # if we accidentally have leftover text, continue parsing using leftover, else move on to next word
-                    if leftover != "":
-                        word = leftover
-                    else:
-                        continue
-                end = 999999999999
-                if self.tokenizer_adds_end_token:
-                    end = -1
-                # parse word
-                tokens.append([(t, weight) for t in self.tokenizer(word)["input_ids"][self.tokens_start : end]])
+            # parse word
+            end = -1 if self.tokenizer_adds_end_token else 999999999999
+            tokens.append([(t, weight) for t in self.tokenizer(word)["input_ids"][self.tokens_start : end]])
 
         # reshape token array to CLIP input size
         batched_tokens = []
