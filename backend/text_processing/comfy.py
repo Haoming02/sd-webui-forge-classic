@@ -1,4 +1,3 @@
-import logging
 import numbers
 
 import torch
@@ -202,7 +201,7 @@ class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
                 else:
                     index += -1
                     pad_extra += emb_shape
-                    logging.warning("WARNING: shape mismatch when trying to apply embedding, embedding will be ignored {} != {}".format(emb.shape[-1], tokens_embed.shape[-1]))
+                    memory_management.logger.warning("Shape mismatch when applying embedding, embedding will be ignored ({} != {})".format(emb.shape[-1], tokens_embed.shape[-1]))
 
             if pad_extra > 0:
                 padd_embed = self.transformer.get_input_embeddings()(torch.tensor([[self.special_tokens["pad"]] * pad_extra], device=device, dtype=torch.long), out_dtype=torch.float32)
@@ -352,14 +351,9 @@ class SDTokenizer:
         empty = self.tokenizer("")["input_ids"]
         self.tokenizer_adds_end_token = has_end_token
         if has_start_token:
-            if len(empty) > 0:
-                self.tokens_start = 1
-                self.start_token = empty[0]
-            else:
-                self.tokens_start = 0
-                self.start_token = start_token
-                if start_token is None:
-                    logging.warning("WARNING: There's something wrong with your tokenizers.'")
+            assert len(empty) > 0
+            self.tokens_start = 1
+            self.start_token = empty[0]
 
             if end_token is not None:
                 self.end_token = end_token
