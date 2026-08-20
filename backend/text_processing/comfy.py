@@ -19,7 +19,7 @@ def gen_empty_tokens(special_tokens, length):
 
 
 class ClipTokenWeightEncoder:
-    def encode_token_weights(self, token_weight_pairs):
+    def encode_token_weights(self: "SDClipModel", token_weight_pairs):
         to_encode = list()
         max_token_len = 0
         has_weights = False
@@ -36,7 +36,7 @@ class ClipTokenWeightEncoder:
             else:
                 to_encode.append(gen_empty_tokens(self.special_tokens, max_token_len))
 
-        o = self.encode(to_encode)
+        o = self.forward(to_encode)
         out, pooled = o[:2]
 
         if pooled is not None:
@@ -93,38 +93,25 @@ class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
         self.layer_norm_hidden_state = layer_norm_hidden_state
         self.return_projected_pooled = return_projected_pooled
         self.return_attention_masks = return_attention_masks
-        self.execution_device = None
 
         if layer == "hidden":
             assert layer_idx is not None
             assert abs(layer_idx) < self.num_layers
-            self.set_clip_options({"layer": layer_idx})
-        self.options_default = (self.layer, self.layer_idx, self.return_projected_pooled)
+
+            if isinstance(self.layer, list) or self.layer == "all":
+                pass
+            elif isinstance(layer_idx, list):
+                self.layer = layer_idx
+            elif layer_idx is None or abs(layer_idx) > self.num_layers:
+                self.layer = "last"
+            else:
+                self.layer = "hidden"
+                self.layer_idx = layer_idx
 
     def freeze(self):
         self.transformer = self.transformer.eval()
         for param in self.parameters():
             param.requires_grad = False
-
-    def set_clip_options(self, options):
-        layer_idx = options.get("layer", self.layer_idx)
-        self.return_projected_pooled = options.get("projected_pooled", self.return_projected_pooled)
-        self.execution_device = options.get("execution_device", self.execution_device)
-        if isinstance(self.layer, list) or self.layer == "all":
-            pass
-        elif isinstance(layer_idx, list):
-            self.layer = layer_idx
-        elif layer_idx is None or abs(layer_idx) > self.num_layers:
-            self.layer = "last"
-        else:
-            self.layer = "hidden"
-            self.layer_idx = layer_idx
-
-    def reset_clip_options(self):
-        self.layer = self.options_default[0]
-        self.layer_idx = self.options_default[1]
-        self.return_projected_pooled = self.options_default[2]
-        self.execution_device = None
 
     def process_tokens(self, tokens, device):
         end_token = self.special_tokens.get("end", None)
@@ -215,10 +202,7 @@ class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
         return torch.cat(embeds_out), torch.tensor(attention_masks, device=device, dtype=torch.long), num_tokens, embeds_info
 
     def forward(self, tokens):
-        if self.execution_device is None:
-            device = self.transformer.get_input_embeddings().weight.device
-        else:
-            device = self.execution_device
+        device = self.transformer.get_input_embeddings().weight.device
 
         embeds, attention_mask, num_tokens, embeds_info = self.process_tokens(tokens, device)
 
@@ -258,21 +242,6 @@ class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
             return z, pooled_output, extra
 
         return z, pooled_output
-
-    def encode(self, tokens):
-        return self(tokens)
-
-    def load_sd(self, sd):
-        return self.transformer.load_state_dict(sd, strict=False, assign=getattr(self, "can_assign_sd", False))
-
-    def generate(self, tokens, do_sample, max_length, temperature, top_k, top_p, min_p, repetition_penalty, seed, presence_penalty=0.0):
-        if isinstance(tokens, dict):
-            tokens_only = next(iter(tokens.values()))  # todo: get this better?
-        else:
-            tokens_only = tokens
-        tokens_only = [[t[0] for t in b] for b in tokens_only]
-        embeds = self.process_tokens(tokens_only, device=self.execution_device)[0]
-        return self.transformer.generate(embeds, do_sample, max_length, temperature, top_k, top_p, min_p, repetition_penalty, seed, presence_penalty=presence_penalty)
 
 
 def parse_parentheses(string):
@@ -378,9 +347,6 @@ class SDTokenizer:
 
         self.pad_with_end = pad_with_end
         self.pad_to_max_length = pad_to_max_length
-
-        vocab = self.tokenizer.get_vocab()
-        self.inv_vocab = {v: k for k, v in vocab.items()}
         self.max_word_length = 8
 
         self.disable_weights = disable_weights
@@ -470,12 +436,3 @@ class SDTokenizer:
             batched_tokens = [[(t, w) for t, w, _ in x] for x in batched_tokens]
 
         return batched_tokens
-
-    def untokenize(self, token_weight_pair):
-        return list(map(lambda a: (a, self.inv_vocab[a[0]]), token_weight_pair))
-
-    def state_dict(self):
-        return {}
-
-    def decode(self, token_ids, skip_special_tokens=True):
-        return self.tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
