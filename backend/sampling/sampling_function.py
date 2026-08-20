@@ -375,7 +375,7 @@ def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
         additional_model_patchers += unet.controlnet_linked_list.get_models()
 
     if unet.has_online_lora():
-        lora_memory = utils.nested_compute_size(unet.patches, element_size=utils.dtype_to_element_size(unet.model.computation_dtype))
+        lora_memory = utils.nested_compute_size(unet.weight_wrapper_patches, element_size=utils.dtype_to_element_size(unet.model.computation_dtype))
         additional_inference_memory += lora_memory
 
     memory_management.load_models_gpu(models=[unet] + additional_model_patchers, memory_required=unet_inference_memory + additional_inference_memory, minimum_memory_required=unet_inference_memory // 2 + additional_inference_memory)
