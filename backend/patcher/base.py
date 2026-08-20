@@ -22,6 +22,10 @@ import collections
 import inspect
 import logging
 import uuid
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from backend.operations import ForgeWeights
 
 import torch
 
@@ -51,6 +55,7 @@ def set_model_options_patch_replace(model_options, patch, name, block_name, numb
         block = (block_name, number, transformer_index)
     else:
         block = (block_name, number)
+
     to["patches_replace"][name][block] = patch
     model_options["transformer_options"] = to
     return model_options
@@ -70,7 +75,7 @@ def set_model_options_pre_cfg_function(model_options, pre_cfg_function, disable_
     return model_options
 
 
-def wipe_lowvram_weight(m):
+def wipe_lowvram_weight(m: "ForgeWeights"):
     if hasattr(m, "prev_parameters_manual_cast"):
         m.parameters_manual_cast = m.prev_parameters_manual_cast
         del m.prev_parameters_manual_cast
@@ -109,7 +114,7 @@ def low_vram_patch_estimate_vram(model, key):
     return weight.numel() * model_dtype.itemsize * LOWVRAM_PATCH_ESTIMATE_MATH_FACTOR
 
 
-def get_key_weight(model, key):
+def get_key_weight(model: torch.nn.Linear, key: str) -> tuple[torch.nn.Parameter, Callable, Callable]:
     set_func = None
     convert_func = None
     op_keys = key.rsplit(".", 1)
@@ -134,10 +139,13 @@ def get_key_weight(model, key):
     return weight, set_func, convert_func
 
 
-def key_param_name_to_key(key, param):
+def key_param_name_to_key(key: str, param: str) -> str:
     if len(key) == 0:
         return param
     return "{}.{}".format(key, param)
+
+
+# region ModelPatcher
 
 
 class ModelPatcher:
@@ -496,9 +504,7 @@ class ModelPatcher:
 
                     module_offload_mem += check_module_offload_mem("{}.weight".format(n))
                     module_offload_mem += check_module_offload_mem("{}.bias".format(n))
-
-                sort_criteria = (module_offload_mem,)
-                loading.append(sort_criteria + (module_mem, n, m, params))
+                loading.append((module_offload_mem, module_mem, n, m, params))
         return loading
 
     def load(self, device_to=None, lowvram_model_memory=0, force_patch_weights=False, full_load=False):
@@ -607,7 +613,7 @@ class ModelPatcher:
             for param in params:
                 self.pin_weight_to_device(key_param_name_to_key(n, param))
 
-        usable_stat = "{:.2f} MB usable,".format(lowvram_model_memory / (1024 * 1024)) if lowvram_model_memory < 1e32 else ""
+        usable_stat = "{:.2f} MB usable, ".format(lowvram_model_memory / (1024 * 1024)) if lowvram_model_memory < 1e32 else ""
         if lowvram_counter > 0:
             logger.info("loaded partially; {}{:.2f} MB loaded, {:.2f} MB offloaded, {:.2f} MB buffer reserved, lowvram patches: {}".format(usable_stat, mem_counter / (1024 * 1024), lowvram_mem_counter / (1024 * 1024), offload_buffer / (1024 * 1024), patch_counter))
             self.model.model_lowvram = True
@@ -717,7 +723,6 @@ class ModelPatcher:
                 if move_weight:
                     cast_weight = self.force_cast_weights
                     m.to(device_to)
-
                     if lowvram_possible:
                         if weight_key in self.patches:
                             if force_patch_weights:
@@ -773,6 +778,7 @@ class ModelPatcher:
         if self.model.model_loaded_weight_memory + extra_memory > self.model_size():
             full_load = True
         current_used = self.model.model_loaded_weight_memory
+
         try:
             self.load(device_to, lowvram_model_memory=current_used + extra_memory, force_patch_weights=force_patch_weights, full_load=full_load)
         except Exception as e:
