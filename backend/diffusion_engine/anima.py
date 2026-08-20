@@ -60,8 +60,8 @@ class Anima(ForgeDiffusionEngine):
         return self.text_processing_engine_anima(prompt)
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
-        token_count = len(self.text_processing_engine_anima.tokenize([prompt])[0][0])
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
+        token_count = len(self.text_processing_engine_anima.tokenize(prompt)[0][0])
         return token_count, max(512, token_count)
 
     @torch.inference_mode()

@@ -88,9 +88,6 @@ class ClassicTextProcessingEngine:
         chunk.multipliers = [1.0] * (self.chunk_length + 2)
         return chunk
 
-    def get_target_prompt_token_count(self, token_count):
-        return math.ceil(max(token_count, 1) / self.chunk_length) * self.chunk_length
-
     def tokenize(self, texts):
         tokenized = self.tokenizer(texts, truncation=False, add_special_tokens=False)["input_ids"]
 

@@ -1,3 +1,5 @@
+import math
+
 import torch
 from huggingface_guess import model_list
 
@@ -109,9 +111,9 @@ class StableDiffusionXL(ForgeDiffusionEngine):
         return cond
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
-        _, token_count = self.text_processing_engine_l.process_texts([prompt])
-        return token_count, self.text_processing_engine_l.get_target_prompt_token_count(token_count)
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
+        token_count = self.text_processing_engine_l.process_texts(prompt)[1]
+        return token_count, math.ceil(max(token_count, 1) / 75) * 75
 
 
 class StableDiffusionXLRefiner(ForgeDiffusionEngine):
@@ -186,6 +188,6 @@ class StableDiffusionXLRefiner(ForgeDiffusionEngine):
         return cond
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
-        _, token_count = self.text_processing_engine_g.process_texts([prompt])
-        return token_count, self.text_processing_engine_g.get_target_prompt_token_count(token_count)
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
+        token_count = self.text_processing_engine_g.process_texts(prompt)[1]
+        return token_count, math.ceil(max(token_count, 1) / 75) * 75

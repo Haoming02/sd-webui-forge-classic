@@ -72,8 +72,8 @@ class QwenImage(ForgeDiffusionEngine):
         return self.text_processing_engine_qwen(["\n".join([*image_prompts, *prompt])], images=images_vl)
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
-        token_count = len(self.text_processing_engine_qwen.tokenize([prompt])[0])
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
+        token_count = len(self.text_processing_engine_qwen.tokenize(prompt)[0])
         return token_count, max(999, token_count)
 
     @torch.inference_mode()
