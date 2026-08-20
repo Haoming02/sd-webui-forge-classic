@@ -4,6 +4,8 @@ import torch
 
 from backend import memory_management
 
+INF = 99999999
+
 
 def gen_empty_tokens(special_tokens, length):
     start_token = special_tokens.get("start", None)
@@ -19,7 +21,7 @@ def gen_empty_tokens(special_tokens, length):
 
 
 class ClipTokenWeightEncoder:
-    def encode_token_weights(self: "SDClipModel", token_weight_pairs):
+    def encode_token_weights(self: "SDClipModel", token_weight_pairs: list[list[tuple[int, float]]]):
         to_encode = list()
         max_token_len = 0
         has_weights = False
@@ -381,7 +383,7 @@ class SDTokenizer:
                 continue
 
             # parse word
-            end = -1 if self.tokenizer_adds_end_token else 999999999999
+            end = -1 if self.tokenizer_adds_end_token else INF
             tokens.append([(t, weight) for t in self.tokenizer(word)["input_ids"][self.tokens_start : end]])
 
         # reshape token array to CLIP input size
