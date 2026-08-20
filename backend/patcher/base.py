@@ -560,15 +560,13 @@ class ModelPatcher:
                     if force_patch_weights:
                         self.patch_weight_to_device(weight_key)
                     else:
-                        _, set_func, convert_func = get_key_weight(self.model, weight_key)
-                        m.weight_function = [LowVramPatch(weight_key, self.patches, convert_func, set_func)]
+                        m.weight_function = [LowVramPatch(weight_key, self.patches)]
                         patch_counter += 1
                 if bias_key in self.patches:
                     if force_patch_weights:
                         self.patch_weight_to_device(bias_key)
                     else:
-                        _, set_func, convert_func = get_key_weight(self.model, bias_key)
-                        m.bias_function = [LowVramPatch(bias_key, self.patches, convert_func, set_func)]
+                        m.bias_function = [LowVramPatch(bias_key, self.patches)]
                         patch_counter += 1
 
                 cast_weight = True
@@ -739,15 +737,13 @@ class ModelPatcher:
                             if force_patch_weights:
                                 self.patch_weight_to_device(weight_key)
                             else:
-                                _, set_func, convert_func = get_key_weight(self.model, weight_key)
-                                m.weight_function.append(LowVramPatch(weight_key, self.patches, convert_func, set_func))
+                                m.weight_function.append(LowVramPatch(weight_key, self.patches))
                                 patch_counter += 1
                         if bias_key in self.patches:
                             if force_patch_weights:
                                 self.patch_weight_to_device(bias_key)
                             else:
-                                _, set_func, convert_func = get_key_weight(self.model, bias_key)
-                                m.bias_function.append(LowVramPatch(bias_key, self.patches, convert_func, set_func))
+                                m.bias_function.append(LowVramPatch(bias_key, self.patches))
                                 patch_counter += 1
                         cast_weight = True
 
