@@ -154,9 +154,12 @@ def update_token_counter(text, steps, styles, *, is_positive=True):
         assert get_prompt_lengths_on_ui is not None
     except Exception:
         return f"<span class='gr-box gr-text-input'>?/?</span>"
+    else:
+        from backend.text_processing.parsing import parse_prompt_attention
 
     flat_prompts = reduce(lambda list1, list2: list1 + list2, prompt_schedules)
-    token_count, max_length = max([get_prompt_lengths_on_ui(prompt) for _, prompt in flat_prompts], key=lambda args: args[0])
+    prompts = ["".join(texts for texts, _ in parse_prompt_attention(prompt)) for _, prompt in flat_prompts]
+    token_count, max_length = max([get_prompt_lengths_on_ui(prompt) for prompt in prompts], key=lambda args: args[0])
     return f"<span class='gr-box gr-text-input'>{token_count}/{max_length}</span>"
 
 
