@@ -1,12 +1,10 @@
 import os
 
-from transformers import CLIPTokenizer
 import comfy.ops
 import torch
 import traceback
 import zipfile
 from . import model_management
-import comfy.clip_model
 import json
 import logging
 import numbers
@@ -84,7 +82,7 @@ class ClipTokenWeightEncoder:
 class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
     LAYERS = ["last", "pooled", "hidden", "all"]
 
-    def __init__(self, device="cpu", max_length=77, freeze=True, layer="last", layer_idx=None, textmodel_json_config=None, dtype=None, model_class=comfy.clip_model.CLIPTextModel, special_tokens={"start": 49406, "end": 49407, "pad": 49407}, layer_norm_hidden_state=True, enable_attention_masks=False, zero_out_masked=False, return_projected_pooled=True, return_attention_masks=False, model_options={}):  # clip-vit-base-patch32
+    def __init__(self, device="cpu", max_length=77, freeze=True, layer="last", layer_idx=None, textmodel_json_config=None, dtype=None, model_class=NotImplementedError, special_tokens={"start": 49406, "end": 49407, "pad": 49407}, layer_norm_hidden_state=True, enable_attention_masks=False, zero_out_masked=False, return_projected_pooled=True, return_attention_masks=False, model_options={}):  # clip-vit-base-patch32
         super().__init__()
 
         if textmodel_json_config is None:
@@ -490,7 +488,7 @@ def load_embed(embedding_name, embedding_directory, embedding_size, embed_key=No
 
 
 class SDTokenizer:
-    def __init__(self, tokenizer_path=None, max_length=77, pad_with_end=True, embedding_directory=None, embedding_size=768, embedding_key="clip_l", tokenizer_class=CLIPTokenizer, has_start_token=True, has_end_token=True, pad_to_max_length=True, min_length=None, pad_token=None, end_token=None, start_token=None, min_padding=None, pad_left=False, disable_weights=False, tokenizer_data={}, tokenizer_args={}):
+    def __init__(self, tokenizer_path=None, max_length=77, pad_with_end=True, embedding_directory=None, embedding_size=768, embedding_key="clip_l", tokenizer_class=NotImplementedError, has_start_token=True, has_end_token=True, pad_to_max_length=True, min_length=None, pad_token=None, end_token=None, start_token=None, min_padding=None, pad_left=False, disable_weights=False, tokenizer_data={}, tokenizer_args={}):
         if tokenizer_path is None:
             tokenizer_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "sd1_tokenizer")
         self.tokenizer = tokenizer_class.from_pretrained(tokenizer_path, **tokenizer_args)
