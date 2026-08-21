@@ -114,6 +114,7 @@ class Toprow:
             self.interrupt = gr.Button("Interrupt", elem_id=f"{self.id_part}_interrupt", elem_classes="generate-box-interrupt", tooltip="End generation immediately or after completing current batch")
             self.skip = gr.Button("Skip", elem_id=f"{self.id_part}_skip", elem_classes="generate-box-skip", tooltip="Stop generation of current batch and continues onto next batch")
             self.interrupting = gr.Button("Interrupting...", elem_id=f"{self.id_part}_interrupting", elem_classes="generate-box-interrupting", tooltip="Interrupting generation...")
+            self.queue = gr.Button("Queue", elem_id=f"{self.id_part}_queue", elem_classes="generate-box-queue", tooltip="Queue a new generation while current one is running")
             self.submit = gr.Button("Generate", elem_id=f"{self.id_part}_generate", variant="primary", tooltip="Right click generate forever menu")
 
             def interrupt_function():

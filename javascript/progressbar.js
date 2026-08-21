@@ -71,6 +71,49 @@ function randomId() {
     );
 }
 
+// Tasks that are waiting for their turn, per tab. Every task gets its own progress bar,
+// and all progress bars are absolutely positioned in the same spot, so a queued task's
+// (necessarily empty) bar would cover the running task's real progress. Instead, queued
+// tasks are counted here and reported on the Queue button.
+const queuedTasks = {};
+
+function progressTabName(progressbarContainer) {
+    const id = progressbarContainer ? progressbarContainer.id : "";
+    return id ? id.split("_")[0] : null;
+}
+
+function updateQueueCount(tabname) {
+    const button = gradioApp().getElementById(tabname + "_queue");
+    if (!button) return;
+
+    const count = queuedTasks[tabname] ? queuedTasks[tabname].size : 0;
+    let badge = button.querySelector(".queue-count");
+
+    if (!count) {
+        if (badge) badge.remove();
+        return;
+    }
+
+    if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "queue-count";
+        button.appendChild(badge);
+    }
+    badge.textContent = count;
+}
+
+function setTaskQueued(tabname, id_task, queued) {
+    if (!tabname) return;
+
+    if (!queuedTasks[tabname]) queuedTasks[tabname] = new Set();
+
+    const sizeBefore = queuedTasks[tabname].size;
+    if (queued) queuedTasks[tabname].add(id_task);
+    else queuedTasks[tabname].delete(id_task);
+
+    if (queuedTasks[tabname].size !== sizeBefore) updateQueueCount(tabname);
+}
+
 // starts sending progress requests to "/internal/progress" uri, creating progressbar above progressbarContainer element and
 // preview inside gallery element. Cleans up all created stuff when the task is over and calls atEnd.
 // calls onProgress every time there is a progress update
@@ -78,6 +121,7 @@ function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgre
     let dateStart = new Date();
     let wasEverActive = false;
     let parentProgressbar = progressbarContainer.parentNode;
+    let tabname = progressTabName(progressbarContainer);
     let wakeLock = null;
 
     if (gallery && gallery.classList.contains("hidden")) gallery = gallery.parentElement.querySelector(".gradio-video");
@@ -114,6 +158,7 @@ function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgre
 
     let removeProgressBar = function () {
         releaseWakeLock();
+        setTaskQueued(tabname, id_task, false);
         if (!divProgress) return;
 
         setTitle("");
@@ -134,6 +179,22 @@ function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgre
                     removeProgressBar();
                     return;
                 }
+
+                // This task is waiting behind another one, so it has no progress of its own
+                // to show yet. Keep its bar hidden so the running task's bar stays visible,
+                // and leave the title alone for the same reason.
+                if (res.queued && !res.active) {
+                    if (divProgress) divProgress.style.display = "none";
+                    setTaskQueued(tabname, id_task, true);
+
+                    setTimeout(() => {
+                        funProgress(id_task, res.id_live_preview);
+                    }, opts.live_preview_refresh_period || 500);
+                    return;
+                }
+
+                setTaskQueued(tabname, id_task, false);
+                if (divProgress) divProgress.style.display = opts.show_progressbar ? "block" : "none";
 
                 let progressText = "";
 

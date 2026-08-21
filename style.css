@@ -366,29 +366,67 @@ input[type="checkbox"].input-accordion-checkbox {
 
 .gradio-button.generate-box-skip,
 .gradio-button.generate-box-interrupt,
-.gradio-button.generate-box-interrupting {
+.gradio-button.generate-box-interrupting,
+.gradio-button.generate-box-queue {
     position: absolute;
-    width: 50%;
+    top: 0;
     height: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    padding-left: 0.25em;
+    padding-right: 0.25em;
+    white-space: nowrap;
     display: none;
+    border: none;
+    border-radius: 0;
     background: #b4c0cc;
 }
 
 .gradio-button.generate-box-skip:hover,
 .gradio-button.generate-box-interrupt:hover,
-.gradio-button.generate-box-interrupting:hover {
+.gradio-button.generate-box-interrupting:hover,
+.gradio-button.generate-box-queue:hover {
     background: #c2cfdb;
 }
 
-.gradio-button.generate-box-interrupt,
-.gradio-button.generate-box-interrupting {
+/* Segmented bar: Queue | Interrupt | Skip */
+.gradio-button.generate-box-queue {
     left: 0;
+    width: calc(100% / 3);
     border-radius: 0.5rem 0 0 0.5rem;
 }
 
+.gradio-button.generate-box-interrupt {
+    left: calc(100% / 3);
+    width: calc(100% / 3);
+    box-shadow:
+        inset 1px 0 0 rgba(0, 0, 0, 0.14),
+        inset -1px 0 0 rgba(0, 0, 0, 0.14);
+}
+
 .gradio-button.generate-box-skip {
+    left: calc(200% / 3);
     right: 0;
+    width: auto;
     border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.gradio-button.generate-box-queue .queue-count {
+    display: inline-block;
+    margin-left: 0.45em;
+    padding: 0 0.45em;
+    border-radius: 999px;
+    background: #0060df;
+    color: #fff;
+    font-size: 0.8em;
+    line-height: 1.5;
+    vertical-align: middle;
+}
+
+.gradio-button.generate-box-interrupting {
+    left: 0;
+    width: 100%;
+    border-radius: 0.5rem;
 }
 
 #img2img_scale_resolution_preview.block {

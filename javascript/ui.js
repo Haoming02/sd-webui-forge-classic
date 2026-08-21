@@ -128,9 +128,17 @@ function create_submit_args(args) {
 }
 
 function setSubmitButtonsVisibility(tabname, showInterrupt, showSkip, showInterrupting) {
-    gradioApp().getElementById(tabname + "_interrupt").style.display = showInterrupt ? "block" : "none";
-    gradioApp().getElementById(tabname + "_skip").style.display = showSkip ? "block" : "none";
-    gradioApp().getElementById(tabname + "_interrupting").style.display = showInterrupting ? "block" : "none";
+    const genBtn = gradioApp().getElementById(tabname + "_generate");
+    const queueBtn = gradioApp().getElementById(tabname + "_queue");
+    const interruptBtn = gradioApp().getElementById(tabname + "_interrupt");
+    const skipBtn = gradioApp().getElementById(tabname + "_skip");
+    const interruptingBtn = gradioApp().getElementById(tabname + "_interrupting");
+    const showControls = showInterrupt || showSkip || showInterrupting;
+    if (genBtn) genBtn.style.visibility = showControls ? "hidden" : "visible";
+    if (queueBtn) queueBtn.style.display = showControls && !showInterrupting ? "block" : "none";
+    if (interruptBtn) interruptBtn.style.display = showInterrupt ? "block" : "none";
+    if (skipBtn) skipBtn.style.display = showSkip ? "block" : "none";
+    if (interruptingBtn) interruptingBtn.style.display = showInterrupting ? "block" : "none";
 }
 
 function showSubmitButtons(tabname, show) {
@@ -148,6 +156,7 @@ function showRestoreProgressButton(tabname, show) {
 }
 
 function submit() {
+    window._txt2img_active = (window._txt2img_active || 0) + 1;
     showSubmitButtons("txt2img", false);
 
     const id = randomId();
@@ -158,9 +167,12 @@ function submit() {
         gradioApp().getElementById("txt2img_gallery_container"),
         gradioApp().getElementById("txt2img_gallery"),
         function () {
-            showSubmitButtons("txt2img", true);
-            localRemove("txt2img_task_id");
-            showRestoreProgressButton("txt2img", false);
+            window._txt2img_active = Math.max((window._txt2img_active || 1) - 1, 0);
+            if (window._txt2img_active === 0) {
+                showSubmitButtons("txt2img", true);
+                localRemove("txt2img_task_id");
+                showRestoreProgressButton("txt2img", false);
+            }
         },
     );
 
@@ -176,6 +188,7 @@ function submit_txt2img_upscale() {
 }
 
 function submit_img2img() {
+    window._img2img_active = (window._img2img_active || 0) + 1;
     showSubmitButtons("img2img", false);
 
     const id = randomId();
@@ -186,9 +199,12 @@ function submit_img2img() {
         gradioApp().getElementById("img2img_gallery_container"),
         gradioApp().getElementById("img2img_gallery"),
         function () {
-            showSubmitButtons("img2img", true);
-            localRemove("img2img_task_id");
-            showRestoreProgressButton("img2img", false);
+            window._img2img_active = Math.max((window._img2img_active || 1) - 1, 0);
+            if (window._img2img_active === 0) {
+                showSubmitButtons("img2img", true);
+                localRemove("img2img_task_id");
+                showRestoreProgressButton("img2img", false);
+            }
         },
     );
 
