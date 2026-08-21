@@ -5,7 +5,7 @@ from PIL import Image
 
 from modules import devices, modelloader, shared
 from modules.images import LANCZOS, NEAREST
-from modules.shared import cmd_opts, models_path, opts
+from modules.shared import models_path, opts
 
 # hardcode
 UPSCALE_ITERATIONS = 4
@@ -46,20 +46,23 @@ class Upscaler:
     def load_model(self, path: str):
         raise NotImplementedError
 
-    def upscale(self, img: Image.Image, scale: int, selected_model: str = None):
-        self.scale = scale
-        dest_w: int = (img.width * scale) // 8 * 8
-        dest_h: int = (img.height * scale) // 8 * 8
+    def upscale(self, img: Image.Image, scale: float, selected_model: str = None):
+        dest_w: int = round(img.width * scale / 8) * 8
+        dest_h: int = round(img.height * scale / 8) * 8
 
         for _ in range(UPSCALE_ITERATIONS):
             if shared.state.interrupted:
                 break
+
+            _orig = img.size
+
             img = self.do_upscale(img, selected_model)
-            if ((img.width >= dest_w) and (img.height >= dest_h)) or (int(scale) == 1):
+
+            if (img.width >= dest_w and img.height >= dest_h) or img.size == _orig:
                 break
 
         if (img.width != dest_w) or (img.height != dest_h):
-            img = img.resize((int(dest_w), int(dest_h)), LANCZOS)
+            img = img.resize((dest_w, dest_h), LANCZOS)
 
         return img
 
