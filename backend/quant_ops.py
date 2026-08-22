@@ -1,4 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.27.0/comfy/quant_ops.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.33.1/comfy/quant_ops.py
 
 import comfy_kitchen as ck
 import torch
@@ -37,15 +37,117 @@ ver = importlib.metadata.version("comfy-kitchen")
 
 print(f"Comfy-Kitchen {ver}:", {k: v["available"] and not v["disabled"] for k, v in ck.list_backends().items()})
 
+from . import float
+
+# region Layouts
+
+
+class TensorCoreFP8LayoutBase(TensorCoreFP8Layout):
+    FP8_DTYPE = None
+
+    @classmethod
+    def quantize(cls, tensor, scale=None, stochastic_rounding=0, inplace_ops=False):
+        assert cls.FP8_DTYPE is not None
+
+        orig_dtype = tensor.dtype
+        orig_shape = tuple(tensor.shape)
+
+        if isinstance(scale, str) and scale == "recalculate":
+            scale = torch.amax(tensor.abs()).to(dtype=torch.float32) / torch.finfo(cls.FP8_DTYPE).max
+            if tensor.dtype not in [torch.float32, torch.bfloat16]:
+                tensor_info = torch.finfo(tensor.dtype)
+                scale = 1.0 / torch.clamp((1.0 / scale), min=tensor_info.min, max=tensor_info.max)
+
+        if scale is None:
+            scale = torch.ones((), device=tensor.device, dtype=torch.float32)
+        if not isinstance(scale, torch.Tensor):
+            scale = torch.tensor(scale, device=tensor.device, dtype=torch.float32)
+
+        if stochastic_rounding > 0:
+            if inplace_ops:
+                tensor *= (1.0 / scale).to(tensor.dtype)
+            else:
+                tensor = tensor * (1.0 / scale).to(tensor.dtype)
+            qdata = float.stochastic_rounding(tensor, dtype=cls.FP8_DTYPE, seed=stochastic_rounding)
+        else:
+            qdata = ck.quantize_per_tensor_fp8(tensor, scale, cls.FP8_DTYPE)
+
+        params = cls.Params(scale=scale.float(), orig_dtype=orig_dtype, orig_shape=orig_shape)
+        return qdata, params
+
+
+class TensorCoreMXFP8Layout_(TensorCoreMXFP8Layout):
+    @classmethod
+    def quantize(cls, tensor, scale=None, stochastic_rounding=0, inplace_ops=False):
+        assert tensor.dim() == 2
+
+        orig_dtype = tensor.dtype
+        orig_shape = tuple(tensor.shape)
+
+        padded_shape = cls.get_padded_shape(orig_shape)
+        needs_padding = padded_shape != orig_shape
+
+        if stochastic_rounding > 0:
+            qdata, block_scale = float.stochastic_round_quantize_mxfp8_by_block(tensor, pad_32x=needs_padding, seed=stochastic_rounding)
+        else:
+            qdata, block_scale = ck.quantize_mxfp8(tensor, pad_32x=needs_padding)
+
+        params = cls.Params(
+            scale=block_scale,
+            orig_dtype=orig_dtype,
+            orig_shape=orig_shape,
+        )
+        return qdata, params
+
+
+class TensorCoreNVFP4Layout_(TensorCoreNVFP4Layout):
+    @classmethod
+    def quantize(cls, tensor, scale=None, stochastic_rounding=0, inplace_ops=False):
+        assert tensor.dim() == 2
+
+        orig_dtype = tensor.dtype
+        orig_shape = tuple(tensor.shape)
+
+        if scale is None or (isinstance(scale, str) and scale == "recalculate"):
+            scale = torch.amax(tensor.abs()) / (ck.float_utils.F8_E4M3_MAX * ck.float_utils.F4_E2M1_MAX)
+
+        if not isinstance(scale, torch.Tensor):
+            scale = torch.tensor(scale)
+        scale = scale.to(device=tensor.device, dtype=torch.float32)
+
+        padded_shape = cls.get_padded_shape(orig_shape)
+        needs_padding = padded_shape != orig_shape
+
+        if stochastic_rounding > 0:
+            qdata, block_scale = float.stochastic_round_quantize_nvfp4_by_block(tensor, scale, pad_16x=needs_padding, seed=stochastic_rounding)
+        else:
+            qdata, block_scale = ck.quantize_nvfp4(tensor, scale, pad_16x=needs_padding)
+
+        params = cls.Params(
+            scale=scale,
+            orig_dtype=orig_dtype,
+            orig_shape=orig_shape,
+            block_scale=block_scale,
+        )
+        return qdata, params
+
+
+class TensorCoreFP8E4M3Layout(TensorCoreFP8LayoutBase):
+    FP8_DTYPE = torch.float8_e4m3fn
+
+
+class TensorCoreFP8E5M2Layout(TensorCoreFP8LayoutBase):
+    FP8_DTYPE = torch.float8_e5m2
+
 
 # region Registry
 
 
-register_layout_class("TensorCoreFP8Layout", TensorCoreFP8Layout)
-register_layout_class("TensorCoreFP8E4M3Layout", TensorCoreFP8Layout)
-register_layout_class("TensorCoreFP8E5M2Layout", TensorCoreFP8Layout)
-register_layout_class("TensorCoreNVFP4Layout", TensorCoreNVFP4Layout)
-register_layout_class("TensorCoreMXFP8Layout", TensorCoreMXFP8Layout)
+register_layout_class("TensorCoreFP8Layout", TensorCoreFP8E4M3Layout)
+register_layout_class("TensorCoreFP8E4M3Layout", TensorCoreFP8E4M3Layout)
+register_layout_class("TensorCoreFP8E5M2Layout", TensorCoreFP8E5M2Layout)
+register_layout_class("TensorCoreNVFP4Layout", TensorCoreNVFP4Layout_)
+register_layout_class("TensorCoreMXFP8Layout", TensorCoreMXFP8Layout_)
 register_layout_class("TensorWiseINT8Layout", TensorWiseINT8Layout)
 register_layout_class("TensorCoreConvRotW4A4Layout", TensorCoreConvRotW4A4Layout)
 register_layout_class("AsymW4A8Int8Layout", AsymW4A8Int8Layout)
@@ -93,22 +195,3 @@ QUANT_ALGOS = {
         "quantize_input": False,
     },
 }
-
-
-# region float
-
-
-def stochastic_rounding(value: torch.Tensor, dtype: torch.dtype, seed: int = 0):
-    if dtype is torch.float32:
-        return value.to(dtype=torch.float32)
-    if dtype is torch.float16:
-        return value.to(dtype=torch.float16)
-    if dtype is torch.bfloat16:
-        return value.to(dtype=torch.bfloat16)
-    if dtype in (torch.float8_e4m3fn, torch.float8_e5m2):
-        generator = torch.Generator(device=value.device)
-        generator.manual_seed(seed)
-        rng = torch.randint(0, 256, value.size(), dtype=torch.uint8, layout=value.layout, device=value.device, generator=generator)
-        return ck.stochastic_rounding_fp8(value, rng, dtype)
-
-    return value.to(dtype=dtype)
