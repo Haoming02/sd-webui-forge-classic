@@ -2,11 +2,11 @@ import os
 import re
 
 from modules import shared
-from modules.paths_internal import script_path, cwd
+from modules.paths_internal import cwd, script_path
 
 
-def natural_sort_key(s, regex=re.compile('([0-9]+)')):
-    return [int(text) if text.isdigit() else text.lower() for text in regex.split(s)]
+def natural_sort_key(s: str, regex=re.compile(r"([0-9]+)")):
+    return [[int(text) if text.isdigit() else text.lower() for text in regex.split(part)] for part in os.path.splitext(s)]
 
 
 def listfiles(dirname):
@@ -147,6 +147,7 @@ class MassFileLister:
         if cached_dir := self.cached_dirs.get(dirname):
             cached_dir.update_entry(filename)
 
+
 def topological_sort(dependencies):
     """Accepts a dictionary mapping name to its dependencies, returns a list of names ordered according to dependencies.
     Ignores errors relating to missing dependencies or circular dependencies
@@ -174,10 +175,11 @@ def topological_sort(dependencies):
 def open_folder(path):
     """Open a folder in the file manager of the respect OS."""
     # import at function level to avoid potential issues
-    import gradio as gr
     import platform
-    import sys
     import subprocess
+    import sys
+
+    import gradio as gr
 
     if not os.path.exists(path):
         msg = f'Folder "{path}" does not exist. after you save an image, the folder will be created.'
@@ -225,6 +227,7 @@ def load_file_from_url(
     re_download: forcibly re-download the file even if it already exists.
     """
     from urllib.parse import urlparse
+
     import requests
     from tqdm import tqdm
 
@@ -240,9 +243,9 @@ def load_file_from_url(
         print(f'\nDownloading: "{url}" to {cached_file}')
         response = requests.get(url, stream=True)
         response.raise_for_status()
-        total_size = int(response.headers.get('content-length', 0))
-        with tqdm(total=total_size, unit='B', unit_scale=True, desc=file_name, disable=not progress) as progress_bar:
-            with open(temp_file, 'wb') as file:
+        total_size = int(response.headers.get("content-length", 0))
+        with tqdm(total=total_size, unit="B", unit_scale=True, desc=file_name, disable=not progress) as progress_bar:
+            with open(temp_file, "wb") as file:
                 for chunk in response.iter_content(chunk_size=1024):
                     if chunk:
                         file.write(chunk)
@@ -260,6 +263,7 @@ def load_file_from_url(
 def compare_sha256(file_path: str, hash_prefix: str) -> bool:
     """Check if the SHA256 hash of the file matches the given prefix."""
     import hashlib
+
     hash_sha256 = hashlib.sha256()
     blksize = 1024 * 1024
 
