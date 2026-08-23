@@ -156,6 +156,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support **Region** Controlnet
     - [Anima](https://huggingface.co/Sen-sou/Anima-LLLite-Regional-Controlnet)
     - use the **Region** mode to create color masks
+- [X] Implement **Task Queueing** for txt2img/img2img
+    - per-tab Queue button with count badge
+    - enqueue generations while one is running; Generate hidden until queue clears
+    - segmented Queue | Interrupt | Skip controls
+    - by default, Ctrl+Enter adds a task to the queue when running; enable "Revert [Ctrl + Enter] to only interrupt the generation (disable Task Queueing)" in Settings -> UI Alternatives to revert to only interrupting
 
 #### Removed Features
 
