@@ -76,6 +76,7 @@ parser.add_argument("--disable-flash", action="store_true", help="disable flash_
 parser.add_argument("--disable-xformers", action="store_true", help="disable xformers")
 
 parser.add_argument("--directml", type=int, nargs="?", metavar="DIRECTML_DEVICE", const=-1, help="Use torch-directml")
+parser.add_argument("--gpu-backend", type=str, default=None, choices=["auto", "cuda", "rocm", "zluda", "directml", "cpu"], help="Which compute backend to run on (default: auto-detect)")
 parser.add_argument("--deterministic", action="store_true", help="Use slower deterministic algorithms when possible")
 
 vram_group = parser.add_mutually_exclusive_group()

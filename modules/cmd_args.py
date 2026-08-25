@@ -20,6 +20,12 @@ parser.add_argument("--skip-prepare-environment", action="store_true", help="lau
 parser.add_argument("--skip-install", action="store_true", help="launch.py argument: skip installation of packages")
 parser.add_argument("--dump-sysinfo", action="store_true", help="launch.py argument: dump limited sysinfo file (without information about extensions, options) to disk and quit")
 
+parser = _parser.add_argument_group(description="compute backend")
+# NOTE: --gpu-backend itself lives in backend/args.py, whose parser is a parent
+# of this one, because the runtime (memory_management) needs it too.
+parser.add_argument("--zluda-nightly", action="store_true", help="launch.py argument: use the nightly ZLUDA build (adds hipBLASLt & MIOpen support)")
+parser.add_argument("--reinstall-zluda", action="store_true", help="launch.py argument: delete and re-download ZLUDA")
+
 parser = _parser.add_argument_group(description="connections")
 parser.add_argument("--share", action="store_true", help="use share=True for gradio and make the UI accessible through their site")
 parser.add_argument("--ngrok", type=str, help="ngrok authtoken, alternative to gradio --share", default=None)

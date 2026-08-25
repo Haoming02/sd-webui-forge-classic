@@ -1,13 +1,14 @@
 # reference: https://github.com/Comfy-Org/ComfyUI/blob/master/cuda_malloc.py
 
 import importlib.util
+import os
 import os.path
 import subprocess
 
 
 def get_gpu_names() -> set[str]:
     gpu_names = set()
-    out = subprocess.check_output(["nvidia-smi", "-L"])
+    out = subprocess.check_output(["nvidia-smi", "-L"], stderr=subprocess.DEVNULL)
     for l in out.split(b"\n"):
         if len(l) > 0:
             gpu_names.add(l.decode("utf-8").split(" (UUID")[0])
@@ -43,6 +44,16 @@ except Exception:
 
 
 def try_cuda_malloc():
+    if "rocm" in get_torch_version().lower():
+        # hipMallocAsync exists but the caching allocator is the tested path on
+        # ROCm; PYTORCH_CUDA_ALLOC_CONF=backend:cudaMallocAsync regresses it.
+        print("Ignoring --cuda-malloc: not applicable to ROCm builds of PyTorch")
+        return
+
+    if os.environ.get("SD_ZLUDA_ACTIVE") == "1":
+        print("Ignoring --cuda-malloc: cudaMallocAsync is not implemented by ZLUDA")
+        return
+
     if not cuda_malloc_supported():
         return
 

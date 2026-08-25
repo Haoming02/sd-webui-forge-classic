@@ -27,10 +27,27 @@ def initialize_forge():
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "modules_forge", "packages"))
 
     from backend.args import args
+    from modules_forge import gpu_backend
+
+    backend = gpu_backend.select_backend(args.gpu_backend)
+    os.environ["SD_GPU_BACKEND"] = backend
 
     if args.gpu_device_id is not None:
+        # ROCm reads HIP_VISIBLE_DEVICES; it honours CUDA_VISIBLE_DEVICES too,
+        # but ZLUDA and the HIP runtime only look at the HIP variables.
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_device_id)
+        os.environ["HIP_VISIBLE_DEVICES"] = str(args.gpu_device_id)
+        os.environ["ROCR_VISIBLE_DEVICES"] = str(args.gpu_device_id)
         print("Set device to:", args.gpu_device_id)
+
+    zluda_ready = False
+    if backend == gpu_backend.Backend.ZLUDA:
+        from modules_forge import zluda_installer
+
+        # Has to happen before `import torch`, so that the CUDA libraries the
+        # wheel would otherwise bind to resolve to ZLUDA's implementations.
+        zluda_installer.load()
+        zluda_ready = True
 
     from modules_forge.cuda_malloc import (
         get_torch_version,
@@ -59,6 +76,14 @@ def initialize_forge():
     import torchvision  # noqa: F401
 
     startup_timer.record("import torch")
+
+    if zluda_ready:
+        from modules_forge import zluda
+
+        if not zluda.initialize():
+            raise RuntimeError("ZLUDA could not run a trivial matmul on your GPU. See AMD.md for troubleshooting.")
+
+        startup_timer.record("initialize zluda")
 
     device = memory_management.get_torch_device()
     torch.zeros((1, 1)).to(device, torch.float32)

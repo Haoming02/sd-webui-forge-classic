@@ -99,6 +99,10 @@ if args.deterministic:
     logger.info("Using deterministic algorithms for PyTorch")
     torch.use_deterministic_algorithms(True, warn_only=True)
 
+# `--gpu-backend directml` is the modern spelling of `--directml`.
+if args.directml is None and (args.gpu_backend == "directml" or os.environ.get("SD_GPU_BACKEND") == "directml"):
+    args.directml = -1
+
 directml_enabled = False
 if args.directml is not None:
     logger.warning("torch-directml barely works; please don't use it, there are better options...")
@@ -129,16 +133,62 @@ if args.cpu:
     cpu_state = CPUState.CPU
 
 
+# ZLUDA implements the CUDA driver API on top of AMD's HIP runtime, so a CUDA
+# build of PyTorch reports `torch.version.cuda` while actually driving a Radeon
+# card. Everything that keys off "is this NVIDIA?" has to know the difference.
+zluda_enabled: bool = os.environ.get("SD_ZLUDA_ACTIVE") == "1"
+
+if not zluda_enabled and torch.version.cuda and not args.cpu:
+    try:
+        zluda_enabled = "[ZLUDA]" in torch.cuda.get_device_name(torch.cuda.current_device())
+    except Exception:
+        zluda_enabled = False
+
+if zluda_enabled:
+    os.environ["SD_ZLUDA_ACTIVE"] = "1"
+    logger.info("ZLUDA detected: running CUDA PyTorch on an AMD GPU")
+
+
 def is_intel_xpu() -> bool:
     return cpu_state is CPUState.GPU and xpu_available
 
 
+def is_zluda() -> bool:
+    return cpu_state is CPUState.GPU and zluda_enabled
+
+
 def is_nvidia() -> bool:
-    return cpu_state is CPUState.GPU and torch.version.cuda
+    return cpu_state is CPUState.GPU and bool(torch.version.cuda) and not zluda_enabled
 
 
 def is_amd() -> bool:
-    return cpu_state is CPUState.GPU and torch.version.hip
+    return cpu_state is CPUState.GPU and (bool(torch.version.hip) or zluda_enabled)
+
+
+def amd_arch(device: torch.device = None) -> str:
+    """
+    LLVM target of the active AMD GPU, e.g. ``"gfx1030"`` for an RX 6800.
+
+    ROCm exposes it through the device properties; ZLUDA does not, so fall back
+    to querying the HIP runtime directly.
+    """
+
+    if not is_amd():
+        return ""
+
+    try:
+        arch = getattr(torch.cuda.get_device_properties(device), "gcnArchName", "")
+        if arch:
+            return arch.split(":")[0]
+    except Exception:
+        pass
+
+    try:
+        from modules_forge.gpu_backend import amd_arch as probe_amd_arch
+
+        return probe_amd_arch() or ""
+    except Exception:
+        return ""
 
 
 def get_torch_device() -> torch.device:
@@ -249,7 +299,7 @@ def amd_min_version(device: torch.device = None, min_rdna_version: int = 0) -> b
     if is_device_cpu(device):
         return False
 
-    arch = torch.cuda.get_device_properties(device).gcnArchName
+    arch = amd_arch(device)
     if arch.startswith("gfx") and len(arch) == 7:
         try:
             cmp_rdna_version = int(arch[4]) + 2
@@ -281,12 +331,18 @@ elif is_intel_xpu():
 
 SUPPORT_FP8_OPS: bool = None
 
-if is_amd():
-    AMD_RDNA2_AND_OLDER_ARCH = ("gfx1030", "gfx1031", "gfx1010", "gfx1011", "gfx1012", "gfx906", "gfx900", "gfx803")
+AMD_RDNA2_AND_OLDER_ARCH = ("gfx1030", "gfx1031", "gfx1010", "gfx1011", "gfx1012", "gfx906", "gfx900", "gfx803")
 
+#: True when the GPU has no hardware FlashAttention / memory-efficient SDPA
+#: kernels, and PyTorch's math backend has to be used instead.
+AMD_MATH_SDP_ONLY: bool = False
+
+if is_amd():
     try:
-        arch = torch.cuda.get_device_properties(get_torch_device()).gcnArchName
-        if not (any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH)):
+        arch = amd_arch(get_torch_device())
+        is_rdna2_or_older = any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH)
+
+        if not is_rdna2_or_older:
             if os.getenv("ENABLE_MIOPEN") != "1":
                 torch.backends.cudnn.enabled = False
 
@@ -295,24 +351,44 @@ if is_amd():
         except Exception:
             rocm_version = (6, -1)
 
-        logger.info("AMD Arch: {}".format(arch))
-        logger.info("ROCm Version: {}".format(rocm_version))
-        if importlib.util.find_spec("triton") is not None:
-            if torch_version_numeric >= (2, 7):
-                if any((a in arch) for a in ["gfx90a", "gfx942", "gfx1100", "gfx1101", "gfx1151"]):
-                    ENABLE_PYTORCH_ATTENTION = True
-            if rocm_version >= (7, 0):
-                if any((a in arch) for a in ["gfx1201"]):
-                    ENABLE_PYTORCH_ATTENTION = True
-        if torch_version_numeric >= (2, 7) and rocm_version >= (6, 4):
-            if any((a in arch) for a in ["gfx1200", "gfx1201", "gfx950"]):
-                SUPPORT_FP8_OPS = True
+        logger.info("AMD Arch: {}".format(arch or "unknown"))
+        if not is_zluda():
+            logger.info("ROCm Version: {}".format(rocm_version))
+
+        if is_zluda() or is_rdna2_or_older:
+            # AOTriton (the ROCm FlashAttention backend) does not cover RDNA 2
+            # and older, and ZLUDA implements neither FlashAttention nor the
+            # memory-efficient kernels. SDPA is left off by default -- the
+            # sliced fallback in `attention_basic` adapts to free VRAM, which
+            # matters on 16 GB cards -- but `--use-pytorch-cross-attention`
+            # still has to end up on a backend that actually exists.
+            AMD_MATH_SDP_ONLY = True
+        else:
+            if importlib.util.find_spec("triton") is not None:
+                if torch_version_numeric >= (2, 7):
+                    if any((a in arch) for a in ["gfx90a", "gfx942", "gfx1100", "gfx1101", "gfx1151"]):
+                        ENABLE_PYTORCH_ATTENTION = True
+                if rocm_version >= (7, 0):
+                    if any((a in arch) for a in ["gfx1201"]):
+                        ENABLE_PYTORCH_ATTENTION = True
+            if torch_version_numeric >= (2, 7) and rocm_version >= (6, 4):
+                if any((a in arch) for a in ["gfx1200", "gfx1201", "gfx950"]):
+                    SUPPORT_FP8_OPS = True
 
     except Exception:
         pass
 
 
-if ENABLE_PYTORCH_ATTENTION:
+if AMD_MATH_SDP_ONLY:
+    # Leaving these enabled makes `sdpa_kernel(...)` raise instead of falling
+    # back, because the kernels are advertised but not implemented.
+    torch.backends.cuda.enable_math_sdp(True)
+    for _toggle in ("enable_flash_sdp", "enable_mem_efficient_sdp", "enable_cudnn_sdp"):
+        try:
+            getattr(torch.backends.cuda, _toggle)(False)
+        except Exception:
+            pass
+elif ENABLE_PYTORCH_ATTENTION:
     torch.backends.cuda.enable_math_sdp(True)
     torch.backends.cuda.enable_flash_sdp(True)
     torch.backends.cuda.enable_mem_efficient_sdp(True)
@@ -1023,6 +1099,9 @@ def xformers_enabled() -> bool:
         return False
     if directml_enabled:
         return False
+    if is_zluda():
+        # xformers' kernels are compiled CUDA; ZLUDA cannot load them.
+        return False
     return XFORMERS_IS_AVAILABLE
 
 
@@ -1073,6 +1152,8 @@ def pytorch_attention_enabled_vae() -> bool:
 
 def pytorch_attention_flash_attention() -> bool:
     if ENABLE_PYTORCH_ATTENTION:
+        if AMD_MATH_SDP_ONLY:
+            return False
         if is_nvidia():
             return True
         if is_intel_xpu():
@@ -1177,7 +1258,9 @@ def should_use_fp16(device: torch.device = None, model_params: int = 0, prioriti
     if is_intel_xpu():
         return torch.xpu.get_device_properties(device).has_fp16
 
-    if torch.version.hip:
+    if is_amd():
+        # Every GPU ROCm/ZLUDA runs on has usable fp16; the compute-capability
+        # checks below are meaningless for them (and ZLUDA reports a made-up one).
         return True
 
     props = torch.cuda.get_device_properties(device)
@@ -1233,7 +1316,11 @@ def should_use_bf16(device: torch.device = None, model_params: int = 0, prioriti
         return torch.xpu.is_bf16_supported()
 
     if is_amd():
-        arch = torch.cuda.get_device_properties(device).gcnArchName
+        arch = amd_arch(device)
+        if not arch:
+            # Unknown architecture (typical under ZLUDA): bf16 would be emulated
+            # at best, so stay on fp16.
+            return False
         if any((a in arch) for a in AMD_RDNA2_AND_OLDER_ARCH):
             if manual_cast:
                 return True
@@ -1349,7 +1436,9 @@ def soft_empty_cache(force=False):
     elif torch.cuda.is_available():
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+        if not is_zluda():
+            # CUDA IPC is not implemented by ZLUDA, and is a no-op on ROCm.
+            torch.cuda.ipc_collect()
 
     global signal_empty_cache
     signal_empty_cache = False
@@ -1454,7 +1543,10 @@ TOTAL_PINNED_MEMORY = 0
 MAX_PINNED_MEMORY = -1
 
 if args.pin_shared_memory:
-    if is_nvidia() or is_amd():
+    if is_zluda():
+        # cudaHostRegister is not implemented by ZLUDA.
+        logger.warning("Ignoring --pin-shared-memory: not supported under ZLUDA")
+    elif is_nvidia() or is_amd():
         if WINDOWS:
             MAX_PINNED_MEMORY = get_total_memory(torch.device("cpu")) * 0.45  # Windows limit is apparently 50%
         else:
@@ -1468,7 +1560,7 @@ def discard_cuda_async_error():
         b = torch.tensor([1], dtype=torch.uint8, device=get_torch_device())
         _ = a + b
         torch.cuda.synchronize()
-    except torch.AcceleratorError:
+    except ACCELERATOR_ERROR:
         pass
 
 

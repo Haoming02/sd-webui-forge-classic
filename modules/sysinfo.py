@@ -92,6 +92,33 @@ def get_packages():
             return {'error pip': pip_error, 'error importlib': str(e2)}
 
 
+def get_gpu_info():
+    """Detected compute backend and GPU, so AMD reports are actionable."""
+
+    from modules_forge import gpu_backend
+
+    info = {
+        "adapters": list(gpu_backend.list_gpu_names()),
+        "backend": os.environ.get("SD_GPU_BACKEND") or gpu_backend.installed_backend(),
+    }
+
+    if gpu_backend.has_amd_gpu():
+        info["amd arch"] = gpu_backend.amd_arch()
+        info["rocm wheel index"] = gpu_backend.rocm_index_url()
+        info["hip sdk"] = gpu_backend.hip_sdk_path()
+
+    try:
+        import torch
+
+        info["torch"] = torch.__version__
+        info["torch cuda"] = torch.version.cuda
+        info["torch hip"] = torch.version.hip
+    except Exception:
+        pass
+
+    return info
+
+
 def get_dict():
     config = get_config()
     res = {
@@ -104,6 +131,7 @@ def get_dict():
         "Extensions dir": paths_internal.extensions_dir,
         "Checksum": checksum_token,
         "Commandline": get_argv(),
+        "GPU": get_gpu_info(),
         "Torch env info": get_torch_sysinfo(),
         "Exceptions": errors.get_exceptions(),
         "CPU": get_cpu_info(),

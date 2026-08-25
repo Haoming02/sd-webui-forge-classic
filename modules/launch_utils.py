@@ -17,7 +17,7 @@ from typing import Any, Final, NamedTuple
 from modules import cmd_args, errors
 from modules.paths_internal import extensions_builtin_dir, extensions_dir, script_path
 from modules.timer import startup_timer
-from modules_forge import forge_version
+from modules_forge import forge_version, gpu_backend
 from modules_forge.config import always_disabled_extensions
 
 args, _ = cmd_args.parser.parse_known_args()
@@ -32,19 +32,26 @@ default_command_live = os.environ.get("WEBUI_LAUNCH_LIVE_OUTPUT") == "1"
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 
 
+#: Python versions every supported backend publishes wheels for.
+SUPPORTED_PYTHON_MINORS: Final[tuple[int, ...]] = (12, 13)
+
+
 def check_python_version():
     major = sys.version_info.major
     minor = sys.version_info.minor
     micro = sys.version_info.micro
 
-    if not (major == 3 and minor == 13):
+    if not (major == 3 and minor in SUPPORTED_PYTHON_MINORS):
         import modules.errors
 
+        supported = " or ".join(f"3.{m}" for m in SUPPORTED_PYTHON_MINORS)
         modules.errors.print_error_explanation(f"""
             This program is tested with 3.13.12 Python, but you have {major}.{minor}.{micro}.
             If you encounter any error regarding unsuccessful package/library installation,
-            please downgrade (or upgrade) to the latest version of 3.13 Python,
+            please downgrade (or upgrade) to the latest version of {supported} Python,
             and delete the current Python "venv" folder in WebUI's directory.
+
+            AMD (ROCm) wheels are only published for {supported}.
 
             Use --skip-python-version-check to suppress this warning
             """)
@@ -94,6 +101,11 @@ def _torch_version() -> tuple[str, str]:
     m = re.search(r"(\d+\.\d+\.\d+)(?:[^+]+)?\+(.+)", ver)
 
     if m is None:
+        # Builds without a local version label (e.g. plain CPU wheels from PyPI)
+        m = re.fullmatch(r"(\d+\.\d+\.\d+).*", ver)
+        if m is not None:
+            return m.group(1), "cpu"
+
         print("\n\nFailed to parse PyTorch version...")
         ver = os.environ.get("PYTORCH_VERSION", "2.10.0+cu130")
         print("Assuming: ", ver)
@@ -283,9 +295,138 @@ def requirements_met(requirements_file):
     return True
 
 
+#: Pinned PyTorch builds per backend.
+#:
+#: ROCm: AMD publishes Windows wheels through "TheRock" nightly channel. They
+#: are date stamped and `torch` pins `rocm[libraries]` to the exact same stamp,
+#: so the whole trio has to move together -- hence the pin.
+ROCM_LINUX_CHANNEL: Final[str] = os.environ.get("ROCM_CHANNEL", "rocm7.1")
+TORCH_ROCM_VERSION: Final[str] = "2.9.1+rocm7.13.0a20260421"
+TORCHVISION_ROCM_VERSION: Final[str] = "0.27.0a0+rocm7.13.0a20260421"
+
+#: ZLUDA translates the CUDA driver API, and only implements CUDA 11.x, so the
+#: cu118 build of PyTorch is the one to use.
+TORCH_ZLUDA_VERSION: Final[str] = "2.7.1+cu118"
+TORCHVISION_ZLUDA_VERSION: Final[str] = "0.22.1+cu118"
+
+
+def resolve_gpu_backend() -> str:
+    """Backend to install for; see `modules_forge/gpu_backend.py`."""
+
+    backend = gpu_backend.select_backend(getattr(args, "gpu_backend", None))
+    os.environ["SD_GPU_BACKEND"] = backend
+    return backend
+
+
+def torch_install_command(backend: str) -> str:
+    """`pip install ...` arguments that put the right PyTorch build in place."""
+
+    explicit = os.environ.get("TORCH_COMMAND")
+    if explicit:
+        return explicit
+
+    if backend == gpu_backend.Backend.ROCM:
+        if os.name != "nt":
+            # Linux has first-party ROCm wheels on the regular PyTorch index.
+            index = os.environ.get("TORCH_INDEX_URL", f"https://download.pytorch.org/whl/{ROCM_LINUX_CHANNEL}")
+            return f"pip install torch torchvision --index-url {index}"
+
+        index = gpu_backend.rocm_index_url()
+        if index is None:
+            arch = gpu_backend.amd_arch() or "unknown"
+            raise RuntimeError(f"""AMD does not publish Windows ROCm PyTorch wheels for your GPU architecture ({arch}).
+Run with --gpu-backend zluda instead (requires the AMD HIP SDK 6.2/6.4), or
+set ROCM_INDEX_URL to a wheel index that covers your card.""")
+        torch_pin = os.environ.get("TORCH_VERSION", TORCH_ROCM_VERSION)
+        vision_pin = os.environ.get("TORCHVISION_VERSION", TORCHVISION_ROCM_VERSION)
+        # Every transitive dependency (including the rocm-sdk runtime packages)
+        # is served by the same index, so it is used as the *primary* one.
+        return f"pip install --pre torch=={torch_pin} torchvision=={vision_pin} --index-url {index}"
+
+    if backend == gpu_backend.Backend.ZLUDA:
+        index = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu118")
+        torch_pin = os.environ.get("TORCH_VERSION", TORCH_ZLUDA_VERSION)
+        vision_pin = os.environ.get("TORCHVISION_VERSION", TORCHVISION_ZLUDA_VERSION)
+        return f"pip install torch=={torch_pin} torchvision=={vision_pin} --extra-index-url {index}"
+
+    if backend == gpu_backend.Backend.DIRECTML:
+        return "pip install torch-directml"
+
+    if backend == gpu_backend.Backend.CPU:
+        index = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cpu")
+        return f"pip install torch torchvision --index-url {index}"
+
+    index = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
+    return f"pip install torch==2.13.0+cu130 torchvision==0.28.0+cu130 --extra-index-url {index}"
+
+
+def prepare_zluda():
+    """Fetch ZLUDA and verify the HIP SDK is in place (Windows + AMD only)."""
+
+    from modules_forge import zluda_installer
+
+    if os.name != "nt":
+        raise RuntimeError("ZLUDA is only supported on Windows; use --gpu-backend rocm on Linux.")
+
+    hip_sdk = gpu_backend.hip_sdk_path()
+    if hip_sdk is None:
+        raise RuntimeError("""ZLUDA needs the AMD HIP SDK, which was not found.
+Install HIP SDK 6.2 (or 6.4) from https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html and re-launch.
+HIP SDK 7.x is not supported by ZLUDA.""")
+
+    version = gpu_backend.hip_sdk_version()
+    if version is not None and version[0] != 6:
+        print(f"Warning: ZLUDA is built against HIP SDK 6.x, but {version[0]}.{version[1]} was found. Expect failures.")
+
+    print(f"HIP SDK: {hip_sdk}")
+
+    if args.reinstall_zluda:
+        zluda_installer.uninstall()
+
+    try:
+        zluda_installer.install(use_nightly=args.zluda_nightly)
+    except Exception as e:
+        raise RuntimeError(f"Couldn't install ZLUDA: {e}") from e
+
+    startup_timer.record("install zluda")
+
+
+def verify_torch_build(backend: str):
+    """
+    Warn when installing the requirements pulled a PyTorch build that does not
+    match the selected backend -- this silently breaks GPU acceleration and is
+    otherwise very hard to diagnose.
+    """
+
+    expected = {
+        gpu_backend.Backend.ROCM: "rocm",
+        gpu_backend.Backend.ZLUDA: "cu",
+        gpu_backend.Backend.CUDA: "cu",
+    }.get(backend)
+
+    if expected is None:
+        return
+
+    try:
+        installed = importlib.metadata.version("torch")
+    except Exception:
+        return
+
+    local = installed.partition("+")[2]
+    if local.startswith(expected):
+        return
+
+    print(f"""
+Warning: the '{backend}' backend expects a '{expected}*' build of PyTorch, but '{installed}' is installed.
+Something (usually an extension's install.py) replaced it. Re-run with --reinstall-torch to fix.
+""")
+
+
 def prepare_environment():
+    backend = resolve_gpu_backend()
+
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.13.0+cu130 torchvision==0.28.0+cu130 --extra-index-url {torch_index_url}")
+    torch_command = torch_install_command(backend)
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.2")
@@ -309,14 +450,21 @@ def prepare_environment():
     print(f"Python {sys.version}")
     print(f"Version: {tag}")
 
-    if args.reinstall_torch or not is_installed("torch") or not is_installed("torchvision"):
+    print(f"Compute backend: {backend}")
+    if backend in gpu_backend.Backend.AMD:
+        print(f"AMD GPU: {', '.join(gpu_backend.amd_gpu_names()) or 'unknown'} ({gpu_backend.amd_arch() or 'unknown arch'})")
+
+    if args.reinstall_torch or not is_installed("torch") or (backend != gpu_backend.Backend.DIRECTML and not is_installed("torchvision")):
         # TODO: Yeet Nunchaku...
-        if args.nunchaku:
+        if args.nunchaku and backend == gpu_backend.Backend.CUDA:
             torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.11.0+cu130 torchvision==0.26.0+cu130 --extra-index-url {torch_index_url}")
             print("(using an older version of PyTorch due to Nunchaku dependency...)")
 
         run(f'"{python}" -m {torch_command}', "Installing PyTorch", "Couldn't install PyTorch", live=True)
         startup_timer.record("install torch")
+
+    if backend == gpu_backend.Backend.ZLUDA:
+        prepare_zluda()
 
     if not args.skip_torch_cuda_test:
         TORCH_CHECK: str = """
@@ -327,12 +475,27 @@ mps = hasattr(torch, "mps") and torch.mps.is_available()
 assert cuda or xpu or mps
         """
 
-        success, err = check_run_python(TORCH_CHECK, return_error=True)
-        if not success:
-            if "older driver" in str(err).lower():
-                raise SystemError("Please update your GPU driver or manually install older version of PyTorch")
-            raise RuntimeError("PyTorch is not able to access any compute device (GPU)")
-        startup_timer.record("torch GPU test")
+        if backend == gpu_backend.Backend.DIRECTML:
+            TORCH_CHECK = "import torch_directml\nassert torch_directml.device_count() > 0"
+
+        if backend == gpu_backend.Backend.CPU:
+            startup_timer.record("torch GPU test")
+        else:
+            success, err = check_run_python(TORCH_CHECK, return_error=True)
+            if not success:
+                message = str(err).lower()
+                if "older driver" in message:
+                    raise SystemError("Please update your GPU driver or manually install older version of PyTorch")
+                if backend == gpu_backend.Backend.ROCM:
+                    detail = err.decode("utf-8", "ignore") if isinstance(err, bytes) else err
+                    family = gpu_backend.therock_family(gpu_backend.amd_arch())
+                    raise RuntimeError(f"""PyTorch (ROCm) cannot see your Radeon GPU.
+  * make sure the AMD Adrenalin driver is up to date
+  * confirm your GPU belongs to the {family!r} wheel family
+  * or fall back to ZLUDA with --gpu-backend zluda
+{detail}""")
+                raise RuntimeError("PyTorch is not able to access any compute device (GPU)")
+            startup_timer.record("torch GPU test")
 
     if not is_installed("packaging"):
         run_pip(f"install {packaging_package}", "packaging")
@@ -359,6 +522,12 @@ assert cuda or xpu or mps
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.9.47/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton=={ver_TRITON}")
         nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://github.com/nunchaku-ai/nunchaku/releases/download/v{ver_NUNCHAKU}/nunchaku-{ver_NUNCHAKU}+{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+
+    cuda_only_requested = [name for name, enabled in (("--xformers", args.xformers), ("--sage", args.sage), ("--flash", args.flash), ("--nunchaku", args.nunchaku), ("--onnxruntime-gpu", args.onnxruntime_gpu)) if enabled]
+
+    if backend != gpu_backend.Backend.CUDA and cuda_only_requested:
+        print(f"Ignoring {', '.join(cuda_only_requested)}: these packages are CUDA-only and cannot run on the '{backend}' backend.")
+        args.xformers = args.sage = args.flash = args.nunchaku = args.onnxruntime_gpu = False
 
     if args.xformers and (not is_installed("xformers") or args.reinstall_xformers):
         run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
@@ -400,6 +569,10 @@ assert cuda or xpu or mps
         run_pip("install ngrok", "ngrok")
         startup_timer.record("install ngrok")
 
+    if backend == gpu_backend.Backend.DIRECTML and not is_installed("torch_directml"):
+        run_pip("install torch-directml", "torch-directml")
+        startup_timer.record("install torch-directml")
+
     if not is_installed("gradio"):
         run_pip(f"install {gradio_package}", "gradio")
 
@@ -428,6 +601,8 @@ assert cuda or xpu or mps
     if not requirements_met(requirements_file):
         run_pip(f'install -r "{requirements_file}"', "requirements")
         startup_timer.record("enforce requirements")
+
+    verify_torch_build(backend)
 
     if "--exit" in sys.argv:
         print("Exiting because of --exit argument")

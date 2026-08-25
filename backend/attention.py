@@ -125,7 +125,9 @@ def _reshape_qkv_to_heads(q, k, v, b, heads, dim_head, enable_gqa=False, expand_
     return q, k, v
 
 
-if memory_management.is_nvidia():
+if memory_management.is_nvidia() or memory_management.AMD_MATH_SDP_ONLY:
+    # The math SDPA fallback materialises the full attention matrix, so the
+    # batch dimension has to stay chunked on AMD cards without real kernels.
     SDP_BATCH_LIMIT = 2**15
 else:
     SDP_BATCH_LIMIT = 2**31

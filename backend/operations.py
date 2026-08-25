@@ -42,12 +42,18 @@ try:
         from torch.nn.attention import SDPBackend, sdpa_kernel
 
         if "set_priority" in inspect.signature(sdpa_kernel).parameters:
-            SDPA_BACKEND_PRIORITY = [
-                SDPBackend.FLASH_ATTENTION,
-                SDPBackend.CUDNN_ATTENTION,
-                SDPBackend.EFFICIENT_ATTENTION,
-                SDPBackend.MATH,
-            ]
+            if memory_management.AMD_MATH_SDP_ONLY:
+                # RDNA 2 (and ZLUDA) have no FlashAttention / cuDNN / efficient
+                # SDPA kernels; listing them makes sdpa_kernel raise instead of
+                # quietly picking the math implementation.
+                SDPA_BACKEND_PRIORITY = [SDPBackend.MATH]
+            else:
+                SDPA_BACKEND_PRIORITY = [
+                    SDPBackend.FLASH_ATTENTION,
+                    SDPBackend.CUDNN_ATTENTION,
+                    SDPBackend.EFFICIENT_ATTENTION,
+                    SDPBackend.MATH,
+                ]
 
             def scaled_dot_product_attention(q, k, v, *args, **kwargs):
                 attn_mask = args[0] if len(args) > 0 else kwargs.get("attn_mask")

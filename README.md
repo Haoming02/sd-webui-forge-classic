@@ -247,7 +247,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update `protobuf`
     - faster `insightface` loading
 - [X] Update to latest PyTorch
-    - `torch==2.13.0+cu130`
+    - `torch==2.13.0+cu130` on NVIDIA
+    - `torch==2.9.1+rocm7.13` on AMD *(see [AMD.md](AMD.md))*
 
 > [!Note]
 > If your GPU does not support the latest PyTorch, manually [install](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Extra-Installations#older-pytorch) older version of PyTorch
@@ -267,7 +268,11 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - `--xformers`: Install the `xformers` package to speed up generation
 
 > [!Warning]
-> `xformers` does **not** support `RTX 50s`
+> `xformers` does **not** support `RTX 50s`, and is **not** available on AMD
+
+- `--gpu-backend`: Pin the compute backend instead of auto-detecting it
+    - one of `cuda`, `rocm`, `zluda`, `directml`, `cpu`
+    - see **[AMD.md](AMD.md)** for the AMD ones
 
 - `--port`: Specify a server port to use
     - defaults to `7860`
@@ -374,14 +379,18 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 <br>
 
 3. **(Optional)** Configure [Commandline](#commandline)
-4. Launch the WebUI via `webui-user.bat`
+4. Launch the WebUI via `webui-user.bat` *(**AMD Radeon**: use `webui-user-amd.bat` instead)*
 5. During the first launch, it will automatically install all the requirements
 6. Once the installation is finished, the WebUI will start in a browser automatically
 
 <br>
 
 > [!Tip]
-> - For **AMD**, refer to <a href="https://github.com/CS1o/Stable-Diffusion-Info/wiki/Webui-Installation-Guides#amd-forge-neo-with-rocm"><ins>CS1o</ins> 's Guide</a>
+> - For **AMD**, see **[AMD.md](AMD.md)** — the correct PyTorch build (ROCm, or
+>   ZLUDA as a fallback) is selected and installed automatically; `webui-user-amd.bat`
+>   is a ready-made launcher. Third-party walkthroughs such as
+>   <a href="https://github.com/CS1o/Stable-Diffusion-Info/wiki/Webui-Installation-Guides#amd-forge-neo-with-rocm"><ins>CS1o</ins> 's Guide</a>
+>   remain useful background reading.
 > - For **Linux** and **macOS**, refer to [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Unix)
 > - For **Docker** (`Nvidia`), refer to [Docker](docker/)
 

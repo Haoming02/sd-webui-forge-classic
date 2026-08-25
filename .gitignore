@@ -10,6 +10,7 @@ __pycache__
 .DS_Store
 .vscode
 /.uv-cache
+/.zluda
 /cache
 /config.json
 /config_states/
