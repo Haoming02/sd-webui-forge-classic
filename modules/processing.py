@@ -1524,6 +1524,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         self.rng = rng.ImageRNG(samples.shape[1:], self.seeds, subseeds=self.subseeds, subseed_strength=self.subseed_strength, seed_resize_from_h=self.seed_resize_from_h, seed_resize_from_w=self.seed_resize_from_w)
         noise = self.rng.next()
 
+        self.outpath_samples = opts.outdir_hires_samples or self.outpath_samples
+
         # GC now before running the next img2img to prevent running out of memory
         devices.torch_gc()
 

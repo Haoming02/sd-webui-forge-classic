@@ -102,13 +102,14 @@ options_templates.update(
     options_section(
         ("saving-paths", "Paths for Saving", "saving"),
         {
-            "outdir_samples": OptionInfo("", "Output Directory", component_args=hide_dirs).info("if empty, default to the <b>four</b> folders below"),
+            "outdir_samples": OptionInfo("", "Output Directory", component_args=hide_dirs).info("override the following <b>five</b> settings below"),
             "outdir_txt2img_samples": OptionInfo(util.truncate_path(os.path.join(default_output_dir, "txt2img-images")), "Output Directory for txt2img Images", component_args=hide_dirs),
+            "outdir_hires_samples": OptionInfo("", "Output Directory for Hires. fix Images", component_args=hide_dirs).info("if empty, save in the txt2img folder above"),
             "outdir_img2img_samples": OptionInfo(util.truncate_path(os.path.join(default_output_dir, "img2img-images")), "Output Directory for img2img Images", component_args=hide_dirs),
             "outdir_extras_samples": OptionInfo(util.truncate_path(os.path.join(default_output_dir, "extras-images")), "Output Directory for Extras Images", component_args=hide_dirs),
             "outdir_videos": OptionInfo(util.truncate_path(os.path.join(default_output_dir, "videos")), "Output Directory for Videos", component_args=hide_dirs),
             "div00": OptionDiv(),
-            "outdir_grids": OptionInfo("", "Output Directory for Grids", component_args=hide_dirs).info("if empty, default to the <b>two</b> folders below"),
+            "outdir_grids": OptionInfo("", "Output Directory for Grids", component_args=hide_dirs).info("override the following <b>two</b> settings below"),
             "outdir_txt2img_grids": OptionInfo(util.truncate_path(os.path.join(default_output_dir, "txt2img-grids")), "Output Directory for txt2img Grids", component_args=hide_dirs),
             "outdir_img2img_grids": OptionInfo(util.truncate_path(os.path.join(default_output_dir, "img2img-grids")), "Output Directory for img2img Grids", component_args=hide_dirs),
             "div01": OptionDiv(),
