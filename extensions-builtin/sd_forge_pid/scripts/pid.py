@@ -156,6 +156,7 @@ class PiDForForge(scripts.Script):
             n_iter=1,
             steps=4,
             cfg_scale=1.0,
+            distilled_cfg_scale=1.5,
             width=p.width * 4,
             height=p.height * 4,
             restore_faces=False,
