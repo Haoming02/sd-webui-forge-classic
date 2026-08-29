@@ -76,12 +76,18 @@ def get_weight_and_bias(layer: torch.nn.Module) -> tuple[torch.Tensor, torch.Ten
     """Forge-Specific Function for on-the-fly LoRA"""
 
     weight: torch.Tensor = getattr(layer, "weight", None)
-    for f in getattr(layer, "weight_function", []):
-        weight = f(weight)
+    weight_functions: list[Callable] = getattr(layer, "weight_function", [])
+    if weight is not None and weight_functions:
+        weight = weight.clone()
+        for f in weight_functions:
+            weight = f(weight)
 
     bias: torch.Tensor = getattr(layer, "bias", None)
-    for f in getattr(layer, "bias_function", []):
-        bias = f(bias)
+    bias_functions: list[Callable] = getattr(layer, "bias_function", [])
+    if bias is not None and bias_functions:
+        bias = bias.clone()
+        for f in bias_functions:
+            bias = f(bias)
 
     return weight, bias
 
