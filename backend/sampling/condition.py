@@ -68,7 +68,7 @@ class ConditionCrossAttn(Condition):
         out = []
         for c in conds:
             if c.shape[1] < crossattn_max_len:
-                c = c.repeat(1, crossattn_max_len // c.shape[1], 1)
+                c = c.repeat(1, crossattn_max_len // c.shape[1], *([1] * (c.ndim - 2)))
             out.append(c)
         return torch.cat(out)
 
