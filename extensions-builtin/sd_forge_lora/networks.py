@@ -25,7 +25,7 @@ setup_logger(logger)
 load_lora_state_dict = functools.partial(load_torch_file, safe_load=True)
 
 
-def process_anima(lora: dict[str, torch.Tensor], blocks: int):
+def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
     # LLMAdapter was moved from transformer to text_encoder
 
     keys = list(lora.keys())
@@ -35,23 +35,40 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int):
         elif k.startswith("lora_unet_llm_adapter"):
             lora[k.replace("lora_unet_llm_adapter", "lora_te_llm_adapter")] = lora.pop(k)
 
-    if blocks == 28:
-        return
-
     from modules_forge.packages.huggingface_guess.detection import count_blocks
 
-    if count_blocks(lora, "lora_unet_blocks_" + "{}") == blocks:
-        return
+    lora_blocks: int = count_blocks(lora, "lora_unet_blocks_" + "{}") or count_blocks(lora, "diffusion_model.blocks." + "{}")
 
-    logger.warning("Re-Mapping 28-Block Anima LoRA to 40-Block")
+    if lora_blocks == blocks:
+        return True
+
+    if lora_blocks > blocks:
+        logger.error(f"Cannot map larger Anima LoRA to smaller Anima Model ({lora_blocks} > {blocks})")
+        return False
 
     temp = lora.copy()
     keys = list(temp.keys())
 
-    MAPPING = [0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 22, 23, 24, 24, 25, 26, 27]
+    MAPPING_2_TO_29 = [0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 22, 23, 24, 24, 25, 26, 27]
+
+    MAPPING_2_TO_38 = [0, 1, 1, 1, 2, 3, 3, 3, 4, 5, 5, 5, 6, 7, 7, 7, 8, 9, 9, 9, 10, 11, 11, 11, 12, 13, 14, 14, 14, 15, 16, 16, 16, 17, 18, 18, 18, 19, 20, 20, 20, 21, 22, 22, 22, 23, 24, 24, 24, 25, 26, 27]
+
+    MAPPING_29_TO_38 = [0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 17, 17, 18, 19, 20, 20, 21, 22, 23, 23, 24, 25, 26, 26, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37, 38, 39]
+
+    if lora_blocks == 28 and blocks == 40:
+        mapping = MAPPING_2_TO_29
+    elif lora_blocks == 28 and blocks == 52:
+        mapping = MAPPING_2_TO_38
+    elif lora_blocks == 40 and blocks == 52:
+        mapping = MAPPING_29_TO_38
+    else:
+        logger.error(f"Failed to recognize LoRA ({lora_blocks}) to Model ({blocks}) Mapping")
+        return False
+
+    logger.warning(f"Re-Mapping Anima LoRA ({lora_blocks} to {blocks})")
 
     for i in range(blocks):
-        a = f"lora_unet_blocks_{MAPPING[i]}"
+        a = f"lora_unet_blocks_{mapping[i]}"
         b = f"lora_unet_blocks_{i}"
 
         for k in keys:
@@ -59,6 +76,7 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int):
                 lora[k.replace(a, b)] = temp[k].clone()
 
     del temp
+    return True
 
 
 def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, torch.Tensor], strength_model: float, strength_clip: float, filename: str = "default", online_mode: bool = False):
@@ -72,7 +90,8 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
     clip_keys = model_lora_keys_clip(clip.cond_stage_model) if clip is not None else {}
 
     if dynamic_args.anima:
-        process_anima(lora, len(model.model.diffusion_model.blocks))
+        if not process_anima(lora, len(model.model.diffusion_model.blocks)):
+            return
 
     lora_unmatch = lora
     lora_unet, lora_unmatch = load_lora(lora_unmatch, unet_keys)
