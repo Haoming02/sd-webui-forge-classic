@@ -88,6 +88,7 @@ if memory_management.ck_enabled():
 
         return q, k, v, mask, b, dim_head
 
+    @torch.compiler.disable
     def attention_comfy_kitchen_int8(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
         q, k, v, mask, b, dim_head = _comfy_kitchen_int8_inputs(q, k, v, heads, mask, skip_reshape, kwargs.get("enable_gqa", False))
         out = ck.int8_attention(q, k, v, scale=kwargs.get("scale", None), attn_mask=mask)
