@@ -39,6 +39,13 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
 
     lora_blocks: int = count_blocks(lora, "lora_unet_blocks_" + "{}") or count_blocks(lora, "diffusion_model.blocks." + "{}")
 
+    if lora_blocks < 28:
+        if blocks == 28:
+            return True
+        else:
+            logger.warning("Assuming LoRA is for 2B Model...")
+            lora_blocks = 28
+
     if lora_blocks == blocks:
         return True
 
@@ -66,10 +73,11 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
         return False
 
     logger.warning(f"Re-Mapping Anima LoRA ({lora_blocks} to {blocks})")
+    prefix = "lora_unet_blocks_" if any(k.startswith("lora_unet_blocks_") for k in keys) else "diffusion_model.blocks."
 
     for i in range(blocks):
-        a = f"lora_unet_blocks_{mapping[i]}"
-        b = f"lora_unet_blocks_{i}"
+        a = f"{prefix}{mapping[i]}"
+        b = f"{prefix}{i}"
 
         for k in keys:
             if a in k:
