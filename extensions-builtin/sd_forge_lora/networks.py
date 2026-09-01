@@ -91,15 +91,14 @@ def load_lora_for_models(model: "UnetPatcher", clip: "CLIP", lora: dict[str, tor
     if dynamic_args.nunchaku:
         model.model.diffusion_model.loras.append((filename, strength_model))
         return model, clip
+    if dynamic_args.anima:
+        if not process_anima(lora, len(model.model.diffusion_model.blocks)):
+            return model, clip
 
     model_flag: str = type(model.model).__name__ if model is not None else "default"
 
     unet_keys = model_lora_keys_unet(model.model) if model is not None else {}
     clip_keys = model_lora_keys_clip(clip.cond_stage_model) if clip is not None else {}
-
-    if dynamic_args.anima:
-        if not process_anima(lora, len(model.model.diffusion_model.blocks)):
-            return
 
     lora_unmatch = lora
     lora_unet, lora_unmatch = load_lora(lora_unmatch, unet_keys)
