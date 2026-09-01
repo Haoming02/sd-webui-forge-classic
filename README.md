@@ -22,7 +22,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Aug.]
+## Features [Sep.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -32,7 +32,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support **Krea 2 Identity Edit**
     - require specific [LoRA](https://civitai.com/models/2761113/krea-2-identity-edit)
     - enable in **Settings/Stable Diffusion**
-- [X] Support [Anima](https://huggingface.co/circlestone-labs/Anima)
+- [X] Support [Anima 2B](https://huggingface.co/circlestone-labs/Anima) / [Anima 2.9B](https://huggingface.co/Gazingstars123/Anima-2.9B) / [Anima 3.8B](https://huggingface.co/lylogummy/Anima-3.8B)
+    - automatically map LoRA for 2B to 2.9B and 3.8B
+    - `qwen35_4b` adapter requires [Extension](https://github.com/GumGum10/forge-anima-3.8B)
 - [X] Support **Anima Edit**
     - require specific [LoRA](https://civitai.com/models/2650553/anima-edit)
     - enable in **Settings/Stable Diffusion**
@@ -86,7 +88,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - `Neta-Lumina` / `NetaYume-Lumina`
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
 - [X] Support **MixedPrecision** Models
-    - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled` / `int8_convrot` / `convrot_w4a4`
+    - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled` / `int8_convrot` / `convrot_w4a4` / `asym_w4a8_int8`
 - [X] Support [Flux.2-Small-Decoder](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/blob/main/full_encoder_small_decoder.safetensors) & [Qwen2D VAE](https://huggingface.co/Anzhc/Qwen2D-VAE/blob/main/Qwen2D_VAE.safetensors)
 
 <br>
@@ -114,7 +116,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - drastically speed up installation
     - require **manually** installing [uv](https://github.com/astral-sh/uv/releases)
     - see [Commandline](#by-neo)
-- [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), `fp16_accumulation`, `torch._scaled_mm`
+- [X] Support [SageAttention](https://github.com/thu-ml/SageAttention), [FlashAttention](https://github.com/Dao-AILab/flash-attention), [ComfyKitchenAttention](https://github.com/Comfy-Org/comfy-kitchen), `fp16_accumulation`, `torch._scaled_mm`
     - see [Commandline](#by-neo)
 - [X] Implement [Radial Attention](https://github.com/mit-han-lab/radial-attention)
     - speed up `Wan 2.2`
@@ -317,6 +319,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - will also attempt to install `triton` automatically
 - `--flash`: Install the `flash_attn` package to speed up generation
 - `--nunchaku`: Install the `nunchaku` package to inference SVDQ models
+
+> [!Warning]
+> Using `nunchaku` will fall back to older version of PyTorch
+
 - `--onnxruntime-gpu`: Install the `onnxruntime` with the latest GPU support
 
 <br>
@@ -331,6 +337,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
+- `--use-ck-attention`: Use the Comfy-Kitchen attention to speed up generation
+    - override other attention packages
 - `--enable-triton-backend`: Enable the use of Triton backend in `comfy-kitchen`
     - *might* speed up inference
 
