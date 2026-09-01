@@ -44,7 +44,7 @@ class Flux2(ForgeDiffusionEngine):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
 
         if not prompt.is_negative_prompt:
-            if opts.klein_no_reference:
+            if not opts.klein_do_reference:
                 dynamic_args.ref_latents.clear()
             else:
                 _references = [*self.ref_latents]
@@ -64,7 +64,7 @@ class Flux2(ForgeDiffusionEngine):
     def encode_first_stage(self, x: torch.Tensor):
         samples: torch.Tensor = super().encode_first_stage(x)
 
-        if not opts.klein_no_reference:
+        if opts.klein_do_reference:
             sample = samples[0].detach().clone().unsqueeze(0).cpu()
             if dynamic_args.is_referencing:
                 self.ref_latents.append(sample)
