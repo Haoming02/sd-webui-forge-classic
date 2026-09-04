@@ -480,6 +480,7 @@ options_templates.update(
             "add_version_to_infotext": OptionInfo(True, "Add webui version to infotext"),
             "disable_weights_auto_swap": OptionInfo(True, "Ignore the Checkpoint when reading infotext"),
             "disable_modules_auto_swap": OptionInfo(True, "Ignore the VAE / Text Encoder when reading infotext"),
+            "strip_whitespaces": OptionInfo(True, "Remove leading and trailing whitespaces from the prompts"),
             "infotext_skip_pasting": OptionInfo([], "Ignore fields when reading infotext", ui_components.DropdownMulti, lambda: {"choices": shared_items.get_infotext_names()}),
             "infotext_styles": OptionInfo("Apply if any", "Infer Styles when reading infotext", gr.Radio, {"choices": ("Ignore", "Apply", "Apply if any", "Discard")}).html("""
 <ul style='margin-left: 1.5em'>
