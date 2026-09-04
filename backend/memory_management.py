@@ -195,14 +195,14 @@ try:
 except Exception:
     pass
 
-OOM_EXCEPTION = getattr(torch, "OutOfMemoryError", Exception)
-ACCELERATOR_ERROR = getattr(torch, "AcceleratorError", RuntimeError)
+OOM_EXCEPTION = getattr(torch, "OutOfMemoryError", None)
+ACCELERATOR_ERROR = getattr(torch, "AcceleratorError", None)
 
 
 def is_oom(e: Exception) -> bool:
-    if isinstance(e, OOM_EXCEPTION):
+    if OOM_EXCEPTION is not None and isinstance(e, OOM_EXCEPTION):
         return True
-    if isinstance(e, ACCELERATOR_ERROR) or "out of memory" in str(e).lower():
+    if (ACCELERATOR_ERROR is not None and isinstance(e, ACCELERATOR_ERROR)) or "out of memory" in str(e).lower():
         discard_cuda_async_error()
         return True
     return False
