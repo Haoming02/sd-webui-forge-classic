@@ -52,8 +52,8 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
 
         self.taginfo: gr.HighlightedText = None
         self.edit_activation_text: gr.Textbox = None
-        self.slider_preferred_weight: gr.Slider = None
-        self.edit_notes: gr.Textbox = None
+        self.slider_preferred_weight: gr.Textbox = None
+        self.edit_notes: gr.TextArea = None
 
     def save_lora_user_metadata(self, name, desc, sd_version, activation_text, preferred_weight, negative_text, notes):
         user_metadata = self.get_user_metadata(name)
