@@ -17,7 +17,7 @@ lora_ctl = re.compile(r"<lora:([^\:\>]+):\[([^\]\>]+)\]>")
 
 
 class LoRAControl(scripts.Script):
-    mapping: dict[str, list[float]] = {}
+    mapping: dict[str, list[tuple[float, float]]] = {}
 
     def title(self):
         return "LoRA Control Integrated"
@@ -27,6 +27,10 @@ class LoRAControl(scripts.Script):
 
     def ui(self, is_img2img):
         return None
+
+    @staticmethod
+    def _parse_schedule(syntax: str) -> list[tuple[float, float]]:
+        return [tuple(map(float, chunk.split("@"))) for chunk in syntax.split(",")]
 
     def before_process(self, p: StableDiffusionProcessing):
         self.mapping.clear()
@@ -40,13 +44,13 @@ class LoRAControl(scripts.Script):
 
             alias: str = m.group(1)
             lora: str = available_network_aliases[alias].filename
-            schedule: list[float] = [float(val) for val in m.group(2).split(":")]
 
-            if len(schedule) not in (2, 3):
-                logger.error(f'Invalid Syntax for "{alias}"\nOnly "[start:end]" or "[from:to:when]" are supported')
+            try:
+                self.mapping[lora] = self._parse_schedule(m.group(2))
+                assert len(self.mapping[lora]) > 1
+            except Exception:
+                logger.error(f'Invalid Syntax for "{alias}": "{m.group(2)}"')
                 continue
-
-            self.mapping[lora] = schedule + [None] * (3 - len(schedule))
 
         if ctl and not dynamic_args.online_lora:
             logger.error("LoRA Control requires on-the-fly Patching")
@@ -57,24 +61,31 @@ class LoRAControl(scripts.Script):
         if not cls.mapping:
             return
 
-        t: float = params.sampling_step / params.total_sampling_steps
-
         m: ModelPatcher = shared.sd_model.forge_objects.unet
         assert m.has_online_lora()
 
-        patches: list[list[OnlineLoRAPatch]] = list(m.weight_wrapper_patches.values())
+        patches: list[list[OnlineLoRAPatch]] = m.weight_wrapper_patches.values()
+        t: float = params.sampling_step / params.total_sampling_steps
+
         for loras in patches:
             for lora in loras:
-                for name, (from_, to_, switch_) in cls.mapping.items():
+                for name, schedule in cls.mapping.items():
                     if lora.name != name:
                         continue
 
-                    if switch_ is None:
-                        lora.patch[0][0] = (1 - t) * from_ + t * to_
-                    elif switch_ < 1.0:
-                        lora.patch[0][0] = from_ if t < switch_ else to_
+                    if schedule[-1][1] <= t:
+                        w = schedule[-1][0]
                     else:
-                        lora.patch[0][0] = from_ if params.sampling_step < switch_ else to_
+                        for i in range(len(schedule) - 1):
+                            w1, t1 = schedule[i]
+                            w2, t2 = schedule[i + 1]
+
+                            if t1 <= t < t2:
+                                ratio = (t - t1) / (t2 - t1)
+                                w = w1 + (w2 - w1) * ratio
+                                break
+
+                    lora.patch[0][0] = w
 
 
 on_cfg_denoiser(LoRAControl.adjust_lora)
