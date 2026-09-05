@@ -49,7 +49,7 @@ class UserMetadataEditor:
         with gr.Row():
             with gr.Column(scale=2):
                 self.edit_name = gr.HTML(elem_classes="extra-network-name")
-                self.edit_description = gr.Textbox(label="Description", lines=4)
+                self.edit_description = gr.Textbox(label="Description", lines=1, max_lines=4)
                 self.html_filedata = gr.HTML()
 
                 self.create_extra_default_items_in_left_column()

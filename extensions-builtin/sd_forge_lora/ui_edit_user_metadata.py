@@ -57,12 +57,16 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
 
     def save_lora_user_metadata(self, name, desc, sd_version, activation_text, preferred_weight, negative_text, notes):
         user_metadata = self.get_user_metadata(name)
-        user_metadata["description"] = desc
-        user_metadata["sd version"] = sd_version
-        user_metadata["activation text"] = activation_text
-        user_metadata["preferred weight"] = preferred_weight
-        user_metadata["negative text"] = negative_text
-        user_metadata["notes"] = notes
+        user_metadata.update(
+            {
+                "description": str(desc),
+                "sd version": str(sd_version),
+                "activation text": str(activation_text),
+                "preferred weight": float(preferred_weight),
+                "negative text": str(negative_text),
+                "notes": str(notes),
+            }
+        )
 
         self.write_user_metadata(name, user_metadata)
 
@@ -126,12 +130,12 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
         return [
             *values[0:5],
             item.get("sd_version", "Unknown"),
-            gr.update(value=gradio_tags, visible=True if tags else False),
-            user_metadata.get("activation text", ""),
-            float(user_metadata.get("preferred weight", 0.0)),
-            user_metadata.get("negative text", ""),
-            gr.update(visible=True if tags else False),
-            gr.update(value=self.generate_random_prompt_from_tags(tags), visible=True if tags else False),
+            gr.update(value=gradio_tags, visible=bool(tags)),
+            str(user_metadata.get("activation text", "")),
+            str(user_metadata.get("preferred weight", 0.0)),
+            str(user_metadata.get("negative text", "")),
+            gr.update(visible=bool(tags)),
+            gr.update(value=self.generate_random_prompt_from_tags(tags), visible=bool(tags)),
         ]
 
     def generate_random_prompt(self, name):
@@ -164,18 +168,16 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
     def create_editor(self):
         self.create_default_editor_elems()
 
-        self.taginfo = gr.HighlightedText(label="Training dataset tags")
-        self.edit_activation_text = gr.Text(label="Activation text", info="Will be added to prompt along with Lora")
-        self.slider_preferred_weight = gr.Slider(label="Preferred weight", info="Set to 0 to disable", minimum=0.0, maximum=2.0, step=0.01)
-        self.edit_negative_text = gr.Text(label="Negative prompt", info="Will be added to negative prompts")
+        self.taginfo = gr.HighlightedText(label="Training Dataset Tags")
+        self.edit_activation_text = gr.Textbox(label="Activation Text", info="append to positive prompt along with Lora", lines=1, max_lines=2)
+        self.slider_preferred_weight = gr.Textbox(label="Preferred Weight", info='set to 0 to use "Default Weight for Extra Networks" in Settings', lines=1, max_lines=1)
+        self.edit_negative_text = gr.Textbox(label="Negative Prompt", info="append to negative prompt", lines=1, max_lines=2)
+
         with gr.Row() as row_random_prompt:
-            with gr.Column(scale=8):
-                random_prompt = gr.Textbox(label="Random prompt", lines=4, max_lines=4, interactive=False)
+            random_prompt = gr.Textbox(label="Random Prompt", lines=4, max_lines=4, interactive=False, scale=9)
+            generate_random_prompt = gr.Button("Generate", size="lg", scale=1)
 
-            with gr.Column(scale=1, min_width=120):
-                generate_random_prompt = gr.Button("Generate", size="lg", scale=1)
-
-        self.edit_notes = gr.TextArea(label="Notes", lines=4)
+        self.edit_notes = gr.TextArea(label="Notes", lines=1, max_lines=4)
 
         generate_random_prompt.click(fn=self.generate_random_prompt, inputs=[self.edit_name_input], outputs=[random_prompt], show_progress=False)
 
@@ -187,7 +189,7 @@ class LoraUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataEditor)
                 words = [x for x in words if x != tag and x.strip()]
                 return ", ".join(words)
 
-            return activation_text + ", " + tag if activation_text else tag
+            return (activation_text + ", " + tag) if activation_text else tag
 
         self.taginfo.select(fn=select_tag, inputs=[self.edit_activation_text], outputs=[self.edit_activation_text], show_progress=False)
 
