@@ -400,6 +400,20 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
+#### Legacy NVIDIA GPUs *(GTX 10xx / GTX 9xx / Titan V)*
+
+Maxwell, Pascal and Volta GPUs *(compute capability < 7.5)* are **not** supported by the CUDA 13 builds of PyTorch. On these cards, the launcher now detects the GPU *(via `nvidia-smi`)* and automatically installs the CUDA 12.6 build *(`torch==2.10.0+cu126`)* instead. `xformers`, `SageAttention` and `FlashAttention` are not available for these GPUs; the default PyTorch attention *(memory-efficient kernel)* is used.
+
+A few things to keep in mind on these cards:
+
+- **Use quantized weights:** for large models *(**Flux**, **Z-Image**, **Qwen-Image**)*, prefer `GGUF` *(`Q4_K_M` / `Q5_K_M`)* or `fp8` checkpoints; the `bnb-nf4` checkpoints from the original Forge are not supported anymore.
+- **VRAM used by other applications:** on Windows, the driver does not report the VRAM used by other processes *(browsers, desktop, etc.)* to CUDA; the WebUI now queries the driver directly *(**NVML**)* and takes it into account, otherwise the GPU gets oversubscribed and the driver starts paging VRAM to the system memory *(the speed drops by ~10x without any error)*. Closing GPU-hungry applications before generating helps on a 8 GB card.
+- **Reserve VRAM manually if needed:** lower **GPU Weights** in the *Settings*, or launch with **e.g.** `--reserve-vram 2`, to leave more room for the computation. This is the equivalent of the *GPU Weights* slider from the original Forge.
+- **Swapping:** `--cuda-stream` and `--pin-shared-memory` speed up the weight swapping from RAM; `--lowvram` is available as a last resort.
+- **Precision:** these GPUs have no `bf16` support; models that do not allow `fp16` are computed in `fp32`, so expect up to **2x** the activation memory compared to a modern GPU in that case. `fp16` matrix multiplications *(**Flux**, **Z-Image** `GGUF`)* run at the `fp32` speed via cuBLAS.
+
+<br>
+
 ## Attention Functions
 
 > [!Important]
