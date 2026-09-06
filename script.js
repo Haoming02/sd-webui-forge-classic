@@ -142,51 +142,63 @@ document.addEventListener("DOMContentLoaded", function () {
 // - Esc to interrupt a generation
 
 document.addEventListener("keydown", function (e) {
-    const isEnter = e.key === "Enter" || e.code === "Enter";
+    const isEnter = e.key === "Enter";
     const isCtrlKey = e.metaKey || e.ctrlKey;
     const isAltKey = e.altKey;
     const isEsc = e.key === "Escape";
 
-    const generateButton = get_uiCurrentTabContent().querySelector("button[id$=_generate]");
-    const interruptButton = get_uiCurrentTabContent().querySelector("button[id$=_interrupt]");
-    const skipButton = get_uiCurrentTabContent().querySelector("button[id$=_skip]");
+    if (!((isCtrlKey && isEnter) || (isAltKey && isEnter) || isEsc)) return;
+
+    const tabContent = get_uiCurrentTabContent();
+    const generateButton = tabContent.querySelector("button[id$=_generate]");
+    const interruptButton = tabContent.querySelector("button[id$=_interrupt]");
+    const skipButton = tabContent.querySelector("button[id$=_skip]");
 
     if (isCtrlKey && isEnter) {
         e.preventDefault();
+
         if (interruptButton.style.display === "block") {
             interruptButton.click();
             if (opts.ctrl_enter_interrupt) return;
-            const callback = (mutationList) => {
+
+            if (window._interruptObserver) window._interruptObserver.disconnect();
+            window._interruptObserver = new MutationObserver((mutationList, observer) => {
                 for (const mutation of mutationList) {
                     if (mutation.type === "attributes" && mutation.attributeName === "style") {
                         if (interruptButton.style.display === "none") {
                             generateButton.click();
                             observer.disconnect();
+                            window._interruptObserver = null;
+                            break;
                         }
                     }
                 }
-            };
-            const observer = new MutationObserver(callback);
-            observer.observe(interruptButton, { attributes: true });
+            });
+
+            window._interruptObserver.observe(interruptButton, { attributes: true });
         } else {
             generateButton.click();
         }
+
+        return;
     }
 
     if (isAltKey && isEnter) {
-        skipButton.click();
         e.preventDefault();
+        skipButton.click();
+        return;
     }
 
     if (isEsc) {
         const globalPopup = document.querySelector(".global-popup");
         const lightboxModal = document.querySelector("#lightboxModal");
-        if (!globalPopup || globalPopup.style.display === "none") {
-            if (document.activeElement === lightboxModal) return;
-            if (interruptButton.style.display === "block") {
-                interruptButton.click();
-                e.preventDefault();
-            }
+
+        const isPopupActive = globalPopup && globalPopup.style.display !== "none";
+        const isLightboxFocused = document.activeElement === lightboxModal;
+
+        if (!isPopupActive && !isLightboxFocused && isInterruptVisible) {
+            e.preventDefault();
+            interruptButton.click();
         }
     }
 });
