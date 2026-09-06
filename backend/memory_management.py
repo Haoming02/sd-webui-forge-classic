@@ -20,7 +20,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import gc
-import importlib
 import logging
 import os
 import platform
@@ -240,6 +239,20 @@ else:
         FLASH_IS_AVAILABLE = False
     else:
         FLASH_IS_AVAILABLE = True
+
+
+if not args.pynvml:
+    PYNVML_IS_AVAILABLE = False
+else:
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+    except Exception:
+        PYNVML_IS_AVAILABLE = False
+    else:
+        PYNVML_IS_AVAILABLE = True
 
 
 def amd_min_version(device: torch.device = None, min_rdna_version: int = 0) -> bool:
@@ -1126,6 +1139,12 @@ def get_free_memory(dev: torch.device = None, torch_free_too: bool = False) -> i
             mem_free_cuda, _ = torch.cuda.mem_get_info(dev)
             mem_free_torch = mem_reserved - mem_active
             mem_free_total = mem_free_cuda + mem_free_torch
+
+            if PYNVML_IS_AVAILABLE:
+                nvml_mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                torch_reserved = torch.cuda.memory_reserved(dev)
+                external = nvml_mem.used - torch_reserved
+                mem_free_total -= external
 
     if torch_free_too:
         return (mem_free_total, mem_free_torch)

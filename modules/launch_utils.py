@@ -287,6 +287,7 @@ def prepare_environment():
     torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
     torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.13.0+cu130 torchvision==0.28.0+cu130 --extra-index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
+    pynvml_package = os.environ.get("PYNVML_PACKAGE", "nvidia-ml-py==13.610.43")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.2")
     gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_rangeslider==0.0.8")
@@ -395,6 +396,10 @@ assert cuda or xpu or mps
             print("Failed to install nunchaku; Please manually install it")
         else:
             startup_timer.record("install nunchaku")
+
+    if args.pynvml and not is_installed("pynvml"):
+        run_pip(f"install {pynvml_package}", "pynvml")
+        startup_timer.record("install pynvml")
 
     if args.ngrok and not is_installed("ngrok"):
         run_pip("install ngrok", "ngrok")
