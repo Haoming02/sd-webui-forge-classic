@@ -19,6 +19,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+import ctypes
 import gc
 import importlib
 import logging
@@ -155,6 +156,81 @@ def get_torch_device() -> torch.device:
             return torch.device(torch.cuda.current_device())
 
 
+# region NVML
+
+_NVML = None  # ctypes handle to the NVML library ; False when unavailable
+_NVML_DEVICE_HANDLES: dict[int, ctypes.c_void_p] = {}
+
+
+class _NVMLMemory(ctypes.Structure):
+    _fields_ = [("total", ctypes.c_ulonglong), ("free", ctypes.c_ulonglong), ("used", ctypes.c_ulonglong)]
+
+
+def _nvml_library():
+    """Load NVML (shipped with the NVIDIA driver) via ctypes ; no Python dependency required"""
+    global _NVML
+    if _NVML is None:
+        _NVML = False
+        if is_nvidia():
+            names = ("nvml.dll",) if platform.system() == "Windows" else ("libnvidia-ml.so.1", "libnvidia-ml.so")
+            for name in names:
+                try:
+                    lib = ctypes.CDLL(name)
+                    if lib.nvmlInit_v2() == 0:
+                        _NVML = lib
+                        break
+                except (OSError, AttributeError):
+                    continue
+            if _NVML is False:
+                logger.debug("NVML is not available ; free VRAM is estimated by CUDA only")
+    return _NVML
+
+
+def _nvml_device_handle(dev: torch.device):
+    lib = _nvml_library()
+    if not lib:
+        return None
+
+    index = dev.index if dev.index is not None else torch.cuda.current_device()
+    if index not in _NVML_DEVICE_HANDLES:
+        handle = ctypes.c_void_p()
+        props = torch.cuda.get_device_properties(index)
+        found = False
+
+        # match the device by PCI bus id, as the NVML and CUDA device indices are not necessarily the same
+        if all(hasattr(props, attr) for attr in ("pci_domain_id", "pci_bus_id", "pci_device_id")):
+            bus_id = "{:08x}:{:02x}:{:02x}.0".format(props.pci_domain_id, props.pci_bus_id, props.pci_device_id)
+            found = lib.nvmlDeviceGetHandleByPciBusId_v2(bus_id.encode(), ctypes.byref(handle)) == 0
+        if not found:
+            found = lib.nvmlDeviceGetHandleByIndex_v2(index, ctypes.byref(handle)) == 0
+
+        _NVML_DEVICE_HANDLES[index] = handle if found else None
+    return _NVML_DEVICE_HANDLES[index]
+
+
+def nvml_free_memory(dev: torch.device) -> int | None:
+    """
+    Free VRAM as seen by the driver, accounting for **all** processes
+
+    On Windows (WDDM), `cudaMemGetInfo` does not account for the VRAM used by other processes
+    (browsers, the desktop, etc.), since the driver can evict their allocations; but once the GPU is
+    oversubscribed, the driver starts paging VRAM to the system memory and the speed drops by ~10x.
+    """
+    try:
+        handle = _nvml_device_handle(dev)
+        if handle is None:
+            return None
+        info = _NVMLMemory()
+        if _NVML.nvmlDeviceGetMemoryInfo(handle, ctypes.byref(info)) != 0:
+            return None
+        return int(info.free)
+    except Exception:
+        return None
+
+
+# endregion
+
+
 def get_total_memory(dev: torch.device = None, torch_total_too: bool = False):
     dev = dev or get_torch_device()
 
@@ -187,6 +263,13 @@ def get_total_memory(dev: torch.device = None, torch_total_too: bool = False):
 total_vram = get_total_memory(get_torch_device()) / (1024 * 1024)
 total_ram = psutil.virtual_memory().total / (1024 * 1024)
 logger.info("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
+
+if is_nvidia():
+    _free_nvml = nvml_free_memory(get_torch_device())
+    if _free_nvml is not None:
+        _free_cuda, _ = torch.cuda.mem_get_info(get_torch_device())
+        if (_free_cuda - _free_nvml) > 256 * 1024 * 1024:
+            logger.info("VRAM used by other processes: {:0.0f} MB (not reported by CUDA ; taken into account)".format((_free_cuda - _free_nvml) / (1024 * 1024)))
 
 try:
     logger.info("PyTorch Version: {}".format(torch_version))
@@ -1124,6 +1207,8 @@ def get_free_memory(dev: torch.device = None, torch_free_too: bool = False) -> i
             mem_active = stats["active_bytes.all.current"]
             mem_reserved = stats["reserved_bytes.all.current"]
             mem_free_cuda, _ = torch.cuda.mem_get_info(dev)
+            if (mem_free_nvml := nvml_free_memory(dev)) is not None:
+                mem_free_cuda = min(mem_free_cuda, mem_free_nvml)
             mem_free_torch = mem_reserved - mem_active
             mem_free_total = mem_free_cuda + mem_free_torch
 
