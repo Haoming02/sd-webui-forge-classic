@@ -106,7 +106,10 @@ def check_versions():
     outdated: list[str] = []
 
     if version.parse(torch.__version__) < version.parse(expected_torch):
-        outdated.append(f"You are running PyTorch {torch.__version__}, which is outdated.")
+        # Maxwell / Pascal / Volta (compute capability < 7.5) require the older CUDA 12.6 build of PyTorch
+        legacy_gpu = torch.cuda.is_available() and torch.cuda.get_device_capability() < (7, 5)
+        if not (legacy_gpu and "+cu126" in torch.__version__):
+            outdated.append(f"You are running PyTorch {torch.__version__}, which is outdated.")
 
     if shared.xformers_available:
         import xformers

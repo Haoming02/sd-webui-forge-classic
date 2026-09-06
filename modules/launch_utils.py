@@ -283,9 +283,43 @@ def requirements_met(requirements_file):
     return True
 
 
+def _nvidia_compute_capability() -> tuple[int, int] | None:
+    """Query the compute capability of the first NVIDIA GPU via `nvidia-smi`; returns None if unavailable"""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    caps = []
+    for line in result.stdout.splitlines():
+        m = re.match(r"\s*(\d+)\.(\d+)", line)
+        if m is not None:
+            caps.append((int(m.group(1)), int(m.group(2))))
+    return min(caps) if caps else None
+
+
+def _is_legacy_nvidia_gpu() -> bool:
+    """Maxwell / Pascal / Volta (compute capability < 7.5) are not supported by the CUDA 13 (`cu130`) builds of PyTorch"""
+    cap = _nvidia_compute_capability()
+    return cap is not None and cap < (7, 5)
+
+
 def prepare_environment():
-    torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.13.0+cu130 torchvision==0.28.0+cu130 --extra-index-url {torch_index_url}")
+    if "TORCH_COMMAND" not in os.environ and "TORCH_INDEX_URL" not in os.environ and _is_legacy_nvidia_gpu():
+        # PyTorch >= 2.8 only ships Maxwell / Pascal / Volta kernels in the `cu126` wheels
+        # https://github.com/pytorch/pytorch/issues/157517
+        print("Legacy NVIDIA GPU detected (compute capability < 7.5): using the CUDA 12.6 build of PyTorch")
+        torch_index_url = "https://download.pytorch.org/whl/cu126"
+        torch_command = f"pip install torch==2.10.0+cu126 torchvision==0.25.0+cu126 --extra-index-url {torch_index_url}"
+    else:
+        torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
+        torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.13.0+cu130 torchvision==0.28.0+cu130 --extra-index-url {torch_index_url}")
     xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.2")
@@ -325,12 +359,25 @@ cuda = hasattr(torch, "cuda") and torch.cuda.is_available()
 xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
 mps = hasattr(torch, "mps") and torch.mps.is_available()
 assert cuda or xpu or mps
+if cuda:
+    # a build of PyTorch without kernels for this GPU still reports `cuda.is_available()`,
+    # but fails on the very first operation with "no kernel image is available"
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        (torch.ones(1, device="cuda") * 2).cpu()
         """
 
         success, err = check_run_python(TORCH_CHECK, return_error=True)
         if not success:
             if "older driver" in str(err).lower():
                 raise SystemError("Please update your GPU driver or manually install older version of PyTorch")
+            if "no kernel image" in str(err).lower():
+                raise SystemError(
+                    "The installed build of PyTorch does not support this GPU (Maxwell / Pascal / Volta are not supported by the CUDA 13 builds)\n"
+                    'Set "TORCH_COMMAND=pip install torch==2.10.0+cu126 torchvision==0.25.0+cu126 --extra-index-url https://download.pytorch.org/whl/cu126" '
+                    "and launch with --reinstall-torch"
+                )
             raise RuntimeError("PyTorch is not able to access any compute device (GPU)")
         startup_timer.record("torch GPU test")
 
