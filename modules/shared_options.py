@@ -388,6 +388,7 @@ options_templates.update(
             "keyedit_delimiters": OptionInfo(r".,\/!?%^*;:{}=`~() ", "RegEx Delimiters when editing the prompt with Ctrl + Up/Down"),
             "keyedit_delimiters_whitespace": OptionInfo(["Tab", "Carriage Return", "Line Feed"], "Whitespace Delimiters when editing the prompt with Ctrl + Up/Down", gr.CheckboxGroup, {"choices": ("Tab", "Carriage Return", "Line Feed")}),
             "keyedit_move": OptionInfo(True, "Alt + Left/Right moves prompt chunks"),
+            "prompt_debounce": OptionInfo(0, "Delay before a prompt edit is sent to Gradio", gr.Slider, {"minimum": 0, "maximum": 500, "step": 50}).info("in ms ; <b>0</b> to disable ; smoother typing, but extensions reacting to the prompt input are notified after the pause").needs_reload_ui(),
             "disable_token_counters": OptionInfo(False, "Disable Token Counter"),
             "include_styles_into_token_counters": OptionInfo(True, "Include enabled Styles in Token Count"),
         },
