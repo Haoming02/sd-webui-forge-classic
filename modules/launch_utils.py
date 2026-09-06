@@ -332,6 +332,8 @@ assert cuda or xpu or mps
         if not success:
             if "older driver" in str(err).lower():
                 raise SystemError("Please update your GPU driver or manually install older version of PyTorch")
+            if "no kernel image" in str(err).lower():
+                raise SystemError("Please manually install older version of PyTorch")
             raise RuntimeError("PyTorch is not able to access any compute device (GPU)")
         startup_timer.record("torch GPU test")
 

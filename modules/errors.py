@@ -97,10 +97,11 @@ def check_versions():
     import torch
     from packaging import version
 
-    from modules import shared
+    if torch.cuda.is_available() and torch.cuda.get_device_properties().major < 8:
+        expected_torch = "2.10.0"
+    else:
+        expected_torch = "2.13.0"
 
-    expected_torch = "2.11.0"
-    expected_xformers = "0.0.35"
     expected_gradio = "4.40.0"
 
     outdated: list[str] = []
@@ -108,15 +109,8 @@ def check_versions():
     if version.parse(torch.__version__) < version.parse(expected_torch):
         outdated.append(f"You are running PyTorch {torch.__version__}, which is outdated.")
 
-    if shared.xformers_available:
-        import xformers
-
-        if version.parse(xformers.__version__) < version.parse(expected_xformers):
-            outdated.append(f"You are running xformers {xformers.__version__}, which is outdated.")
-
     if version.parse(gradio.__version__) != version.parse(expected_gradio):
-        outdated.append(f"You are running Gradio {gradio.__version__}. This program was built on Gradio {expected_gradio}.")
-        outdated.append("Using a different version of Gradio is likely to break some functionalities.")
+        outdated.append(f"You are running Gradio {gradio.__version__}, while this program was built on Gradio {expected_gradio}.")
 
     if not outdated:
         return
