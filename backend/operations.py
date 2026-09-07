@@ -391,6 +391,45 @@ class ForgeOperations:
 
 
 from backend.operations_gguf import dequantize_tensor
+from backend.operations_nf4 import dequantize_nf4, load_nf4_parameter
+
+
+class ForgeOperationsNF4(ForgeOperations):
+    class Linear(torch.nn.Module, ForgeWeights):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+            self.dummy = {"device": current_device, "dtype": current_dtype}
+            self.weight = None
+            self.bias = None
+
+        def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+            if hasattr(self, "dummy"):
+                computation_dtype = self.dummy["dtype"]
+
+                if (weight := load_nf4_parameter(state_dict, prefix + "weight", self.dummy["device"], computation_dtype)) is not None:
+                    self.weight = weight
+                elif prefix + "weight" in state_dict:
+                    self.weight = utils.tensor2parameter(state_dict[prefix + "weight"].to(device=self.dummy["device"], dtype=computation_dtype))
+                if prefix + "bias" in state_dict:
+                    self.bias = utils.tensor2parameter(state_dict[prefix + "bias"].to(device=self.dummy["device"], dtype=computation_dtype))
+
+                del self.dummy
+            else:
+                if prefix + "weight" in state_dict:
+                    self.weight = state_dict[prefix + "weight"]
+                if prefix + "bias" in state_dict:
+                    self.bias = state_dict[prefix + "bias"]
+
+        def _apply(self, fn, recurse=True):
+            for k, p in self.named_parameters(recurse=False, remove_duplicate=True):
+                setattr(self, k, utils.tensor2parameter(fn(p)))
+            return self
+
+        def forward(self, x):
+            # cast the bias per call instead of replacing it: the memory manager may have pinned it
+            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_nf4)
+            with main_stream_worker(weight, bias, signal):
+                return torch.nn.functional.linear(x, weight, bias)
 
 
 class ForgeOperationsGGUF(ForgeOperations):
@@ -664,6 +703,8 @@ def using_forge_operations(operations=None, device=None, dtype=None, manual_cast
     if operations is None:
         if extra_dtype in ["gguf"]:
             operations = ForgeOperationsGGUF
+        elif extra_dtype in ["nf4", "fp4"]:
+            operations = ForgeOperationsNF4
         elif extra_dtype in ["vae"] and args.tiled_conv2d:
             memory_management.logger.info(f"Using TiledOperations ({args.tiled_conv2d}) for VAE")
             operations = TiledOperations

@@ -1,6 +1,7 @@
 import json
 import math
 import os.path
+import struct
 
 import safetensors
 import torch
@@ -58,6 +59,48 @@ def read_arbitrary_config(directory: os.PathLike) -> dict:
     return config_data
 
 
+SAFETENSORS_DTYPES = {
+    "F64": torch.float64,
+    "F32": torch.float32,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "F8_E4M3": torch.float8_e4m3fn,
+    "F8_E5M2": torch.float8_e5m2,
+    "I64": torch.int64,
+    "I32": torch.int32,
+    "I16": torch.int16,
+    "I8": torch.int8,
+    "U8": torch.uint8,
+    "BOOL": torch.bool,
+}
+
+
+def read_safetensors(ckpt: str, device: torch.device) -> tuple[dict[str, torch.Tensor], dict | None]:
+    with open(ckpt, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        header: dict = json.loads(f.read(n))
+        metadata = header.pop("__metadata__", None)
+
+        sd = {}
+        for k, h in sorted(header.items(), key=lambda kv: kv[1]["data_offsets"][0]):
+            start, end = h["data_offsets"]
+            dtype = SAFETENSORS_DTYPES[h["dtype"]]
+            if end > start:
+                f.seek(8 + n + start)
+                tensor = torch.frombuffer(bytearray(f.read(end - start)), dtype=torch.uint8).view(dtype).reshape(h["shape"])
+            else:
+                tensor = torch.empty(h["shape"], dtype=dtype)
+            sd[k] = tensor if device.type == "cpu" else tensor.to(device)
+
+    return sd, metadata
+
+
+def is_4bit_safetensors(ckpt: str) -> bool:
+    with open(ckpt, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        return b"bitsandbytes__nf4" in (head := f.read(n)) or b"bitsandbytes__fp4" in head
+
+
 def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=False) -> dict[str, torch.Tensor]:
     """https://github.com/Comfy-Org/ComfyUI/blob/v0.10.0/comfy/utils.py#L59"""
 
@@ -66,15 +109,22 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
 
     if ckpt.lower().endswith((".safetensors", ".sft")):
         try:
-            with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:
-                sd = {}
-                for k in f.keys():
-                    tensor = f.get_tensor(k)
-                    if DISABLE_MMAP:
-                        tensor = tensor.to(device=device, copy=True)
-                    sd[k] = tensor
-                if return_metadata:
-                    metadata = f.metadata()
+            if is_4bit_safetensors(ckpt):
+                # the packed weights get repacked into new buffers anyway; the copy-on-write mapping
+                # of a 12 GB file would only double the commit charge, and the offload fails on Windows
+                sd, metadata = read_safetensors(ckpt, device)
+                if not return_metadata:
+                    metadata = None
+            else:
+                with safetensors.safe_open(ckpt, framework="pt", device=device.type) as f:
+                    sd = {}
+                    for k in f.keys():
+                        tensor = f.get_tensor(k)
+                        if DISABLE_MMAP:
+                            tensor = tensor.to(device=device, copy=True)
+                        sd[k] = tensor
+                    if return_metadata:
+                        metadata = f.metadata()
         except Exception:
             raise ValueError(f'\nModel "{ckpt}" is corrupt or invalid...\nPlease download the model again\n') from None
 
@@ -178,6 +228,11 @@ def calculate_parameters(sd: dict[str, torch.Tensor], prefix: str = "") -> int:
 def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype | str:
     if any(hasattr(v, "gguf_cls") for v in sd.values()):
         return "gguf"
+    for k in sd:
+        if "bitsandbytes__nf4" in k:
+            return "nf4"
+        if "bitsandbytes__fp4" in k:
+            return "fp4"
 
     dtypes: dict[torch.dtype, int] = {}
     for k in sd.keys():

@@ -29,6 +29,7 @@ from backend.diffusion_engine.wan import Wan
 from backend.diffusion_engine.zimage import ZImage
 from backend.logging import setup_logger
 from backend.operations import using_forge_operations
+from backend.operations_nf4 import with_4bit_shapes
 from backend.state_dict import (
     convert_quantization,
     detect_quantization,
@@ -443,6 +444,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 logger.info(f"Using Detected Model Data Type: {_log}")
                 if state_dict_dtype == "gguf":
                     beautiful_print_gguf_state_dict_statics(state_dict)
+                elif state_dict_dtype in ["nf4", "fp4"] and not backend.args.dynamic_args.online_lora:
+                    logger.warning(f"{state_dict_dtype} requires fp16 LoRA ; overriding option")
+                    backend.args.dynamic_args.online_lora = True
             else:
                 if override_dtype is not None:
                     storage_dtype = override_dtype
@@ -801,7 +805,7 @@ def _load_unet(path: os.PathLike):
     sd, metadata = load_torch_file(path, return_metadata=True)
     sd, metadata = convert_quantization(sd, metadata)
     sd = preprocess_state_dict(sd)
-    guess = huggingface_guess.guess(sd)
+    guess = huggingface_guess.guess(with_4bit_shapes(sd))
 
     return sd, metadata, guess
 
@@ -814,7 +818,7 @@ def _load_diffuser(path: os.PathLike):
     if (sd := convert_diffusers_mmdit(sd, "")) is None:
         raise ModuleNotFoundError("Failed to recognize model...")
     sd = preprocess_state_dict(sd)
-    guess = huggingface_guess.guess(sd)
+    guess = huggingface_guess.guess(with_4bit_shapes(sd))
 
     return sd, metadata, guess
 
