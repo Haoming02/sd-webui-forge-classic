@@ -35,16 +35,14 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
         elif k.startswith("lora_unet_llm_adapter"):
             lora[k.replace("lora_unet_llm_adapter", "lora_te_llm_adapter")] = lora.pop(k)
 
-    from modules_forge.packages.huggingface_guess.detection import count_blocks
+    prefix = "lora_unet_blocks_" if any(k.startswith("lora_unet_blocks_") for k in keys) else "diffusion_model.blocks."
+    pattern = re.compile(re.escape(prefix) + r"(\d+)\.")
+    indices = [int(m.group(1)) for k in keys for m in [pattern.match(k)] if m]
 
-    lora_blocks: int = count_blocks(lora, "lora_unet_blocks_" + "{}") or count_blocks(lora, "diffusion_model.blocks." + "{}")
-
-    if lora_blocks < 28:
-        if blocks == 28:
-            return True
-        else:
-            logger.warning("Assuming LoRA is for 2B Model...")
-            lora_blocks = 28
+    # count_blocks breaks on pre-remapped LoRAs that skip blocks (e.g. 2.9B Turbo),
+    # so derive the layout from the highest block index snapped up to a known size
+    lora_blocks: int = (max(indices) + 1) if indices else 0
+    lora_blocks = next((size for size in (28, 40, 52) if lora_blocks <= size), lora_blocks)
 
     if lora_blocks == blocks:
         return True
@@ -73,14 +71,13 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
         return False
 
     logger.warning(f"Re-Mapping Anima LoRA ({lora_blocks} to {blocks})")
-    prefix = "lora_unet_blocks_" if any(k.startswith("lora_unet_blocks_") for k in keys) else "diffusion_model.blocks."
 
     for i in range(blocks):
-        a = f"{prefix}{mapping[i]}"
-        b = f"{prefix}{i}"
+        a = f"{prefix}{mapping[i]}."
+        b = f"{prefix}{i}."
 
         for k in keys:
-            if a in k:
+            if k.startswith(a):
                 lora[k.replace(a, b)] = temp[k].clone()
 
     del temp
