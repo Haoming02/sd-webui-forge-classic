@@ -196,7 +196,7 @@ document.addEventListener("keydown", function (e) {
         const isPopupActive = globalPopup && globalPopup.style.display !== "none";
         const isLightboxFocused = document.activeElement === lightboxModal;
 
-        if (!isPopupActive && !isLightboxFocused && isInterruptVisible) {
+        if (!isPopupActive && !isLightboxFocused && interruptButton.style.display === "block") {
             e.preventDefault();
             interruptButton.click();
         }
