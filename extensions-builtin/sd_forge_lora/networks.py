@@ -35,13 +35,20 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
         elif k.startswith("lora_unet_llm_adapter"):
             lora[k.replace("lora_unet_llm_adapter", "lora_te_llm_adapter")] = lora.pop(k)
 
-    prefix = "lora_unet_blocks_" if any(k.startswith("lora_unet_blocks_") for k in keys) else "diffusion_model.blocks."
-    pattern = re.compile(re.escape(prefix) + r"(\d+)\.")
-    indices = [int(m.group(1)) for k in keys for m in [pattern.match(k)] if m]
+    # the block number sits between the prefix and the format's own separator:
+    # lora_unet_blocks_0_... (kohya) / diffusion_model.blocks.0.... (ComfyUI)
+    prefix, sep = ("lora_unet_blocks_", "_") if any(k.startswith("lora_unet_blocks_") for k in keys) else ("diffusion_model.blocks.", ".")
+    parsed: dict[str, tuple[int, str]] = {}
+    for k in keys:
+        if not k.startswith(prefix):
+            continue
+        num, s, tail = k[len(prefix) :].partition(sep)
+        if s and num.isdigit():
+            parsed[k] = (int(num), tail)
 
     # count_blocks breaks on pre-remapped LoRAs that skip blocks (e.g. 2.9B Turbo),
     # so derive the layout from the highest block index snapped up to a known size
-    lora_blocks: int = (max(indices) + 1) if indices else 0
+    lora_blocks: int = (max(n for n, _ in parsed.values()) + 1) if parsed else 0
     lora_blocks = next((size for size in (28, 40, 52) if lora_blocks <= size), lora_blocks)
 
     if lora_blocks == blocks:
@@ -52,7 +59,6 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
         return False
 
     temp = lora.copy()
-    keys = list(temp.keys())
 
     MAPPING_2_TO_29 = [0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 22, 23, 24, 24, 25, 26, 27]
 
@@ -72,13 +78,13 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
 
     logger.warning(f"Re-Mapping Anima LoRA ({lora_blocks} to {blocks})")
 
-    for i in range(blocks):
-        a = f"{prefix}{mapping[i]}."
-        b = f"{prefix}{i}."
+    reverse: dict[int, list[int]] = {}
+    for target, source in enumerate(mapping):
+        reverse.setdefault(source, []).append(target)
 
-        for k in keys:
-            if k.startswith(a):
-                lora[k.replace(a, b)] = temp[k].clone()
+    for k, (source, tail) in parsed.items():
+        for target in reverse.get(source, []):
+            lora[f"{prefix}{target}{sep}{tail}"] = temp[k].clone()
 
     del temp
     return True
