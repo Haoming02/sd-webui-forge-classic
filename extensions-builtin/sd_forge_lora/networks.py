@@ -35,10 +35,9 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
         elif k.startswith("lora_unet_llm_adapter"):
             lora[k.replace("lora_unet_llm_adapter", "lora_te_llm_adapter")] = lora.pop(k)
 
-    # the block number sits between the prefix and the format's own separator:
-    # lora_unet_blocks_0_... (kohya) / diffusion_model.blocks.0.... (ComfyUI)
-    prefix, sep = ("lora_unet_blocks_", "_") if any(k.startswith("lora_unet_blocks_") for k in keys) else ("diffusion_model.blocks.", ".")
     parsed: dict[str, tuple[int, str]] = {}
+    prefix, sep = ("lora_unet_blocks_", "_") if any(k.startswith("lora_unet_blocks_") for k in keys) else ("diffusion_model.blocks.", ".")
+
     for k in keys:
         if not k.startswith(prefix):
             continue
@@ -46,10 +45,8 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
         if s and num.isdigit():
             parsed[k] = (int(num), tail)
 
-    # count_blocks breaks on pre-remapped LoRAs that skip blocks (e.g. 2.9B Turbo),
-    # so derive the layout from the highest block index snapped up to a known size
-    lora_blocks: int = (max(n for n, _ in parsed.values()) + 1) if parsed else 0
-    lora_blocks = next((size for size in (28, 40, 52) if lora_blocks <= size), lora_blocks)
+    _blocks: int = (max(n for n, _ in parsed.values()) + 1) if parsed else 0
+    lora_blocks: int = next(size for size in (28, 40, 52) if _blocks <= size)
 
     if lora_blocks == blocks:
         return True
@@ -79,6 +76,7 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
     logger.warning(f"Re-Mapping Anima LoRA ({lora_blocks} to {blocks})")
 
     reverse: dict[int, list[int]] = {}
+
     for target, source in enumerate(mapping):
         reverse.setdefault(source, []).append(target)
 
