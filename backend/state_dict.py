@@ -4,7 +4,24 @@ import torch
 
 
 def load_state_dict(model, sd, ignore_errors=[], log_name=None, ignore_start=None):
-    missing, unexpected = model.load_state_dict(sd, strict=False)
+    # a model built on the meta device owns no storage: adopt the tensors instead of copying into it
+    assign = any(p.is_meta for p in model.parameters())
+    if assign:
+        for name, param in list(model.named_parameters()) + list(model.named_buffers()):
+            entry = sd.get(name)
+            if entry is not None and entry.dtype != param.dtype:
+                sd[name] = entry.to(param.dtype)  # the module picked that dtype on purpose, e.g. fp32 embeddings
+
+    missing, unexpected = model.load_state_dict(sd, strict=False, assign=assign)
+
+    if assign:
+        for module in model.modules():  # whatever the file did not carry has to become real storage
+            for name, param in module._parameters.items():
+                if param is not None and param.is_meta:
+                    module._parameters[name] = torch.nn.Parameter(torch.zeros(param.shape, dtype=param.dtype), requires_grad=param.requires_grad)
+            for name, buffer in module._buffers.items():
+                if buffer is not None and buffer.is_meta:
+                    module._buffers[name] = torch.zeros(buffer.shape, dtype=buffer.dtype)
     missing = [x for x in missing if x not in ignore_errors]
     unexpected = [x for x in unexpected if x not in ignore_errors]
 
