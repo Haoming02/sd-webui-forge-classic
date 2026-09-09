@@ -773,7 +773,7 @@ class ModelPatcher:
         unpatch_weights = self.model.current_weight_patches_uuid is not None and (self.model.current_weight_patches_uuid != self.patches_uuid or force_patch_weights)
 
         used = self.model.model_loaded_weight_memory
-        self.unpatch_model(unpatch_weights=unpatch_weights)
+        self.unpatch_model(self.offload_device, unpatch_weights=unpatch_weights)
         if unpatch_weights:
             extra_memory += used - self.model.model_loaded_weight_memory
 
