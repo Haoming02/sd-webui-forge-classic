@@ -51,13 +51,6 @@ setup_logger(logger)
 HF = os.path.join(os.path.dirname(__file__), "huggingface")
 
 
-def build_device(storage_dtype, state_dict_dtype, quant_config=None) -> torch.device:
-    # when the file already holds what the module wants, load_state_dict adopts its tensors: do not allocate weights that get overwritten
-    if quant_config is None and storage_dtype == state_dict_dtype:
-        return torch.device("meta")
-    return memory_management.cpu
-
-
 def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_path, state_dict):
     config_path = os.path.join(repo_path, component_name)
 
@@ -73,6 +66,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             comp = cls.from_pretrained(os.path.join(repo_path, component_name))
             comp._eventual_warn_about_too_long_sequence = lambda *args, **kwargs: None
             return comp
+
+        state_dict_dtype = utils.weight_dtype(state_dict)
 
         # region VAE
 
@@ -147,20 +142,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
         if component_name.startswith("text_encoder") and cls_name in ["CLIPTextModel", "CLIPTextModelWithProjection"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have CLIP state dict!"
+
             from transformers import CLIPTextConfig, CLIPTextModel
 
             from backend.nn.clip import IntegratedCLIP
 
             config = CLIPTextConfig.from_pretrained(config_path)
 
-            to_args = dict(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype())
-            device = build_device(to_args["dtype"], utils.weight_dtype(state_dict))
-
             with no_init_weights():
-                with using_forge_operations(device=device, dtype=to_args["dtype"], manual_cast_enabled=True):
+                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=True, sd_dtype=state_dict_dtype):
                     model = IntegratedCLIP(CLIPTextModel, config, add_text_projection=True)
-                    if device.type != "meta":
-                        model = model.to(**to_args)
 
             load_state_dict(model, state_dict, ignore_errors=["transformer.text_projection.weight", "transformer.text_model.embeddings.position_ids", "logit_scale"], log_name=cls_name)
             return model
@@ -193,7 +184,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = Qwen25_7BVLI(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=build_device(storage_dtype, state_dict_dtype, quant_config), dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = Qwen25_7BVLI(config)
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
@@ -227,7 +218,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = Gemma2_2B(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=build_device(storage_dtype, state_dict_dtype, quant_config), dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = Gemma2_2B(config)
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
@@ -261,7 +252,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = Ministral3_3B(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=build_device(storage_dtype, state_dict_dtype, quant_config), dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = Ministral3_3B(config)
 
             load_state_dict(model, state_dict, log_name=cls_name)
@@ -302,7 +293,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = QTE(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=build_device(storage_dtype, state_dict_dtype, quant_config), dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = QTE(config)
 
             if cls_name == "Qwen3VLModel":
@@ -356,7 +347,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = IntegratedT5(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=build_device(storage_dtype, state_dict_dtype, quant_config), dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = IntegratedT5(config)
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["transformer.encoder.embed_tokens.weight", "logit_scale"])
@@ -436,7 +427,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             unet_config = guess.unet_config.copy()
             state_dict_parameters = utils.calculate_parameters(state_dict)
-            state_dict_dtype = utils.weight_dtype(state_dict)
             quant_config = detect_quantization(state_dict, is_unet=True)
 
             override_dtype = backend.args.dynamic_args.forge_unet_storage_dtype
@@ -488,15 +478,9 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 else:
                     extra_dtype = None
 
-                device = memory_management.cpu
-                if memory_management.is_device_cpu(initial_device) and not guess.nunchaku:
-                    device = build_device(storage_dtype, state_dict_dtype, quant_config)
-
                 with no_init_weights():
-                    with using_forge_operations(device=device, dtype=storage_dtype, manual_cast_enabled=need_manual_cast, extra_dtype=extra_dtype):
+                    with using_forge_operations(**to_args, manual_cast_enabled=need_manual_cast, sd_dtype=state_dict_dtype, extra_dtype=extra_dtype):
                         model = model_loader(unet_config)
-                        if device.type != "meta":
-                            model = model.to(**to_args)
 
             model = pre_func(model)
             load_state_dict(model, state_dict)
