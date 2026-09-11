@@ -67,6 +67,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             comp._eventual_warn_about_too_long_sequence = lambda *args, **kwargs: None
             return comp
 
+        state_dict_dtype = utils.weight_dtype(state_dict)
+
         # region VAE
 
         if cls_name == "PiDAutoVAE":
@@ -140,17 +142,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
         if component_name.startswith("text_encoder") and cls_name in ["CLIPTextModel", "CLIPTextModelWithProjection"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have CLIP state dict!"
+
             from transformers import CLIPTextConfig, CLIPTextModel
 
             from backend.nn.clip import IntegratedCLIP
 
             config = CLIPTextConfig.from_pretrained(config_path)
 
-            to_args = dict(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype())
-
             with no_init_weights():
-                with using_forge_operations(**to_args, manual_cast_enabled=True):
-                    model = IntegratedCLIP(CLIPTextModel, config, add_text_projection=True).to(**to_args)
+                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=True, sd_dtype=state_dict_dtype):
+                    model = IntegratedCLIP(CLIPTextModel, config, add_text_projection=True)
 
             load_state_dict(model, state_dict, ignore_errors=["transformer.text_projection.weight", "transformer.text_model.embeddings.position_ids", "logit_scale"], log_name=cls_name)
             return model
@@ -183,7 +184,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = Qwen25_7BVLI(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = Qwen25_7BVLI(config)
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
@@ -217,7 +218,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = Gemma2_2B(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = Gemma2_2B(config)
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
@@ -251,7 +252,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = Ministral3_3B(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = Ministral3_3B(config)
 
             load_state_dict(model, state_dict, log_name=cls_name)
@@ -292,7 +293,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = QTE(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = QTE(config)
 
             if cls_name == "Qwen3VLModel":
@@ -346,7 +347,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                         model = IntegratedT5(config)
             else:
                 with no_init_weights():
-                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, extra_dtype=quant_config):
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = IntegratedT5(config)
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_errors=["transformer.encoder.embed_tokens.weight", "logit_scale"])
@@ -426,7 +427,6 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             unet_config = guess.unet_config.copy()
             state_dict_parameters = utils.calculate_parameters(state_dict)
-            state_dict_dtype = utils.weight_dtype(state_dict)
             quant_config = detect_quantization(state_dict, is_unet=True)
 
             override_dtype = backend.args.dynamic_args.forge_unet_storage_dtype
@@ -479,8 +479,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     extra_dtype = None
 
                 with no_init_weights():
-                    with using_forge_operations(**to_args, manual_cast_enabled=need_manual_cast, extra_dtype=extra_dtype):
-                        model = model_loader(unet_config).to(**to_args)
+                    with using_forge_operations(**to_args, manual_cast_enabled=need_manual_cast, sd_dtype=state_dict_dtype, extra_dtype=extra_dtype):
+                        model = model_loader(unet_config)
 
             model = pre_func(model)
             load_state_dict(model, state_dict)

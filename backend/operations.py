@@ -635,7 +635,19 @@ class TiledOperations(ForgeOperations):
 
 
 @contextlib.contextmanager
-def using_forge_operations(operations=None, device=None, dtype=None, manual_cast_enabled=False, extra_dtype=None):
+def using_forge_operations(
+    *,
+    operations: "ForgeOperations" = None,
+    device: torch.device = None,
+    dtype: torch.dtype = None,
+    manual_cast_enabled: bool = False,
+    sd_dtype: torch.dtype = None,
+    extra_dtype: torch.dtype = None,
+):
+
+    if extra_dtype is None and dtype == sd_dtype:
+        device = torch.device("meta")
+
     global current_device, current_dtype, current_manual_cast_enabled
 
     current_device, current_dtype, current_manual_cast_enabled = device, dtype, manual_cast_enabled
