@@ -4,7 +4,10 @@ times faster than fp16 on every GPU without fp8 support. Weights are quantised o
 channel; activations per token at every call; a LoRA is added as a low-rank side branch, not merged.
 """
 
+import json
 import logging
+import os
+import struct
 from functools import partial
 
 import torch
@@ -20,6 +23,7 @@ INT8_MODELS = ("IntegratedFluxTransformer2DModel", "IntegratedChromaTransformer2
 MIN_ROWS = 17  # torch._int_mm needs M > 16; a modulation GEMV is padded up to it
 BLOCK_BYTES = 128 * 1024**2  # budget for one row block's int32 + fp32 temporaries
 ARENA_BYTES = 512 * 1024**2  # the Windows allocator rounds ~50 MB blocks up by half; pack the weights instead
+CACHE_VERSION = "1"  # bump when the blob layout or the quantisation changes
 
 
 class ParameterInt8(torch.nn.Parameter):
@@ -94,7 +98,51 @@ def int_mm_works(device: torch.device) -> bool:
         return False
 
 
-def quantize_model(model: torch.nn.Module) -> int:
+class Arena:
+    """Blobs are packed into a few big buffers: the Windows allocator rounds ~50 MB blocks up by half"""
+
+    def __init__(self):
+        self.buffer, self.at = None, 0
+
+    def slice(self, size: int) -> torch.Tensor:
+        if self.buffer is None or self.at + size > self.buffer.numel():
+            self.buffer, self.at = torch.empty(max(size, ARENA_BYTES), dtype=torch.uint8), 0
+        out = self.buffer[self.at : self.at + size]
+        self.at += size
+        return out
+
+
+def dequantize_source(weight: torch.Tensor, device: torch.device) -> torch.Tensor:
+    if getattr(weight, "gguf_cls", None) is not None:
+        from backend.loader_gguf import dequantize
+
+        return dequantize(weight.to(device), torch.float16)
+    return weight.to(device=device, dtype=torch.float16)
+
+
+def linear_layers(model: torch.nn.Module) -> tuple[list, int]:
+    from backend.operations import ForgeOperations, ForgeOperationsGGUF
+
+    supported = (ForgeOperations.Linear, ForgeOperationsGGUF.Linear)  # the Linear classes whose forward we hook
+    todo, skipped = [], 0
+    for name, module in model.named_modules():
+        if not isinstance(module, supported) or module.weight is None or module.weight.ndim != 2:
+            continue
+        n, k = module.weight.shape
+        if n % 8 or k % 8:
+            skipped += 1
+            continue
+        todo.append((name, module, (n, k)))
+    return todo, skipped
+
+
+def install(module, weight: ParameterInt8):
+    module.weight = weight
+    module.convert_weight = convert_weight  # the patcher merges a LoRA through these
+    module.set_weight = partial(set_weight, module)
+
+
+def quantize_model(model: torch.nn.Module, source: str = None) -> int:
     name = type(model).__name__
     if name not in INT8_MODELS:
         logger.info(f"Not quantising {name}: its Linear layers are too small to gain from int8")
@@ -104,40 +152,93 @@ def quantize_model(model: torch.nn.Module) -> int:
     if not int_mm_works(device):
         return 0
 
-    from backend.loader_gguf import dequantize
-    from backend.operations import ForgeOperations, ForgeOperationsGGUF
+    todo, skipped = linear_layers(model)
 
-    supported = (ForgeOperations.Linear, ForgeOperationsGGUF.Linear)  # the Linear classes whose forward we hook
-    count, skipped, arena, at = 0, 0, None, 0
+    if source is not None and os.path.isfile(source):
+        try:
+            path = cache_path(source)
+            if not cache_is_valid(path, source, name, todo):
+                build_cache(path, source, name, todo, device)
+            load_cache(path, todo)
+            logger.info(f"Loaded {len(todo)} int8 Linear layers of {name} from {os.path.basename(path)} ({skipped} skipped)")
+            return len(todo)
+        except Exception as e:
+            logger.warning(f"int8 cache unavailable ({e}); quantising into RAM instead")
 
-    for module in model.modules():
-        if not isinstance(module, supported) or module.weight is None or module.weight.ndim != 2:
-            continue
-        n, k = module.weight.shape
-        if n % 8 or k % 8:
-            skipped += 1
-            continue
+    arena = Arena()
+    for _, module, (n, k) in todo:
+        weight = quantize(dequantize_source(module.weight, device), getattr(module.weight, "computation_dtype", torch.float16), out=arena.slice(blob_size(n, k)))
+        weight.arena = arena.buffer
+        install(module, weight)
 
-        source = module.weight
-        if getattr(source, "gguf_cls", None) is not None:
-            source = dequantize(source.to(device), torch.float16)
-        else:
-            source = source.to(device=device, dtype=torch.float16)
+    logger.info(f"Quantised {len(todo)} Linear layers of {name} to int8 ({skipped} skipped)")
+    return len(todo)
 
+
+# region disk cache: a safetensors file of blobs, written one weight at a time and read back into the arenas,
+# so neither building it nor using it ever holds both the source and the int8 model
+
+
+def cache_path(source: str) -> str:
+    stem = os.path.splitext(os.path.basename(source))[0]
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(source))), "int8", f"{stem}.int8.safetensors")
+
+
+def cache_tags(source: str, model_name: str) -> dict[str, str]:
+    st = os.stat(source)
+    return {"int8_version": CACHE_VERSION, "model": model_name, "source": os.path.basename(source), "source_size": str(st.st_size), "source_mtime": str(int(st.st_mtime))}
+
+
+def read_header(path: str) -> tuple[dict, int]:
+    with open(path, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        return json.loads(f.read(n)), 8 + n
+
+
+def cache_is_valid(path: str, source: str, model_name: str, todo: list) -> bool:
+    if not os.path.isfile(path):
+        return False
+    header, _ = read_header(path)
+    meta = header.pop("__metadata__", {})
+    if any(meta.get(k) != v for k, v in cache_tags(source, model_name).items()):
+        return False
+    shapes = json.loads(meta.get("shapes", "{}"))
+    return all(shapes.get(name) == [n, k] and header.get(name, {}).get("shape") == [blob_size(n, k)] for name, _, (n, k) in todo)
+
+
+def build_cache(path: str, source: str, model_name: str, todo: list, device: torch.device):
+    header, at = {}, 0
+    for name, _, (n, k) in todo:
         size = blob_size(n, k)
-        if arena is None or at + size > arena.numel():
-            arena, at = torch.empty(max(size, ARENA_BYTES), dtype=torch.uint8), 0
-        weight = quantize(source, getattr(module.weight, "computation_dtype", torch.float16), out=arena[at : at + size])
-        weight.arena = arena
+        header[name] = {"dtype": "U8", "shape": [size], "data_offsets": [at, at + size]}
         at += size
+    header["__metadata__"] = dict(cache_tags(source, model_name), shapes=json.dumps({name: [n, k] for name, _, (n, k) in todo}))
+    head = json.dumps(header).encode("utf-8")
+    head += b" " * (-len(head) % 8)
 
-        module.weight = weight
-        module.convert_weight = convert_weight  # the patcher merges a LoRA through these
-        module.set_weight = partial(set_weight, module)
-        count += 1
+    logger.info(f"Building the int8 cache {os.path.basename(path)} ({at / 2**30:.1f} GB)")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(struct.pack("<Q", len(head)))
+        f.write(head)
+        for _, module, _ in todo:
+            f.write(quantize(dequantize_source(module.weight, device)).data.numpy().tobytes())
+    os.replace(tmp, path)
 
-    logger.info(f"Quantised {count} Linear layers of {name} to int8 ({skipped} skipped)")
-    return count
+
+def load_cache(path: str, todo: list):
+    header, data = read_header(path)
+    arena = Arena()
+    with open(path, "rb") as f:
+        for name, module, (n, k) in todo:
+            start, end = header[name]["data_offsets"]
+            blob = arena.slice(end - start)
+            f.seek(data + start)
+            f.readinto(memoryview(blob.numpy()))  # a plain read: the peak is the model, not twice the file
+            weight = ParameterInt8(blob, real_shape=(n, k), computation_dtype=getattr(module.weight, "computation_dtype", torch.float16))
+            weight.arena = arena.buffer
+            install(module, weight)
 
 
 def convert_weight(weight: ParameterInt8, inplace=False) -> torch.Tensor:

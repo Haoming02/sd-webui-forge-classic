@@ -485,10 +485,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             model = pre_func(model)
             load_state_dict(model, state_dict)
 
-            if backend.args.args.int8_linear and not guess.nunchaku:
+            if (backend.args.args.int8_linear or backend.args.args.int8_cache) and not guess.nunchaku:
                 from backend.operations_int8 import quantize_model
 
-                quantize_model(model)
+                quantize_model(model, getattr(guess, "checkpoint_path", None) if backend.args.args.int8_cache else None)
             # model = post_func(model)
 
             if hasattr(model, "_internal_dict"):
@@ -889,6 +889,7 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
     backend.args.dynamic_args.reset()
     backend.args.dynamic_args.kontext = "kontext" in str(sd).lower()
     backend.args.dynamic_args.edit = "qwen" in str(sd).lower() and "edit" in str(sd).lower()
+    estimated_config.checkpoint_path = str(sd)
     backend.args.dynamic_args.nunchaku = getattr(estimated_config, "nunchaku", False)
     backend.args.dynamic_args.klein = "klein" in repo_name
     backend.args.dynamic_args.wan = "Wan" in repo_name
