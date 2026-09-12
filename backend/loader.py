@@ -484,6 +484,11 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             model = pre_func(model)
             load_state_dict(model, state_dict)
+
+            if backend.args.args.int8_linear and not guess.nunchaku:
+                from backend.operations_int8 import quantize_model
+
+                quantize_model(model)
             # model = post_func(model)
 
             if hasattr(model, "_internal_dict"):

@@ -220,6 +220,8 @@ class ForgeOperations:
             return None
 
         def forward(self, x):
+            if isinstance(self.weight, ParameterInt8):
+                return int8_forward(self, x)
             if self.parameters_manual_cast:
                 weight, bias, signal = weights_manual_cast(self, x)
                 with main_stream_worker(weight, bias, signal):
@@ -391,6 +393,7 @@ class ForgeOperations:
 
 
 from backend.operations_gguf import dequantize_tensor
+from backend.operations_int8 import ParameterInt8, forward as int8_forward
 
 
 class ForgeOperationsGGUF(ForgeOperations):
@@ -426,6 +429,8 @@ class ForgeOperationsGGUF(ForgeOperations):
             return self
 
         def forward(self, x):
+            if isinstance(self.weight, ParameterInt8):
+                return int8_forward(self, x)
             if self.bias is not None and self.bias.dtype != x.dtype:
                 self.bias = utils.tensor2parameter(dequantize_tensor(self.bias).to(x.dtype))
             if self.weight is not None and self.weight.dtype != x.dtype and getattr(self.weight, "gguf_cls", None) is None:

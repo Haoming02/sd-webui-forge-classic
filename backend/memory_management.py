@@ -1477,7 +1477,7 @@ def sync_stream(device: torch.device, stream):
 
 
 PINNED_MEMORY = {}
-PINNING_ALLOWED_TYPES = "Parameter"
+PINNING_ALLOWED_TYPES = ("Parameter", "ParameterInt8")
 
 TOTAL_PINNED_MEMORY = 0
 MAX_PINNED_MEMORY = -1
@@ -1506,7 +1506,7 @@ def pin_memory(tensor):
     if MAX_PINNED_MEMORY <= 0:
         return False
 
-    if type(tensor).__name__ != PINNING_ALLOWED_TYPES:
+    if type(tensor).__name__ not in PINNING_ALLOWED_TYPES:
         return False
 
     if not is_device_cpu(tensor.device):
