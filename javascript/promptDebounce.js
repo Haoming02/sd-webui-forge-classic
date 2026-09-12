@@ -1,102 +1,88 @@
 (function () {
-    /**
-     * Gradio re-evaluates its whole component tree on every value change, which costs ~75 ms
-     * per keystroke in a build this size, regardless of which field is edited or whether it is
-     * even visible. Typing in a prompt therefore runs at ~11 fps.
-     *
-     * Only the `input` event is withheld from the listeners below, and only until the typing
-     * pauses; `keydown`, `keyup`, `paste`, `focus` and `blur` are never touched, and the value
-     * of the textarea itself is always current, so anything reading it directly still sees
-     * every character. The pending value is flushed before it could be read by the backend:
-     * on blur, on any pointer press, on a modifier shortcut, and before the page unloads.
-     */
-
-    const IDs = [
-        "txt2img_prompt",
-        "txt2img_neg_prompt",
-        "img2img_prompt",
-        "img2img_neg_prompt",
-        "hires_prompt",
-        "hires_neg_prompt",
-    ];
-
     /** @type {Map<HTMLTextAreaElement, number>} */
     const pending = new Map();
+
     /** @type {WeakMap<HTMLTextAreaElement, InputEventInit>} */
     const lastInput = new WeakMap();
-    /** @type {Set<HTMLTextAreaElement>} */
-    let targets = new Set();
-    let delay = 0;
 
-    /** @param {HTMLTextAreaElement} textarea */
-    function flush(textarea) {
-        const timer = pending.get(textarea);
-        if (timer === undefined) return;
+    /** @type {WeakSet<HTMLTextAreaElement>} */
+    const dispatching = new WeakSet();
 
-        clearTimeout(timer);
-        pending.delete(textarea);
+    class DebounceWatcher {
+        /** @param {string} id @param {number} delay */
+        constructor(id, delay) {
+            /** @type {HTMLTextAreaElement} */
+            this.textarea = document.querySelector(`#${id} textarea`);
+            this.delay = delay;
 
-        // re-emit with the fields of the last real keystroke: listeners such as tag autocompletion
-        // ignore `input` events without an `inputType` (that is how they skip programmatic updates)
-        const init = lastInput.get(textarea);
-        const event = init?.inputType ? new InputEvent("input", { bubbles: true, ...init }) : new Event("input", { bubbles: true });
-
-        textarea.dataset.debouncedInput = "1";
-        textarea.dispatchEvent(event);
-    }
-
-    function flushAll() {
-        for (const textarea of Array.from(pending.keys())) flush(textarea);
-    }
-
-    function onInput(event) {
-        const textarea = event.target;
-        if (!targets.has(textarea)) return;
-
-        if (textarea.dataset.debouncedInput) {
-            // the event this module dispatched itself; let every listener handle it
-            delete textarea.dataset.debouncedInput;
-            return;
+            this.textarea.addEventListener("input", (e) => this.#onInput(e), true);
+            this.textarea.addEventListener("blur", () => this.#flush(), true);
         }
 
-        if (!event.inputType) {
-            // programmatic edit (`updateInput()`: Ctrl+Up/Down, undo, extra networks cards...):
-            // one event per action, let it through; it also carries any keystrokes still pending
-            const timer = pending.get(textarea);
-            if (timer !== undefined) clearTimeout(timer);
-            pending.delete(textarea);
-            return;
+        #onInput(event) {
+            if (dispatching.has(this.textarea)) return;
+
+            const timer = pending.get(this.textarea);
+            if (timer !== undefined) {
+                clearTimeout(timer);
+                pending.delete(this.textarea);
+            }
+
+            if (!event.inputType) return;
+            event.stopImmediatePropagation();
+
+            lastInput.set(this.textarea, {
+                inputType: event.inputType,
+                data: event.data,
+                isComposing: event.isComposing,
+            });
+
+            pending.set(
+                this.textarea,
+                setTimeout(() => this.#flush(), this.delay),
+            );
         }
 
-        event.stopPropagation();
-        lastInput.set(textarea, { inputType: event.inputType, data: event.data, isComposing: event.isComposing });
+        #flush() {
+            const timer = pending.get(this.textarea);
+            if (timer === undefined) return;
 
-        const timer = pending.get(textarea);
-        if (timer !== undefined) clearTimeout(timer);
-        pending.set(textarea, setTimeout(() => flush(textarea), delay));
+            clearTimeout(timer);
+            pending.delete(this.textarea);
+
+            const init = lastInput.get(this.textarea);
+            lastInput.delete(this.textarea);
+
+            const event = init?.inputType
+                ? new InputEvent("input", {
+                    bubbles: true,
+                    ...init,
+                })
+                : new Event("input", {
+                    bubbles: true,
+                });
+
+            dispatching.add(this.textarea);
+            try {
+                this.textarea.dispatchEvent(event);
+            } finally {
+                dispatching.delete(this.textarea);
+            }
+        }
     }
 
     function setup() {
-        targets = new Set(IDs.map((id) => document.querySelector(`#${id} textarea`)).filter(Boolean));
-        if (targets.size === 0) return;
+        const IDs = [
+            "txt2img_prompt",
+            "txt2img_neg_prompt",
+            "img2img_prompt",
+            "img2img_neg_prompt",
+            "hires_prompt",
+            "hires_neg_prompt",
+        ];
 
-        document.addEventListener("input", onInput, true);
-        document.addEventListener("blur", (e) => flush(e.target), true);
-        document.addEventListener("pointerdown", flushAll, true);
-        document.addEventListener(
-            "keydown",
-            (e) => {
-                if (e.ctrlKey || e.altKey || e.metaKey) flushAll();
-            },
-            true,
-        );
-        window.addEventListener("beforeunload", flushAll);
+        for (const id of IDs) new DebounceWatcher(id, opts.prompt_debounce);
     }
 
-    onUiLoaded(() => {
-        onOptionsAvailable(() => {
-            delay = opts.prompt_debounce ?? 0;
-            if (delay > 0) setup();
-        });
-    });
+    onOptionsAvailable(() => { if (opts.prompt_debounce) setup(); });
 })();
