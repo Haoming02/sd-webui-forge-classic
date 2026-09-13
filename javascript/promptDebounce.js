@@ -1,12 +1,15 @@
 (function () {
-    /** @type {Map<HTMLTextAreaElement, number>} */
-    const pending = new Map();
+    /** @type {WeakMap<HTMLTextAreaElement, number>} */
+    const pending = new WeakMap();
 
     /** @type {WeakMap<HTMLTextAreaElement, InputEventInit>} */
     const lastInput = new WeakMap();
 
     /** @type {WeakSet<HTMLTextAreaElement>} */
     const dispatching = new WeakSet();
+
+    /** @type {Set<Function>} */
+    const allFlushes = new Set();
 
     class DebounceWatcher {
         /** @param {string} id @param {number} delay */
@@ -17,6 +20,7 @@
 
             this.textarea.addEventListener("input", (e) => this.#onInput(e), true);
             this.textarea.addEventListener("blur", () => this.#flush(), true);
+            allFlushes.add(() => this.#flush());
         }
 
         #onInput(event) {
@@ -71,6 +75,11 @@
         }
     }
 
+    function flushAll(event) {
+        if (!(event.ctrlKey || event.altKey || event.metaKey)) return;
+        for (const func of allFlushes) func();
+    }
+
     function setup() {
         const IDs = [
             "txt2img_prompt",
@@ -82,6 +91,7 @@
         ];
 
         for (const id of IDs) new DebounceWatcher(id, opts.prompt_debounce);
+        document.addEventListener("keydown", (e) => flushAll(e), true);
     }
 
     onOptionsAvailable(() => { if (opts.prompt_debounce) setup(); });
