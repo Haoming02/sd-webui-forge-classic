@@ -67,7 +67,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             comp._eventual_warn_about_too_long_sequence = lambda *args, **kwargs: None
             return comp
 
-        state_dict_dtype = utils.weight_dtype(state_dict)
+        state_dict_dtype = utils.weight_dtype(state_dict) if isinstance(state_dict, dict) else None
 
         # region VAE
 

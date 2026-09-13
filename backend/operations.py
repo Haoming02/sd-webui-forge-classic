@@ -645,7 +645,7 @@ def using_forge_operations(
     extra_dtype: torch.dtype = None,
 ):
 
-    if extra_dtype is None and dtype == sd_dtype:
+    if extra_dtype is None and dtype == sd_dtype and memory_management.is_device_cpu(device):
         device = torch.device("meta")
 
     global current_device, current_dtype, current_manual_cast_enabled
