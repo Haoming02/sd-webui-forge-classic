@@ -26,6 +26,7 @@ class State:
     preview_step: int = 0
     sampling_step: int = 0
     sampling_steps: int = 0
+    sampling_thread: Optional[threading.Thread] = None
     current_latent = None
     current_image = None
     current_image_sampling_step = 0
@@ -121,6 +122,7 @@ class State:
     def begin(self, job: str = "(unknown)"):
         self.sampling_step = 0
         self.preview_step = 0
+        self.sampling_thread = None
         self.time_start = time.time()
         self.job_count = -1
         self.processing_has_refined_job_count = False
@@ -143,6 +145,7 @@ class State:
         log.info("Ending job %s (%.2f seconds)", self.job, duration)
         self.job = ""
         self.job_count = 0
+        self.sampling_thread = None
 
         devices.torch_gc()
 
@@ -157,6 +160,9 @@ class State:
 
     @torch.inference_mode()
     def do_set_current_image(self):
+        # MPS previews must share the sampling thread to avoid concurrent command-buffer use.
+        if devices.has_mps() and threading.current_thread() is not self.sampling_thread:
+            return
         if self.current_latent is None:
             return
 

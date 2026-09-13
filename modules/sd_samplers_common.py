@@ -1,5 +1,6 @@
 import inspect
 import re
+import threading
 from collections import namedtuple
 from typing import TYPE_CHECKING
 
@@ -430,11 +431,14 @@ class Sampler:
 
         state.sampling_step = step
         state.preview_step = step + 1
+        if devices.has_mps():
+            state.set_current_image()
         shared.total_tqdm.update()
 
     def launch_sampling(self, steps, func):
         self.model_wrap_cfg.steps = steps
         self.model_wrap_cfg.total_steps = self.config.total_steps(steps)
+        state.sampling_thread = threading.current_thread()
         state.sampling_steps = steps
         state.sampling_step = 0
         state.preview_step = 0
