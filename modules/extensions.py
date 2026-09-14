@@ -124,14 +124,17 @@ class Extension:
         self.remote = None
         self.have_info_from_repo = False
         self.metadata = metadata if metadata else ExtensionMetadata(self.path, name.lower())
-        self.canonical_name = metadata.canonical_name
+        self.canonical_name = self.metadata.canonical_name
 
     def to_dict(self):
         return {x: getattr(self, x) for x in self.cached_fields}
 
     def from_dict(self, d):
+        if not isinstance(d, dict):
+            return
+
         for field in self.cached_fields:
-            setattr(self, field, d[field])
+            setattr(self, field, d.get(field, getattr(self, field)))
 
     def read_info_from_repo(self):
         if self.is_builtin or self.have_info_from_repo:
@@ -140,13 +143,14 @@ class Extension:
         def read_from_repo():
             with self.lock:
                 if self.have_info_from_repo:
-                    return
+                    return self.to_dict()
                 self.do_read_info_from_repo()
                 return self.to_dict()
 
         try:
             d = cache.cached_data_for_file("extensions-git", self.name, os.path.join(self.path, ".git"), read_from_repo)
-            self.from_dict(d)
+            if d is not None:
+                self.from_dict(d)
         except FileNotFoundError:
             pass
 

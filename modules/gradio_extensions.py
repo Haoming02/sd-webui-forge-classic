@@ -75,6 +75,67 @@ def BlockContext_init(self, *args, **kwargs):
     return res
 
 
+def prune_unknown_layout_blocks(config):
+    """
+    remove layout nodes that have no matching component
+
+    a block can end up in the layout tree without being registered in the same Blocks, for example
+    when an extension builds UI inside a throwaway `with gr.Blocks()` context. the gradio frontend
+    looks up every layout id in `components` and throws when one is missing, which leaves the whole
+    web UI stuck on the loading screen, so drop those ids instead of letting one bad component break
+    the entire interface. the root node is kept because the frontend synthesizes it itself.
+    """
+    known_ids = {comp_config.get("id") for comp_config in config.get("components", [])}
+    dropped_ids = []
+
+    def prune(layout_node):
+        children = layout_node.get("children")
+        if not children:
+            return
+
+        kept = []
+        for child in children:
+            if child.get("id") in known_ids:
+                kept.append(child)
+                prune(child)
+            else:
+                dropped_ids.append(child.get("id"))
+        layout_node["children"] = kept
+
+    layout_root = config.get("layout")
+    if isinstance(layout_root, dict):
+        prune(layout_root)
+
+    # Dependencies are serialized separately from the layout.  When an extension leaves behind
+    # an event for a component that was created in a temporary Blocks root, the stale component id
+    # can still be present in targets, inputs, or outputs.  Gradio's frontend looks these ids up
+    # while wiring events, so discard only the invalid references and keep the remaining events
+    # usable.
+    dependencies = config.get("dependencies")
+    if isinstance(dependencies, list):
+        for dependency in dependencies:
+            targets = dependency.get("targets")
+            if isinstance(targets, list):
+                dependency["targets"] = [
+                    target for target in targets
+                    if isinstance(target, (list, tuple))
+                    and target
+                    and (target[0] in known_ids or target[0] in (-1, None))
+                ]
+
+            for field in ("inputs", "outputs"):
+                values = dependency.get(field)
+                if isinstance(values, list):
+                    dependency[field] = [value for value in values if value in known_ids]
+
+    if dropped_ids:
+        warnings.warn(
+            f"removed {len(dropped_ids)} layout entries with no matching component: {dropped_ids[:10]}"
+        )
+
+    return config
+
+
 def Blocks_get_config_file(self, *args, **kwargs):
     config = original_Blocks_get_config_file(self, *args, **kwargs)
 
@@ -82,7 +143,7 @@ def Blocks_get_config_file(self, *args, **kwargs):
         if "example_inputs" in comp_config:
             comp_config["example_inputs"] = {"serialized": []}
 
-    return config
+    return prune_unknown_layout_blocks(config)
 
 
 original_IOComponent_init = patches.patch(__name__, obj=gr.components.Component, field="__init__", replacement=IOComponent_init)

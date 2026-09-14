@@ -31,6 +31,7 @@ from modules.processing import (
     StableDiffusionProcessingImg2Img,
     StableDiffusionProcessingTxt2Img,
 )
+from modules.sd_samplers_common import decode_first_stage
 from modules_forge.shared import try_load_supported_control_model
 from modules_forge.supported_controlnet import ControlModelPatcher
 from modules_forge.utils import HWC3, numpy_to_pytorch
@@ -46,6 +47,8 @@ class ControlNetCachedParameters:
         self.control_cond_for_hr_fix = None
         self.control_mask = None
         self.control_mask_for_hr_fix = None
+        self.auto_hr_control_from_latent = False
+        self.auto_hr_control_ready = False
 
 
 class ControlNetForForgeOfficial(scripts.Script):
@@ -89,6 +92,87 @@ class ControlNetForForgeOfficial(scripts.Script):
         assert all(isinstance(unit, ControlNetUnit) for unit in units)
         enabled_units = [x for x in units if x.enabled]
         return enabled_units
+
+    @staticmethod
+    def image_has_content(image) -> bool:
+        if isinstance(image, dict):
+            image = image.get("image", None)
+        if image is None:
+            return False
+        if isinstance(image, np.ndarray):
+            return image.size > 0 and bool((image > 5).any())
+        return True
+
+    def should_defer_hr_control_from_latent(self, p: StableDiffusionProcessing, unit: ControlNetUnit) -> bool:
+        if not getattr(unit, "use_firstpass_as_hr_input", False):
+            return False
+
+        if not isinstance(p, StableDiffusionProcessingTxt2Img) or not getattr(p, "enable_hr", False):
+            return False
+
+        hr_option = HiResFixOption.from_value(unit.hr_option)
+        if not (hr_option.high_res_enabled and not hr_option.low_res_enabled):
+            return False
+
+        if unit.use_preview_as_input and self.image_has_content(unit.generated_image):
+            return False
+
+        return not (self.image_has_content(unit.image) or self.image_has_content(unit.image_fg))
+
+    def build_hr_control_from_latent(self, p: StableDiffusionProcessing, unit: ControlNetUnit, params: ControlNetCachedParameters, latent):
+        if params.auto_hr_control_ready:
+            return
+        if latent is None:
+            raise ValueError("ControlNet auto HR input requested, but no HR latent was provided.")
+
+        _, _, hr_y, hr_x = self.get_target_dimensions(p)
+        preprocessor = params.preprocessor
+        resize_mode = external_code.ResizeMode.INNER_FIT
+
+        decoded = decode_first_stage(p.sd_model, latent)
+        if len(decoded.shape) == 5:
+            decoded = decoded.squeeze(1) if decoded.shape[1] == 1 else decoded.reshape(-1, *decoded.shape[-3:])
+
+        decoded = torch.clamp((decoded + 1.0) / 2.0, min=0.0, max=1.0)
+        control_conds = []
+        preprocessor_output_is_image = False
+
+        for image_tensor in decoded:
+            input_image = image_tensor.detach().float().cpu().numpy()
+            input_image = np.moveaxis(input_image, 0, 2)
+            input_image = np.rint(input_image * 255.0).clip(0, 255).astype(np.uint8)
+            input_image = HWC3(input_image)
+
+            if unit.pixel_perfect:
+                unit.processor_res = external_code.pixel_perfect_resolution(
+                    input_image,
+                    target_H=hr_y,
+                    target_W=hr_x,
+                    resize_mode=resize_mode,
+                )
+
+            preprocessor_output = preprocessor(
+                input_image=input_image,
+                input_mask=None,
+                resolution=unit.processor_res,
+                slider_1=unit.threshold_a,
+                slider_2=unit.threshold_b,
+            )
+
+            preprocessor_output_is_image = judge_image_type(preprocessor_output)
+            if not preprocessor_output_is_image:
+                params.control_cond_for_hr_fix = preprocessor_output
+                break
+
+            control_cond = crop_and_resize_image(preprocessor_output, resize_mode, hr_y, hr_x)
+            control_conds.append(numpy_to_pytorch(control_cond).movedim(-1, 1))
+
+        if preprocessor_output_is_image:
+            params.control_cond_for_hr_fix = torch.cat(control_conds, dim=0).contiguous()
+
+        params.control_mask_for_hr_fix = None
+        params.auto_hr_control_ready = True
+        logger.info("ControlNet auto HR input: using the current Hires. fix image as high-res control input.")
 
     @staticmethod
     def try_crop_image_with_a1111_mask(p: StableDiffusionProcessing, unit: ControlNetUnit, input_image: np.ndarray, resize_mode: external_code.ResizeMode, preprocessor, *, _is_mask: bool = False) -> np.ndarray:
@@ -268,6 +352,26 @@ class ControlNetForForgeOfficial(scripts.Script):
 
         preprocessor = global_state.get_preprocessor(unit.module)
 
+        if self.should_defer_hr_control_from_latent(p, unit):
+            if preprocessor.do_not_need_model:
+                model_filename = "Not Needed"
+                params.model = ControlModelPatcher()
+            else:
+                assert unit.model != "None", "You have not selected any control model!"
+                model_filename = global_state.get_controlnet_filename(unit.model)
+                params.model = try_load_supported_control_model(model_filename)
+                assert params.model is not None, logger.error(f"Recognizing Control Model failed: {model_filename}")
+
+            params.preprocessor = preprocessor
+            params.auto_hr_control_from_latent = True
+
+            params.preprocessor.process_after_running_preprocessors(process=p, params=params, **kwargs)
+            params.model.process_after_running_preprocessors(process=p, params=params, **kwargs)
+
+            logger.info(f"Current ControlNet {type(params.model).__name__}: {model_filename}")
+            logger.info("ControlNet auto HR input armed: no control image was provided; Hires. fix will use the first-pass image.")
+            return
+
         input_list, resize_mode = self.get_input_data(p, unit, preprocessor, h, w)
         preprocessor_outputs = []
         control_masks = []
@@ -418,6 +522,9 @@ class ControlNetForForgeOfficial(scripts.Script):
         if has_high_res_fix and (not is_hr_pass) and (not hr_option.low_res_enabled):
             logger.info(f"ControlNet Skipped Low-res pass.")
             return
+
+        if is_hr_pass and params.auto_hr_control_from_latent:
+            self.build_hr_control_from_latent(p, unit, params, kwargs.get("x", None))
 
         if is_hr_pass:
             cond = params.control_cond_for_hr_fix

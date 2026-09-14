@@ -204,6 +204,7 @@ class ControlNetUiGroup:
         self.image_upload_panel = None
         self.save_detected_map = None
         self.hr_option = None
+        self.use_firstpass_as_hr_input = None
 
         # Internal states for UI state pasting.
         self.prevent_next_n_module_update = 0
@@ -470,6 +471,13 @@ class ControlNetUiGroup:
             elem_classes="controlnet_hr_option_radio",
             visible=False,
         )
+        self.use_firstpass_as_hr_input = gr.Checkbox(
+            label="高分阶段使用首轮图作控制图",
+            value=self.default_unit.use_firstpass_as_hr_input,
+            elem_id=f"{elem_id_tabname}_{tabname}_controlnet_firstpass_hr_input_checkbox",
+            elem_classes=["controlnet_firstpass_hr_input_checkbox"],
+            visible=False,
+        )
 
         unit_args = (
             self.use_preview_as_input,
@@ -477,6 +485,7 @@ class ControlNetUiGroup:
             self.mask_image.background,
             self.mask_image.foreground,
             self.hr_option,
+            self.use_firstpass_as_hr_input,
             self.enabled,
             self.module,
             self.model,
@@ -799,9 +808,9 @@ class ControlNetUiGroup:
 
     def register_shift_hr_options(self):
         ControlNetUiGroup.a1111_context.txt2img_enable_hr.change(
-            fn=lambda checked: gr.update(visible=checked),
+            fn=lambda checked: (gr.update(visible=checked), gr.update(visible=checked)),
             inputs=[ControlNetUiGroup.a1111_context.txt2img_enable_hr],
-            outputs=[self.hr_option],
+            outputs=[self.hr_option, self.use_firstpass_as_hr_input],
             show_progress=False,
         )
 

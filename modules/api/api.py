@@ -10,7 +10,6 @@ from secrets import compare_digest
 from threading import Lock
 from typing import Any, Union, get_args, get_origin
 
-import gradio as gr
 import piexif
 import piexif.helper
 import requests
@@ -316,14 +315,22 @@ class Api:
         script_args = [None] * last_arg_index
         script_args[0] = 0
 
-        # get default values
-        with gr.Blocks():  # will throw errors calling ui function without this
-            for script in script_runner.scripts:
-                if script.ui(script.is_img2img):
-                    ui_default_values = []
-                    for elem in script.ui(script.is_img2img):
-                        ui_default_values.append(elem.value)
-                    script_args[script.args_from : script.args_to] = ui_default_values
+        # get default values from the controls that were already created for the real UI.
+        #
+        # Do not call script.ui() a second time inside a throwaway `with gr.Blocks()` root: scripts
+        # that re-enter containers from the real UI (for example Ranbooru's cached prompt rows)
+        # then attach a duplicate UI to the real layout tree while their blocks are registered in
+        # the throwaway Blocks. The resulting /config layout references ids that have no matching
+        # component, which makes the Gradio frontend throw while walking the layout and leaves the
+        # whole web UI stuck on the loading screen.
+        for script in script_runner.scripts:
+            controls = getattr(script, "controls", None)
+            if not controls:
+                continue
+
+            ui_default_values = [getattr(elem, "value", None) for elem in controls]
+            if script.args_to - script.args_from == len(ui_default_values):
+                script_args[script.args_from : script.args_to] = ui_default_values
         return script_args
 
     def init_script_args(self, request, default_script_args, selectable_scripts, selectable_idx, script_runner, *, input_script_args=None):

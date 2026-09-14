@@ -157,6 +157,7 @@ class ControlNetUnit:
     mask_image: Optional[GradioImageMaskPair] = None
     mask_image_fg: Optional[GradioImageMaskPair] = None
     hr_option: HiResFixOption | int | str = HiResFixOption.BOTH
+    use_firstpass_as_hr_input: bool = False
     enabled: bool = True
     module: str = "None"
     model: str = "None"
@@ -195,6 +196,7 @@ class ControlNetUnit:
             "pixel_perfect",
             "control_mode",
             "hr_option",
+            "use_firstpass_as_hr_input",
         )
 
     @staticmethod

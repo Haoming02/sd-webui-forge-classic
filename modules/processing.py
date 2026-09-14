@@ -1402,8 +1402,9 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         fp_additional_modules = getattr(shared.opts, "forge_additional_modules")
 
         reload = False
-        if "Use same choices" not in (getattr(self, "hr_additional_modules", []) or []):
-            modules_changed = main_entry.modules_change(self.hr_additional_modules, preset=None, save=False, refresh=False)
+        hr_additional_modules = getattr(self, "hr_additional_modules", None)
+        if hr_additional_modules and "Use same choices" not in hr_additional_modules:
+            modules_changed = main_entry.modules_change(hr_additional_modules, preset=None, save=False, refresh=False)
             if modules_changed:
                 reload = True
 
@@ -1435,7 +1436,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         if self.sd_model.use_shift:
             self.extra_generation_params["Hires Shift"] = self.hr_distilled_cfg
 
-        if self.hr_sampler_name is not None and self.hr_sampler_name != self.sampler_name:
+        if self.hr_sampler_name not in (None, "Use same sampler") and self.hr_sampler_name != self.sampler_name:
             self.extra_generation_params["Hires sampler"] = self.hr_sampler_name
         if self.hr_scheduler is not None and self.hr_scheduler != self.scheduler:
             self.extra_generation_params["Hires schedule type"] = self.hr_scheduler
@@ -1466,7 +1467,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             info = create_infotext(self, self.all_prompts, self.all_seeds, self.all_subseeds, [], iteration=self.iteration, position_in_batch=index)
             images.save_image(image, self.outpath_samples, "", seeds[index], prompts[index], opts.samples_format, info=info, p=self, suffix="-before-highres-fix")
 
-        img2img_sampler_name = self.hr_sampler_name or self.sampler_name
+        img2img_sampler_name = self.hr_sampler_name if self.hr_sampler_name and self.hr_sampler_name != "Use same sampler" else self.sampler_name
 
         self.sampler = sd_samplers.create_sampler(img2img_sampler_name, self.sd_model)
 
@@ -1599,7 +1600,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         hr_prompts = prompt_parser.SdConditioning(self.hr_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, distilled_cfg_scale=self.hr_distilled_cfg)
         hr_negative_prompts = prompt_parser.SdConditioning(self.hr_negative_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, is_negative_prompt=True, distilled_cfg_scale=self.hr_distilled_cfg)
 
-        sampler_config = sd_samplers.find_sampler_config(self.hr_sampler_name or self.sampler_name)
+        sampler_name = self.hr_sampler_name if self.hr_sampler_name and self.hr_sampler_name != "Use same sampler" else self.sampler_name
+        sampler_config = sd_samplers.find_sampler_config(sampler_name)
         steps = self.hr_second_pass_steps or self.steps
         total_steps = sampler_config.total_steps(steps) if sampler_config else steps
 
@@ -1935,3 +1937,4 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     def get_token_merging_ratio(self, for_hr=False):
         return self.token_merging_ratio or ("token_merging_ratio" in self.override_settings and opts.token_merging_ratio) or opts.token_merging_ratio_img2img or opts.token_merging_ratio
+

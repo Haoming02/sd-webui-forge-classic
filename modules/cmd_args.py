@@ -103,5 +103,8 @@ pkm.add_argument("--uv", action="store_true", help="Use the uv package manager")
 pkm.add_argument("--uv-symlink", action="store_true", help="Use the uv package manager with symlink")
 pkm.add_argument("--uv-local-cache", action="store_true", help="Use the uv package manager with a local cache (.uv-cache) instead of the system-wide cache")
 
+# Backward compatibility for extensions such as ADetailer and WD14 Tagger.
+parser.add_argument("--use-cpu", nargs="+", default=[], type=str.lower, help=argparse.SUPPRESS)
+
 parser = _parser
 paths_internal.parser = parser
