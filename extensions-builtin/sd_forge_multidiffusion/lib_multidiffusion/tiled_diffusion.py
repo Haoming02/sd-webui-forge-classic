@@ -276,6 +276,79 @@ class AbstractDiffusion:
                 control.cond_hint = self.control_params[tuple_key][param_id][batch_id]
             control = control.previous_controlnet
 
+    def _process_lllite_patches(self, c_in: dict, bboxes, batch_size: int, batch_id: int, x_shape, x_dtype, cond_or_uncond: list):
+        """Tile ControllLite (classic) patches stored in transformer_options['patches']."""
+        if opt_f is None:
+            return
+        try:
+            transformer_options = c_in.get("transformer_options", {}) or c_in.get("c", {}).get("transformer_options", {})
+            # also check direct c_in transformer_options (calc_cond_uncond_batch stores it in c)
+            if not transformer_options and "transformer_options" in c_in:
+                transformer_options = c_in["transformer_options"]
+        except Exception:
+            transformer_options = {}
+        patches_dict = transformer_options.get("patches", {}) if isinstance(transformer_options, dict) else {}
+        if not patches_dict:
+            return
+        PH, PW = self.h * opt_f, self.w * opt_f
+        tuple_key = tuple(cond_or_uncond) + tuple(x_shape)
+        # collect all lllite patches (attn1_patch / attn2_patch are same object)
+        seen = set()
+        for patch_name in ("attn1_patch", "attn2_patch"):
+            plist = patches_dict.get(patch_name, [])
+            for patch in plist:
+                pid = id(patch)
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                # detect classic LLLite patch via attributes introduced in lib_controllllite
+                if hasattr(patch, "cond_image_original") and hasattr(patch, "prepare_tiled"):
+                    try:
+                        if self.refresh:
+                            patch.clear_cache()
+                        patch.prepare_tiled(bboxes, opt_f, PH, PW, batch_size, batch_id, x_dtype, tuple_key)
+                    except Exception as e:
+                        # do not break diffusion on tiling error; fallback to original
+                        import traceback
+
+                        traceback.print_exc()
+                        print(f"[TiledDiffusion] LLLite tiling failed: {e}")
+
+    def _process_lllite_anima(self, bboxes, batch_size: int, batch_id: int, x_shape, x_dtype, cond_or_uncond: list):
+        """Tile ControllLite DiT (Anima) via global registry."""
+        if opt_f is None:
+            return
+        ACTIVE = None
+        try:
+            import importlib
+
+            mod = importlib.import_module("lib_controllllite.lib_controllllite_anima")
+            ACTIVE = getattr(mod, "ACTIVE_DIT_LLLITE_INSTANCES", None)
+        except Exception:
+            pass
+        if ACTIVE is None:
+            try:
+                import importlib
+
+                mod = importlib.import_module("lib_controllllite_anima")
+                ACTIVE = getattr(mod, "ACTIVE_DIT_LLLITE_INSTANCES", None)
+            except Exception:
+                return
+        if not ACTIVE:
+            return
+        PH, PW = self.h * opt_f, self.w * opt_f
+        tuple_key = tuple(cond_or_uncond) + tuple(x_shape)
+        for inst in list(ACTIVE):
+            try:
+                if self.refresh:
+                    inst.clear_tiled_cache()
+                inst.prepare_tiled(bboxes, opt_f, PH, PW, batch_size, batch_id, x_dtype, tuple_key)
+            except Exception as e:
+                import traceback
+
+                traceback.print_exc()
+                print(f"[TiledDiffusion] Anima LLLite tiling failed: {e}")
+
 
 def gaussian_weights(tile_w: int, tile_h: int) -> Tensor:
     f = lambda x, midpoint, var=0.01: exp(-(x - midpoint) * (x - midpoint) / (tile_w * tile_w) / (2 * var)) / sqrt(2 * pi * var)
@@ -334,6 +407,10 @@ class MultiDiffusion(AbstractDiffusion):
                 if "control" in c_in:
                     self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
                     c_tile["control"] = c_in["control_model"].get_control(x_tile, ts_tile, c_tile, len(cond_or_uncond))
+
+                # --- ControllLite tiling (classic + Anima) ---
+                self._process_lllite_patches(c_in, bboxes, N, batch_id, x_tile.shape, x_tile.dtype, cond_or_uncond)
+                self._process_lllite_anima(bboxes, N, batch_id, x_tile.shape, x_tile.dtype, cond_or_uncond)
 
                 if is_5d:
                     x_tile = x_tile.unsqueeze(2)
@@ -446,6 +523,10 @@ class MixtureOfDiffusers(AbstractDiffusion):
                 if "control" in c_in:
                     self.process_controlnet(x_tile.shape, x_tile.dtype, c_in, cond_or_uncond, bboxes, N, batch_id)
                     c_tile["control"] = c_in["control_model"].get_control(x_tile, t_tile, c_tile, len(cond_or_uncond))
+
+                # --- ControllLite tiling (classic + Anima) ---
+                self._process_lllite_patches(c_in, bboxes, N, batch_id, x_tile.shape, x_tile.dtype, cond_or_uncond)
+                self._process_lllite_anima(bboxes, N, batch_id, x_tile.shape, x_tile.dtype, cond_or_uncond)
 
                 if is_5d:
                     x_tile = x_tile.unsqueeze(2)
