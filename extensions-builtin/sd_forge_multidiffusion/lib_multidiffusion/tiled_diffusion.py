@@ -254,14 +254,6 @@ class AbstractDiffusion:
                     control.cond_hint = adaptive_resize(control.cond_hint_original, width, height, "nearest-exact", "center").float().to(control.device)
                     if control.channels_in == 1 and control.cond_hint.shape[1] > 1:
                         control.cond_hint = torch.mean(control.cond_hint, 1, keepdim=True)
-                elif control.__class__.__name__ == "ControlLLLiteAdvanced":
-                    if control.sub_idxs is not None and control.cond_hint_original.shape[0] >= control.full_latent_length:
-                        control.cond_hint = adaptive_resize(control.cond_hint_original[control.sub_idxs], PW, PH, "nearest-exact", "center").to(dtype=dtype, device=control.device)
-                    else:
-                        if (PH, PW) == (control.cond_hint_original.shape[-2], control.cond_hint_original.shape[-1]):
-                            control.cond_hint = control.cond_hint_original.clone().to(dtype=dtype, device=control.device)
-                        else:
-                            control.cond_hint = adaptive_resize(control.cond_hint_original, PW, PH, "nearest-exact", "center").to(dtype=dtype, device=control.device)
                 else:
                     if (PH, PW) == (control.cond_hint_original.shape[-2], control.cond_hint_original.shape[-1]):
                         control.cond_hint = control.cond_hint_original.clone().to(dtype=dtype, device=control.device)
