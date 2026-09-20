@@ -8,12 +8,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from backend.args import dynamic_args
 from backend.state_dict import load_state_dict
 
 logger = logging.getLogger("ControlNet")
-
-# Global registry for MultiDiffusion tiling support - holds active DiT LLLite instances
-ACTIVE_DIT_LLLITE_INSTANCES: list["ControlNetLLLiteDiT"] = []
 
 
 # region Consts
@@ -421,14 +419,20 @@ class ControlNetLLLiteDiT(nn.Module):
     def apply_to(self):
         for m in self.lllite_modules:
             m.apply_to()
-        if self not in ACTIVE_DIT_LLLITE_INSTANCES:
-            ACTIVE_DIT_LLLITE_INSTANCES.append(self)
+
+        instances: set["ControlNetLLLiteDiT"] = getattr(dynamic_args, "ACTIVE_LLLITE_DIT", set())
+        instances.add(self)
+        setattr(dynamic_args, "ACTIVE_LLLITE_DIT", instances)
 
     def restore(self):
         for m in self.lllite_modules:
             m.restore()
-        if self in ACTIVE_DIT_LLLITE_INSTANCES:
-            ACTIVE_DIT_LLLITE_INSTANCES.remove(self)
+
+        try:
+            getattr(dynamic_args, "ACTIVE_LLLITE_DIT", None).remove(self)
+        except (AttributeError, KeyError):
+            pass
+
         self.set_cond_image(None)
 
 

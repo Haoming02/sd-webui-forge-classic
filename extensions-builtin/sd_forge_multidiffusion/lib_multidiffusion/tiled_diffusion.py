@@ -12,6 +12,7 @@ from numpy import exp, pi, sqrt
 from torch import Tensor
 
 from backend import memory_management
+from backend.args import dynamic_args
 from backend.misc.image_resize import adaptive_resize
 from backend.patcher.base import ModelPatcher
 from backend.patcher.controlnet import ControlNet, T2IAdapter
@@ -318,27 +319,13 @@ class AbstractDiffusion:
         """Tile ControllLite DiT (Anima) via global registry."""
         if opt_f is None:
             return
-        ACTIVE = None
-        try:
-            import importlib
 
-            mod = importlib.import_module("lib_controllllite.lib_controllllite_anima")
-            ACTIVE = getattr(mod, "ACTIVE_DIT_LLLITE_INSTANCES", None)
-        except Exception:
-            pass
-        if ACTIVE is None:
-            try:
-                import importlib
-
-                mod = importlib.import_module("lib_controllllite_anima")
-                ACTIVE = getattr(mod, "ACTIVE_DIT_LLLITE_INSTANCES", None)
-            except Exception:
-                return
-        if not ACTIVE:
+        if not (INSTANCES := getattr(dynamic_args, "ACTIVE_LLLITE_DIT", None)):
             return
+
         PH, PW = self.h * opt_f, self.w * opt_f
         tuple_key = tuple(cond_or_uncond) + tuple(x_shape)
-        for inst in list(ACTIVE):
+        for inst in list(INSTANCES):
             try:
                 if self.refresh:
                     inst.clear_tiled_cache()
