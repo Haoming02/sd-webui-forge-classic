@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from backend.args import dynamic_args
+from backend.misc.image_resize import adaptive_resize
 from backend.state_dict import load_state_dict
 
 logger = logging.getLogger("ControlNet")
@@ -267,9 +268,8 @@ class ControlNetLLLiteDiT(nn.Module):
             m.layer_idx = i
             m._depth_embeds_ref = [self.depth_embeds]
 
-        # tiled diffusion support
-        self.cond_image_original: Optional[torch.Tensor] = None
-        self._tiled_cache: dict[tuple, dict[int, torch.Tensor]] = {}
+        self._cond_image_original: torch.Tensor = None
+        self._lllite_tiled_cache: dict[tuple, dict[int, torch.Tensor]] = {}
 
         logger.info(f"Loaded Control-LLLite (Anima) ({n} modules)")
 
@@ -321,35 +321,29 @@ class ControlNetLLLiteDiT(nn.Module):
         if cond_image is None:
             for m in self.lllite_modules:
                 m.cond_emb = None
-            self.cond_image_original = None
-            self._tiled_cache.clear()
+            self._cond_image_original = None
+            self._lllite_tiled_cache.clear()
             return
-        self.cond_image_original = cond_image.clone()
-        self._tiled_cache.clear()
+        self._cond_image_original = cond_image.clone()
+        self._lllite_tiled_cache.clear()
         cx = self.conditioning1(cond_image)
         for m in self.lllite_modules:
             m.cond_emb = cx
 
     def prepare_tiled(self, bboxes, opt_f: int, PH: int, PW: int, batch_size: int, batch_id: int, x_dtype: torch.dtype, tuple_key: tuple):
-        """Slice cond_image_original per bbox and recompute conditioning for tiled diffusion."""
-        if self.cond_image_original is None:
+        if self._cond_image_original is None:
             return
-        cache_for_key = self._tiled_cache.get(tuple_key)
-        if cache_for_key is not None and batch_id in cache_for_key:
-            cx_tiled = cache_for_key[batch_id]
+
+        if batch_id in (cache_for_key := self._lllite_tiled_cache.get(tuple_key, {})):
             for m in self.lllite_modules:
-                m.cond_emb = cx_tiled.to(m.cond_emb.device if m.cond_emb is not None else cx_tiled.device) if m.cond_emb is not None else cx_tiled
+                m.cond_emb = cache_for_key[batch_id]
             return
 
-        cond = self.cond_image_original
-        # resize if needed like ControlNet
-        if cond.shape[-2] != PH or cond.shape[-1] != PW:
-            from backend.misc.image_resize import adaptive_resize
+        cond = self._cond_image_original
 
-            dtype = x_dtype if x_dtype is not None else cond.dtype
-            # handle 4-channel case (inpaint) - resize all channels
-            resized = adaptive_resize(cond.float(), PW, PH, "nearest-exact", "center").to(dtype=dtype)
-            cond_resized = resized.to(device=cond.device, dtype=dtype)
+        if cond.shape[-2] != PH or cond.shape[-1] != PW:
+            resized = adaptive_resize(cond.float(), PW, PH, "nearest-exact", "center").to(dtype=x_dtype)
+            cond_resized = resized.to(device=cond.device, dtype=x_dtype)
         else:
             cond_resized = cond
 
@@ -364,41 +358,36 @@ class ControlNetLLLiteDiT(nn.Module):
             cond_repeat = cond_resized[:batch_size]
 
         tiles = []
+
         for bbox in bboxes:
-            y1 = bbox[1] * opt_f
-            y2 = bbox[3] * opt_f
             x1 = bbox[0] * opt_f
             x2 = bbox[2] * opt_f
-            y1 = max(0, min(y1, cond_repeat.shape[2]))
-            y2 = max(0, min(y2, cond_repeat.shape[2]))
+            y1 = bbox[1] * opt_f
+            y2 = bbox[3] * opt_f
+
             x1 = max(0, min(x1, cond_repeat.shape[3]))
             x2 = max(0, min(x2, cond_repeat.shape[3]))
+            y1 = max(0, min(y1, cond_repeat.shape[2]))
+            y2 = max(0, min(y2, cond_repeat.shape[2]))
+
             tile = cond_repeat[:, :, y1:y2, x1:x2]
             tiles.append(tile)
+
         tiled = torch.cat(tiles, dim=0) if len(tiles) > 1 else tiles[0]
-        # compute conditioning on tiled batch (need correct device/dtype)
-        # use same device/dtype as original conditioning
+
         device = self.conditioning1.conv1.weight.device
         dtype = self.conditioning1.conv1.weight.dtype
-        # move tiled to that device for conditioning compute, then will be moved per-module in forward
+
         cx_tiled = self.conditioning1(tiled.to(device=device, dtype=dtype))
-        # cache
-        if tuple_key not in self._tiled_cache:
-            self._tiled_cache[tuple_key] = {}
-        self._tiled_cache[tuple_key][batch_id] = cx_tiled
+
+        _cache = self._lllite_tiled_cache.setdefault(tuple_key, {})
+        _cache[batch_id] = cx_tiled
+
         for m in self.lllite_modules:
             m.cond_emb = cx_tiled
 
-    def restore_tiled(self):
-        """Restore original cond_emb after tiled batch."""
-        if self.cond_image_original is None:
-            return
-        cx = self.conditioning1(self.cond_image_original.to(device=self.conditioning1.conv1.weight.device, dtype=self.conditioning1.conv1.weight.dtype))
-        for m in self.lllite_modules:
-            m.cond_emb = cx
-
     def clear_tiled_cache(self):
-        self._tiled_cache.clear()
+        self._lllite_tiled_cache.clear()
 
     def set_multiplier(self, multiplier: float):
         self.multiplier = multiplier
