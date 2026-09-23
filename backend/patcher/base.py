@@ -163,7 +163,7 @@ class ModelPatcher:
 
         self.patches = {}
         self.backup = {}
-        self.backup_buffers = {}
+
         self.object_patches = {}
         self.object_patches_backup = {}
 
@@ -219,7 +219,6 @@ class ModelPatcher:
         n.force_cast_weights = self.force_cast_weights
 
         n.backup = self.backup
-        n.backup_buffers = self.backup_buffers
         n.object_patches_backup = self.object_patches_backup
         n.pinned = self.pinned
 
