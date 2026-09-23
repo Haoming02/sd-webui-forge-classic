@@ -22,13 +22,13 @@ re_attention = re.compile(
 re_break = re.compile(r"\s*\bBREAK\b\s*", re.S)
 
 
-def parse_prompt_attention(text: str, emphasis: str):
+def parse_prompt_attention(text: str, emphasis: str = None) -> list[tuple[str, float]]:
     res = []
     round_brackets = []
     square_brackets = []
 
     round_bracket_multiplier = 1.1
-    square_bracket_multiplier = 1 / 1.1
+    square_bracket_multiplier = 1.0 / 1.1
 
     def multiply_range(start_position, multiplier):
         for p in range(start_position, len(res)):
@@ -79,3 +79,7 @@ def parse_prompt_attention(text: str, emphasis: str):
                 i += 1
 
     return res
+
+
+def strip_emphasis(prompt: str) -> str:
+    return "".join(text for text, _ in parse_prompt_attention(prompt))

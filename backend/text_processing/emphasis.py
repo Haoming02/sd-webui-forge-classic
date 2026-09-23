@@ -74,9 +74,9 @@ options = [
 # region Utils
 
 
-from modules.prompt_parser import parse_prompt_attention
+from .parsing import parse_prompt_attention
 
 
 def uses_emphasis(prompt: str) -> bool:
     attention = parse_prompt_attention(prompt)
-    return len(attention) != len([p for p in attention if p[1] == 1.0 or p[0] == "BREAK"])
+    return any(w != 1.0 for (_, w) in attention)
