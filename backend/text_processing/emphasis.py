@@ -2,73 +2,64 @@ import torch
 
 
 class Emphasis:
-    """Emphasis class decides how to death with (emphasized:1.1) text in prompts"""
+    """Emphasis class determines how to deal with (emphasized texts:1.1) in prompts"""
 
-    name: str = "Base"
+    name: str = ""
     description: str = ""
 
-    tokens: list[list[int]]
-    """tokens from the chunk of the prompt"""
-
-    multipliers: torch.Tensor
-    """tensor with multipliers, once for each token"""
-
-    z: torch.Tensor
-    """output of cond transformers network (CLIP)"""
-
-    def after_transformers(self):
-        """Called after cond transformers network has processed the chunk of the prompt; this function should modify self.z to apply the emphasis"""
+    def __call__(self, z: torch.Tensor, multipliers: torch.Tensor):
 
         pass
 
 
 class EmphasisNone(Emphasis):
     name = "None"
-    description = "disable Emphasis entirely and treat (:1.2) as literal characters"
+    description = "disable Emphasis and treat parentheses as literal characters"
 
 
 class EmphasisIgnore(Emphasis):
     name = "Ignore"
-    description = "treat all words as if they have no emphasis"
+    description = "consume parentheses but ignore all emphasis"
 
 
 class EmphasisOriginal(Emphasis):
     name = "Original"
-    description = "the original emphasis implementation"
+    description = "the default emphasis implementation"
 
-    def after_transformers(self):
-        original_mean = self.z.mean()
-        self.z = self.z * self.multipliers.reshape(self.multipliers.shape + (1,)).expand(self.z.shape)
-        new_mean = self.z.mean()
-        self.z = self.z * (original_mean / new_mean)
+    def __call__(self, z: torch.Tensor, multipliers: torch.Tensor):
+        orig_mean = z.mean()
+        z *= multipliers.reshape(multipliers.shape + (1,)).expand(z.shape)
+        new_mean = z.mean()
+        z *= orig_mean / new_mean
+        return z
 
 
 class EmphasisOriginalNoNorm(EmphasisOriginal):
     name = "No norm"
-    description = "implementation without normalization (fix certain issues for SDXL)"
+    description = "implementation without normalization (for SD1/SDXL only)"
 
-    def after_transformers(self):
-        self.z = self.z * self.multipliers.reshape(self.multipliers.shape + (1,)).expand(self.z.shape)
-
-
-def get_current_option(emphasis_option_name):
-    return next(iter([x for x in options if x.name == emphasis_option_name]), EmphasisOriginal)
+    def __call__(self, z: torch.Tensor, multipliers: torch.Tensor):
+        return z * multipliers.reshape(multipliers.shape + (1,)).expand(z.shape)
 
 
-def get_options_descriptions():
-    return f"""
-        <ul style='margin-left: 1.5em'><li>
-            {"</li><li>".join(f"<b>{x.name}</b>: {x.description}" for x in options)}
-        </li></ul>
-            """
-
-
-options = [
+options: list[Emphasis] = [
     EmphasisNone,
     EmphasisIgnore,
     EmphasisOriginal,
     EmphasisOriginalNoNorm,
 ]
+
+
+def get_current_option(emphasis_option_name: str) -> Emphasis:
+    return next(iter([x for x in options if x.name == emphasis_option_name]), EmphasisOriginal)
+
+
+def get_options_descriptions() -> str:
+    return f"""
+        <ul style='margin-left: 1.5em'><li>
+            {"</li><li>".join(f"<b>{x.name}</b>: {x.description}" for x in options)}
+        </li></ul>
+            """
 
 
 # region Utils
