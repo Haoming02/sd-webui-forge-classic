@@ -34,7 +34,7 @@ class ExtraNetworkLora(extra_networks.ExtraNetwork):
 
             names.append(params.positional[0])
 
-            te_multiplier = 0.0 if "@" in params.positional[1] else (float(params.positional[1]) if len(params.positional) > 1 else 1.0)
+            te_multiplier = (0.0 if "@" in params.positional[1] else float(params.positional[1])) if len(params.positional) > 1 else 1.0
             te_multiplier = float(params.named.get("te", te_multiplier))
 
             unet_multiplier = float(params.positional[2]) if len(params.positional) > 2 else te_multiplier
