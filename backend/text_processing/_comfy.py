@@ -1,11 +1,13 @@
 # https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/sd1_clip.py
 
 import numbers
-from typing import Final
+from typing import Final, TypeAlias
 
 import torch
 
 from backend import memory_management
+
+TOKEN_WEIGHTS: TypeAlias = list[list[tuple[int, float]]]
 
 INF: Final[int] = 99999999
 
@@ -24,7 +26,7 @@ def gen_empty_tokens(special_tokens: dict[str, int], length: int) -> list[int]:
 
 
 class ClipTokenWeightEncoder:
-    def encode_token_weights(self: "SDClipModel", token_weight_pairs: list[list[tuple[int, float]]]):
+    def encode_token_weights(self: "SDClipModel", token_weight_pairs: TOKEN_WEIGHTS):
         to_encode = []
         max_token_len = 0
         has_weights = False
@@ -364,7 +366,7 @@ class SDTokenizer:
         else:
             tokens.extend([(self.pad_token, 1.0, 0)] * amount)
 
-    def tokenize_with_weights(self, text: str, return_word_ids=False, **kwargs):
+    def tokenize_with_weights(self, text: str, **kwargs) -> TOKEN_WEIGHTS:
         min_length = kwargs.get("min_length", self.min_length)
         min_padding = kwargs.get("min_padding", self.min_padding)
 
@@ -427,7 +429,7 @@ class SDTokenizer:
         if min_length is not None and len(batch) < min_length:
             self.pad_tokens(batch, min_length - len(batch))
 
-        if not return_word_ids:
+        if not kwargs.get("return_word_ids", False):
             batched_tokens = [[(t, w) for t, w, _ in x] for x in batched_tokens]
 
         return batched_tokens
