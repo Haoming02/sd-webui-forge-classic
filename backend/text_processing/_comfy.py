@@ -1,13 +1,16 @@
 # https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/sd1_clip.py
 
 import numbers
+from typing import Final
 
 import torch
 
 from backend import memory_management
 
+INF: Final[int] = 99999999
 
-def gen_empty_tokens(special_tokens, length):
+
+def gen_empty_tokens(special_tokens: dict[str, int], length: int) -> list[int]:
     start_token = special_tokens.get("start", None)
     end_token = special_tokens.get("end", None)
     pad_token = special_tokens.get("pad")
@@ -21,8 +24,8 @@ def gen_empty_tokens(special_tokens, length):
 
 
 class ClipTokenWeightEncoder:
-    def encode_token_weights(self: "SDClipModel", token_weight_pairs):
-        to_encode = list()
+    def encode_token_weights(self: "SDClipModel", token_weight_pairs: list[list[tuple[int, float]]]):
+        to_encode = []
         max_token_len = 0
         has_weights = False
         for x in token_weight_pairs:
@@ -247,7 +250,7 @@ class SDClipModel(torch.nn.Module, ClipTokenWeightEncoder):
         return z, pooled_output
 
 
-def parse_parentheses(string):
+def parse_parentheses(string: str) -> list[str]:
     result = []
     current_item = ""
     nesting_level = 0
@@ -276,7 +279,7 @@ def parse_parentheses(string):
     return result
 
 
-def token_weights(string, current_weight):
+def token_weights(string: str, current_weight: float) -> list[tuple[str, float]]:
     a = parse_parentheses(string)
     out = []
     for x in a:
@@ -297,13 +300,13 @@ def token_weights(string, current_weight):
     return out
 
 
-def escape_important(text):
+def escape_important(text: str) -> str:
     text = text.replace("\\)", "\0\1")
     text = text.replace("\\(", "\0\2")
     return text
 
 
-def unescape_important(text):
+def unescape_important(text: str) -> str:
     text = text.replace("\0\1", ")")
     text = text.replace("\0\2", "(")
     return text
@@ -376,7 +379,7 @@ class SDTokenizer:
             if (word := unescape_important(weighted_segment)) == "":
                 continue
 
-            end = -1 if self.tokenizer_adds_end_token else 999999999999
+            end = -1 if self.tokenizer_adds_end_token else INF
             tokens.append([(t, weight) for t in self.tokenizer(word)["input_ids"][self.tokens_start : end]])
 
         batched_tokens = []
