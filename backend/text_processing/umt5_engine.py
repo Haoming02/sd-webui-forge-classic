@@ -3,150 +3,40 @@
 
 import torch
 
-from backend import memory_management
 from backend.args import dynamic_args
-from backend.text_processing import emphasis, parsing
+from backend.text_processing import emphasis
 from modules.shared import opts
 
-
-class PromptChunk:
-    def __init__(self):
-        self.tokens = []
-        self.multipliers = []
+from ._comfy import INF, SDClipModel, SDTokenizer
 
 
 class UMT5TextProcessingEngine:
-    def __init__(self, text_encoder, tokenizer, min_length=512):
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
+    def __init__(self, text_encoder, tokenizer):
+        self.text_encoder = SDClipModel(text_encoder.transformer, layer="last", layer_idx=None, special_tokens={"end": 1, "pad": 0}, enable_attention_masks=True, zero_out_masked=True)
+        self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, pad_to_max_length=False, max_length=INF, min_length=512, pad_token=0)
 
-        self.text_encoder = text_encoder.transformer
-        self.tokenizer = tokenizer
-        self.device = memory_management.text_encoder_device()
+    @property
+    def emphasis(self) -> "emphasis.Emphasis":
+        return emphasis.get_current_option(opts.emphasis)()
 
-        self.max_length = 99999999
-        self.min_length = min_length
+    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+        return self.tokenizer.tokenizer(texts)["input_ids"]
 
-        empty = self.tokenizer("")["input_ids"]
-        self.tokens_start = 0
-        self.tokens_end = -1
-        self.end_token = empty[0]
-        self.pad_token = 0
-
-    def tokenize(self, texts):
-        return self.tokenizer(texts)["input_ids"]
-
-    def process_attn_mask(self, tokens):
-        attention_masks = []
-
-        for x in tokens:
-            attention_mask = []
-            eos = False
-
-            for y in x:
-                if isinstance(y, int):
-                    attention_mask.append(0 if eos else 1)
-                    if not eos and int(y) == self.end_token:
-                        eos = True
-
-            attention_masks.append(attention_mask)
-
-        return torch.tensor(attention_masks, dtype=torch.long, device=self.device)
-
-    def encode_with_transformers(self, tokens, attention_mask):
-        tokens = tokens.to(self.device)
-        return self.text_encoder(input_ids=tokens, attention_mask=attention_mask)
-
-    def tokenize_line(self, line):
-        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
-
-        tokenized = self.tokenize([text[self.tokens_start : self.tokens_end] for text, _ in parsed])
-
-        chunks = []
-        chunk = PromptChunk()
-        token_count = 0
-
-        def next_chunk():
-            nonlocal token_count
-            nonlocal chunk
-
-            chunk.tokens.append(self.end_token)
-            chunk.multipliers.append(1.0)
-
-            current_chunk_length = len(chunk.tokens)
-            token_count += current_chunk_length
-
-            if current_chunk_length < self.min_length:
-                chunk.tokens.extend([self.pad_token] * (self.min_length - current_chunk_length))
-                chunk.multipliers.extend([1.0] * (self.min_length - current_chunk_length))
-
-            chunks.append(chunk)
-            chunk = PromptChunk()
-
-        for tokens, (text, weight) in zip(tokenized, parsed):
-            if text == "BREAK" and weight == -1:
-                next_chunk()
-                continue
-
-            position = 0
-            while position < len(tokens):
-                token = tokens[position]
-                chunk.tokens.append(token)
-                chunk.multipliers.append(weight)
-                position += 1
-
-        if chunk.tokens or not chunks:
-            next_chunk()
-
-        return chunks, token_count
-
-    def __call__(self, texts):
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
-        if any(emphasis.uses_emphasis(x) for x in texts):
+    def __call__(self, texts: list[str]) -> torch.Tensor:
+        if any(emphasis.uses_emphasis(text) for text in texts) and self.emphasis.name in ("None", "Ignore"):
             dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
 
         zs = []
-        cache = {}
+        cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
             if line in cache:
-                line_z_values = cache[line]
+                cond = cache[line]
             else:
-                chunks, _ = self.tokenize_line(line)
-                line_z_values = []
+                chunk = self.tokenizer.tokenize_with_weights(line, disable_weights=self.emphasis.name == "None")
+                cond = self.text_encoder.encode_token_weights(chunk)[0]
+                cache[line] = cond
 
-                # pad all chunks to length of longest chunk
-                max_tokens = 0
-                for chunk in chunks:
-                    max_tokens = max(len(chunk.tokens), max_tokens)
-
-                for chunk in chunks:
-                    tokens = chunk.tokens
-                    multipliers = chunk.multipliers
-
-                    remaining_count = max_tokens - len(tokens)
-                    if remaining_count > 0:
-                        tokens += [self.id_pad] * remaining_count
-                        multipliers += [1.0] * remaining_count
-
-                    z = self.process_tokens([tokens], [multipliers])[0]
-                    line_z_values.append(z)
-                cache[line] = line_z_values
-
-            zs.extend(line_z_values)
+            zs.extend(cond)
 
         return torch.stack(zs)
-
-    def process_tokens(self, batch_tokens, batch_multipliers):
-        tokens = torch.asarray(batch_tokens)
-
-        attention_mask = self.process_attn_mask(batch_tokens)
-        z = self.encode_with_transformers(tokens, attention_mask)
-        z *= attention_mask.unsqueeze(-1).float()
-
-        self.emphasis.tokens = batch_tokens
-        self.emphasis.multipliers = torch.asarray(batch_multipliers).to(z)
-        self.emphasis.z = z
-        self.emphasis.after_transformers()
-        z = self.emphasis.z
-
-        return z

@@ -1,7 +1,6 @@
 import math
 
 import torch
-from transformers.activations import NewGELUActivation
 
 from backend.memory_management import pytorch_attention_enabled
 
@@ -13,7 +12,6 @@ else:
 activations = {
     "gelu_pytorch_tanh": lambda a: torch.nn.functional.gelu(a, approximate="tanh"),
     "relu": torch.nn.functional.relu,
-    "gelu_new": lambda a: NewGELUActivation()(a),
 }
 
 
