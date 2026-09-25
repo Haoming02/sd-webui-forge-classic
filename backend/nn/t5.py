@@ -177,7 +177,7 @@ class T5Stack(torch.nn.Module):
 
         if attention_mask is not None:
             mask = 1.0 - attention_mask.to(x.dtype).reshape((attention_mask.shape[0], 1, -1, attention_mask.shape[-1])).expand(attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1])
-            mask = mask.masked_fill(mask.to(torch.bool), float("-inf"))
+            mask = mask.masked_fill(mask.to(torch.bool), -torch.finfo(x.dtype).max)
 
         past_bias = None
 
@@ -185,7 +185,7 @@ class T5Stack(torch.nn.Module):
             x, past_bias = l(x, mask, past_bias)
 
         x = self.final_layer_norm(x)
-        return x
+        return x, None
 
 
 class T5(torch.nn.Module):
@@ -198,10 +198,16 @@ class T5(torch.nn.Module):
         self.encoder = T5Stack(self.num_layers, model_dim, model_dim, config["d_ff"], config["dense_act_fn"], config["is_gated_act"], config["num_heads"], config["model_type"] != "umt5")
         self.shared = torch.nn.Embedding(config["vocab_size"], model_dim)
 
-    def forward(self, input_ids, attention_mask=None, *args, **kwargs):
-        x = self.shared(input_ids)
-        x = torch.nan_to_num(x)
-        return self.encoder(x, attention_mask=attention_mask, *args, **kwargs)
+    def get_input_embeddings(self):
+        return self.shared
+
+    def forward(self, input_ids=None, attention_mask=None, embeds=None, **kwargs):
+        if input_ids is None:
+            x = embeds
+        else:
+            x = self.shared(input_ids).to(dtype=kwargs.get("dtype", torch.float32))
+
+        return self.encoder(torch.nan_to_num(x), attention_mask=attention_mask)
 
 
 class IntegratedT5(torch.nn.Module):

@@ -26,8 +26,7 @@ class Chroma(ForgeDiffusionEngine):
         self.text_processing_engine_t5 = T5TextProcessingEngine(
             text_encoder=clip.cond_stage_model.t5xxl,
             tokenizer=clip.tokenizer.t5xxl,
-            min_length=1,
-            min_padding=0,
+            is_chroma=True,
         )
 
         self.forge_objects = ForgeObjects(unet=unet, clip=clip, vae=vae, clipvision=None)
