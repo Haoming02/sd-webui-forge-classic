@@ -295,7 +295,7 @@ elif is_intel_xpu():
 SUPPORT_FP8_OPS: bool = None
 
 if is_amd():
-    AMD_RDNA2_AND_OLDER_ARCH = ("gfx1030", "gfx1031", "gfx1010", "gfx1011", "gfx1012", "gfx906", "gfx900", "gfx803")
+    AMD_RDNA2_AND_OLDER_ARCH = ("gfx1030", "gfx1031", "gfx1032", "gfx1033", "gfx1034", "gfx1035", "gfx1036", "gfx1010", "gfx1011", "gfx1012", "gfx906", "gfx900", "gfx803")
 
     try:
         arch = torch.cuda.get_device_properties(get_torch_device()).gcnArchName
