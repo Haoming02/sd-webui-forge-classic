@@ -40,6 +40,10 @@ class T5TextProcessingEngine:
                 cond = cache[line]
             else:
                 chunk = self.tokenizer.tokenize_with_weights(line, disable_weights=self.emphasis.name == "None")
+
+                if self.emphasis.name == "Ignore":
+                    chunk = [[(x[0], 1.0) for x in inner] for inner in chunk]
+
                 cond = self.text_encoder.encode_token_weights(chunk)[0]
                 cache[line] = cond
 
