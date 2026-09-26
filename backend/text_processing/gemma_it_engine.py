@@ -1,16 +1,12 @@
 # https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/sd1_clip.py
 # https://github.com/Comfy-Org/ComfyUI/blob/v0.24.1/comfy/text_encoders/pixeldit.py
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from modules.prompt_parser import SdConditioning
-
 import torch
 
-from backend import memory_management
 from backend.args import dynamic_args
-from backend.text_processing import emphasis, parsing
+from backend.text_processing import emphasis
+
+from ._comfy import INF, SDClipModel, SDTokenizer
 
 PIXELDIT_MAX_LENGTH = 300
 
@@ -33,143 +29,43 @@ PIXELDIT_CHI_PROMPT = (
 )
 
 
-class PromptChunk:
-    def __init__(self):
-        self.tokens = []
-        self.multipliers = []
-
-
-class GemmaTextProcessingEngine:
+class GemmaItTextProcessingEngine:
     def __init__(self, text_encoder, tokenizer):
-        self.emphasis = emphasis.EmphasisNone()
+        self.text_encoder = SDClipModel(text_encoder, layer="last", layer_idx=None, special_tokens={"start": 2, "pad": 0}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
+        self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1)
 
-        self.text_encoder = text_encoder
-        self.tokenizer = tokenizer
+        self.max_length_all = len(self.tokenize(PIXELDIT_CHI_PROMPT)) + PIXELDIT_MAX_LENGTH - 2
 
-        chi_token_count = len(self.tokenizer(PIXELDIT_CHI_PROMPT)["input_ids"])
-        self.min_length = chi_token_count + PIXELDIT_MAX_LENGTH - 2
+    @property
+    def emphasis(self) -> "emphasis.Emphasis":
+        return emphasis.EmphasisNone()
 
-        self.id_start = 2
-        self.id_pad = 0
+    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+        return self.tokenizer.tokenizer(texts)["input_ids"]
 
-        self.layer_norm_hidden_state = False
+    def _tokenize_with_weights(self, text: str):
+        if not text.strip():
+            return self.tokenizer.tokenize_with_weights("", disable_weights=True, min_length=PIXELDIT_MAX_LENGTH)
 
-    def tokenize(self, texts):
-        tokenized = self.tokenizer(texts)["input_ids"]
-        return tokenized
+        out = self.tokenizer.tokenize_with_weights(PIXELDIT_CHI_PROMPT + text, disable_weights=True, min_length=self.max_length_all)
 
-    def tokenize_line(self, line):
-        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
+        return [out[0][: self.max_length_all]]
 
-        tokenized = self.tokenize([text for text, _ in parsed])
-
-        chunks = []
-        chunk = PromptChunk()
-
-        def next_chunk():
-            nonlocal chunk
-
-            chunk.tokens = [self.id_start] + chunk.tokens
-            chunk.multipliers = [1.0] + chunk.multipliers
-
-            current_chunk_length = len(chunk.tokens)
-            remaining_count = self.min_length - current_chunk_length
-
-            if remaining_count > 0:
-                chunk.tokens += [self.id_pad] * remaining_count
-                chunk.multipliers += [1.0] * remaining_count
-
-            chunks.append(chunk)
-            chunk = PromptChunk()
-
-        for tokens, (text, weight) in zip(tokenized, parsed):
-            if text == "BREAK" and weight == -1:
-                next_chunk()
-                continue
-
-            position = 0
-            while position < len(tokens):
-                token = tokens[position]
-                chunk.tokens.append(token)
-                chunk.multipliers.append(weight)
-                position += 1
-
-        if chunk.tokens or not chunks:
-            next_chunk()
-
-        return chunks
-
-    def __call__(self, texts: "SdConditioning"):
-        self.emphasis = emphasis.EmphasisNone()
-        if any(emphasis.uses_emphasis(x) for x in texts):
-            dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
+    def __call__(self, texts: list[str]) -> list[torch.Tensor]:
+        if any(emphasis.uses_emphasis(text) for text in texts):
+            dynamic_args.last_extra_generation_params["Emphasis"] = "None"
 
         zs = []
-        cache = {}
+        cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
             if line in cache:
-                line_z_values = cache[line]
+                cond = cache[line]
             else:
-                chunks = self.tokenize_line(line)
-                line_z_values = []
+                chunk = self._tokenize_with_weights(line)
+                cond = self.text_encoder.encode_token_weights(chunk)[0]
+                cache[line] = cond
 
-                for chunk in chunks:
-                    tokens = chunk.tokens
-                    multipliers = chunk.multipliers
-
-                    z = self.process_tokens([tokens], [multipliers])[0]
-                    line_z_values.append(z)
-                cache[line] = line_z_values
-
-            zs.extend(line_z_values)
+            zs.extend(cond)
 
         return zs
-
-    def process_embeds(self, batch_tokens):
-        device = memory_management.text_encoder_device()
-
-        embeds_out = []
-        attention_masks = []
-        num_tokens = []
-
-        for tokens in batch_tokens:
-            attention_mask = []
-            tokens_temp = []
-            eos = False
-            index = 0
-
-            for t in tokens:
-                token = int(t)
-                attention_mask.append(0 if eos else 1)
-                tokens_temp += [token]
-                if not eos and token == self.id_pad:
-                    eos = True
-                index += 1
-
-            tokens_embed = torch.tensor([tokens_temp], device=device, dtype=torch.long)
-            tokens_embed = self.text_encoder.get_input_embeddings()(tokens_embed)
-
-            index = 0
-
-            embeds_out.append(tokens_embed)
-            attention_masks.append(attention_mask)
-            num_tokens.append(sum(attention_mask))
-
-        return torch.cat(embeds_out), torch.tensor(attention_masks, device=device, dtype=torch.long), num_tokens
-
-    def process_tokens(self, batch_tokens, batch_multipliers):
-        embeds, mask, count = self.process_embeds(batch_tokens)
-
-        z, _ = self.text_encoder(
-            None,
-            attention_mask=mask,
-            embeds=embeds,
-            num_tokens=count,
-            final_layer_norm_intermediate=self.layer_norm_hidden_state,
-        )
-
-        if z.shape[1] > PIXELDIT_MAX_LENGTH:
-            z = torch.cat([z[:, :1], z[:, -(PIXELDIT_MAX_LENGTH - 1) :]], dim=1)
-
-        return z

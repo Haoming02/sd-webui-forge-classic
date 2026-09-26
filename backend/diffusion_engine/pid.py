@@ -10,7 +10,7 @@ from backend.nn.wan_vae import WanVAE
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.gemma_it_engine import GemmaTextProcessingEngine
+from backend.text_processing.gemma_it_engine import GemmaItTextProcessingEngine
 from modules.shared import opts
 
 
@@ -40,7 +40,7 @@ class PiD(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_gemma = GemmaTextProcessingEngine(
+        self.text_processing_engine_gemma = GemmaItTextProcessingEngine(
             text_encoder=clip.cond_stage_model.gemma2,
             tokenizer=clip.tokenizer.gemma2,
         )
