@@ -182,8 +182,8 @@ def weight_dtype(sd: dict[str, torch.Tensor], prefix: str = "") -> torch.dtype |
     dtypes: dict[torch.dtype, int] = {}
     for k in sd.keys():
         if k.startswith(prefix):
-            w = sd[k]
-            dtypes[w.dtype] = dtypes.get(w.dtype, 0) + w.numel()
+            if isinstance((w := sd[k]), (torch.Tensor, torch.nn.Parameter)):
+                dtypes[w.dtype] = dtypes.get(w.dtype, 0) + w.numel()
 
     if len(dtypes) == 0:
         return None
