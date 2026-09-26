@@ -1,141 +1,46 @@
 # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.75/comfy/sd1_clip.py
 # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.75/comfy/text_encoders/z_image.py
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from modules.prompt_parser import SdConditioning
-
 import torch
 
-from backend import memory_management
 from backend.args import dynamic_args
-from backend.text_processing import emphasis, parsing
-from modules.shared import opts
+from backend.text_processing import emphasis
 
-
-class PromptChunk:
-    def __init__(self):
-        self.tokens = []
-        self.multipliers = []
+from ._comfy import INF, SDClipModel, SDTokenizer
 
 
 class Qwen3TextProcessingEngine:
     def __init__(self, text_encoder, tokenizer):
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
+        self.text_encoder = SDClipModel(text_encoder, layer="hidden", layer_idx=-2, special_tokens={"pad": 151643}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
+        self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1, pad_token=151643)
 
-        self.text_encoder = text_encoder
-        self.tokenizer = tokenizer
-
-        self.id_pad = 151643
         self.llama_template = "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
-        self.intermediate_output = -2
-        self.layer_norm_hidden_state = False
 
-    def tokenize(self, texts):
+    @property
+    def emphasis(self) -> "emphasis.Emphasis":
+        return emphasis.EmphasisNone()
+
+    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
         llama_texts = [self.llama_template.format(text) for text in texts]
-        return self.tokenizer(llama_texts)["input_ids"]
+        return self.tokenizer.tokenizer(llama_texts)["input_ids"]
 
-    def tokenize_line(self, line: str):
-        parsed = parsing.parse_prompt_attention(line, self.emphasis.name)
-        tokenized = self.tokenize([text for text, _ in parsed])
-
-        chunks = []
-        chunk = PromptChunk()
-
-        def next_chunk():
-            nonlocal chunk
-
-            chunks.append(chunk)
-            chunk = PromptChunk()
-
-        for tokens, (text, weight) in zip(tokenized, parsed):
-            position = 0
-            while position < len(tokens):
-                token = tokens[position]
-                chunk.tokens.append(token)
-                chunk.multipliers.append(weight)
-                position += 1
-
-        if chunk.tokens or not chunks:
-            next_chunk()
-
-        return chunks
-
-    def __call__(self, texts: "SdConditioning"):
-        self.emphasis = emphasis.get_current_option(opts.emphasis)()
-        if any(emphasis.uses_emphasis(x) for x in texts):
-            dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
+    def __call__(self, texts: list[str]) -> torch.Tensor:
+        if any(emphasis.uses_emphasis(text) for text in texts):
+            dynamic_args.last_extra_generation_params["Emphasis"] = "None"
 
         zs = []
-        cache = {}
+        cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
+            line = self.llama_template.format(line)
+
             if line in cache:
-                line_z_values = cache[line]
+                cond = cache[line]
             else:
-                chunks = self.tokenize_line(line)
-                line_z_values = []
+                chunk = self.tokenizer.tokenize_with_weights(line, disable_weights=True)
+                cond = self.text_encoder.encode_token_weights(chunk)[0]
+                cache[line] = cond
 
-                for chunk in chunks:
-                    tokens = chunk.tokens
-                    multipliers = chunk.multipliers
-
-                    z = self.process_tokens([tokens], [multipliers])[0]
-                    line_z_values.append(z)
-                cache[line] = line_z_values
-
-            zs.extend(line_z_values)
+            zs.extend(cond)
 
         return zs
-
-    def process_embeds(self, batch_tokens):
-        device = memory_management.text_encoder_device()
-
-        embeds_out = []
-        attention_masks = []
-        num_tokens = []
-
-        for tokens in batch_tokens:
-            attention_mask = []
-            tokens_temp = []
-            eos = False
-            index = 0
-
-            for t in tokens:
-                token = int(t)
-                attention_mask.append(0 if eos else 1)
-                tokens_temp += [token]
-                if not eos and token == self.id_pad:
-                    eos = True
-                index += 1
-
-            tokens_embed = torch.tensor([tokens_temp], device=device, dtype=torch.long)
-            tokens_embed = self.text_encoder.get_input_embeddings()(tokens_embed)
-
-            index = 0
-
-            embeds_out.append(tokens_embed)
-            attention_masks.append(attention_mask)
-            num_tokens.append(sum(attention_mask))
-
-        return torch.cat(embeds_out), torch.tensor(attention_masks, device=device, dtype=torch.long), num_tokens
-
-    def process_tokens(self, batch_tokens, batch_multipliers):
-        embeds, mask, count = self.process_embeds(batch_tokens)
-
-        self.emphasis.tokens = batch_tokens
-        self.emphasis.multipliers = torch.asarray(batch_multipliers).to(embeds)
-        self.emphasis.z = embeds
-        self.emphasis.after_transformers()
-        embeds = self.emphasis.z
-
-        _, z = self.text_encoder(
-            None,
-            attention_mask=mask,
-            embeds=embeds,
-            num_tokens=count,
-            intermediate_output=self.intermediate_output,
-            final_layer_norm_intermediate=self.layer_norm_hidden_state,
-        )
-        return z
