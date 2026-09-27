@@ -1,10 +1,12 @@
+from functools import wraps
+
 import torch
 
 from backend.args import dynamic_args
 from backend.text_processing import emphasis
 from modules.shared import opts
 
-from ._comfy import INF, SDClipModel, SDTokenizer
+from ._comfy import INF, SDClipModel, SDTokenizer, gen_empty_tokens
 
 
 class T5TextProcessingEngine:
@@ -13,13 +15,15 @@ class T5TextProcessingEngine:
         self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, pad_to_max_length=False, max_length=INF, min_length=1 if is_chroma else 256)
 
         if is_chroma:
+            import types
 
-            def gen_empty_tokens(special_tokens, *args, **kwargs):
+            @wraps(gen_empty_tokens)
+            def _gen_empty_tokens(self, special_tokens: dict, *args, **kwargs):
                 special_tokens = special_tokens.copy()
                 special_tokens.pop("end")
                 return gen_empty_tokens(special_tokens, *args, **kwargs)
 
-            self.text_encoder.gen_empty_tokens = gen_empty_tokens
+            self.text_encoder.gen_empty_tokens = types.MethodType(_gen_empty_tokens, self.text_encoder)
 
     @property
     def emphasis(self) -> "emphasis.Emphasis":
