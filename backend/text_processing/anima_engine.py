@@ -1,3 +1,5 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/anima.py
+
 import torch
 
 from backend import memory_management

@@ -1,5 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.19.1/comfy/sd1_clip.py
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.19.1/comfy/text_encoders/ernie.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/ernie.py
 
 import torch
 

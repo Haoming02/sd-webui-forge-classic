@@ -1,5 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.75/comfy/sd1_clip.py
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.75/comfy/text_encoders/z_image.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/z_image.py
 
 import torch
 

@@ -1,3 +1,5 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/flux.py
+
 from functools import wraps
 
 import torch

@@ -1,5 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.9.0/comfy/sd1_clip.py
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.9.0/comfy/text_encoders/flux.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/flux.py
 
 import torch
 

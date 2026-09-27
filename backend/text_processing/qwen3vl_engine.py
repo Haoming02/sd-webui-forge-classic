@@ -1,7 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/sd1_clip.py
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/text_encoders/krea2.py
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/text_encoders/qwen35.py
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.26.1/comfy/text_encoders/qwen3vl.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/krea2.py
 
 import numbers
 

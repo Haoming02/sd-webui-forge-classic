@@ -1,5 +1,4 @@
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/sd1_clip.py
-# https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/text_encoders/lumina2.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/lumina2.py
 
 from typing import TYPE_CHECKING
 
