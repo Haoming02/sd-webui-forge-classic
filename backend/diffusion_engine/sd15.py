@@ -52,6 +52,6 @@ class StableDiffusion(ForgeDiffusionEngine):
         return cond
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
         _, token_count = self.text_processing_engine.process_texts([prompt])
         return token_count, self.text_processing_engine.get_target_prompt_token_count(token_count)
