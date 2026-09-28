@@ -8,7 +8,7 @@ from backend.args import dynamic_args
 from backend.text_processing import emphasis
 from modules.shared import opts
 
-from ._comfy import INF, SDClipModel, SDTokenizer, gen_empty_tokens
+from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer, gen_empty_tokens
 
 
 class T5TextProcessingEngine:
@@ -31,14 +31,14 @@ class T5TextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.get_current_option(opts.emphasis)()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         return self.tokenizer.tokenizer(texts)["input_ids"]
 
-    def __call__(self, texts: list[str]) -> torch.Tensor:
+    def __call__(self, texts: list[str]) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts) and self.emphasis.name in ("None", "Ignore"):
             dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
 
-        zs = []
+        zs: list[torch.Tensor] = []
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
@@ -55,4 +55,4 @@ class T5TextProcessingEngine:
 
             zs.extend(cond)
 
-        return torch.stack(zs)
+        return zs

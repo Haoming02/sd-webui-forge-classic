@@ -7,6 +7,7 @@ import torch
 
 from backend import memory_management
 
+EMBEDDINGS: TypeAlias = list[int]
 TOKEN_WEIGHTS: TypeAlias = list[list[tuple[int, float]]]
 
 INF: Final[int] = 99999999

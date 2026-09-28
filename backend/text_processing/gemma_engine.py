@@ -11,7 +11,7 @@ from backend.args import dynamic_args
 from backend.text_processing import emphasis
 from modules.shared import opts
 
-from ._comfy import INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
 class GemmaTextProcessingEngine:
@@ -23,25 +23,18 @@ class GemmaTextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.get_current_option(opts.emphasis)()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         return self.tokenizer.tokenizer(texts)["input_ids"]
 
-    @staticmethod
-    def process_template(text: str, is_negative: bool) -> str:
-        if "<Prompt Start>" in text:
-            return text
-
-        return "\n".join([opts.neta_template_negative if is_negative else opts.neta_template_positive, text])
-
-    def __call__(self, texts: "SdConditioning") -> torch.Tensor:
+    def __call__(self, texts: "SdConditioning") -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts) and self.emphasis.name in ("None", "Ignore"):
             dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
 
-        zs = []
+        zs: list[torch.Tensor] = []
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
-            line = self.process_template(line, texts.is_negative_prompt)
+            line = self._process_template(line, texts.is_negative_prompt)
 
             if line in cache:
                 cond = cache[line]
@@ -57,3 +50,10 @@ class GemmaTextProcessingEngine:
             zs.extend(cond)
 
         return zs
+
+    @staticmethod
+    def _process_template(text: str, is_negative: bool) -> str:
+        if "<Prompt Start>" in text:
+            return text
+
+        return "\n".join([opts.neta_template_negative if is_negative else opts.neta_template_positive, text])

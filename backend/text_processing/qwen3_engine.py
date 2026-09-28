@@ -5,7 +5,7 @@ import torch
 from backend.args import dynamic_args
 from backend.text_processing import emphasis
 
-from ._comfy import INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
 class Qwen3TextProcessingEngine:
@@ -19,15 +19,15 @@ class Qwen3TextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.EmphasisNone()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         llama_texts = [self.llama_template.format(text) for text in texts]
         return self.tokenizer.tokenizer(llama_texts)["input_ids"]
 
-    def __call__(self, texts: list[str]) -> torch.Tensor:
+    def __call__(self, texts: list[str]) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts):
             dynamic_args.last_extra_generation_params["Emphasis"] = "None"
 
-        zs = []
+        zs: list[torch.Tensor] = []
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:

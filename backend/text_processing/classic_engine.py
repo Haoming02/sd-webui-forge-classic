@@ -10,6 +10,8 @@ from backend.text_processing import emphasis, parsing
 from backend.text_processing.textual_inversion import EmbeddingDatabase
 from modules.shared import opts
 
+from ._comfy import EMBEDDINGS
+
 PromptChunkFix = namedtuple("PromptChunkFix", ["offset", "embedding"])
 
 
@@ -83,7 +85,7 @@ class ClassicTextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.get_current_option(opts.emphasis)()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         return self.tokenizer(texts)["input_ids"]
 
     def empty_chunk(self):
@@ -218,7 +220,7 @@ class ClassicTextProcessingEngine:
         batch_chunks, _ = self.process_texts(texts)
         chunk_count = max([len(x) for x in batch_chunks])
 
-        zs = []
+        zs: list[torch.Tensor] = []
         used_embeddings = {}
 
         for i in range(chunk_count):

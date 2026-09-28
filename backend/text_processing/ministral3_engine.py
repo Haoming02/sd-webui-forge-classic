@@ -5,7 +5,7 @@ import torch
 from backend.args import dynamic_args
 from backend.text_processing import emphasis
 
-from ._comfy import INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
 class Wrap:
@@ -30,7 +30,7 @@ class Ministral3TextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.EmphasisNone()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         if isinstance(texts, str):
             return self.tokenizer.tokenizer(texts)["input_ids"]
         else:
@@ -40,7 +40,7 @@ class Ministral3TextProcessingEngine:
         if any(emphasis.uses_emphasis(text) for text in texts):
             dynamic_args.last_extra_generation_params["Emphasis"] = "None"
 
-        zs = []
+        zs: list[torch.Tensor] = []
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:

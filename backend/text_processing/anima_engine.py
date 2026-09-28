@@ -7,7 +7,7 @@ from backend.args import dynamic_args
 from backend.text_processing import emphasis
 from modules.shared import opts
 
-from ._comfy import INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
 class AnimaTextProcessingEngine:
@@ -20,7 +20,7 @@ class AnimaTextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.get_current_option(opts.emphasis)()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> tuple[EMBEDDINGS, EMBEDDINGS] | tuple[list[EMBEDDINGS], list[EMBEDDINGS]]:
         return (
             self.qwen_tokenizer.tokenizer(texts)["input_ids"],
             self.t5_tokenizer.tokenizer(texts)["input_ids"],
@@ -33,12 +33,12 @@ class AnimaTextProcessingEngine:
         n: bool = self.emphasis.name == "None"
         i: bool = self.emphasis.name == "Ignore"
 
-        zs = []
-        cache: dict[str, tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = {}
+        zs: list[torch.Tensor] = []
+        cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
             if line in cache:
-                cond, ids, weights = cache[line]
+                z = cache[line]
             else:
                 qwen_chunk = self.qwen_tokenizer.tokenize_with_weights(line, disable_weights=n)
                 t5_chunk = self.t5_tokenizer.tokenize_with_weights(line, disable_weights=n)
@@ -49,9 +49,10 @@ class AnimaTextProcessingEngine:
                 ids = torch.tensor(list(map(lambda x: x[0], t5_chunk[0])), dtype=torch.int).unsqueeze(0)
                 weights = torch.tensor(list(map(lambda x: (1.0 if i else x[1]), t5_chunk[0]))).unsqueeze(0).unsqueeze(-1)
 
-                cache[line] = (cond, ids, weights)
+                z = self._preprocess(cond, ids, weights)
+                cache[line] = z
 
-            zs.append(self._preprocess(cond, ids, weights))
+            zs.append(z)
 
         return zs
 

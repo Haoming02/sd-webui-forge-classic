@@ -7,7 +7,7 @@ import torch
 from backend.args import dynamic_args
 from backend.text_processing import emphasis
 
-from ._comfy import INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, TOKEN_WEIGHTS, SDClipModel, SDTokenizer
 
 
 class Qwen3VLTextProcessingEngine:
@@ -23,30 +23,14 @@ class Qwen3VLTextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.EmphasisNone()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         return self.tokenizer.tokenizer(texts)["input_ids"]
-
-    def _tokenize_with_weights(self, text: str, images: list[torch.Tensor]):
-        prompt = self.vision_block * len(images) + text.strip()
-        llama_text = self.llama_template.format(prompt)
-
-        tokens = self.tokenizer.tokenize_with_weights(llama_text, disable_weights=True)
-        embed_count = 0
-
-        for r in tokens:
-            for i in range(len(r)):
-                if isinstance(r[i][0], (int, float)) and r[i][0] == 151655:
-                    if len(images) > embed_count:
-                        r[i] = ({"type": "image", "data": images[embed_count], "original_type": "image"},) + r[i][1:]
-                        embed_count += 1
-
-        return tokens
 
     def __call__(self, texts: list[str], images: list[torch.Tensor] = []) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts):
             dynamic_args.last_extra_generation_params["Emphasis"] = "None"
 
-        zs = []
+        zs: list[torch.Tensor] = []
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
@@ -79,3 +63,18 @@ class Qwen3VLTextProcessingEngine:
             zs.append(cond)
 
         return zs
+
+    def _tokenize_with_weights(self, text: str, images: list[torch.Tensor]) -> TOKEN_WEIGHTS:
+        llama_text = self.llama_template.format(self.vision_block * len(images) + text.strip())
+        tokens = self.tokenizer.tokenize_with_weights(llama_text, disable_weights=True)
+
+        embed_count = 0
+
+        for r in tokens:
+            for i in range(len(r)):
+                if isinstance(r[i][0], (int, float)) and r[i][0] == 151655:
+                    if len(images) > embed_count:
+                        r[i] = ({"type": "image", "data": images[embed_count], "original_type": "image"},) + r[i][1:]
+                        embed_count += 1
+
+        return tokens

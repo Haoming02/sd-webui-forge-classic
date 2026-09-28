@@ -5,7 +5,7 @@ import torch
 from backend.args import dynamic_args
 from backend.text_processing import emphasis
 
-from ._comfy import INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, TOKEN_WEIGHTS, SDClipModel, SDTokenizer
 
 PIXELDIT_MAX_LENGTH = 300
 
@@ -39,22 +39,14 @@ class GemmaItTextProcessingEngine:
     def emphasis(self) -> "emphasis.Emphasis":
         return emphasis.EmphasisNone()
 
-    def tokenize(self, texts: list[str]) -> tuple[list[int], list[int]]:
+    def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         return self.tokenizer.tokenizer(texts)["input_ids"]
-
-    def _tokenize_with_weights(self, text: str):
-        if not text.strip():
-            return self.tokenizer.tokenize_with_weights("", disable_weights=True, min_length=PIXELDIT_MAX_LENGTH)
-
-        out = self.tokenizer.tokenize_with_weights(PIXELDIT_CHI_PROMPT + text, disable_weights=True, min_length=self.max_length_all)
-
-        return [out[0][: self.max_length_all]]
 
     def __call__(self, texts: list[str]) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts):
             dynamic_args.last_extra_generation_params["Emphasis"] = "None"
 
-        zs = []
+        zs: list[torch.Tensor] = []
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
@@ -68,3 +60,10 @@ class GemmaItTextProcessingEngine:
             zs.extend(cond)
 
         return zs
+
+    def _tokenize_with_weights(self, text: str) -> TOKEN_WEIGHTS:
+        if not text.strip():
+            return self.tokenizer.tokenize_with_weights("", disable_weights=True, min_length=PIXELDIT_MAX_LENGTH)
+
+        out = self.tokenizer.tokenize_with_weights(PIXELDIT_CHI_PROMPT + text, disable_weights=True, min_length=self.max_length_all)
+        return [out[0][: self.max_length_all]]
