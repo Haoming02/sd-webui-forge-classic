@@ -156,7 +156,7 @@ class ForgeCanvas {
         drawingCanvas.width = imageContainer.clientWidth;
         drawingCanvas.height = imageContainer.clientHeight;
 
-        const drawContext = drawingCanvas.getContext("2d");
+        const drawContext = drawingCanvas.getContext("2d", { willReadFrequently: true });
         self.drawingCanvas_ = drawingCanvas;
 
         if (self.no_scribbles) {
@@ -268,11 +268,10 @@ class ForgeCanvas {
             if (!self.img || e.button !== 0 || self.no_scribbles) return;
             e.preventDefault();
             drawingCanvas.setPointerCapture(e.pointerId);
-            const rect = drawingCanvas.getBoundingClientRect();
             self.drawing = true;
             drawingCanvas.style.cursor = "crosshair";
             scribbleIndicator.style.display = "none";
-            self.temp_draw_points = [[(e.clientX - rect.left) / self.imgScale, (e.clientY - rect.top) / self.imgScale]];
+            self.temp_draw_points = [];
             self.temp_draw_bg = drawContext.getImageData(0, 0, drawingCanvas.width, drawingCanvas.height);
             self.handleDraw(e);
         });
@@ -521,6 +520,7 @@ class ForgeCanvas {
         ctx.putImageData(this.temp_draw_bg, 0, 0);
         ctx.beginPath();
         ctx.moveTo(this.temp_draw_points[0][0], this.temp_draw_points[0][1]);
+        if (this.temp_draw_points.length === 1) ctx.arc(x, y, 1, 0, Math.PI * 2);
 
         for (let i = 1; i < this.temp_draw_points.length; i++) {
             ctx.lineTo(this.temp_draw_points[i][0], this.temp_draw_points[i][1]);
