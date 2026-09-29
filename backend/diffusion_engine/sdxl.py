@@ -8,7 +8,7 @@ from backend.nn.unet import Timestep
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.classic_engine import ClassicTextProcessingEngine
+from backend.text_processing.sd_engine import ClipEngine
 from modules.shared import opts
 
 
@@ -33,7 +33,7 @@ class StableDiffusionXL(ForgeDiffusionEngine):
             unet = UnetPatcher.from_model(model=huggingface_components["unet"], diffusers_scheduler=huggingface_components["scheduler"], config=estimated_config)
             self.use_shift = False
 
-        self.text_processing_engine_l = ClassicTextProcessingEngine(
+        self.text_processing_engine_l = ClipEngine(
             text_encoder=clip.cond_stage_model.clip_l,
             tokenizer=clip.tokenizer.clip_l,
             embedding_dir=dynamic_args.embedding_dir,
@@ -46,7 +46,7 @@ class StableDiffusionXL(ForgeDiffusionEngine):
             final_layer_norm=False,
         )
 
-        self.text_processing_engine_g = ClassicTextProcessingEngine(
+        self.text_processing_engine_g = ClipEngine(
             text_encoder=clip.cond_stage_model.clip_g,
             tokenizer=clip.tokenizer.clip_g,
             embedding_dir=dynamic_args.embedding_dir,
@@ -131,7 +131,7 @@ class StableDiffusionXLRefiner(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["unet"], diffusers_scheduler=huggingface_components["scheduler"], config=estimated_config)
 
-        self.text_processing_engine_g = ClassicTextProcessingEngine(
+        self.text_processing_engine_g = ClipEngine(
             text_encoder=clip.cond_stage_model.clip_g,
             tokenizer=clip.tokenizer.clip_g,
             embedding_dir=dynamic_args.embedding_dir,

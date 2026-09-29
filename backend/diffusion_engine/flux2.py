@@ -12,7 +12,7 @@ from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.klein_engine import KleinTextProcessingEngine
+from backend.text_processing.klein_engine import Qwen3_4B_8B_Engine
 from modules.shared import opts
 
 
@@ -30,7 +30,7 @@ class Flux2(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_gemma = KleinTextProcessingEngine(
+        self.text_processing_engine_gemma = Qwen3_4B_8B_Engine(
             text_encoder=clip.cond_stage_model.qwen3,
             tokenizer=clip.tokenizer.qwen3,
         )

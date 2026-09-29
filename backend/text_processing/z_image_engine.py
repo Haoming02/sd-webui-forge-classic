@@ -8,7 +8,7 @@ from backend.text_processing import emphasis
 from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
-class Qwen3TextProcessingEngine:
+class Qwen34BEngine:
     def __init__(self, text_encoder, tokenizer):
         self.text_encoder = SDClipModel(text_encoder, layer="hidden", layer_idx=-2, special_tokens={"pad": 151643}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
         self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1, pad_token=151643)

@@ -10,7 +10,7 @@ from modules.shared import opts
 from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
-class AnimaTextProcessingEngine:
+class Qwen06Engine:
     def __init__(self, text_encoder, qwen_tokenizer, t5_tokenizer):
         self.text_encoder = SDClipModel(text_encoder, layer="last", layer_idx=None, special_tokens={"pad": 151643}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
         self.qwen_tokenizer = SDTokenizer(qwen_tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1, pad_token=151643)

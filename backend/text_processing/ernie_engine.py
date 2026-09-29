@@ -21,7 +21,7 @@ class Wrap:
         return getattr(self.model, name)
 
 
-class Ministral3TextProcessingEngine:
+class Ministral3Engine:
     def __init__(self, text_encoder, tokenizer):
         self.text_encoder = SDClipModel(text_encoder, layer="hidden", layer_idx=-2, special_tokens={"start": 1, "pad": 0}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
         self.tokenizer = SDTokenizer(Wrap(tokenizer), pad_with_end=False, has_end_token=False, pad_to_max_length=False, pad_token=11, start_token=1, max_length=INF, min_length=1, pad_left=True, disable_weights=True)

@@ -1,9 +1,6 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/lumina2.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/flux.py
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from modules.prompt_parser import SdConditioning
+from functools import wraps
 
 import torch
 
@@ -11,13 +8,24 @@ from backend.args import dynamic_args
 from backend.text_processing import emphasis
 from modules.shared import opts
 
-from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer, gen_empty_tokens
 
 
-class GemmaTextProcessingEngine:
-    def __init__(self, text_encoder, tokenizer):
-        self.text_encoder = SDClipModel(text_encoder, layer="hidden", layer_idx=-2, special_tokens={"start": 2, "pad": 0}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
-        self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1)
+class T5XXLEngine:
+    def __init__(self, text_encoder, tokenizer, *, is_chroma: bool = False):
+        self.text_encoder = SDClipModel(text_encoder.transformer, layer="last", layer_idx=None, special_tokens={"end": 1, "pad": 0}, enable_attention_masks=False, return_attention_masks=False)
+        self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, pad_to_max_length=False, max_length=INF, min_length=1 if is_chroma else 256)
+
+        if is_chroma:
+            import types
+
+            @wraps(gen_empty_tokens)
+            def _gen_empty_tokens(self, special_tokens: dict, *args, **kwargs):
+                special_tokens = special_tokens.copy()
+                special_tokens.pop("end")
+                return gen_empty_tokens(special_tokens, *args, **kwargs)
+
+            self.text_encoder.gen_empty_tokens = types.MethodType(_gen_empty_tokens, self.text_encoder)
 
     @property
     def emphasis(self) -> "emphasis.Emphasis":
@@ -26,7 +34,7 @@ class GemmaTextProcessingEngine:
     def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
         return self.tokenizer.tokenizer(texts)["input_ids"]
 
-    def __call__(self, texts: "SdConditioning") -> list[torch.Tensor]:
+    def __call__(self, texts: list[str]) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts) and self.emphasis.name in ("None", "Ignore"):
             dynamic_args.last_extra_generation_params["Emphasis"] = self.emphasis.name
 
@@ -34,8 +42,6 @@ class GemmaTextProcessingEngine:
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
-            line = self._process_template(line, texts.is_negative_prompt)
-
             if line in cache:
                 cond = cache[line]
             else:
@@ -50,10 +56,3 @@ class GemmaTextProcessingEngine:
             zs.extend(cond)
 
         return zs
-
-    @staticmethod
-    def _process_template(text: str, is_negative: bool) -> str:
-        if "<Prompt Start>" in text:
-            return text
-
-        return "\n".join([opts.neta_template_negative if is_negative else opts.neta_template_positive, text])

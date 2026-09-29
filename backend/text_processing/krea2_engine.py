@@ -1,4 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/qwen_image.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/krea2.py
 
 import numbers
 
@@ -10,13 +10,14 @@ from backend.text_processing import emphasis
 from ._comfy import EMBEDDINGS, INF, TOKEN_WEIGHTS, SDClipModel, SDTokenizer
 
 
-class QwenTextProcessingEngine:
+class Qwen3VL4BEngine:
     def __init__(self, text_encoder, tokenizer):
-        self.text_encoder = SDClipModel(text_encoder, layer="last", layer_idx=None, special_tokens={"pad": 151643}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
+        self.text_encoder = SDClipModel(text_encoder, layer=[2, 5, 8, 11, 14, 17, 20, 23, 26, 29, 32, 35], layer_idx=None, special_tokens={"pad": 151643}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
         self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1, pad_token=151643)
 
         self.llama_template = "<|im_start|>system\nDescribe the image by detailing the color, shape, size, texture, quantity, text, spatial relationships of the objects and background:<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
-        self.image_template = "<|im_start|>system\nDescribe the key features of the input image (color, shape, size, texture, objects, background), then explain how the user's text instruction should alter or modify the image. Generate a new image that meets the user's requirements while maintaining consistency with the original input where appropriate.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>{}<|im_end|>\n<|im_start|>assistant\n"
+
+        self.vision_block = "<|vision_start|><|image_pad|><|vision_end|>"
 
     @property
     def emphasis(self) -> "emphasis.Emphasis":
@@ -46,33 +47,32 @@ class QwenTextProcessingEngine:
                 if template_end == -1:
                     for i, v in enumerate(tok_pairs):
                         elem = v[0]
-                        if not torch.is_tensor(elem):
-                            if isinstance(elem, numbers.Integral):
-                                if elem == 151644 and count_im_start < 2:
-                                    template_end = i
-                                    count_im_start += 1
-
-                    if cond.shape[1] > (template_end + 3):
+                        if not torch.is_tensor(elem) and isinstance(elem, numbers.Integral):
+                            if elem == 151644 and count_im_start < 2:
+                                template_end = i
+                                count_im_start += 1
+                    if cond.shape[2] > (template_end + 3):
                         if tok_pairs[template_end + 1][0] == 872:
                             if tok_pairs[template_end + 2][0] == 198:
                                 template_end += 3
 
-                cond = cond[:, template_end:]
+                cond = cond[:, :, template_end:]
+                cond = cond.permute(0, 2, 1, 3).reshape(-1, 12, 2560)
                 cache[line] = cond
 
-            zs.extend(cond)
+            zs.append(cond)
 
         return zs
 
     def _tokenize_with_weights(self, text: str, images: list[torch.Tensor]) -> TOKEN_WEIGHTS:
-        llama_text = (self.image_template if len(images) > 0 else self.llama_template).format(text)
+        llama_text = self.llama_template.format(self.vision_block * len(images) + text.strip())
         tokens = self.tokenizer.tokenize_with_weights(llama_text, disable_weights=True)
 
         embed_count = 0
 
         for r in tokens:
             for i in range(len(r)):
-                if r[i][0] == 151655:
+                if isinstance(r[i][0], (int, float)) and r[i][0] == 151655:
                     if len(images) > embed_count:
                         r[i] = ({"type": "image", "data": images[embed_count], "original_type": "image"},) + r[i][1:]
                         embed_count += 1

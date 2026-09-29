@@ -6,7 +6,7 @@ from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.t5_engine import T5TextProcessingEngine
+from backend.text_processing.flux_engine import T5XXLEngine
 
 
 class Chroma(ForgeDiffusionEngine):
@@ -23,7 +23,7 @@ class Chroma(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_t5 = T5TextProcessingEngine(
+        self.text_processing_engine_t5 = T5XXLEngine(
             text_encoder=clip.cond_stage_model.t5xxl,
             tokenizer=clip.tokenizer.t5xxl,
             is_chroma=True,

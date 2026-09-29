@@ -9,7 +9,7 @@ from modules.shared import opts
 from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
-class UMT5TextProcessingEngine:
+class UMT5XXLEngine:
     def __init__(self, text_encoder, tokenizer):
         self.text_encoder = SDClipModel(text_encoder.transformer, layer="last", layer_idx=None, special_tokens={"end": 1, "pad": 0}, enable_attention_masks=True, zero_out_masked=True)
         self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, pad_to_max_length=False, max_length=INF, min_length=512, pad_token=0)

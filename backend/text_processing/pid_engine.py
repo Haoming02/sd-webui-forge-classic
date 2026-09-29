@@ -28,7 +28,7 @@ PIXELDIT_CHI_PROMPT = (
 )
 
 
-class GemmaItTextProcessingEngine:
+class Gemma22BITEngine:
     def __init__(self, text_encoder, tokenizer):
         self.text_encoder = SDClipModel(text_encoder, layer="last", layer_idx=None, special_tokens={"start": 2, "pad": 0}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
         self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1)
