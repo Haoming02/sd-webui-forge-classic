@@ -1333,6 +1333,19 @@ def supports_mxfp8_compute(device: torch.device = None) -> bool:
     return True
 
 
+def supports_int8_compute(device: torch.device = None) -> bool:
+    if (device is not None and is_device_mps(device)) or mps_mode():
+        return False
+
+    if is_intel_xpu():
+        return False
+
+    if is_directml_enabled():
+        return False
+
+    return True
+
+
 def supports_fp64(device: torch.device = None) -> bool:
     if is_device_mps(device):
         return False
