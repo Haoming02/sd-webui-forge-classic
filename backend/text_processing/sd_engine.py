@@ -86,7 +86,7 @@ class ClipEngine:
         return emphasis.get_current_option(opts.emphasis)()
 
     def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
-        return self.tokenizer(texts)["input_ids"]
+        return self.tokenizer(texts, truncation=False, add_special_tokens=False)["input_ids"]
 
     def empty_chunk(self):
         chunk = PromptChunk()
