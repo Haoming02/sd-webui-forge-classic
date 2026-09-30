@@ -536,6 +536,8 @@ class LoadedModel:
             self._patcher_finalizer.detach()
 
     def is_dead(self):
+        if self.real_model is None:
+            return False
         return self.real_model() is not None and self.model is None
 
 
@@ -601,23 +603,26 @@ def free_memory(memory_required: float, device: torch.device, keep_loaded: list[
         shift_model = current_loaded_models[i]
         if shift_model.device == device:
             if shift_model not in keep_loaded and not shift_model.is_dead():
-                can_unload.append((-shift_model.model_offloaded_memory(), sys.getrefcount(shift_model.model), shift_model.model_memory(), i))
+                can_unload.append((-shift_model.model_offloaded_memory(), sys.getrefcount(shift_model.model), shift_model.model_memory(), i, shift_model))
                 shift_model.currently_used = False
 
-    for x in sorted(can_unload):
-        i = x[-1]
+    for x in sorted(can_unload, key=lambda entry: entry[:4]):
+        loaded = x[-1]
         memory_to_free = None
         if not DISABLE_SMART_MEMORY:
             free_mem = get_free_memory(device)
             if free_mem > memory_required:
                 break
             memory_to_free = memory_required - free_mem
-        logger.debug(f"Unloading {current_loaded_models[i].model.model.__class__.__name__}")
-        if current_loaded_models[i].model_unload(memory_to_free):
-            unloaded_model.append(i)
+        logger.debug(f"Unloading {loaded.model.model.__class__.__name__}")
+        if loaded.model_unload(memory_to_free):
+            unloaded_model.append(loaded)
 
-    for i in sorted(unloaded_model, reverse=True):
-        unloaded_models.append(current_loaded_models.pop(i))
+    for loaded in unloaded_model:
+        for i in range(len(current_loaded_models) - 1, -1, -1):
+            if current_loaded_models[i] is loaded:
+                unloaded_models.append(current_loaded_models.pop(i))
+                break
 
     if len(unloaded_model) > 0:
         soft_empty_cache()
@@ -765,7 +770,8 @@ def cleanup_models_gc(*, target: list["ModelPatcher"] = []):
 def cleanup_models():
     to_delete = []
     for i in range(len(current_loaded_models)):
-        if current_loaded_models[i].real_model() is None:
+        real_model = current_loaded_models[i].real_model
+        if real_model is not None and real_model() is None:
             to_delete = [i] + to_delete
 
     for i in to_delete:
