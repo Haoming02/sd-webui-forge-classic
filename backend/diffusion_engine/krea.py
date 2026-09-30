@@ -13,7 +13,7 @@ from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.qwen3vl_engine import Qwen3VLTextProcessingEngine
+from backend.text_processing.krea2_engine import Qwen3VL4BEngine
 from modules.shared import opts
 
 
@@ -31,7 +31,7 @@ class Krea2(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_qwen = Qwen3VLTextProcessingEngine(
+        self.text_processing_engine_qwen = Qwen3VL4BEngine(
             text_encoder=clip.cond_stage_model.qwen3vl_4b,
             tokenizer=clip.tokenizer.qwen3vl_4b,
         )
@@ -94,8 +94,8 @@ class Krea2(ForgeDiffusionEngine):
         return (_vision, _latent)
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
-        token_count = len(self.text_processing_engine_qwen.tokenize([prompt])[0])
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
+        token_count = len(self.text_processing_engine_qwen.tokenize(prompt))
         return token_count, max(999, token_count)
 
     @torch.inference_mode()

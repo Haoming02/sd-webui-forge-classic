@@ -8,7 +8,7 @@ from backend.misc.image_resize import adaptive_resize
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.umt5_engine import UMT5TextProcessingEngine
+from backend.text_processing.wan_engine import UMT5XXLEngine
 from backend.utils import resize_to_batch_size
 
 # get_learned_conditioning is not called in the Refiner pass;
@@ -30,7 +30,7 @@ class Wan(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_t5 = UMT5TextProcessingEngine(
+        self.text_processing_engine_t5 = UMT5XXLEngine(
             text_encoder=clip.cond_stage_model.umt5xxl,
             tokenizer=clip.tokenizer.umt5xxl,
         )
@@ -72,8 +72,8 @@ class Wan(ForgeDiffusionEngine):
         return self.text_processing_engine_t5(prompt)
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
-        token_count = len(self.text_processing_engine_t5.tokenize([prompt])[0])
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
+        token_count = len(self.text_processing_engine_t5.tokenize(prompt))
         return token_count, max(510, token_count)
 
     @torch.inference_mode()

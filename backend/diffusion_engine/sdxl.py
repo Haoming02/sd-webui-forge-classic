@@ -8,7 +8,7 @@ from backend.nn.unet import Timestep
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.classic_engine import ClassicTextProcessingEngine
+from backend.text_processing.sd_engine import ClipEngine
 from modules.shared import opts
 
 
@@ -33,7 +33,7 @@ class StableDiffusionXL(ForgeDiffusionEngine):
             unet = UnetPatcher.from_model(model=huggingface_components["unet"], diffusers_scheduler=huggingface_components["scheduler"], config=estimated_config)
             self.use_shift = False
 
-        self.text_processing_engine_l = ClassicTextProcessingEngine(
+        self.text_processing_engine_l = ClipEngine(
             text_encoder=clip.cond_stage_model.clip_l,
             tokenizer=clip.tokenizer.clip_l,
             embedding_dir=dynamic_args.embedding_dir,
@@ -46,7 +46,7 @@ class StableDiffusionXL(ForgeDiffusionEngine):
             final_layer_norm=False,
         )
 
-        self.text_processing_engine_g = ClassicTextProcessingEngine(
+        self.text_processing_engine_g = ClipEngine(
             text_encoder=clip.cond_stage_model.clip_g,
             tokenizer=clip.tokenizer.clip_g,
             embedding_dir=dynamic_args.embedding_dir,
@@ -109,7 +109,7 @@ class StableDiffusionXL(ForgeDiffusionEngine):
         return cond
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
         _, token_count = self.text_processing_engine_l.process_texts([prompt])
         return token_count, self.text_processing_engine_l.get_target_prompt_token_count(token_count)
 
@@ -131,7 +131,7 @@ class StableDiffusionXLRefiner(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["unet"], diffusers_scheduler=huggingface_components["scheduler"], config=estimated_config)
 
-        self.text_processing_engine_g = ClassicTextProcessingEngine(
+        self.text_processing_engine_g = ClipEngine(
             text_encoder=clip.cond_stage_model.clip_g,
             tokenizer=clip.tokenizer.clip_g,
             embedding_dir=dynamic_args.embedding_dir,
@@ -186,6 +186,6 @@ class StableDiffusionXLRefiner(ForgeDiffusionEngine):
         return cond
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
         _, token_count = self.text_processing_engine_g.process_texts([prompt])
         return token_count, self.text_processing_engine_g.get_target_prompt_token_count(token_count)

@@ -1,4 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/flux.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.36.0/comfy/text_encoders/z_image.py
 
 import torch
 
@@ -8,12 +8,12 @@ from backend.text_processing import emphasis
 from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
-class Qwen3_4B_8B_Engine:
+class Qwen34BEngine:
     def __init__(self, text_encoder, tokenizer):
-        self.text_encoder = SDClipModel(text_encoder, layer=[9, 18, 27], layer_idx=None, special_tokens={"pad": 151643}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
-        self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=512, pad_token=151643)
+        self.text_encoder = SDClipModel(text_encoder, layer="hidden", layer_idx=-2, special_tokens={"pad": 151643}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
+        self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1, pad_token=151643)
 
-        self.llama_template = "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        self.llama_template = "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
 
     @property
     def emphasis(self) -> "emphasis.Emphasis":
@@ -38,11 +38,6 @@ class Qwen3_4B_8B_Engine:
             else:
                 chunk = self.tokenizer.tokenize_with_weights(line, disable_weights=True)
                 cond = self.text_encoder.encode_token_weights(chunk)[0]
-
-                cond = torch.stack((cond[:, 0], cond[:, 1], cond[:, 2]), dim=1)
-                cond = cond.movedim(1, 2)
-                cond = cond.reshape(cond.shape[0], cond.shape[1], -1)
-
                 cache[line] = cond
 
             zs.extend(cond)

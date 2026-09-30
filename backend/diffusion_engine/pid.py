@@ -10,7 +10,7 @@ from backend.nn.wan_vae import WanVAE
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.gemma_it_engine import GemmaTextProcessingEngine
+from backend.text_processing.pid_engine import Gemma22BITEngine
 from modules.shared import opts
 
 
@@ -40,7 +40,7 @@ class PiD(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_gemma = GemmaTextProcessingEngine(
+        self.text_processing_engine_gemma = Gemma22BITEngine(
             text_encoder=clip.cond_stage_model.gemma2,
             tokenizer=clip.tokenizer.gemma2,
         )
@@ -59,8 +59,8 @@ class PiD(ForgeDiffusionEngine):
         return self.text_processing_engine_gemma(prompt)
 
     @torch.inference_mode()
-    def get_prompt_lengths_on_ui(self, prompt):
-        token_count = len(self.text_processing_engine_gemma.tokenize([prompt])[0])
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
+        token_count = len(self.text_processing_engine_gemma.tokenize(prompt))
         return token_count, max(300, token_count)
 
     @torch.inference_mode()

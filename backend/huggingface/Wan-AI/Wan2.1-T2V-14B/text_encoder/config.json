@@ -8,7 +8,7 @@
   "d_kv": 64,
   "d_model": 4096,
   "decoder_start_token_id": 0,
-  "dense_act_fn": "gelu_new",
+  "dense_act_fn": "gelu_pytorch_tanh",
   "dropout_rate": 0.1,
   "eos_token_id": 1,
   "feed_forward_proj": "gated-gelu",
