@@ -630,8 +630,6 @@ class Api:
 
         progress = min(progress, 1)
 
-        shared.state.set_current_image()
-
         current_image = None
         if shared.state.current_image and not req.skip_current_image:
             current_image = encode_pil_to_base64(shared.state.current_image)

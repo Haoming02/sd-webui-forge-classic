@@ -121,7 +121,7 @@ def progressapi(req: ProgressRequest):
     id_live_preview = req.id_live_preview
 
     if opts.live_previews_enable and req.live_preview:
-        shared.state.set_current_image()
+
         if shared.state.id_live_preview != req.id_live_preview:
             image = shared.state.current_image
             if image is not None:

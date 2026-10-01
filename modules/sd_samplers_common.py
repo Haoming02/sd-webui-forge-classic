@@ -430,6 +430,7 @@ class Sampler:
 
         state.sampling_step = step
         state.preview_step = step + 1
+        state.set_current_image()
         shared.total_tqdm.update()
 
     def launch_sampling(self, steps, func):
