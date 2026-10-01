@@ -887,7 +887,7 @@ class NunchakuZImageAttention(JointAttention):
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
 
         n_rep = self.n_local_heads // self.n_local_kv_heads
-        if n_rep >= 1:
+        if n_rep > 1:
             xk = xk.unsqueeze(3).repeat(1, 1, 1, n_rep, 1).flatten(2, 3)
             xv = xv.unsqueeze(3).repeat(1, 1, 1, n_rep, 1).flatten(2, 3)
         output = attention_function(
