@@ -22,7 +22,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Sep.]
+## Features [Oct.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
@@ -88,7 +88,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - `Neta-Lumina` / `NetaYume-Lumina`
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
 - [X] Support **MixedPrecision** Models
-    - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled` / `int8_convrot` / `convrot_w4a4` / `asym_w4a8_int8`
+    - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled` / `int8_convrot` / `convrot_w4a4` / `asym_w4a8_int8` / `w6a8_int8`
 - [X] Support [Flux.2-Small-Decoder](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/blob/main/full_encoder_small_decoder.safetensors) & [Qwen2D VAE](https://huggingface.co/Anzhc/Qwen2D-VAE/blob/main/Qwen2D_VAE.safetensors)
 
 <br>
