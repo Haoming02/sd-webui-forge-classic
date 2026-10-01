@@ -194,6 +194,9 @@ def _quantized_weight_state_dict(module: torch.nn.Module, sd: dict[str, torch.Te
             linear_dtype = getattr(params, "linear_dtype", "int4")
             if linear_dtype != "int4":
                 quant_conf["linear_dtype"] = linear_dtype
+        elif module.quant_format in _GROUPED_INT8_FORMATS:
+            quant_conf["group_size"] = getattr(params, "group_size", 16)
+            quant_conf["convrot_groupsize"] = getattr(params, "convrot_groupsize", 256)
         if extra_quant_conf:
             quant_conf.update(extra_quant_conf)
         sd[f"{prefix}comfy_quant"] = torch.tensor(list(json.dumps(quant_conf).encode("utf-8")), dtype=torch.uint8)
