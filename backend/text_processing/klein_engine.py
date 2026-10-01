@@ -20,8 +20,10 @@ class Qwen3_4B_8B_Engine:
         return emphasis.EmphasisNone()
 
     def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
-        llama_texts = [self.llama_template.format(text) for text in texts]
-        return self.tokenizer.tokenizer(llama_texts)["input_ids"]
+        if isinstance(texts, str):
+            return self.tokenizer.tokenizer(self.llama_template.format(texts))["input_ids"]
+        else:
+            return [self.tokenizer.tokenizer(self.llama_template.format(t))["input_ids"] for t in texts]
 
     def __call__(self, texts: list[str]) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts):

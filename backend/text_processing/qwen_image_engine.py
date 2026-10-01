@@ -23,7 +23,10 @@ class Qwen25VL7BEngine:
         return emphasis.EmphasisNone()
 
     def tokenize(self, texts: str | list[str]) -> EMBEDDINGS | list[EMBEDDINGS]:
-        return self.tokenizer.tokenizer(texts)["input_ids"]
+        if isinstance(texts, str):
+            return self.tokenizer.tokenizer(self.llama_template.format(texts))["input_ids"]
+        else:
+            return [self.tokenizer.tokenizer(self.llama_template.format(t))["input_ids"] for t in texts]
 
     def __call__(self, texts: list[str], images: list[torch.Tensor] = []) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts):

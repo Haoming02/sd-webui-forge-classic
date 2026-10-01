@@ -23,7 +23,7 @@ class ZImage(ForgeDiffusionEngine):
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_gemma = Qwen34BEngine(
+        self.text_processing_engine_qwen = Qwen34BEngine(
             text_encoder=clip.cond_stage_model.qwen3,
             tokenizer=clip.tokenizer.qwen3,
         )
@@ -37,9 +37,9 @@ class ZImage(ForgeDiffusionEngine):
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: list[str]):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
-        return self.text_processing_engine_gemma(prompt)
+        return self.text_processing_engine_qwen(prompt)
 
     @torch.inference_mode()
     def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
-        token_count = len(self.text_processing_engine_gemma.tokenize(prompt))
+        token_count = len(self.text_processing_engine_qwen.tokenize(prompt))
         return token_count, max(999, token_count)
