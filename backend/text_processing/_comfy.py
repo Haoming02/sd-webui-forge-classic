@@ -56,12 +56,16 @@ class ClipTokenWeightEncoder:
         for k in range(0, sections):
             z = out[k : k + 1]
             if has_weights:
-                z_empty = out[-1]
-                for i in range(len(z)):
-                    for j in range(len(z[i])):
-                        weight = token_weight_pairs[k][j][1]
-                        if weight != 1.0:
-                            z[i][j] = (z[i][j] - z_empty[j]) * weight + z_empty[j]
+                z_empty = out[-1:]
+                w_list = [x[1] for x in token_weight_pairs[k]]
+                if len(w_list) < z.shape[1]:
+                    w_list = w_list + [1.0] * (z.shape[1] - len(w_list))
+                elif len(w_list) > z.shape[1]:
+                    w_list = w_list[:z.shape[1]]
+                weights = torch.tensor(w_list, device=z.device, dtype=torch.float32).view(1, -1, 1)
+                mask = weights != 1.0
+                if mask.any():
+                    z = torch.where(mask, (z - z_empty) * weights + z_empty, z)
             output.append(z)
 
         if len(output) == 0:
