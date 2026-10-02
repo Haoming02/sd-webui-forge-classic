@@ -1,4 +1,4 @@
-# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.27.1/comfy/supported_models.py
+# reference: https://github.com/Comfy-Org/ComfyUI/blob/v0.38.0/comfy/supported_models.py
 
 from enum import Enum
 
@@ -564,6 +564,33 @@ class QwenImage(BASE):
         return ModelType.FLUX
 
 
+class QwenImage21(BASE):
+    huggingface_repo = "Qwen/Qwen-Image-2.1"
+
+    unet_config = {
+        "image_model": "qwen_image21",
+    }
+
+    # TODO
+    sampling_settings = {
+        "multiplier": 1.0,
+        "shift": 0.69,
+    }
+
+    memory_usage_factor = 6.0
+
+    unet_extra_config = {}
+    latent_format = latent.QwenImage21
+
+    supported_inference_dtypes = [torch.bfloat16, torch.float32]
+
+    vae_key_prefix = ["vae."]
+    text_encoder_key_prefix = ["text_encoders."]
+
+    def clip_target(self, state_dict={}):
+        return {"qwen3vl_8b.transformer": "text_encoder"}
+
+
 class Krea2(BASE):
     huggingface_repo = "krea/Krea-2-Raw"
 
@@ -671,6 +698,7 @@ models = [
     WAN21_T2V,
     WAN21_I2V,
     QwenImage,
+    QwenImage21,
     Krea2,
     ErnieImage,
     PiD,
