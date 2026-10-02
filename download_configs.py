@@ -5,10 +5,10 @@ import shutil
 
 from huggingface_hub import snapshot_download
 
-PIPELINE_PATHS = (
-    # "baidu/ERNIE-Image",
-    "krea/Krea-2-Raw",
-)
+PIPELINE_PATHS = [
+    # "krea/Krea-2-Raw",
+    "Qwen/Qwen-Image-2.1"
+]
 
 for pretrained in PIPELINE_PATHS:
     try:
