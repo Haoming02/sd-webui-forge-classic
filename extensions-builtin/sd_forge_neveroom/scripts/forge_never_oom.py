@@ -1,7 +1,8 @@
 import gradio as gr
 
-from modules import scripts
 from backend import memory_management
+from backend.patcher.unet import UnetPatcher
+from modules import scripts
 
 
 class NeverOOMForForge(scripts.Script):
@@ -9,7 +10,6 @@ class NeverOOMForForge(scripts.Script):
 
     def __init__(self):
         self.previous_unet_enabled: bool = False
-        self.original_vram_state: memory_management.VRAMState = memory_management.vram_state
 
     def title(self):
         return "Never OOM Integrated"
@@ -24,23 +24,27 @@ class NeverOOMForForge(scripts.Script):
 
         return [unet_enabled, vae_enabled]
 
-    def process(self, p, unet_enabled: bool, vae_enabled: bool):
+    def setup(self, p, unet_enabled: bool, vae_enabled: bool):
 
         if unet_enabled:
             memory_management.logger.info("[NeverOOM] Enabled for UNet (always offload)")
         if vae_enabled:
             memory_management.logger.info("[NeverOOM] Enabled for VAE (always tiled)")
 
+        memory_management.UNET_ALWAYS_OFFLOAD = unet_enabled
         memory_management.VAE_ALWAYS_TILED = vae_enabled
 
         if self.previous_unet_enabled != unet_enabled:
-            memory_management.unload_all_models()
+            idx = None
 
-            if unet_enabled:
-                self.original_vram_state = memory_management.vram_state
-                memory_management.vram_state = memory_management.VRAMState.NO_VRAM
-            else:
-                memory_management.vram_state = self.original_vram_state
+            for i, loaded_models in enumerate(memory_management.current_loaded_models):
+                if isinstance(loaded_models.model, UnetPatcher):
+                    idx = i
+                    break
 
-            memory_management.logger.info(f"Changed VRAM State to {memory_management.vram_state.name}")
+            if idx is not None:
+                mdl: memory_management.LoadedModel = memory_management.current_loaded_models.pop(idx)
+                mdl.model_unload()
+                del mdl
+
             self.previous_unet_enabled = unet_enabled

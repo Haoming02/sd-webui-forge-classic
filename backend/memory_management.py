@@ -68,6 +68,7 @@ set_vram_to = VRAMState.NORMAL_VRAM
 cpu_state = CPUState.GPU
 
 VAE_ALWAYS_TILED: bool = False
+UNET_ALWAYS_OFFLOAD: bool = False
 
 FLOAT8_TYPES: list[torch.dtype] = []
 
@@ -709,7 +710,7 @@ def load_models_gpu(models: list["ModelPatcher"], memory_required: float = 0, fo
             if lowvram_model_memory == 0:
                 lowvram_model_memory = 0.1
 
-        if vram_set_state is VRAMState.NO_VRAM:
+        if vram_set_state is VRAMState.NO_VRAM or (UNET_ALWAYS_OFFLOAD and type(loaded_model.model).__name__.startswith("Unet")):
             lowvram_model_memory = 0.1
 
         loaded_model.model_load(lowvram_model_memory, force_patch_weights=force_patch_weights)
