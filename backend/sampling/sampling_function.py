@@ -206,6 +206,8 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
                 logger.warning('You can also (not recommended) add "--disable-gpu-warning" to remove this warning')
 
         for i in range(1, len(to_batch_temp) + 1):
+            if args.no_batch_cond_uncond:
+                break
             batch_amount = to_batch_temp[: len(to_batch_temp) // i]
             input_shape = [len(batch_amount) * first_shape[0]] + list(first_shape)[1:]
             if model.memory_required(input_shape) < free_memory:
