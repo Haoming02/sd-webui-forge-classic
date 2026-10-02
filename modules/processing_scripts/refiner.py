@@ -134,14 +134,17 @@ Use this setting to load different LoRAs between the normal pass and the refiner
         from backend.utils import load_torch_file
         from modules_forge.main_entry import logger
 
+        idx = None
+
         for i, loaded_models in enumerate(current_loaded_models):
             if isinstance(loaded_models.model, UnetPatcher):
                 idx = i
                 break
 
-        mdl: LoadedModel = current_loaded_models.pop(idx)
-        mdl.model_unload()
-        del mdl
+        if idx is not None:
+            mdl: LoadedModel = current_loaded_models.pop(idx)
+            mdl.model_unload()
+            del mdl
 
         model = sd_model.forge_objects.unet.model.diffusion_model
 
