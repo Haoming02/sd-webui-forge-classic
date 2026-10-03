@@ -121,15 +121,27 @@ def tiled_scale(samples, function, tile_x=64, tile_y=64, overlap=8, upscale_amou
 
 
 class VAE:
-    def __init__(self, model=None, device=None, dtype=None, no_init=False, *, is_wan=False, is_flux2=False, is_mugen=False):
+    def __init__(self, model=None, device=None, dtype=None, no_init=False, *, is_wan=False, is_qwen21=False, is_flux2=False, is_mugen=False):
         if no_init:
             return
 
-        if not is_wan:
+        self.output_channels = 3
+        self.upscale_index_formula = None
+        self.downscale_index_formula = None
+
+        if is_qwen21:
+            self.upscale_ratio = 16
+            self.downscale_ratio = 16
+            self.latent_dim = 2
+            self.latent_channels = 64
+            self.output_channels = 4
+            self.pad_channel_value = 1.0
+            self.memory_used_encode = lambda shape, dtype: (600 * shape[2] * shape[3]) * memory_management.dtype_size(dtype)
+            self.memory_used_decode = lambda shape, dtype: (900 * shape[2] * shape[3] * (16 * 16)) * memory_management.dtype_size(dtype)
+
+        elif not is_wan:
             self.upscale_ratio = 8
-            self.upscale_index_formula = None
             self.downscale_ratio = 8
-            self.downscale_index_formula = None
             self.latent_dim = 2
             self.latent_channels = 32 if is_mugen else int(model.config.latent_channels)  # 4 | 16
             self.memory_used_encode = lambda shape, dtype: (1767 * shape[2] * shape[3]) * memory_management.dtype_size(dtype)
@@ -151,7 +163,6 @@ class VAE:
             self.memory_used_encode = lambda shape, dtype: (1500 if shape[2] <= 4 else 6000) * shape[3] * shape[4] * memory_management.dtype_size(dtype)
             self.memory_used_decode = lambda shape, dtype: (2200 if shape[2] <= 4 else 7000) * shape[3] * shape[4] * (8 * 8) * memory_management.dtype_size(dtype)
 
-        self.output_channels = 3
         self.first_stage_model = model.eval()
 
         self.device = device or memory_management.vae_device()
