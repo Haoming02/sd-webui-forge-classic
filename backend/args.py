@@ -88,6 +88,7 @@ vram_group.add_argument("--cpu", action="store_true", help="Use the CPU for ever
 
 parser.add_argument("--reserve-vram", type=float, default=None, metavar="GB", help="Set the amount of VRAM you want to reserve for other software (by default some amount is reserved)")
 parser.add_argument("--disable-smart-memory", action="store_true", help="Aggressively offload to RAM instead of keeping models in VRAM when possible")
+parser.add_argument("--no-batch-cond-uncond", action="store_true", help="Run cond and uncond as separate passes instead of one batch ; uses less memory")
 parser.add_argument("--force-non-blocking", action="store_true", help="Use non-blocking operations for all applicable tensors")
 
 parser.add_argument("--cuda-malloc", action="store_true", help="improve memory allocation")

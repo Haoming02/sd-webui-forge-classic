@@ -455,9 +455,15 @@ def slice_attention_vae(q, k, v):
     if mem_required > mem_free_total:
         steps = 2 ** (math.ceil(math.log(mem_required / mem_free_total, 2)))
 
+    # MPSGraph rejects tensors with more than INT_MAX elements
+    max_elements = 2**31 - 1
+    elements = q.shape[0] * q.shape[1] * k.shape[2]
+    if q.device.type == "mps" and elements > max_elements:
+        steps = max(steps, 2 ** math.ceil(math.log2(elements / max_elements)))
+
     while True:
         try:
-            slice_size = q.shape[1] // steps if (q.shape[1] % steps) == 0 else q.shape[1]
+            slice_size = math.ceil(q.shape[1] / steps)
             for i in range(0, q.shape[1], slice_size):
                 end = i + slice_size
                 s1 = torch.bmm(q[:, i:end], k) * scale
@@ -469,7 +475,7 @@ def slice_attention_vae(q, k, v):
                 del s2
             break
         except Exception as e:
-            if not memory_management.is_oom(e):
+            if not (memory_management.is_oom(e) or "INT_MAX" in str(e)):
                 raise e
             if steps > 128:
                 raise e
