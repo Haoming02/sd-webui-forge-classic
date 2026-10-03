@@ -587,8 +587,13 @@ class QwenImage21(BASE):
     vae_key_prefix = ["vae."]
     text_encoder_key_prefix = ["text_encoders."]
 
+    unet_target = "transformer"
+
     def clip_target(self, state_dict={}):
         return {"qwen3vl_8b.transformer": "text_encoder"}
+
+    def model_type(self, state_dict):
+        return ModelType.FLUX
 
 
 class Krea2(BASE):
@@ -605,6 +610,7 @@ class Krea2(BASE):
 
     memory_usage_factor = 2.2
 
+    unet_extra_config = {}
     latent_format = latent.Wan21
 
     supported_inference_dtypes = [torch.bfloat16, torch.float16, torch.float32]
