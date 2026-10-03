@@ -134,6 +134,20 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, ignore_start="loss.")
             return model
+        if cls_name == "AutoencoderKLQwenImage21":
+            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
+            from backend.nn.qwen21_vae import Wan22VAE
+
+            config = Wan22VAE.load_config(config_path)
+
+            config.update({"dim": int(state_dict["encoder.conv1.weight"].shape[0]), "dec_dim": int(state_dict["decoder.head.0.gamma"].shape[0]), "z_dim": 64, "dim_mult": [1, 2, 4, 8, 8], "num_res_blocks": 2, "attn_scales": [], "temporal_downsample": [False, True, True, True], "dropout": 0.0, "image_channels": int(state_dict["decoder.head.2.weight"].shape[0]), "patch_size": 1, "temporal_kernel": 1})
+
+            with no_init_weights():
+                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype(), extra_dtype="vae"):
+                    model = Wan22VAE.from_config(config)
+
+            load_state_dict(model, state_dict, ignore_start="loss.")
+            return model
         if cls_name in ["AutoencoderKLWan", "AutoencoderKLQwenImage"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
 

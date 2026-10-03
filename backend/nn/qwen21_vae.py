@@ -5,8 +5,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from diffusers.configuration_utils import ConfigMixin, register_to_config
 from einops import rearrange
 
+from backend.nn._vae import ProcessLatent
 from backend.nn.wan_vae import AttentionBlock, CausalConv3d, RMS_norm
 
 CACHE_T = 2
@@ -582,8 +584,10 @@ def count_conv3d(model: nn.Module) -> int:
     return count
 
 
-class Wan22VAE(nn.Module):
+class Wan22VAE(nn.Module, ProcessLatent, ConfigMixin):
+    config_name = "config.json"
 
+    @register_to_config
     def __init__(
         self,
         dim=160,
