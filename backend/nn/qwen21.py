@@ -9,6 +9,7 @@ from backend.attention import attention_function
 from backend.nn.flux import EmbedND, timestep_embedding
 from backend.nn.qwen import TimestepEmbedding
 from backend.operations import main_stream_worker, weights_manual_cast
+from backend.operations_mixed_precision import linear_input_act
 from backend.quant_ops import ck
 from backend.utils import fp16_fix
 
@@ -57,7 +58,7 @@ class SwiGLUFeedForward(nn.Module):
 
     def forward(self, x):
         if self.fused:
-            return comfy.ops.linear_input_act(self.out, self.gate_up(x), "swiglu")
+            return linear_input_act(self.out, self.gate_up(x), "swiglu")
         return self.out(F.silu(self.gate_layer(x)) * self.proj(x))
 
 

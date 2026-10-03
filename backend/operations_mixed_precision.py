@@ -4,8 +4,8 @@ import json
 
 import torch
 
-from backend.args import args
 from backend.memory_management import cast_to_device, logger
+from backend.operations import main_stream_worker, weights_manual_cast
 
 from .operations import (
     ForgeOperations,
@@ -18,6 +18,7 @@ from .quant_ops import (  # noqa
     QuantizedTensor,
     TensorCoreFP8Layout,
     TensorWiseINT8Layout,
+    ck,
     get_layout_class,
 )
 
@@ -377,3 +378,72 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 return super().forward(input)
 
     return MixedPrecisionOps
+
+
+# region ops
+
+import torch.nn.functional as F
+
+
+def _swiglu_eager(x: torch.Tensor) -> torch.Tensor:
+    gate, up = x.chunk(2, dim=-1)
+    return F.silu(gate).mul_(up)
+
+
+INPUT_ACT_EAGER = {
+    "gelu_tanh": lambda x: F.gelu(x, approximate="tanh"),
+    "swiglu": _swiglu_eager,
+}
+
+
+def _eager_input_act(x: torch.Tensor, input_act: str, act_weight: torch.Tensor = None, act_eps: float = 0.0) -> torch.Tensor:
+    if input_act is None:
+        return x
+    if input_act == "rms_norm":
+        return F.rms_norm(x, act_weight.shape, cast_to_device(act_weight, x.device, x.dtype), act_eps)
+    return INPUT_ACT_EAGER[input_act](x)
+
+
+def _fp16_linear_wanted(x: torch.Tensor) -> bool:
+    return getattr(torch.backends.cuda.matmul, "allow_fp16_accumulation", False) and x.dtype == torch.float16 and x.is_cuda
+
+
+def linear_input_act(linear: torch.nn.Linear, x: torch.Tensor, input_act: str, act_weight: torch.Tensor = None, act_eps: float = 0.0, residual: torch.Tensor = None, residual_scale: float = None) -> torch.Tensor:
+    """https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ops.py#L976"""
+
+    def _residual_out(out):
+        if residual is None:
+            return out
+        return torch.addcmul(residual, out, residual_scale)
+
+    weight = linear.weight
+    full_precision_mm = getattr(linear, "_full_precision_mm", False)
+
+    if not isinstance(weight, QuantizedTensor) or weight._layout_cls != "TensorWiseINT8Layout" or getattr(weight._params, "transposed", False) or full_precision_mm:
+        if not isinstance(weight, QuantizedTensor) and not full_precision_mm and _fp16_linear_wanted(x):
+            weight, bias, offload_stream = weights_manual_cast(linear, x)
+            with main_stream_worker(weight, bias, offload_stream):
+                return ck.fp16_linear(_eager_input_act(x, input_act, act_weight, act_eps), weight, bias, residual=residual, residual_scale=residual_scale)
+
+        return _residual_out(linear(_eager_input_act(x, input_act, act_weight, act_eps)))
+
+    weight, bias, offload_stream = weights_manual_cast(linear, x)
+    with main_stream_worker(weight, bias, offload_stream):
+        if not isinstance(weight, QuantizedTensor):
+            return _residual_out(torch.nn.functional.linear(_eager_input_act(x, input_act, act_weight, act_eps), weight, bias))
+
+        qdata, scale = TensorWiseINT8Layout.get_plain_tensors(weight)
+        return ck.int8_linear(
+            x,
+            qdata,
+            scale,
+            bias,
+            x.dtype,
+            convrot=getattr(weight._params, "convrot", False),
+            convrot_groupsize=getattr(weight._params, "convrot_groupsize", 256),
+            input_act=input_act,
+            input_act_weight=act_weight,
+            input_act_eps=act_eps,
+            residual=residual,
+            residual_scale=residual_scale,
+        )
