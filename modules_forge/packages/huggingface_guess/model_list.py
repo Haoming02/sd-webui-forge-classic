@@ -571,7 +571,6 @@ class QwenImage21(BASE):
         "image_model": "qwen_image21",
     }
 
-    # TODO
     sampling_settings = {
         "multiplier": 1.0,
         "shift": 0.69,
