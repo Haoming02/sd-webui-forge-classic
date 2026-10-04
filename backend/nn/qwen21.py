@@ -176,7 +176,7 @@ class QwenImage21Transformer2DModel(nn.Module):
         self.norm_out = LastLayer(self.inner_dim, eps=eps)
         self.proj_out = nn.Linear(self.inner_dim, out_channels, bias=False)
 
-    def build_sequence(self, x, context, ref_latents, image_slots):
+    def build_sequence(self, x: torch.Tensor, context: torch.Tensor, ref_latents: list[torch.Tensor], image_slots: list[int]):
         txt = self.txt_in(context)
         slots = (image_slots + [txt.shape[1]] * len(ref_latents))[: len(ref_latents)]
         bounds = [0] + slots + [txt.shape[1]]
@@ -192,6 +192,10 @@ class QwenImage21Transformer2DModel(nn.Module):
                 pos += n
                 length += n
             h, w = img.shape[-2:]
+
+            if x.size(0) > 1 and img is not x:
+                img = img.expand(x.shape[0], *img.shape[1:])
+
             parts.append(self.img_in(img.flatten(2).transpose(1, 2).to(x)))
             hh = torch.arange(h, device=x.device, dtype=torch.float32) - (h - h // 2) + 0.5 * (h % 2 - x.shape[-2] % 2)
             ww = torch.arange(w, device=x.device, dtype=torch.float32) - (w - w // 2) + 0.5 * (w % 2 - x.shape[-1] % 2)
