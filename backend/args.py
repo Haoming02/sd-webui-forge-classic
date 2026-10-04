@@ -201,3 +201,7 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
         cls.lq_latent = [None, None]
         cls.context_handler = None
         cls.image_slots = None
+
+    @classmethod
+    def can_reference(cls) -> bool:
+        return any(getattr(cls, key) for key in ("kontext", "edit", "qwen21", "klein", "wan", "anima", "krea2"))

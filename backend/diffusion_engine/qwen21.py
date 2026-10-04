@@ -51,21 +51,27 @@ class QwenImage21(ForgeDiffusionEngine):
         self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
         memory_management.logger.debug(f"Shift: {shift}")
 
+    def _get_references(self) -> list[torch.Tensor]:
+        _references = [*self.ref_latents]
+        if self.ini_latent is not None:
+            _references.insert(0, self.ini_latent)
+        return _references
+
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: "SdConditioning"):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
 
-        if not prompt.is_negative_prompt:
-            _references = [*self.ref_latents]
-            if self.ini_latent is not None:
-                _references.insert(0, self.ini_latent)
+        _references = self._get_references()
+
+        if opts.qwen21_do_reference and bool(_references):
+            if not prompt.is_negative_prompt:
                 self.ini_latent = None
 
-            if opts.qwen21_do_reference and bool(_references):
-                return self.get_learned_conditioning_with_image(prompt, _references)
-            else:
-                dynamic_args.ref_latents.clear()
-                dynamic_args.image_slots = None
+            return self.get_learned_conditioning_with_image(prompt, _references)
+
+        if not prompt.is_negative_prompt:
+            dynamic_args.ref_latents.clear()
+            dynamic_args.image_slots = None
 
         return self.text_processing_engine_qwen(prompt)
 
