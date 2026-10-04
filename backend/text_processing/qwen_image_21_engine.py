@@ -51,6 +51,8 @@ class Qwen3VL8BEngine:
         cache: dict[str, torch.Tensor] = {}
 
         for line in texts:
+            line: str = line.strip() or " "
+
             if line in cache:
                 cond = cache[line]
             else:
@@ -68,13 +70,13 @@ class Qwen3VL8BEngine:
                 keep = torch.ones(cond.shape[1], dtype=torch.bool)
                 keep[: im_starts[1] if len(im_starts) > 1 else 0] = False
 
-                slots = []
+                if len(images) > 0:
+                    slots = []
 
-                for start, size in self.image_spans:
-                    keep[start : start + size] = False
-                    slots.append(int(keep[:start].sum()))
+                    for start, size in self.image_spans:
+                        keep[start : start + size] = False
+                        slots.append(int(keep[:start].sum()))
 
-                if len(slots) > 0:
                     dynamic_args.image_slots = slots.copy()
 
                 cond = cond[:, keep.to(cond.device)]
@@ -85,7 +87,12 @@ class Qwen3VL8BEngine:
         return zs
 
     def _tokenize_with_weights(self, text: str, images: list[torch.Tensor]) -> TOKEN_WEIGHTS:
-        llama_text = self.llama_template.format(self.vision_block * len(images) + text.strip())
+        if len(images) > 0:
+            refs = " ".join(f"<image{i + 1}>{self.vision_block}" for i in range(len(images)))
+            llama_text = self.llama_template.format(refs + text)
+        else:
+            llama_text = self.llama_template.format(text)
+
         tokens = self.tokenizer.tokenize_with_weights(llama_text, disable_weights=True)
 
         embed_count = 0

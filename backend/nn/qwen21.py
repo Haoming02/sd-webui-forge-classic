@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from backend import memory_management
+from backend.args import dynamic_args
 from backend.attention import attention_function
 from backend.nn.flux import EmbedND, timestep_embedding
 from backend.nn.qwen import TimestepEmbedding
@@ -191,7 +192,7 @@ class QwenImage21Transformer2DModel(nn.Module):
                 pos += n
                 length += n
             h, w = img.shape[-2:]
-            parts.append(self.img_in(img.flatten(2).transpose(1, 2)))
+            parts.append(self.img_in(img.flatten(2).transpose(1, 2).to(x)))
             hh = torch.arange(h, device=x.device, dtype=torch.float32) - (h - h // 2) + 0.5 * (h % 2 - x.shape[-2] % 2)
             ww = torch.arange(w, device=x.device, dtype=torch.float32) - (w - w // 2) + 0.5 * (w % 2 - x.shape[-1] % 2)
             ids.append(torch.stack([torch.full((h, w), pos, device=x.device, dtype=torch.float32), hh[:, None].expand(h, w), ww[None, :].expand(h, w)], dim=-1).flatten(0, 1))
@@ -205,8 +206,8 @@ class QwenImage21Transformer2DModel(nn.Module):
     def forward(self, x, timesteps, context, ref_latents=None, image_slots=None, transformer_options={}, **kwargs):
         B, C, H, W = x.shape
         dtype = x.dtype
-        ref_latents = list(ref_latents or [])
-        image_slots = list(image_slots or [])
+        ref_latents = list(dynamic_args.ref_latents or [])
+        image_slots = list(dynamic_args.image_slots or [])
 
         hidden_states, pe, segments = self.build_sequence(x, context, ref_latents, image_slots)
         prefix_len = hidden_states.shape[1] - H * W
