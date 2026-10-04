@@ -158,6 +158,8 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """Flux Kontext"""
     edit: bool = False
     """Qwen-Image-Edit"""
+    qwen21: bool = False
+    """Qwen-Image-2.1"""
     nunchaku: bool = False
     """Nunchaku (SVDQ) Models"""
     klein: bool = False
