@@ -55,7 +55,7 @@ class Wan(ForgeDiffusionEngine):
         self.end_image: torch.Tensor = None
         """last frame; cleared manually by ImageStitch"""
 
-    def set_shift(self, shift):
+    def set_shift(self, shift: float, *args, **kwargs):
         global refiner_shift
         super().set_shift(shift)
         refiner_shift = shift

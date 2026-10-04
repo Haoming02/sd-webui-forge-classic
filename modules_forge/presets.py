@@ -14,6 +14,7 @@ class PresetArch(Enum):
     ernie = 10  # Ernie-Image
     pid = 11  # PiD
     krea = 12  # Krea2
+    qwen21 = 13  # Qwen-Image-2.1
 
     @staticmethod
     def choices() -> list[str]:
@@ -33,6 +34,7 @@ SAMPLERS = {
     PresetArch.ernie: "Euler",
     PresetArch.pid: "LCM",
     PresetArch.krea: "Euler",
+    PresetArch.qwen21: "Euler",
 }
 
 SCHEDULERS = {
@@ -48,6 +50,7 @@ SCHEDULERS = {
     PresetArch.ernie: "Simple",
     PresetArch.pid: "Simple",
     PresetArch.krea: "Simple",
+    PresetArch.qwen21: "Simple",
 }
 
 STEPS = {
@@ -63,6 +66,7 @@ STEPS = {
     PresetArch.ernie: 8,
     PresetArch.pid: 4,
     PresetArch.krea: 8,
+    PresetArch.qwen21: 32,
 }
 
 CFG = {
@@ -78,6 +82,7 @@ CFG = {
     PresetArch.ernie: 1.0,
     PresetArch.pid: 1.0,
     PresetArch.krea: 1.0,
+    PresetArch.qwen21: 2.5,
 }
 
 DISTILL = {

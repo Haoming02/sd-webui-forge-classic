@@ -42,6 +42,15 @@ class QwenImage21(ForgeDiffusionEngine):
         self.forge_objects_original = self.forge_objects.shallow_copy()
         self.forge_objects_after_applying_lora = self.forge_objects.shallow_copy()
 
+    def set_shift(self, shift: float, width: int, height: int):
+        seq_len = width * height / (16 * 16)
+
+        # shift = base_shift + (max_shift - base_shift) * (sequence_length - base_image_seq_len) / (max_image_seq_len - base_image_seq_len)
+        shift = 0.5 + (0.9 - 0.5) * (seq_len - 256) / (8192 - 256)
+
+        self.forge_objects.unet.model.predictor.set_parameters(shift=shift)
+        memory_management.logger.debug(f"Shift: {shift}")
+
     @torch.inference_mode()
     def get_learned_conditioning(self, prompt: "SdConditioning"):
         memory_management.load_model_gpu(self.forge_objects.clip.patcher)
