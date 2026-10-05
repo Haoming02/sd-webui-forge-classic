@@ -24,6 +24,13 @@ from .quant_ops import (  # noqa
 
 _GROUPED_INT8_FORMATS = {"asym_w4a8_int8": 4, "w6a8_int8": 6}
 
+_COMPILE_UNSAFE_LAYOUTS = {"TensorCoreConvRotW4A4Layout", "AsymW4A8Int8Layout"}
+
+
+@torch.compiler.disable
+def _run_eager(fn, *args, **kwargs):
+    return fn(*args, **kwargs)
+
 
 def _quantized_apply(module: torch.nn.Module, fn, recurse=True):
     if recurse:
@@ -246,6 +253,11 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 return _quantized_weight_state_dict(self, sd, prefix, extra_quant_params=("input_scale",))
 
             def forward(self, input, *args, **kwargs):
+                if getattr(self, "layout_type", None) in _COMPILE_UNSAFE_LAYOUTS:
+                    return _run_eager(self._forward, input, *args, **kwargs)
+                return self._forward(input, *args, **kwargs)
+
+            def _forward(self, input, *args, **kwargs):
                 input_shape = input.shape
                 reshaped_nd = False
 
@@ -350,6 +362,11 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 return _quantized_weight_state_dict(self, sd, prefix)
 
             def forward(self, input):
+                if getattr(self, "layout_type", None) in _COMPILE_UNSAFE_LAYOUTS:
+                    return _run_eager(self._forward, input)
+                return self._forward(input)
+
+            def _forward(self, input):
                 weight = self.weight
 
                 if isinstance(weight, QuantizedTensor) and len(self.weight_function) == 0:
@@ -408,6 +425,7 @@ def _fp16_linear_wanted(x: torch.Tensor) -> bool:
     return getattr(torch.backends.cuda.matmul, "allow_fp16_accumulation", False) and x.dtype == torch.float16 and x.is_cuda
 
 
+@torch.compiler.disable
 def linear_input_act(linear: torch.nn.Linear, x: torch.Tensor, input_act: str, act_weight: torch.Tensor = None, act_eps: float = 0.0, residual: torch.Tensor = None, residual_scale: float = None) -> torch.Tensor:
     """https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/ops.py#L976"""
 
