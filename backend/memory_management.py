@@ -944,7 +944,7 @@ def vae_offload_device() -> torch.device:
     return get_torch_device() if args.gpu_only else cpu
 
 
-def vae_dtype(device=None, allowed_dtypes=None) -> torch.dtype:
+def vae_dtype(device: torch.device = None, allowed_dtypes: list[torch.dtype] = [torch.bfloat16, torch.float32]) -> torch.dtype:
     if args.fp16_vae:
         return torch.float16
     if args.bf16_vae:
@@ -952,8 +952,11 @@ def vae_dtype(device=None, allowed_dtypes=None) -> torch.dtype:
     if args.fp32_vae:
         return torch.float32
 
-    if should_use_bf16(vae_device()):
-        return torch.bfloat16
+    for d in allowed_dtypes:
+        if d is torch.float16 and should_use_fp16(device or vae_device()):
+            return d
+        if d is torch.bfloat16 and should_use_bf16(device or vae_device()):
+            return d
 
     return torch.float32
 

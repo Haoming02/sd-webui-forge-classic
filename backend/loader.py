@@ -143,8 +143,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             config.update({"dim": int(state_dict["encoder.conv1.weight"].shape[0]), "dec_dim": int(state_dict["decoder.head.0.gamma"].shape[0]), "z_dim": 64, "dim_mult": [1, 2, 4, 8, 8], "num_res_blocks": 2, "attn_scales": [], "temporal_downsample": [False, True, True, True], "dropout": 0.0, "image_channels": int(state_dict["decoder.head.2.weight"].shape[0]), "patch_size": 1, "temporal_kernel": 1})
 
+            dtype = memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
+
             with no_init_weights():
-                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype(), extra_dtype="vae"):
+                with using_forge_operations(device=memory_management.cpu, dtype=dtype, extra_dtype="vae"):
                     model = Wan22VAE.from_config(config)
 
             load_state_dict(model, state_dict, ignore_start="loss.")
@@ -156,14 +158,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.wan_vae_2d import Qwen2DVAE as WanVAE
 
                 config = {}
+                dtype = memory_management.vae_dtype()
 
             else:
                 from backend.nn.wan_vae import WanVAE
 
                 config = WanVAE.load_config(config_path)
+                dtype = memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
 
             with no_init_weights():
-                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype(), extra_dtype="vae"):
+                with using_forge_operations(device=memory_management.cpu, dtype=dtype, extra_dtype="vae"):
                     model = WanVAE.from_config(config)
 
             load_state_dict(model, state_dict)
