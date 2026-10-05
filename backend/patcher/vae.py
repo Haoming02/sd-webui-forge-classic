@@ -139,6 +139,8 @@ class VAE:
             self.memory_used_encode = lambda shape, dtype: (600 * shape[2] * shape[3]) * memory_management.dtype_size(dtype)
             self.memory_used_decode = lambda shape, dtype: (900 * shape[2] * shape[3] * (16 * 16)) * memory_management.dtype_size(dtype)
 
+            dtype = dtype or memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
+
         elif not is_wan:
             self.upscale_ratio = 8
             self.downscale_ratio = 8
@@ -162,6 +164,8 @@ class VAE:
             self.latent_channels = int(model.config.z_dim)  # 16
             self.memory_used_encode = lambda shape, dtype: (1500 if shape[2] <= 4 else 6000) * shape[3] * shape[4] * memory_management.dtype_size(dtype)
             self.memory_used_decode = lambda shape, dtype: (2200 if shape[2] <= 4 else 7000) * shape[3] * shape[4] * (8 * 8) * memory_management.dtype_size(dtype)
+
+            dtype = dtype or memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
 
         self.first_stage_model = model.eval()
 
