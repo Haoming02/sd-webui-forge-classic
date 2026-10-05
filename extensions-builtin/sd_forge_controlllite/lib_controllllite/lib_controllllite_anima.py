@@ -2,6 +2,7 @@
 
 import logging
 import math
+import re
 from typing import Final, Optional
 
 import torch
@@ -10,6 +11,7 @@ import torch.nn.functional as F
 
 from backend.args import dynamic_args
 from backend.misc.image_resize import adaptive_resize
+from backend.nn.anima import BLOCK_MAPPINGS
 from backend.state_dict import load_state_dict
 
 logger = logging.getLogger("ControlNet")
@@ -42,6 +44,7 @@ _INTERNAL_COND_PREFIX = "conditioning1."
 _INTERNAL_DEPTH_KEY = "depth_embeds"
 _SAVED_COND_PREFIX = "lllite_conditioning1."
 _SAVED_DEPTH_SUFFIX = ".depth_embed"
+_SAVED_BLOCK_RE = re.compile(r"lllite_dit_blocks_(\d+)_")
 
 
 def parse_target_layers(spec: str) -> tuple[str]:
@@ -423,6 +426,33 @@ class ControlNetLLLiteDiT(nn.Module):
             pass
 
         self.set_cond_image(None)
+
+
+# region Depth-Expanded DiT
+
+
+class _OriginalBlocks(nn.Module):
+    """The original blocks of a depth-expanded DiT, under their indices in the shallower model"""
+
+    def __init__(self, dit: nn.Module, layout: list[int]):
+        super().__init__()
+        self.blocks = nn.ModuleList(dit.blocks[i] for i in layout)
+
+
+def match_trained_blocks(dit: nn.Module, state_dict: dict[str, torch.Tensor]) -> nn.Module:
+    """Return the module whose ``blocks.{i}`` are the blocks this Control-LLLite was trained on"""
+    blocks = getattr(dit, "blocks", None)
+    trained = 1 + max((int(m.group(1)) for k in state_dict if (m := _SAVED_BLOCK_RE.match(k))), default=-1)
+    if blocks is None or trained in (0, len(blocks)):
+        return dit
+
+    if (mapping := BLOCK_MAPPINGS.get((trained, len(blocks)))) is None:
+        raise RuntimeError(f"Cannot map Control-LLLite of {trained}-block Anima to {len(blocks)}-block Anima")
+
+    # the original block keeps the first index grown from it; the inserted copies follow
+    layout = [mapping.index(i) for i in range(trained)]
+    logger.info(f"Re-Mapping Anima Control-LLLite ({trained} to {len(blocks)})")
+    return _OriginalBlocks(dit, layout)
 
 
 # region Weight Loading (v2)
