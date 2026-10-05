@@ -1428,7 +1428,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             return samples
 
         devices.torch_gc()
-        self.sd_model.set_shift(shift=self.hr_distilled_cfg)
+        self.sd_model.set_shift(shift=self.hr_distilled_cfg, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y)
 
         if self.sd_model.use_distilled_cfg_scale:
             self.extra_generation_params["Hires Distilled CFG Scale"] = self.hr_distilled_cfg
