@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from backend.args import dynamic_args
 from backend.logging import setup_logger
+from backend.nn.anima import BLOCK_MAPPINGS
 from backend.patcher.lora import load_lora, model_lora_keys_clip, model_lora_keys_unet
 from backend.state_dict import state_dict_prefix_replace
 from backend.utils import load_torch_file
@@ -57,19 +58,7 @@ def process_anima(lora: dict[str, torch.Tensor], blocks: int) -> bool:
 
     temp = lora.copy()
 
-    MAPPING_2_TO_29 = [0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 22, 23, 24, 24, 25, 26, 27]
-
-    MAPPING_2_TO_38 = [0, 1, 1, 1, 2, 3, 3, 3, 4, 5, 5, 5, 6, 7, 7, 7, 8, 9, 9, 9, 10, 11, 11, 11, 12, 13, 14, 14, 14, 15, 16, 16, 16, 17, 18, 18, 18, 19, 20, 20, 20, 21, 22, 22, 22, 23, 24, 24, 24, 25, 26, 27]
-
-    MAPPING_29_TO_38 = [0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 17, 17, 18, 19, 20, 20, 21, 22, 23, 23, 24, 25, 26, 26, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37, 38, 39]
-
-    if lora_blocks == 28 and blocks == 40:
-        mapping = MAPPING_2_TO_29
-    elif lora_blocks == 28 and blocks == 52:
-        mapping = MAPPING_2_TO_38
-    elif lora_blocks == 40 and blocks == 52:
-        mapping = MAPPING_29_TO_38
-    else:
+    if (mapping := BLOCK_MAPPINGS.get((lora_blocks, blocks))) is None:
         logger.error(f"Failed to recognize LoRA ({lora_blocks}) to Model ({blocks}) Mapping")
         return False
 

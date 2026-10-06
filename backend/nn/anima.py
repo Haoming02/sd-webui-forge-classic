@@ -6,7 +6,7 @@
 # References: https://github.com/nvidia-cosmos/cosmos-predict2
 
 import math
-from typing import Callable, Optional
+from typing import Callable, Final, Optional
 
 import torch
 from einops import rearrange, repeat
@@ -24,6 +24,12 @@ from backend.operations import (
 )
 from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
+
+BLOCK_MAPPINGS: Final[dict[tuple[int, int], list[int]]] = {
+    (28, 40): [0, 1, 1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 16, 17, 18, 18, 19, 20, 20, 21, 22, 22, 23, 24, 24, 25, 26, 27],
+    (28, 52): [0, 1, 1, 1, 2, 3, 3, 3, 4, 5, 5, 5, 6, 7, 7, 7, 8, 9, 9, 9, 10, 11, 11, 11, 12, 13, 14, 14, 14, 15, 16, 16, 16, 17, 18, 18, 18, 19, 20, 20, 20, 21, 22, 22, 22, 23, 24, 24, 24, 25, 26, 27],
+    (40, 52): [0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, 9, 10, 11, 11, 12, 13, 14, 14, 15, 16, 17, 17, 18, 19, 20, 20, 21, 22, 23, 23, 24, 25, 26, 26, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37, 38, 39],
+}
 
 
 def _fn(x: torch.Tensor, _norm: nn.Module, y: torch.Tensor, z: torch.Tensor) -> torch.Tensor:

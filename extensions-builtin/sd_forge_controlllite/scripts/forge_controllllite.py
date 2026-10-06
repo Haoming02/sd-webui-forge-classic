@@ -5,6 +5,7 @@ from lib_controllllite.lib_controllllite_anima import (
     ControlNetLLLiteDiT,
     infer_anima_config,
     load_lllite_weights_from_dict,
+    map_blocks,
 )
 
 from backend.utils import load_torch_file
@@ -41,7 +42,7 @@ class ControlLLLiteAnimaPatcher(ControlModelPatcher):
         if self._lllite_net is None:
             dit = unet.model.diffusion_model
             cfg = infer_anima_config(self.state_dict)
-            self._lllite_net = ControlNetLLLiteDiT(dit, **cfg)
+            self._lllite_net = ControlNetLLLiteDiT(map_blocks(dit, self.state_dict), **cfg)
             load_lllite_weights_from_dict(self._lllite_net, self.state_dict)
             self._lllite_net = self._lllite_net.eval().to(device=device, dtype=dtype)
             del self.state_dict
