@@ -366,7 +366,7 @@ def sampling_function(self, denoiser_params, cond_scale, cond_composition, extra
 
 def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
     shape = list(x.shape)
-    mem_shape = [2 * shape[0]] + shape[1:]
+    mem_shape = [(1 if args.no_batch_cond_uncond else 2) * shape[0]] + shape[1:]
 
     unet_inference_memory = unet.memory_required(mem_shape)
     additional_inference_memory = unet.extra_preserved_memory_during_sampling
