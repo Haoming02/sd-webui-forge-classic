@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 from backend.args import dynamic_args
 from backend.misc.image_resize import adaptive_resize
-from backend.nn.anima import BLOCK_MAPPINGS
+from backend.nn.anima import BLOCK_MAPPINGS, Anima
 from backend.state_dict import load_state_dict
 
 logger = logging.getLogger("ControlNet")
@@ -248,7 +248,7 @@ class LLLiteModuleDiT(nn.Module):
 
 
 class ControlNetLLLiteDiT(nn.Module):
-    def __init__(self, dit: nn.Module, cond_emb_dim: int = 32, mlp_dim: int = 64, target_layers: str = "self_attn_q", dropout: Optional[float] = None, multiplier: float = 1.0, cond_dim: int = 64, cond_resblocks: int = 1, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS, cond_in_ch: int = 3):
+    def __init__(self, dit: Anima, cond_emb_dim: int = 32, mlp_dim: int = 64, target_layers: str = "self_attn_q", dropout: Optional[float] = None, multiplier: float = 1.0, cond_dim: int = 64, cond_resblocks: int = 1, use_aspp: bool = False, aspp_dilations: tuple[int] = ASPP_DEFAULT_DILATIONS, cond_in_ch: int = 3):
         super().__init__()
         atomics = parse_target_layers(target_layers)
         self.multiplier = multiplier
@@ -290,7 +290,7 @@ class ControlNetLLLiteDiT(nn.Module):
                 return "cross_attn_q_pre" in atomics
         return False
 
-    def _create_modules(self, dit, cond_emb_dim, mlp_dim, atomics, dropout, multiplier):
+    def _create_modules(self, dit: Anima, cond_emb_dim, mlp_dim, atomics, dropout, multiplier):
         modules = []
         want_mlp = "mlp_fc1_pre" in atomics
         any_attn = any(a in atomics for a in ("self_attn_q_pre", "self_attn_kv_pre", "cross_attn_q_pre"))
@@ -320,7 +320,7 @@ class ControlNetLLLiteDiT(nn.Module):
         return modules
 
     def set_cond_image(self, cond_image: Optional[torch.Tensor]):
-        """cond_image: (B, 3, H, W) in [-1, 1]. None clears."""
+        """cond_image: (B, 3, H, W) in [-1, 1] ; `None` clears"""
         if cond_image is None:
             for m in self.lllite_modules:
                 m.cond_emb = None
@@ -428,34 +428,31 @@ class ControlNetLLLiteDiT(nn.Module):
         self.set_cond_image(None)
 
 
-# region Depth-Expanded DiT
+# region Block Mapping
 
 
-class _OriginalBlocks(nn.Module):
-    """The original blocks of a depth-expanded DiT, under their indices in the shallower model"""
-
+class MappedModule(nn.Module):
     def __init__(self, dit: nn.Module, layout: list[int]):
         super().__init__()
         self.blocks = nn.ModuleList(dit.blocks[i] for i in layout)
 
 
-def match_trained_blocks(dit: nn.Module, state_dict: dict[str, torch.Tensor]) -> nn.Module:
-    """Return the module whose ``blocks.{i}`` are the blocks this Control-LLLite was trained on"""
-    blocks = getattr(dit, "blocks", None)
-    trained = 1 + max((int(m.group(1)) for k in state_dict if (m := _SAVED_BLOCK_RE.match(k))), default=-1)
-    if blocks is None or trained in (0, len(blocks)):
+def map_blocks(dit: Anima, state_dict: dict[str, torch.Tensor]) -> nn.Module:
+    blocks: int = len(dit.blocks)
+    trained: int = 1 + max((int(m.group(1)) for k in state_dict if (m := _SAVED_BLOCK_RE.match(k))), default=-1)
+
+    if trained == blocks:
         return dit
 
-    if (mapping := BLOCK_MAPPINGS.get((trained, len(blocks)))) is None:
-        raise RuntimeError(f"Cannot map Control-LLLite of {trained}-block Anima to {len(blocks)}-block Anima")
+    if (mapping := BLOCK_MAPPINGS.get((trained, blocks))) is None:
+        raise NotImplementedError(f"Cannot map Control-LLLite ({trained}) to Model ({blocks})")
 
-    # the original block keeps the first index grown from it; the inserted copies follow
     layout = [mapping.index(i) for i in range(trained)]
-    logger.info(f"Re-Mapping Anima Control-LLLite ({trained} to {len(blocks)})")
-    return _OriginalBlocks(dit, layout)
+    logger.info(f"Re-Mapping Anima Control-LLLite ({trained} to {blocks})")
+    return MappedModule(dit, layout)
 
 
-# region Weight Loading (v2)
+# region Weight Loading
 
 
 def _from_saved_state_dict(lllite: ControlNetLLLiteDiT, weights_sd: dict[str, torch.Tensor]) -> dict:
@@ -494,7 +491,7 @@ def load_lllite_weights_from_dict(lllite: ControlNetLLLiteDiT, state_dict: dict[
 
 
 def infer_anima_config(state_dict: dict[str, torch.Tensor]) -> dict:
-    """Reconstruct ControlNetLLLiteDiT constructor kwargs from a saved state dict."""
+    """Reconstruct ControlNetLLLiteDiT constructor kwargs from a saved `state_dict`"""
     cond_emb_dim = 32
     cond_dim = 64
     cond_in_ch = 3
