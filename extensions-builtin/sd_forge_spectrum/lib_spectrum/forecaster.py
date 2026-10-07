@@ -95,56 +95,54 @@ class SpectrumNode:
 
     @staticmethod
     def patch(model, steps: int, w: float, m: int, lam: float, window_size: int, flex_window: float, warmup_steps: int, stop_caching_step: float):
-        state = {"forecasters": {}, "cnt": 0, "num_cached": 0, "curr_ws": float(window_size), "last_t": -1, "total_runs": 0, "estimated_total_steps": steps, "step_cnt": 0, "step_actual": True}
+        state = {"forecaster": None, "cnt": 0, "num_cached": 0, "curr_ws": float(window_size), "last_t": -1, "total_runs": 0, "estimated_total_steps": steps}
 
         def spectrum_unet_wrapper(model_function, kwargs):
             x, timestep, c = kwargs["input"], kwargs["timestep"], kwargs["c"]
             t_scalar = timestep[0].item() if isinstance(timestep, torch.Tensor) else float(timestep)
 
             if t_scalar > state["last_t"]:
-                for f in state["forecasters"].values():
-                    f.reset_buffers()
-                state["forecasters"] = {}
+                if state["forecaster"]:
+                    state["forecaster"].reset_buffers()
                 state["cnt"] = 0
                 state["num_cached"] = 0
                 state["curr_ws"] = float(window_size)
+                state["forecaster"] = None
                 state["total_runs"] += 1
-                state["last_t"] = -1
 
-            # The sampler may split cond/uncond into several calls per step depending on free memory; decide once per step
-            if t_scalar != state["last_t"]:
-                state["last_t"] = t_scalar
+            state["last_t"] = t_scalar
 
-                cnt = state["cnt"]
-                is_micro_final = cnt >= int(state["estimated_total_steps"] * stop_caching_step)
+            is_micro_final = False
+            auto_stop = int(state["estimated_total_steps"] * stop_caching_step)
+            if state["cnt"] >= auto_stop:
+                is_micro_final = True
 
-                do_actual = True
-                if cnt >= warmup_steps and not is_micro_final:
-                    do_actual = (state["num_cached"] + 1) % math.floor(state["curr_ws"]) == 0
+            do_actual = True
+            if state["cnt"] >= warmup_steps and not is_micro_final:
+                do_actual = (state["num_cached"] + 1) % math.floor(state["curr_ws"]) == 0
 
-                if do_actual:
-                    if cnt >= warmup_steps:
-                        state["curr_ws"] += flex_window
+            if do_actual:
+                out = model_function(x, timestep, **c)
+                if state["forecaster"] is None:
+                    state["forecaster"] = FastChebyshevForecaster(m=m, lam=lam, steps=steps)
+
+                state["forecaster"].update(state["cnt"], out)
+                if state["cnt"] >= warmup_steps:
+                    state["curr_ws"] += flex_window
+                state["num_cached"] = 0
+            else:
+                out = state["forecaster"].predict(state["cnt"], w=w).to(x.dtype)
+                if out.shape != x.shape:
+                    out = model_function(x, timestep, **c)
+                    assert state["forecaster"] is not None
+
+                    state["forecaster"].update(state["cnt"], out)
+                    state["curr_ws"] = float(window_size)
                     state["num_cached"] = 0
                 else:
                     state["num_cached"] += 1
 
-                state["step_cnt"] = cnt
-                state["step_actual"] = do_actual
-                state["cnt"] += 1
-
-            # Each distinct call layout (which conds, which shape) keeps its own history
-            key = (tuple(c.get("transformer_options", {}).get("cond_or_uncond", ())), tuple(x.shape))
-            forecaster = state["forecasters"].get(key)
-
-            if state["step_actual"] or forecaster is None:
-                out = model_function(x, timestep, **c)
-                if forecaster is None:
-                    forecaster = state["forecasters"][key] = FastChebyshevForecaster(m=m, lam=lam, steps=steps)
-                forecaster.update(state["step_cnt"], out)
-            else:
-                out = forecaster.predict(state["step_cnt"], w=w).to(x.dtype)
-
+            state["cnt"] += 1
             return out
 
         new_model = model.clone()
