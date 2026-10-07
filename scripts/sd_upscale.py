@@ -2,11 +2,12 @@ import math
 import re
 
 import gradio as gr
+from PIL import Image
+
 import modules.scripts as scripts
 from modules import devices, images, processing, shared
 from modules.processing import Processed
 from modules.shared import opts, state
-from PIL import Image
 
 
 class SDUpscale(scripts.Script):
