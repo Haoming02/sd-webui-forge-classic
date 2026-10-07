@@ -321,6 +321,7 @@ options_templates.update(
         ("optimizations", "Optimizations", "sd"),
         {
             "cross_attention_optimization": OptionInfo("Automatic", "Cross Attention Optimization", gr.Dropdown, {"choices": ("Automatic",), "interactive": False}),
+            "batch_cond_uncond": OptionInfo(True, "Batch Cond/Uncond").info("do both positive and negative denoising in the same batch ; increase speed & VRAM usage").info("less effective on macOS"),
             "persistent_cond_cache": OptionInfo(True, "Persistent Cond Cache").info("do not re-encode prompts if only the Seed changes ; <b>Note:</b> may cause certain Infotext to be missing"),
             "skip_early_cond": OptionInfo(0.0, "Ignore Negative Prompt during Early Steps", gr.Slider, {"minimum": 0.0, "maximum": 1.0, "step": 0.05}, infotext="Skip Early CFG").info("in percentage of total steps; 0 = disable; higher = faster"),
             "s_min_uncond": OptionInfo(0.0, "Skip Negative Prompt during Later Steps", gr.Slider, {"minimum": 0.0, "maximum": 8.0, "step": 0.05}).info('in "sigma"; 0 = disable; higher = faster'),

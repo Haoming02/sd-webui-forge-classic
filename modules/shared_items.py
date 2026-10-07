@@ -173,5 +173,11 @@ class Shared(sys.modules[__name__].__class__):
 
         modules.sd_models.model_data.set_sd_model(value)
 
+    @property
+    def batch_cond_uncond(self):
+        from modules import shared
+
+        return shared.opts.batch_cond_uncond
+
 
 sys.modules["modules.shared"].__class__ = Shared
