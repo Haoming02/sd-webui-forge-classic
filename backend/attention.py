@@ -453,13 +453,11 @@ def slice_attention_vae(q, k, v):
     steps = 1
 
     if mem_required > mem_free_total:
-        steps = 2 ** (math.ceil(math.log(mem_required / mem_free_total, 2)))
+        steps = 2 ** (math.ceil(math.log2(mem_required / mem_free_total)))
 
-    # MPSGraph rejects tensors with more than INT_MAX elements
-    max_elements = 2**31 - 1
-    elements = q.shape[0] * q.shape[1] * k.shape[2]
-    if q.device.type == "mps" and elements > max_elements:
-        steps = max(steps, 2 ** math.ceil(math.log2(elements / max_elements)))
+    if memory_management.is_device_mps(q.device):
+        if (elements := q.shape[0] * q.shape[1] * k.shape[2]) > (max_elements := 2**31 - 1):
+            steps = max(steps, 2 ** math.ceil(math.log2(elements / max_elements)))
 
     while True:
         try:
