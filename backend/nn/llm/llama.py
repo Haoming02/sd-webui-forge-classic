@@ -89,11 +89,16 @@ class Qwen3_8BConfig:
 
 
 @dataclass
-class Qwen3VL_4BConfig(Qwen3_8BConfig):
+class Qwen3VL_8BConfig(Qwen3_8BConfig):
     max_position_embeddings: int = 262144
     rope_theta: float = 5000000.0
     rope_dims = [24, 20, 20]
-    interleaved_mrope = True
+    interleaved_mrope: bool = True
+    lm_head: bool = True
+
+
+@dataclass
+class Qwen3VL_4BConfig(Qwen3VL_8BConfig):
     hidden_size: int = 2560
     intermediate_size: int = 9728
     lm_head: bool = False
@@ -167,11 +172,9 @@ class Ministral3_3BConfig:
     k_norm = None
     rope_scale = None
     final_norm: bool = True
-    lm_head: bool = False
-    stop_tokens = [2]
 
 
-def precompute_freqs_cis(head_dim, position_ids, theta, rope_scale=None, rope_dims=None, device=None):
+def precompute_freqs_cis(head_dim, position_ids, theta, rope_scale=None, rope_dims=None, device=None, interleaved_mrope=False):
     if not isinstance(theta, list):
         theta = [theta]
 
@@ -189,17 +192,26 @@ def precompute_freqs_cis(head_dim, position_ids, theta, rope_scale=None, rope_di
         inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos()
-        sin = emb.sin()
-        if rope_dims is not None and position_ids.shape[0] > 1:
-            mrope_section = rope_dims * 2
-            cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(0)
-            sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(0)
+        if rope_dims is not None and position_ids.shape[0] > 1 and interleaved_mrope:
+            freqs_inter = freqs[0].clone()
+            for axis_idx, offset in ((1, 1), (2, 2)):
+                length = rope_dims[axis_idx] * 3
+                idx = slice(offset, length, 3)
+                freqs_inter[..., idx] = freqs[axis_idx, ..., idx]
+            emb = torch.cat((freqs_inter, freqs_inter), dim=-1)
+            cos = emb.cos().unsqueeze(0)
+            sin = emb.sin().unsqueeze(0)
         else:
-            cos = cos.unsqueeze(1)
-            sin = sin.unsqueeze(1)
-
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+            if rope_dims is not None and position_ids.shape[0] > 1:
+                mrope_section = rope_dims * 2
+                cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(0)
+                sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(0)
+            else:
+                cos = cos.unsqueeze(1)
+                sin = sin.unsqueeze(1)
         sin_split = sin.shape[-1] // 2
         out.append((cos, sin[..., :sin_split], -sin[..., sin_split:]))
 
@@ -447,7 +459,10 @@ class Llama2_(nn.Module):
         else:
             self.norm = None
 
-    def forward(self, x, attention_mask=None, embeds=None, num_tokens=None, intermediate_output=None, final_layer_norm_intermediate=True, dtype=None, position_ids=None, embeds_info=[], past_key_values=None):
+        if getattr(config, "lm_head", False):
+            self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+    def forward(self, x, attention_mask=None, embeds=None, num_tokens=None, intermediate_output=None, final_layer_norm_intermediate=True, dtype=None, position_ids=None, embeds_info=[], input_ids=None, deepstack_embeds=None, visual_pos_masks=None, **kwargs):
         if embeds is not None:
             x = embeds
         else:
@@ -458,13 +473,11 @@ class Llama2_(nn.Module):
 
         seq_len = x.shape[1]
         past_len = 0
-        if past_key_values is not None and len(past_key_values) > 0:
-            past_len = past_key_values[0][2]
 
         if position_ids is None:
             position_ids = torch.arange(past_len, past_len + seq_len, device=x.device).unsqueeze(0)
 
-        freqs_cis = precompute_freqs_cis(self.config.head_dim, position_ids, self.config.rope_theta, self.config.rope_scale, self.config.rope_dims, device=x.device)
+        freqs_cis = precompute_freqs_cis(self.config.head_dim, position_ids, self.config.rope_theta, self.config.rope_scale, self.config.rope_dims, interleaved_mrope=getattr(self.config, "interleaved_mrope", False), device=x.device)
 
         mask = None
         if attention_mask is not None:
@@ -491,26 +504,21 @@ class Llama2_(nn.Module):
             elif intermediate_output < 0:
                 intermediate_output = len(self.layers) + intermediate_output
 
-        next_key_values = []
         for i, layer in enumerate(self.layers):
             if all_intermediate is not None:
                 if only_layers is None or (i in only_layers):
                     all_intermediate.append(x.unsqueeze(1).clone())
 
-            past_kv = None
-            if past_key_values is not None:
-                past_kv = past_key_values[i] if len(past_key_values) > 0 else []
-
-            x, current_kv = layer(
+            x, _ = layer(
                 x=x,
                 attention_mask=mask,
                 freqs_cis=freqs_cis,
                 optimized_attention=attention_function,
-                past_key_value=past_kv,
+                past_key_value=None,
             )
 
-            if current_kv is not None:
-                next_key_values.append(current_kv)
+            if deepstack_embeds is not None and i < len(deepstack_embeds):
+                x[visual_pos_masks] = x[visual_pos_masks] + deepstack_embeds[i].to(x)
 
             if i == intermediate_output:
                 intermediate = x.clone()
@@ -528,10 +536,7 @@ class Llama2_(nn.Module):
         if intermediate is not None and final_layer_norm_intermediate and self.norm is not None:
             intermediate = self.norm(intermediate)
 
-        if len(next_key_values) > 0:
-            return x, intermediate, next_key_values
-        else:
-            return x, intermediate
+        return x, intermediate
 
 
 class BaseLlama:
@@ -677,13 +682,17 @@ class Ministral3_3B(BaseLlama, nn.Module):
         self.model = Llama2_(config)
 
 
-from backend.nn.llm.qwen35 import QWEN3VL_VISION, Qwen3VLVisionModel
+from backend.nn.llm.qwen35 import (
+    QWEN3VL_VISION,
+    QWEN3VL_VISION_COMMON,
+    Qwen3VLVisionModel,
+)
 
 
 class Qwen3VL(BaseLlama, nn.Module):
-    def __init__(self, config_dict):
+    def __init__(self, config_dict, *, model_type: str):
         super().__init__()
-        config = Qwen3VL_4BConfig()
+        config = {"qwen3vl_4b": Qwen3VL_4BConfig, "qwen3vl_8b": Qwen3VL_8BConfig}[model_type]()
 
         _config_dict = asdict(config)
         for key, value in _config_dict.items():
@@ -692,7 +701,7 @@ class Qwen3VL(BaseLlama, nn.Module):
 
         self.num_layers = config.num_hidden_layers
         self.model = Llama2_(config)
-        vision_config = {**QWEN3VL_VISION, "out_hidden_size": config.hidden_size}
+        vision_config = {**QWEN3VL_VISION_COMMON, **QWEN3VL_VISION[model_type], "out_hidden_size": config.hidden_size}
         self.visual = Qwen3VLVisionModel(vision_config)
 
     def preprocess_embed(self, embed, device):
@@ -723,3 +732,24 @@ class Qwen3VL(BaseLlama, nn.Module):
             else:
                 deepstack = [torch.cat([deepstack[i], ds[i]], dim=0) for i in range(len(ds))]
         return position_ids, visual_pos_masks, deepstack
+
+    def forward(self, input_ids, attention_mask=None, embeds=None, num_tokens=None, intermediate_output=None, final_layer_norm_intermediate=True, dtype=None, embeds_info=[], **kwargs):
+        position_ids = kwargs.pop("position_ids", None)
+        visual_pos_masks = kwargs.pop("visual_pos_masks", None)
+        deepstack_embeds = kwargs.pop("deepstack_embeds", None)
+        if embeds is not None and position_ids is None:
+            position_ids, visual_pos_masks, deepstack_embeds = self.build_image_inputs(embeds, embeds_info)
+        return self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            embeds=embeds,
+            num_tokens=num_tokens,
+            intermediate_output=intermediate_output,
+            final_layer_norm_intermediate=final_layer_norm_intermediate,
+            dtype=dtype,
+            position_ids=position_ids,
+            embeds_info=embeds_info,
+            visual_pos_masks=visual_pos_masks,
+            deepstack_embeds=deepstack_embeds,
+            **kwargs,
+        )

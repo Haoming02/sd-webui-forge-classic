@@ -584,6 +584,21 @@ def get_next_sequence_number(path, basename):
     return result + 1
 
 
+def _process_alpha(image: Image.Image) -> Image.Image:
+    if image.mode != "RGBA":
+        return image
+
+    alpha = image.getchannel("A")
+    if alpha.getextrema() == (255, 255):
+        return image.convert("RGB")
+
+    rgb = image.convert("RGB")
+    zero_alpha = alpha.point(lambda a: 255 if a < 16 else 0)
+    rgb.paste((0, 0, 0), mask=zero_alpha)
+
+    return Image.merge("RGBA", (*rgb.split(), alpha))
+
+
 def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_pnginfo=None, pnginfo_section_name="parameters"):
     """
     Saves image to filename, including geninfo as text information for generation info.
@@ -595,6 +610,7 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
         extension = os.path.splitext(filename)[1]
 
     image_format = Image.registered_extensions()[extension]
+    image = _process_alpha(image)
 
     if extension.lower() == ".png":
         existing_pnginfo = existing_pnginfo or {}
@@ -609,10 +625,10 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
         image.save(filename, format=image_format, quality=opts.jpeg_quality, pnginfo=pnginfo_data)
 
     elif extension.lower() in (".jpg", ".jpeg", ".webp"):
-        if image.mode == "RGBA":
+        if image.mode == "RGBA" and extension.lower() in (".jpg", ".jpeg"):
             image = image.convert("RGB")
         elif image.mode == "I;16":
-            image = image.point(lambda p: p * 0.0038910505836576).convert("RGB" if extension.lower() == ".webp" else "L")
+            image = image.point(lambda p: p * (255 / 65535)).convert("L")
 
         image.save(filename, format=image_format, quality=opts.jpeg_quality, lossless=opts.webp_lossless)
 

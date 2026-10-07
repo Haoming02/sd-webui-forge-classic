@@ -1339,7 +1339,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         self.sampler = sd_samplers.create_sampler(self.sampler_name, self.sd_model)
-        self.sd_model.set_shift(shift=self.distilled_cfg_scale)
+        self.sd_model.set_shift(shift=self.distilled_cfg_scale, width=self.width, height=self.height)
 
         if self.firstpass_image is not None and self.enable_hr:
             # here we don't need to generate image, we just take self.firstpass_image and prepare it for hires fix
@@ -1428,7 +1428,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             return samples
 
         devices.torch_gc()
-        self.sd_model.set_shift(shift=self.hr_distilled_cfg)
+        self.sd_model.set_shift(shift=self.hr_distilled_cfg, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y)
 
         if self.sd_model.use_distilled_cfg_scale:
             self.extra_generation_params["Hires Distilled CFG Scale"] = self.hr_distilled_cfg
@@ -1894,7 +1894,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         x = self.rng.next()
-        self.sd_model.set_shift(shift=self.distilled_cfg_scale)
+        self.sd_model.set_shift(shift=self.distilled_cfg_scale, width=self.width, height=self.height)
 
         if shared.sd_model.is_wan and args.dynamic_args.wan:  # enforce batch_size of 1
             x = x[0].unsqueeze(0)

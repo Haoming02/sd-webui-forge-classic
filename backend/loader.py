@@ -23,6 +23,7 @@ from backend.diffusion_engine.lumina import Lumina2
 from backend.diffusion_engine.mugen import Mugen
 from backend.diffusion_engine.pid import PiD
 from backend.diffusion_engine.qwen import QwenImage
+from backend.diffusion_engine.qwen21 import QwenImage21
 from backend.diffusion_engine.sd15 import StableDiffusion
 from backend.diffusion_engine.sdxl import StableDiffusionXL, StableDiffusionXLRefiner
 from backend.diffusion_engine.wan import Wan
@@ -43,7 +44,7 @@ from backend.utils import (
 )
 from modules_forge.packages.comfy.utils import convert_diffusers_mmdit
 
-possible_models: tuple["ForgeDiffusionEngine"] = (StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, Krea2, Lumina2, ZImage, Anima, ErnieImage, PiD)
+possible_models: tuple["ForgeDiffusionEngine"] = (StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, QwenImage21, Krea2, Lumina2, ZImage, Anima, ErnieImage, PiD)
 
 logger = logging.getLogger("loader")
 setup_logger(logger)
@@ -134,6 +135,22 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, ignore_start="loss.")
             return model
+        if cls_name == "AutoencoderKLQwenImage21":
+            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
+            from backend.nn.qwen21_vae import Wan22VAE
+
+            config = Wan22VAE.load_config(config_path)
+
+            config.update({"dim": int(state_dict["encoder.conv1.weight"].shape[0]), "dec_dim": int(state_dict["decoder.head.0.gamma"].shape[0]), "z_dim": 64, "dim_mult": [1, 2, 4, 8, 8], "num_res_blocks": 2, "attn_scales": [], "temporal_downsample": [False, True, True, True], "dropout": 0.0, "image_channels": int(state_dict["decoder.head.2.weight"].shape[0]), "patch_size": 1, "temporal_kernel": 1})
+
+            dtype = memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
+
+            with no_init_weights():
+                with using_forge_operations(device=memory_management.cpu, dtype=dtype, extra_dtype="vae"):
+                    model = Wan22VAE.from_config(config)
+
+            load_state_dict(model, state_dict, ignore_start="loss.")
+            return model
         if cls_name in ["AutoencoderKLWan", "AutoencoderKLQwenImage"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have VAE state dict!"
 
@@ -141,14 +158,16 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.wan_vae_2d import Qwen2DVAE as WanVAE
 
                 config = {}
+                dtype = memory_management.vae_dtype()
 
             else:
                 from backend.nn.wan_vae import WanVAE
 
                 config = WanVAE.load_config(config_path)
+                dtype = memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
 
             with no_init_weights():
-                with using_forge_operations(device=memory_management.cpu, dtype=memory_management.vae_dtype(), extra_dtype="vae"):
+                with using_forge_operations(device=memory_management.cpu, dtype=dtype, extra_dtype="vae"):
                     model = WanVAE.from_config(config)
 
             load_state_dict(model, state_dict)
@@ -234,13 +253,19 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name)
             return model
-        if cls_name in ["Qwen3Model", "Qwen3ForCausalLM", "Qwen3VLModel"]:
+        if cls_name in ["Qwen3Model", "Qwen3ForCausalLM", "Qwen3VLModel", "Qwen3VLForConditionalGeneration"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen3 state dict!"
 
             config = read_arbitrary_config(config_path)
 
             if cls_name == "Qwen3VLModel":
-                from backend.nn.llm.llama import Qwen3VL as QTE
+                from backend.nn.llm.llama import Qwen3VL
+
+                QTE = partial(Qwen3VL, model_type="qwen3vl_4b")
+            elif cls_name == "Qwen3VLForConditionalGeneration":
+                from backend.nn.llm.llama import Qwen3VL
+
+                QTE = partial(Qwen3VL, model_type="qwen3vl_8b")
             elif config["hidden_size"] == 4096:
                 from backend.nn.llm.llama import Qwen3_8B as QTE
             elif config["hidden_size"] == 2560:
@@ -260,7 +285,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
                         model = QTE(config)
 
-            if cls_name == "Qwen3VLModel":
+            if cls_name.startswith("Qwen3VL"):
                 state_dict = state_dict_prefix_replace(
                     state_dict,
                     {
@@ -306,7 +331,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
         # region UNet / DiT
 
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel", "PiDTransformer2DModel", "Krea2Transformer2DModel"]:
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "QwenImage21Transformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel", "PiDTransformer2DModel", "Krea2Transformer2DModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
             pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
@@ -343,6 +368,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                     from backend.nn.qwen import QwenImageTransformer2DModel
 
                     model_loader = lambda c: QwenImageTransformer2DModel(**c)
+            elif cls_name == "QwenImage21Transformer2DModel":
+                from backend.nn.qwen21 import QwenImage21Transformer2DModel
+
+                model_loader = lambda c: QwenImage21Transformer2DModel(**c)
             elif cls_name in ("Lumina2Transformer2DModel", "ZImageTransformer2DModel"):
                 if guess.nunchaku:
                     guess.unet_config.pop("filename")
@@ -663,9 +692,9 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
             sd[f"{text_encoder_key_prefix}gemma2_2b.{k}"] = v
 
     elif "model.visual.deepstack_merger_list.0.norm.weight" in asd:
-        assert asd["model.visual.merger.linear_fc2.weight"].shape[0] == 2560
+        size: int = 4 if asd["model.visual.merger.linear_fc2.weight"].shape[0] == 2560 else 8
         for k, v in asd.items():
-            sd[f"{text_encoder_key_prefix}qwen3vl_4b.transformer.{k}"] = v
+            sd[f"{text_encoder_key_prefix}qwen3vl_{size}b.transformer.{k}"] = v
 
     elif "model.layers.0.self_attn.k_proj.bias" in asd:
         weight = asd["model.layers.0.self_attn.k_proj.bias"]
@@ -826,6 +855,7 @@ def forge_loader(sd: os.PathLike, additional_state_dicts: list[os.PathLike] = No
     backend.args.dynamic_args.reset()
     backend.args.dynamic_args.kontext = "kontext" in str(sd).lower()
     backend.args.dynamic_args.edit = "qwen" in str(sd).lower() and "edit" in str(sd).lower()
+    backend.args.dynamic_args.qwen21 = "Qwen-Image-2.1" in repo_name
     backend.args.dynamic_args.nunchaku = getattr(estimated_config, "nunchaku", False)
     backend.args.dynamic_args.klein = "klein" in repo_name
     backend.args.dynamic_args.wan = "Wan" in repo_name

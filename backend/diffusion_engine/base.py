@@ -114,7 +114,7 @@ class ForgeDiffusionEngine:
         self.ref_latents.clear()
         memory_management.soft_empty_cache()
 
-    def set_shift(self, shift: float):
+    def set_shift(self, shift: float, *args, **kwargs):
         if not self.use_shift:
             return
         self.forge_objects.unet.model.predictor.set_parameters(shift=shift)

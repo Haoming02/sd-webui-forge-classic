@@ -5,7 +5,8 @@
 # https://github.com/madebyollin/taehv/blob/main/taehv.py
 
 # reference:
-# - https://github.com/Comfy-Org/ComfyUI/blob/v0.21.0/comfy/taesd/taehv.py
+# - https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/taesd/taesd.py
+# - https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/taesd/taehv.py
 
 import os
 from typing import TYPE_CHECKING
@@ -79,6 +80,16 @@ def encoder(latent_channels=4, use_midblock_gn=False):
         *(conv(64, 64, stride=2, bias=False), Block(64, 64), Block(64, 64), Block(64, 64)),
         *(conv(64, 64, stride=2, bias=False), Block(64, 64, **mb_kw), Block(64, 64, **mb_kw), Block(64, 64, **mb_kw)),
         conv(64, latent_channels),
+    )
+
+
+def decoder_f16(latent_channels=64, image_channels=4):
+    return nn.Sequential(
+        *(Clamp(), conv(latent_channels, 256), nn.ReLU()),
+        *(Block(256, 256), Block(256, 256), Block(256, 256), nn.Upsample(scale_factor=2), conv(256, 128, bias=False)),
+        *(Block(128, 128), Block(128, 128), Block(128, 128), nn.Upsample(scale_factor=2), conv(128, 64, bias=False)),
+        *(Block(64, 64), Block(64, 64), Block(64, 64), nn.Upsample(scale_factor=2), conv(64, 64, bias=False)),
+        *(Block(64, 64), conv(64, image_channels * 4), nn.PixelShuffle(2)),
     )
 
 
@@ -216,6 +227,19 @@ class TAEHVDecoder(nn.Module):
         return z.squeeze(1)
 
 
+class TAESDF16Decoder(nn.Module):
+
+    def __init__(self, decoder_path: os.PathLike, latent_channels: int = 64, image_channels: int = 4):
+        super().__init__()
+        self.latent_channels = latent_channels
+        self.image_channels = image_channels
+        self.decoder = decoder_f16(self.latent_channels, self.image_channels)
+        load_state_dict(self.decoder, load_torch_file(decoder_path))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.decoder(x)
+
+
 def download_model(model_path: os.PathLike, model_url: str):
     if not os.path.exists(model_path):
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -230,6 +254,7 @@ def decoder_model():
         return None
     else:
         _video = model_name in ["taew2_1"]
+        _f16 = model_name in ["taeqi2_1_decoder"]
         model_name = model_name + ".pth"
 
     loaded_model = sd_vae_taesd_models.get(model_name)
@@ -241,7 +266,13 @@ def decoder_model():
         if not os.path.exists(model_path):
             return None
 
-        loaded_model = (TAEHVDecoder if _video else TAESDDecoder)(model_path, latent_format.latent_channels)
+        if _video:
+            loaded_model = TAEHVDecoder(model_path, latent_format.latent_channels)
+        elif _f16:
+            loaded_model = TAESDF16Decoder(model_path, latent_format.latent_channels)
+        else:
+            loaded_model = TAESDDecoder(model_path, latent_format.latent_channels)
+
         loaded_model.eval()
         loaded_model.to(devices.device, devices.dtype)
         sd_vae_taesd_models[model_name] = loaded_model
@@ -254,7 +285,7 @@ def encoder_model():
     model_name: str = latent_format.taesd_decoder_name
     if model_name is None:
         return None
-    elif model_name in ["taew2_1"]:
+    elif model_name in ["taew2_1", "taeqi2_1_decoder"]:
         return None
     else:
         model_name = model_name.replace("decoder", "encoder") + ".pth"

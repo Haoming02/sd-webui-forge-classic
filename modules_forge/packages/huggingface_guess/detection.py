@@ -1,4 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/v0.28.0/comfy/model_detection.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.38.0/comfy/model_detection.py
 
 import logging
 
@@ -241,6 +241,29 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
                     "rope_ref_w": 2048,
                 }
             )
+        return dit_config
+
+    q21_keys = ["txt_in.text_norm.weight", "modulation.1.weight", "transformer_blocks.0.attn.norm_q.weight", "img_in.weight", "proj_out.weight"]
+    if all("{}{}".format(key_prefix, k) in state_dict_keys for k in q21_keys) and any("{}transformer_blocks.0.img_mlp.{}.weight".format(key_prefix, k) in state_dict_keys for k in ("gate_up", "proj")):  # Qwen Image 2.1
+        dit_config = {}
+
+        dit_config["image_model"] = "qwen_image21"
+        head_dim = int(state_dict["{}transformer_blocks.0.attn.norm_q.weight".format(key_prefix)].shape[0])
+        inner_dim = int(state_dict["{}img_in.weight".format(key_prefix)].shape[0])
+        dit_config["in_channels"] = int(state_dict["{}img_in.weight".format(key_prefix)].shape[1])
+        dit_config["out_channels"] = int(state_dict["{}proj_out.weight".format(key_prefix)].shape[0])
+        dit_config["num_layers"] = count_blocks(state_dict_keys, "{}transformer_blocks.".format(key_prefix) + "{}.")
+        dit_config["attention_head_dim"] = head_dim
+        dit_config["num_attention_heads"] = inner_dim // head_dim
+        dit_config["context_in_dim"] = int(state_dict["{}txt_in.text_norm.weight".format(key_prefix)].shape[0])
+
+        gate_up = state_dict.get("{}transformer_blocks.0.img_mlp.gate_up.weight".format(key_prefix), None)
+        if gate_up is not None:
+            dit_config["mlp_ratio"] = int(gate_up.shape[0]) // 2 // inner_dim
+        else:
+            dit_config["mlp_ratio"] = int(state_dict["{}transformer_blocks.0.img_mlp.proj.weight".format(key_prefix)].shape[0]) // inner_dim
+        dit_config["fused_mlp"] = gate_up is not None
+
         return dit_config
 
     if "{}txt_norm.weight".format(key_prefix) in state_dict_keys:  # Qwen Image

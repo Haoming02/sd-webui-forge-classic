@@ -153,7 +153,7 @@ class ImageStitch(scripts.Script):
         p.sd_model.clear_references()
 
     def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]], max_dim: int):
-        if not (enable and references and any(getattr(dynamic_args, key) for key in ("kontext", "edit", "klein", "wan", "anima", "krea2"))):
+        if not (enable and references and dynamic_args.can_reference()):
             if ImageStitch.cached_parameters is None:
                 return
 
