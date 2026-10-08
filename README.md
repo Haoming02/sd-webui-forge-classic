@@ -4,7 +4,7 @@
 [ <b>Neo</b> | <a href="https://github.com/Haoming02/sd-webui-forge-classic/tree/classic#stable-diffusion-webui-forge---classic">Classic</a> ]
 </sup></p>
 
-<p align="center"><img src="html\ui.webp" width=512 alt="UI"></p>
+<p align="center"><img src="html\ui.webp" width=768 alt="UI"></p>
 
 <blockquote><i>
 <b>Stable Diffusion WebUI Forge</b> is a platform on top of the original <a href="https://github.com/AUTOMATIC1111/stable-diffusion-webui">Stable Diffusion WebUI</a> by <ins>AUTOMATIC1111</ins>, to make development easier, optimize resource management, speed up inference, and study experimental features.<br>
@@ -27,30 +27,26 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 #### New Features
 
+- [X] Support [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)
 - [X] Support [Krea 2](https://huggingface.co/krea/Krea-2-Turbo)
-    - `Turbo` / `Raw`
 - [X] Support **Krea 2 Identity Edit**
     - require specific [LoRA](https://civitai.com/models/2761113/krea-2-identity-edit)
-    - enable in **Settings/Stable Diffusion**
 - [X] Support [Anima 2B](https://huggingface.co/circlestone-labs/Anima) / [Anima 2.9B](https://huggingface.co/Gazingstars123/Anima-2.9B) / [Anima 3.8B](https://huggingface.co/lylogummy/Anima-3.8B)
-    - automatically map LoRA for 2B to 2.9B and 3.8B
+    - automatically map LoRA / Controllllite for 2.9B & 3.8B
     - `qwen35_4b` adapter requires [Extension](https://github.com/GumGum10/forge-anima-3.8B)
 - [X] Support **Anima Edit**
     - require specific [LoRA](https://civitai.com/models/2650553/anima-edit)
-    - enable in **Settings/Stable Diffusion**
 - [X] Support [Flux.2-Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B)
     - `4B` / `9B` (**not** `FLUX.2-Dev`)
 
-> [!Important]
-> To use `Flux.2-Klein` for regular `img2img`, toggle the functionality in **Settings/Stable Diffusion**
+> [!Note]
+> To toggle between `img2img` and `reference` (`edit`) for `Qwen-Image-2.1` / `Krea 2` / `Anima` / `Flux.2-Klein`, refer to **Settings/Stable Diffusion**
 
 - [X] Support [Ernie-Image](https://huggingface.co/baidu/ERNIE-Image)
-    - `ernie-image` / `ernie-image-turbo`
 - [X] Support [PiD 1.5](https://huggingface.co/nvidia/PiD)
     - `sdxl` / `qwen` / `flux1` / `flux2` (**not** `PixelDiT`)
     - use `PiD Integrated` to automatically upscale after generation
 - [X] Support [Z-Image](https://huggingface.co/Tongyi-MAI/Z-Image)
-    - `z-image` / `z-image-turbo`
 - [X] Support [Wan 2.2](https://github.com/Wan-Video/Wan2.2)
     - `14B` (**not** `5B`)
     - use `Refiner` to achieve **High Noise** / **Low Noise** switching
@@ -70,7 +66,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Support [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image) / [Qwen-Image-Edit](https://huggingface.co/Qwen/Qwen-Image-Edit-2509)
 
 > [!Note]
-> To be detected as an **Edit** model, the model must include "`qwen`" and "`edit`" in its path *(**e.g.** file name or folder name)*
+> To be detected as an **Edit** model, the model must include both "`qwen`" and "`edit`" in its path *(**e.g.** file name or folder name)*
 
 - [X] Support [Flux Kontext](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev)
 
@@ -85,7 +81,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - only `Flux` and `Qwen` support LoRA currently
     - see [Commandline](#by-neo)
 - [X] Support [Lumina-Image-2.0](https://huggingface.co/Alpha-VLLM/Lumina-Image-2.0)
-    - `Neta-Lumina` / `NetaYume-Lumina`
 - [X] Support [Chroma1-HD](https://huggingface.co/lodestones/Chroma1-HD)
 - [X] Support **MixedPrecision** Models
     - `fp4mixed` / `fp8mixed` / `mxfp8` / `nvfp4` / `fp8_scaled` / `int8_convrot` / `convrot_w4a4` / `asym_w4a8_int8` / `w6a8_int8`
@@ -106,8 +101,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 > [!Note]
 > This overrides the `UI Defaults` for the controlled parameters
-
-<br>
 
 - [X] Enforce Resolution Steps
     - dimensions must be multiples of `64` by default
@@ -131,12 +124,15 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Implement MaHiRo
     - alternative CFG calculation; improve prompt adherence
     - enable in **Settings/UI Alternatives**
+- [X] Implement DeGrid
+    - remove VAE artifacts
 - [X] Implement [Spectrum](https://github.com/hanjq17/Spectrum)
-    - training-free acceleration for all models
+    - speed up inference
 - [X] Implement [Epsilon Scaling](https://github.com/comfyanonymous/ComfyUI/pull/10132)
     - enable in **Settings/Stable Diffusion**
 - [X] Implement `torch.compile`
     - speed up inference after compilation
+    - require `triton`
 - [X] Implement alternative Prompt Box layouts
 - [X] Implement tiled `Conv2d` for VAE
     - reduce memory usage; reduce speed
@@ -181,6 +177,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Some Compatibility Settings
 - [X] Stealth Infotext
 - [X] `bitsandbytes` Support
+- [ ] `Nunchaku` Support
 
 #### Optimizations
 
@@ -204,7 +201,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Update [spandrel](https://github.com/chaiNNer-org/spandrel)
     - support new upscaler architectures
 
-> [!Important]
+> [!Note]
 > Put every upscaler (`.pth` / `.safetensors`) inside the `ESRGAN` folder
 
 > [!Tip]
@@ -412,7 +409,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 ## Attention Functions
 
-> [!Important]
+> [!Note]
 > The `--xformers`, `--flash`, and `--sage` args are only responsible for installing the packages, **not** whether its respective attention is used *(this also means you can remove them once the packages are successfully installed)*
 
 > [!Caution]
@@ -427,7 +424,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 4. `PyTorch`
 5. `Basic`
 
-> [!Note]
+> [!Tip]
 > To skip a specific attention, add the respective disable arg such as `--disable-sage`
 
 <br>
