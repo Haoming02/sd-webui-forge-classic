@@ -132,7 +132,15 @@ class SpectrumNode:
                 state["num_cached"] = 0
             else:
                 out = state["forecaster"].predict(state["cnt"], w=w).to(x.dtype)
-                state["num_cached"] += 1
+                if out.shape != x.shape:
+                    out = model_function(x, timestep, **c)
+                    assert state["forecaster"] is not None
+
+                    state["forecaster"].update(state["cnt"], out)
+                    state["curr_ws"] = float(window_size)
+                    state["num_cached"] = 0
+                else:
+                    state["num_cached"] += 1
 
             state["cnt"] += 1
             return out
