@@ -39,6 +39,7 @@ forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
 
 
 module_list: dict[str, os.PathLike] = {}
+module_map: dict[str, str] = {}
 
 
 def make_checkpoint_manager_ui():
@@ -88,6 +89,7 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
     file_extensions = ("ckpt", "pt", "pth", "bin", "safetensors", "sft", "gguf")
 
     module_list.clear()
+    module_map.clear()
 
     module_paths: set[os.PathLike] = {
         os.path.abspath(os.path.join(paths.models_path, "VAE")),
@@ -100,7 +102,14 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
         vae_files = find_files_with_extensions(vae_path, file_extensions)
         module_list.update(vae_files)
 
-    return sorted(ckpt_list), sorted(module_list.keys())
+        for file, path in vae_files.items():
+            rel = os.path.normpath(os.path.relpath(path, vae_path))
+            module_map[file] = rel
+
+    if shared.opts.sd_modules_dropdown_use_short:
+        return sorted(ckpt_list), sorted(module_list.keys())
+    else:
+        return sorted(ckpt_list), sorted(module_map.values())
 
 
 def refresh_model_loading_parameters(*, refresh: bool = True):
@@ -283,10 +292,14 @@ def on_preset_change(preset: str):
     batch_args_i2i = batch_args_t2i.copy()
     batch_args_i2i["value"] = getattr(shared.opts, f"{preset}_i2i_batch_size", 1)
 
+    modules_value = [os.path.basename(m) for m in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]
+    if not shared.opts.sd_modules_dropdown_use_short:
+        modules_value = [module_map[m] for m in modules_value]
+
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
         gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),
-        gr.update(value=[os.path.basename(m) for m in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]),
+        gr.update(value=modules_value),
         gr.update(value=getattr(shared.opts, f"forge_unet_storage_dtype_{preset}", "Automatic")),
         # ui_txt2img_steps, ui_txt2img_hr_steps, ui_img2img_steps
         gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_step", 20)) > 0 else gr.skip(),
