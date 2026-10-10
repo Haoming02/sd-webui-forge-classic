@@ -58,6 +58,17 @@ class LoRAControl(scripts.Script):
             logger.error("LoRA Control requires on-the-fly Patching")
             self.mapping.clear()
 
+    @staticmethod
+    def _interp(schedule: list[tuple[float, float]], t: float) -> float:
+        if schedule[-1][1] <= t:
+            return schedule[-1][0]
+        for i in range(len(schedule) - 1):
+            w1, t1 = schedule[i]
+            w2, t2 = schedule[i + 1]
+            if t1 <= t < t2:
+                return w1 + (w2 - w1) * (t - t1) / (t2 - t1)
+        return schedule[-1][0]
+
     @classmethod
     def adjust_lora(cls, params: CFGDenoiserParams):
         if not cls.mapping:
@@ -75,19 +86,15 @@ class LoRAControl(scripts.Script):
                     if lora.name != name:
                         continue
 
-                    if schedule[-1][1] <= t:
-                        w = schedule[-1][0]
-                    else:
-                        for i in range(len(schedule) - 1):
-                            w1, t1 = schedule[i]
-                            w2, t2 = schedule[i + 1]
+                    lora.patch[0][0] = cls._interp(schedule, t)
 
-                            if t1 <= t < t2:
-                                ratio = (t - t1) / (t2 - t1)
-                                w = w1 + (w2 - w1) * ratio
-                                break
+        for loras in m.dynamic_loras.values():
+            for entry in loras:
+                for name, schedule in cls.mapping.items():
+                    if entry["name"] != name:
+                        continue
 
-                    lora.patch[0][0] = w
+                    entry["strength"] = cls._interp(schedule, t)
 
 
 on_cfg_denoiser(LoRAControl.adjust_lora)

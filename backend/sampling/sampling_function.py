@@ -379,7 +379,22 @@ def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
 
     if unet.has_online_lora():
         lora_memory = utils.nested_compute_size(unet.weight_wrapper_patches, element_size=utils.dtype_to_element_size(unet.model.computation_dtype))
-        additional_inference_memory += lora_memory
+        dynamic_memory = 0
+        built = False
+        for m in unet.model.modules():
+            if (d := getattr(m, "_dyn_down", None)) is not None:
+                dynamic_memory += d.numel() * d.element_size()
+                dynamic_memory += sum(up.numel() * up.element_size() for up, _, _ in m._dyn_ups)
+                built = True
+            for t, _ in getattr(m, "_dyn_diffs", ()):
+                dynamic_memory += t.numel() * t.element_size()
+                built = True
+            for w1, w2, _ in getattr(m, "_dyn_kron", ()):
+                dynamic_memory += w1.numel() * w1.element_size() + w2.numel() * w2.element_size()
+                built = True
+        if not built and unet.dynamic_loras:
+            dynamic_memory = utils.nested_compute_size(unet.dynamic_loras, element_size=utils.dtype_to_element_size(unet.model.computation_dtype))
+        additional_inference_memory += lora_memory + dynamic_memory
 
     memory_management.load_models_gpu(models=[unet] + additional_model_patchers, memory_required=unet_inference_memory + additional_inference_memory, minimum_memory_required=unet_inference_memory // 2 + additional_inference_memory)
 
