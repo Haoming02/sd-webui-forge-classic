@@ -225,6 +225,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
 
         class Linear(torch.nn.Module, ForgeWeights):
             _disabled_formats = disabled
+            supports_dynamic_lora = True
 
             def __init__(self, in_features: int, out_features: int, bias: bool = True, device=None, dtype=None):
                 super().__init__()
@@ -260,6 +261,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
             def _forward(self, input, *args, **kwargs):
                 input_shape = input.shape
                 reshaped_nd = False
+                x_orig = input
 
                 _use_quantized = getattr(self, "layout_type", None) is not None and not isinstance(input, QuantizedTensor) and not self._full_precision_mm and not getattr(self, "forge_force_cast_weights", False) and len(self.weight_function) == 0 and len(self.bias_function) == 0
                 quantize_input = QUANT_ALGOS.get(getattr(self, "quant_format", None), {}).get("quantize_input", True)
@@ -290,7 +292,49 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 if reshaped_nd:
                     output = output.reshape((*input_shape[:-1], self.weight.shape[0]))
 
+                if hasattr(self, "_dyn_down") or hasattr(self, "_dyn_diffs") or hasattr(self, "_dyn_kron"):
+                    output = self.apply_dynamic_lora(x_orig, output)
+
                 return output
+
+            def apply_dynamic_lora(self, x: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+                x2 = x.reshape(-1, x.shape[-1])
+                y2 = out.reshape(-1, out.shape[-1])
+                dtype, device = y2.dtype, y2.device
+
+                down = getattr(self, "_dyn_down", None)
+                if down is not None:
+                    if down.dtype != dtype or down.device != device:
+                        down = self._dyn_down = down.to(device=device, dtype=dtype)
+                    mid = torch.nn.functional.linear(x2, down)
+                    idx = 0
+                    for i, (up, rank) in enumerate(self._dyn_ups):
+                        if up.dtype != dtype or up.device != device:
+                            up = self._dyn_ups[i][0] = up.to(device=device, dtype=dtype)
+                        y2 = torch.addmm(y2, mid[:, idx : idx + rank], up.transpose(0, 1))
+                        idx += rank
+
+                diffs = getattr(self, "_dyn_diffs", None)
+                if diffs is not None:
+                    for i, diff in enumerate(diffs):
+                        if diff.dtype != dtype or diff.device != device:
+                            diff = diffs[i] = diff.to(device=device, dtype=dtype)
+                        y2 = torch.addmm(y2, x2, diff.transpose(0, 1))
+
+                krons = getattr(self, "_dyn_kron", None)
+                if krons is not None:
+                    for i, (w1, w2) in enumerate(krons):
+                        if w1.dtype != dtype or w1.device != device:
+                            w1 = krons[i][0] = w1.to(device=device, dtype=dtype)
+                        if w2.dtype != dtype or w2.device != device:
+                            w2 = krons[i][1] = w2.to(device=device, dtype=dtype)
+                        a_out, a_in = w1.shape
+                        b_out, b_in = w2.shape
+                        a = torch.einsum("tab,ob->tao", x2.reshape(-1, a_in, b_in), w2)
+                        b = torch.einsum("tao,ia->tio", a, w1)
+                        y2 = y2 + b.reshape(y2.shape[0], -1)
+
+                return y2.reshape(out.shape)
 
             def convert_weight(self, weight, inplace=False, **kwargs):
                 if isinstance(weight, QuantizedTensor):

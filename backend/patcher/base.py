@@ -32,7 +32,7 @@ import torch
 from backend import memory_management, utils
 from backend.float import stochastic_rounding
 from backend.logging import setup_logger
-from backend.patcher.lora import merge_lora_to_weight, string_to_seed
+from backend.patcher.lora import merge_lora_to_weight, string_to_seed, weight_adapter
 from backend.quant_ops import QuantizedTensor
 
 logger = logging.getLogger("model_patcher")
@@ -107,6 +107,70 @@ class OnlineLoRAPatch:
         return merge_lora_to_weight(self.patch, weight, self.key, computation_dtype=weight.dtype)
 
 
+DYNAMIC_LORA_ATTRS = ("_dyn_down", "_dyn_ups", "_dyn_diffs", "_dyn_kron")
+
+
+def wipe_dynamic_lora(m):
+    for attr in DYNAMIC_LORA_ATTRS:
+        if hasattr(m, attr):
+            delattr(m, attr)
+
+
+def dynamic_lora_entry(strength_patch: float, v, strength_model: float, offset, function, weight_shape: tuple) -> dict | None:
+    """Convert an online LoRA patch into runtime low-rank form, or None if unsupported."""
+    if offset is not None or function is not None or strength_model != 1.0 or strength_patch == 0.0:
+        return None
+
+    if isinstance(v, weight_adapter.LoRAAdapter):
+        if len(v.weights) < 6:
+            return None
+        up, down, alpha, mid, dora, reshape = v.weights[:6]
+        if mid is not None or dora is not None or reshape is not None:
+            return None
+        if up is None or down is None or up.dim() != 2 or down.dim() != 2:
+            return None
+        rank = down.shape[0]
+        if up.shape != (weight_shape[0], rank) or down.shape != (rank, weight_shape[1]):
+            return None
+        scale = strength_patch * (float(alpha) / rank if alpha is not None else 1.0)
+        return {"kind": "lora", "scale": scale, "tensors": (down, up)}
+
+    if isinstance(v, weight_adapter.LoKrAdapter):
+        w1, w2, alpha, w1_a, w1_b, w2_a, w2_b, t2, dora = v.weights[:9]
+        if dora is not None:
+            return None
+        dim = None
+        if w1 is None:
+            if w1_a is None or w1_b is None:
+                return None
+            dim = w1_b.shape[0]
+            w1 = w1_a.to(torch.float32) @ w1_b.to(torch.float32)
+        else:
+            w1 = w1.to(torch.float32)
+        if w2 is None:
+            if t2 is not None or w2_a is None or w2_b is None:
+                return None
+            dim = w2_b.shape[0]
+            w2 = w2_a.to(torch.float32) @ w2_b.to(torch.float32)
+        else:
+            w2 = w2.to(torch.float32)
+        if w1.dim() != 2 or w2.dim() != 2:
+            return None
+        if (w1.shape[0] * w2.shape[0], w1.shape[1] * w2.shape[1]) != tuple(weight_shape):
+            return None
+        scale = strength_patch * (float(alpha) / dim if alpha is not None and dim is not None else 1.0)
+        return {"kind": "lokr", "scale": scale, "tensors": (w1, w2)}
+
+    if isinstance(v, tuple) or isinstance(v, list):
+        if len(v) == 2 and v[0] == "diff" and isinstance(v[1], tuple | list) and len(v[1]) == 1:
+            diff = v[1][0]
+            if diff is None or tuple(diff.shape) != tuple(weight_shape):
+                return None
+            return {"kind": "diff", "scale": float(strength_patch), "tensors": (diff,)}
+
+    return None
+
+
 LOWVRAM_PATCH_ESTIMATE_MATH_FACTOR = 2
 
 
@@ -162,6 +226,7 @@ class ModelPatcher:
         self.current_device = current_device or offload_device
 
         self.patches = {}
+        self.dynamic_loras = {}
         self.backup = {}
 
         self.object_patches = {}
@@ -190,7 +255,7 @@ class ModelPatcher:
             self.model.model_offload_buffer_memory = 0
 
     def has_online_lora(self) -> bool:
-        return len(self.weight_wrapper_patches) > 0
+        return len(self.weight_wrapper_patches) > 0 or len(self.dynamic_loras) > 0
 
     def model_size(self) -> int:
         if self.size == 0:
@@ -210,6 +275,8 @@ class ModelPatcher:
         for k in self.patches:
             n.patches[k] = self.patches[k][:]
         n.patches_uuid = self.patches_uuid
+
+        n.dynamic_loras = {k: v[:] for k, v in self.dynamic_loras.items()}
 
         n.object_patches = self.object_patches.copy()
         n.weight_wrapper_patches = self.weight_wrapper_patches.copy()
@@ -414,7 +481,18 @@ class ModelPatcher:
                 p.add(k)
 
                 if online_mode:
-                    self.add_weight_wrapper(key, OnlineLoRAPatch(filename, k, [strength_patch, patches[k], strength_model, offset, function]))
+                    entry = None
+                    if key.endswith(".weight"):
+                        try:
+                            module = utils.get_attr(self.model, key.rsplit(".", 1)[0])
+                        except AttributeError:
+                            module = None
+                        if module is not None and getattr(module, "supports_dynamic_lora", False):
+                            entry = dynamic_lora_entry(strength_patch, patches[k], strength_model, offset, function, model_sd[key].shape)
+                    if entry is not None:
+                        self.dynamic_loras.setdefault(key, []).append(entry)
+                    else:
+                        self.add_weight_wrapper(key, OnlineLoRAPatch(filename, k, [strength_patch, patches[k], strength_model, offset, function]))
                 else:
                     current_patches = self.patches.pop(key, [])
                     current_patches.append((strength_patch, patches[k], strength_model, offset, function))
@@ -422,6 +500,32 @@ class ModelPatcher:
 
         self.patches_uuid = uuid.uuid4()
         return list(p)
+
+    def build_dynamic_lora(self, m, key: str, device_to):
+        target_dtype = getattr(self.model, "computation_dtype", None) or getattr(self.model, "manual_cast_dtype", None) or torch.float32
+        device = device_to if device_to is not None else self.load_device
+        downs, ups, diffs, krons = [], [], [], []
+        for entry in self.dynamic_loras[key]:
+            scale, kind = entry["scale"], entry["kind"]
+            if scale == 0.0:
+                continue
+            if kind == "lora":
+                down, up = entry["tensors"]
+                downs.append(down.to(device=device, dtype=target_dtype, copy=True))
+                ups.append([up.to(device=device, dtype=target_dtype, copy=True) * scale, down.shape[0]])
+            elif kind == "diff":
+                diff = entry["tensors"][0]
+                diffs.append(diff.to(device=device, dtype=target_dtype, copy=True) * scale)
+            elif kind == "lokr":
+                w1, w2 = entry["tensors"]
+                krons.append([w1.to(device=device, dtype=target_dtype, copy=True) * scale, w2.to(device=device, dtype=target_dtype, copy=True)])
+        if downs:
+            m._dyn_down = torch.cat(downs, dim=0)
+            m._dyn_ups = ups
+        if diffs:
+            m._dyn_diffs = diffs
+        if krons:
+            m._dyn_kron = krons
 
     def get_key_patches(self, filter_prefix=None):
         model_sd = self.model_state_dict()
@@ -592,6 +696,11 @@ class ModelPatcher:
             if bias_key in self.weight_wrapper_patches:
                 m.bias_function.extend(self.weight_wrapper_patches[bias_key])
 
+            if getattr(m, "supports_dynamic_lora", False):
+                wipe_dynamic_lora(m)
+                if weight_key in self.dynamic_loras:
+                    self.build_dynamic_lora(m, weight_key, device_to)
+
         load_completely.sort(reverse=True)
         for x in load_completely:
             n = x[1]
@@ -686,6 +795,7 @@ class ModelPatcher:
             for m in self.model.modules():
                 if hasattr(m, "forge_patched_weights"):
                     del m.forge_patched_weights
+                wipe_dynamic_lora(m)
 
         keys = list(self.object_patches_backup.keys())
         for k in keys:
