@@ -381,13 +381,15 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
             mask = mask.unsqueeze(1)
 
     try:
-        assert mask is None
+        # The caller marks a known bottom-right causal mask.
+        causal = kwargs.get("causal", False)
+        assert mask is None or causal
         out = flash_attn_wrapper(
             q.transpose(1, 2),
             k.transpose(1, 2),
             v.transpose(1, 2),
             dropout_p=0.0,
-            causal=False,
+            causal=causal,
         ).transpose(1, 2)
         _fallback = False
     except Exception as e:

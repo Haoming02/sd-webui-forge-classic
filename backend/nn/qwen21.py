@@ -139,7 +139,7 @@ class LastLayer(nn.Module):
 def block_causal_attention(segments, transformer_options={}):
 
     def attn(q, k, v, heads, preferred_attention=None):
-        outs = [attention_function(q[:, start:end].flatten(2), k[:, :end].flatten(2), v[:, :end].flatten(2), heads, mask=mask, transformer_options=transformer_options, preferred_attention=preferred_attention) for start, end, mask in segments]
+        outs = [attention_function(q[:, start:end].flatten(2), k[:, :end].flatten(2), v[:, :end].flatten(2), heads, mask=mask, causal=mask is not None, transformer_options=transformer_options, preferred_attention=preferred_attention) for start, end, mask in segments]
         return torch.cat(outs, dim=1) if len(outs) > 1 else outs[0]
 
     return attn
