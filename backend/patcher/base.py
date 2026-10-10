@@ -116,9 +116,9 @@ def wipe_dynamic_lora(m):
             delattr(m, attr)
 
 
-def dynamic_lora_entry(strength_patch: float, v, strength_model: float, offset, function, weight_shape: tuple) -> dict | None:
+def dynamic_lora_entry(name, strength_patch: float, v, strength_model: float, offset, function, weight_shape: tuple) -> dict | None:
     """Convert an online LoRA patch into runtime low-rank form, or None if unsupported."""
-    if offset is not None or function is not None or strength_model != 1.0 or strength_patch == 0.0:
+    if offset is not None or function is not None or strength_model != 1.0:
         return None
 
     if isinstance(v, weight_adapter.LoRAAdapter):
@@ -132,8 +132,8 @@ def dynamic_lora_entry(strength_patch: float, v, strength_model: float, offset, 
         rank = down.shape[0]
         if up.shape != (weight_shape[0], rank) or down.shape != (rank, weight_shape[1]):
             return None
-        scale = strength_patch * (float(alpha) / rank if alpha is not None else 1.0)
-        return {"kind": "lora", "scale": scale, "tensors": (down, up)}
+        factor = float(alpha) / rank if alpha is not None else 1.0
+        return {"kind": "lora", "name": name, "strength": float(strength_patch), "factor": factor, "tensors": (down, up)}
 
     if isinstance(v, weight_adapter.LoKrAdapter):
         w1, w2, alpha, w1_a, w1_b, w2_a, w2_b, t2, dora = v.weights[:9]
@@ -158,15 +158,15 @@ def dynamic_lora_entry(strength_patch: float, v, strength_model: float, offset, 
             return None
         if (w1.shape[0] * w2.shape[0], w1.shape[1] * w2.shape[1]) != tuple(weight_shape):
             return None
-        scale = strength_patch * (float(alpha) / dim if alpha is not None and dim is not None else 1.0)
-        return {"kind": "lokr", "scale": scale, "tensors": (w1, w2)}
+        factor = float(alpha) / dim if alpha is not None and dim is not None else 1.0
+        return {"kind": "lokr", "name": name, "strength": float(strength_patch), "factor": factor, "tensors": (w1, w2)}
 
     if isinstance(v, tuple) or isinstance(v, list):
         if len(v) == 2 and v[0] == "diff" and isinstance(v[1], tuple | list) and len(v[1]) == 1:
             diff = v[1][0]
             if diff is None or tuple(diff.shape) != tuple(weight_shape):
                 return None
-            return {"kind": "diff", "scale": float(strength_patch), "tensors": (diff,)}
+            return {"kind": "diff", "name": name, "strength": float(strength_patch), "factor": 1.0, "tensors": (diff,)}
 
     return None
 
@@ -488,7 +488,7 @@ class ModelPatcher:
                         except AttributeError:
                             module = None
                         if module is not None and getattr(module, "supports_dynamic_lora", False):
-                            entry = dynamic_lora_entry(strength_patch, patches[k], strength_model, offset, function, model_sd[key].shape)
+                            entry = dynamic_lora_entry(filename, strength_patch, patches[k], strength_model, offset, function, model_sd[key].shape)
                     if entry is not None:
                         self.dynamic_loras.setdefault(key, []).append(entry)
                     else:
@@ -506,19 +506,17 @@ class ModelPatcher:
         device = device_to if device_to is not None else self.load_device
         downs, ups, diffs, krons = [], [], [], []
         for entry in self.dynamic_loras[key]:
-            scale, kind = entry["scale"], entry["kind"]
-            if scale == 0.0:
-                continue
+            kind = entry["kind"]
             if kind == "lora":
                 down, up = entry["tensors"]
                 downs.append(down.to(device=device, dtype=target_dtype, copy=True))
-                ups.append([up.to(device=device, dtype=target_dtype, copy=True) * scale, down.shape[0]])
+                ups.append([up.to(device=device, dtype=target_dtype, copy=True), down.shape[0], entry])
             elif kind == "diff":
                 diff = entry["tensors"][0]
-                diffs.append(diff.to(device=device, dtype=target_dtype, copy=True) * scale)
+                diffs.append([diff.to(device=device, dtype=target_dtype, copy=True), entry])
             elif kind == "lokr":
                 w1, w2 = entry["tensors"]
-                krons.append([w1.to(device=device, dtype=target_dtype, copy=True) * scale, w2.to(device=device, dtype=target_dtype, copy=True)])
+                krons.append([w1.to(device=device, dtype=target_dtype, copy=True), w2.to(device=device, dtype=target_dtype, copy=True), entry])
         if downs:
             m._dyn_down = torch.cat(downs, dim=0)
             m._dyn_ups = ups

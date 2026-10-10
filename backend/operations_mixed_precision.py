@@ -298,6 +298,8 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 return output
 
             def apply_dynamic_lora(self, x: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+                if isinstance(x, QuantizedTensor):
+                    x = x.dequantize()
                 x2 = x.reshape(-1, x.shape[-1])
                 y2 = out.reshape(-1, out.shape[-1])
                 dtype, device = y2.dtype, y2.device
@@ -306,24 +308,36 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                 if down is not None:
                     if down.dtype != dtype or down.device != device:
                         down = self._dyn_down = down.to(device=device, dtype=dtype)
-                    mid = torch.nn.functional.linear(x2, down)
+                    mid = None
                     idx = 0
-                    for i, (up, rank) in enumerate(self._dyn_ups):
+                    for i, (up, rank, entry) in enumerate(self._dyn_ups):
+                        scale = entry["strength"] * entry["factor"]
+                        if scale == 0.0:
+                            idx += rank
+                            continue
+                        if mid is None:
+                            mid = torch.nn.functional.linear(x2, down)
                         if up.dtype != dtype or up.device != device:
                             up = self._dyn_ups[i][0] = up.to(device=device, dtype=dtype)
-                        y2 = torch.addmm(y2, mid[:, idx : idx + rank], up.transpose(0, 1))
+                        y2 = torch.addmm(y2, mid[:, idx : idx + rank], up.transpose(0, 1), alpha=scale)
                         idx += rank
 
                 diffs = getattr(self, "_dyn_diffs", None)
                 if diffs is not None:
-                    for i, diff in enumerate(diffs):
+                    for i, (diff, entry) in enumerate(diffs):
+                        scale = entry["strength"] * entry["factor"]
+                        if scale == 0.0:
+                            continue
                         if diff.dtype != dtype or diff.device != device:
-                            diff = diffs[i] = diff.to(device=device, dtype=dtype)
-                        y2 = torch.addmm(y2, x2, diff.transpose(0, 1))
+                            diff = diffs[i][0] = diff.to(device=device, dtype=dtype)
+                        y2 = torch.addmm(y2, x2, diff.transpose(0, 1), alpha=scale)
 
                 krons = getattr(self, "_dyn_kron", None)
                 if krons is not None:
-                    for i, (w1, w2) in enumerate(krons):
+                    for i, (w1, w2, entry) in enumerate(krons):
+                        scale = entry["strength"] * entry["factor"]
+                        if scale == 0.0:
+                            continue
                         if w1.dtype != dtype or w1.device != device:
                             w1 = krons[i][0] = w1.to(device=device, dtype=dtype)
                         if w2.dtype != dtype or w2.device != device:
@@ -332,7 +346,7 @@ def mixed_precision_ops(quant_config={}, compute_dtype=torch.bfloat16, full_prec
                         b_out, b_in = w2.shape
                         a = torch.einsum("tab,ob->tao", x2.reshape(-1, a_in, b_in), w2)
                         b = torch.einsum("tao,ia->tio", a, w1)
-                        y2 = y2 + b.reshape(y2.shape[0], -1)
+                        y2 = y2 + scale * b.reshape(y2.shape[0], -1)
 
                 return y2.reshape(out.shape)
 

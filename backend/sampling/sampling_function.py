@@ -384,12 +384,12 @@ def sampling_prepare(unet: "UnetPatcher", x: torch.Tensor):
         for m in unet.model.modules():
             if (d := getattr(m, "_dyn_down", None)) is not None:
                 dynamic_memory += d.numel() * d.element_size()
-                dynamic_memory += sum(up.numel() * up.element_size() for up, _ in m._dyn_ups)
+                dynamic_memory += sum(up.numel() * up.element_size() for up, _, _ in m._dyn_ups)
                 built = True
-            for t in getattr(m, "_dyn_diffs", ()):
+            for t, _ in getattr(m, "_dyn_diffs", ()):
                 dynamic_memory += t.numel() * t.element_size()
                 built = True
-            for w1, w2 in getattr(m, "_dyn_kron", ()):
+            for w1, w2, _ in getattr(m, "_dyn_kron", ()):
                 dynamic_memory += w1.numel() * w1.element_size() + w2.numel() * w2.element_size()
                 built = True
         if not built and unet.dynamic_loras:
