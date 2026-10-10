@@ -152,6 +152,9 @@ class PromptsFromTexts(scripts.Script):
 
         images = []
         all_prompts = []
+        all_negative_prompts = []
+        all_seeds = []
+        all_subseeds = []
         infotexts = []
         for args in jobs:
             state.job = f"{state.job_no + 1} out of {state.job_count}"
@@ -182,6 +185,13 @@ class PromptsFromTexts(scripts.Script):
                 p.seed = p.seed + (p.batch_size * p.n_iter)
 
             all_prompts += proc.all_prompts
+            all_negative_prompts += proc.all_negative_prompts
+            all_seeds += proc.all_seeds
+            all_subseeds += proc.all_subseeds
             infotexts += proc.infotexts
 
-        return Processed(p, images, p.seed, "", all_prompts=all_prompts, infotexts=infotexts)
+        info = infotexts[0] if infotexts else ""
+        seed = all_seeds[0] if all_seeds else p.seed
+        subseed = all_subseeds[0] if all_subseeds else p.subseed
+
+        return Processed(p, images, seed, info, subseed=subseed, all_prompts=all_prompts, all_negative_prompts=all_negative_prompts, all_seeds=all_seeds, all_subseeds=all_subseeds, infotexts=infotexts)
