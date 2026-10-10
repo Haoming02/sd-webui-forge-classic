@@ -21,6 +21,7 @@ class State:
     job = ""
     job_no = 0
     job_count = 0
+    job_video = False
     processing_has_refined_job_count = False
     job_timestamp = "0"
     preview_step: int = 0

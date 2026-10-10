@@ -106,6 +106,7 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
         upscale_to_width: int,
         upscale_to_height: int,
         upscale_crop: bool,
+        do_cache: bool,
     ):
         if upscale_mode == 1:
             upscale_by = max(upscale_to_width / image.width, upscale_to_height / image.height)
@@ -119,17 +120,22 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
                 upscale_by = max(upscale_to_width / image.width, upscale_to_height / image.height)
                 info["Max side length"] = max_side_length
 
-        cache_key = (hash(np.array(image.getdata()).tobytes()), upscaler.name, upscale_mode, upscale_by, upscale_to_width, upscale_to_height, upscale_crop)
-        cached_image = upscale_cache.pop(cache_key, None)
+        if do_cache:
+            cache_key = (hash(np.array(image.getdata()).tobytes()), upscaler.name, upscale_mode, upscale_by, upscale_to_width, upscale_to_height, upscale_crop)
+            cached_image = upscale_cache.pop(cache_key, None)
+        else:
+            cache_key = None
+            cached_image = None
 
         if cached_image is not None:
             image = cached_image
         else:
             image = upscaler.scaler.upscale(image, upscale_by, upscaler.data_path)
 
-        upscale_cache[cache_key] = image
-        if len(upscale_cache) > shared.opts.upscaling_max_images_in_cache:
-            upscale_cache.pop(next(iter(upscale_cache), None), None)
+        if do_cache:
+            upscale_cache[cache_key] = image
+            if len(upscale_cache) > shared.opts.upscaling_max_images_in_cache:
+                upscale_cache.pop(next(iter(upscale_cache), None), None)
 
         if upscale_mode == 1 and upscale_crop:
             cropped = Image.new("RGB", (upscale_to_width, upscale_to_height))
@@ -197,11 +203,11 @@ class ScriptPostprocessingUpscale(scripts_postprocessing.ScriptPostprocessing):
         upscaler2 = next(iter([x for x in shared.sd_upscalers if x.name == _upscaler_2_name and x.name != "None"]), None)
         assert upscaler2 or (_upscaler_2_name is None), f"could not find upscaler named {_upscaler_2_name}"
 
-        upscaled_image = self._upscale(pp.image, pp.info, upscaler1, upscale_mode, upscale_by, max_side_length, upscale_to_width, upscale_to_height, upscale_crop)
+        upscaled_image = self._upscale(pp.image, pp.info, upscaler1, upscale_mode, upscale_by, max_side_length, upscale_to_width, upscale_to_height, upscale_crop, do_cache=not pp.shared.is_video)
         pp.info["Postprocess upscaler"] = upscaler1.name
 
         if upscaler2 and upscaler_2_visibility > 0:
-            second_upscale = self._upscale(pp.image, pp.info, upscaler2, upscale_mode, upscale_by, max_side_length, upscale_to_width, upscale_to_height, upscale_crop)
+            second_upscale = self._upscale(pp.image, pp.info, upscaler2, upscale_mode, upscale_by, max_side_length, upscale_to_width, upscale_to_height, upscale_crop, do_cache=not pp.shared.is_video)
             if upscaled_image.mode != second_upscale.mode:
                 second_upscale = second_upscale.convert(upscaled_image.mode)
             upscaled_image = Image.blend(upscaled_image, second_upscale, upscaler_2_visibility)

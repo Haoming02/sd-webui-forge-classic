@@ -114,59 +114,69 @@ def run_postprocessing_video(_mode, _img, _folder, _in_dir, _out_dir, _show, vid
     devices.torch_gc()
 
     shared.state.begin(job="extras")
-
-    outputs: list[np.ndarray] = []
+    shared.state.job_video = True
 
     container = av.open(video_input)
 
     video_stream = container.streams.best("video")
+    video_stream.thread_type = "AUTO"
+
     frames = video_stream.frames
+    fps = round(float(video_stream.average_rate))
 
     def get_frames():
         for frame in tqdm(container.decode(video=0), desc="Processing Video", total=frames, unit="frame"):
             yield frame.to_image()
 
-    infotext = None
+    infotext: str = None
+    last_image: Image.Image = None
 
     shared.state.job_count = frames
 
-    for i, image_data in enumerate(get_frames()):
+    writer = images.StreamingVideoWriter(os.path.splitext(os.path.basename(video_input))[0], fps=fps, info=None, audio_copy=video_input)
 
-        shared.state.nextjob()
-        shared.state.textinfo = str(i)
-        shared.state.skipped = False
+    try:
+        for i, image_data in enumerate(get_frames()):
 
-        if shared.state.interrupted or shared.state.stopping_generation:
-            break
+            shared.state.nextjob()
+            shared.state.textinfo = str(i)
+            shared.state.skipped = False
+            shared.state.job = "extras-video"
 
-        initial_pp = scripts_postprocessing.PostprocessedImage(image_data)
+            if shared.state.interrupted or shared.state.stopping_generation:
+                break
+            if shared.state.skipped:
+                continue
 
-        scripts.scripts_postproc.run(initial_pp, args)
+            initial_pp = scripts_postprocessing.PostprocessedImage(image_data)
+            initial_pp.shared.is_video = True
 
-        if shared.state.skipped:
-            continue
+            scripts.scripts_postproc.run(initial_pp, args)
 
-        if infotext is None:
-            infotext = ", ".join([k if k == v else f"{k}: {infotext_utils.quote(v)}" for k, v in initial_pp.info.items() if v is not None])
+            if infotext is None:
+                infotext = ", ".join([k if k == v else f"{k}: {infotext_utils.quote(v)}" for k, v in initial_pp.info.items() if v is not None])
 
-        shared.state.assign_current_image(initial_pp.image)
+            shared.state.assign_current_image(initial_pp.image)
 
-        outputs.append(np.array(initial_pp.image, dtype=np.uint8))
+            image_out = initial_pp.image.convert("RGB")
+            arr = np.asarray(image_out, dtype=np.uint8)
 
-    if not (shared.state.interrupted or shared.state.stopping_generation):
-        images.save_video(
-            os.path.splitext(os.path.basename(video_input))[0],
-            outputs,
-            fps=round(float(container.streams.video[0].average_rate)),
-            basename=None,
-            info=infotext,
-            audio_copy=video_input,
-        )
+            writer.info = infotext
+            if not writer.opened:
+                writer.open(arr.shape[1], arr.shape[0])
+            writer.write(arr)
 
-    container.close()
-    devices.torch_gc()
-    shared.state.end()
-    return outputs[-1:], ui_common.plaintext_to_html(infotext), ""
+            last_image = image_out
+            del arr, image_data, initial_pp, image_out
+
+    finally:
+        container.close()
+        writer.close(cancel=shared.state.interrupted or shared.state.stopping_generation)
+        devices.torch_gc()
+        shared.state.end()
+        shared.state.job_video = False
+
+    return ([last_image] if last_image is not None else []), ui_common.plaintext_to_html(infotext), ""
 
 
 def run_postprocessing_webui(id_task, *args, **kwargs):

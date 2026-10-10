@@ -161,7 +161,11 @@ def upscale_tensor_tiles(model: Callable, tensor: torch.Tensor, tile_size: int, 
             mask = (ramp_y[:, None] * ramp_x[None, :]).expand(1, 1, h, w)
         return key, mask
 
-    with tqdm.tqdm(desc=desc, total=total_tiles) as pbar:
+    with tqdm.tqdm(
+        desc=desc,
+        total=total_tiles,
+        disable=not shared.opts.enable_upscale_progressbar or shared.state.job_video,
+    ) as pbar:
         for tile_idx in range(total_tiles):
             if shared.state.interrupted:
                 return None
@@ -240,7 +244,7 @@ def upscale_with_model_cpu(
     with tqdm.tqdm(
         total=grid.tile_count,
         desc=desc,
-        disable=not shared.opts.enable_upscale_progressbar,
+        disable=not shared.opts.enable_upscale_progressbar or shared.state.job_video,
     ) as p:
         for y, h, row in grid.tiles:
             newrow = []

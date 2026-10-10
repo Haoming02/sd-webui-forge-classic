@@ -9,6 +9,7 @@ from modules import errors, shared
 class PostprocessedImageSharedInfo:
     target_width: int = None
     target_height: int = None
+    is_video: bool = False
 
 
 class PostprocessedImage:
@@ -140,6 +141,7 @@ class ScriptPostprocessingRunner:
     def scripts_in_preferred_order(self):
         if self.scripts is None:
             import modules.scripts
+
             self.initialize_scripts(modules.scripts.postprocessing_scripts_data)
 
         scripts_order = shared.opts.postprocessing_operation_order
@@ -173,7 +175,7 @@ class ScriptPostprocessingRunner:
         scripts = []
 
         for script in self.scripts_in_preferred_order():
-            script_args = args[script.args_from:script.args_to]
+            script_args = args[script.args_from : script.args_to]
 
             process_args = {}
             for (name, _component), value in zip(script.controls.items(), script_args):
@@ -227,4 +229,3 @@ class ScriptPostprocessingRunner:
     def image_changed(self):
         for script in self.scripts_in_preferred_order():
             script.image_changed()
-

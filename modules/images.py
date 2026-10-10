@@ -939,10 +939,7 @@ def fix_png_transparency(image: Image.Image):
     return image
 
 
-def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = None, audio_copy: os.PathLike = None) -> str:
-    height, width, channels = frames[0].shape
-    assert channels == 3, "Frames must be in (H, W, 3) RGB format"
-
+def _reserve_video_path(p, basename: str = "") -> tuple[str, str]:
     folder = opts.outdir_samples or opts.outdir_videos
     extension = opts.video_container
     os.makedirs(folder, exist_ok=True)
@@ -970,10 +967,37 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
     else:
         fullfn = os.path.join(folder, f"{file_decoration}.{extension}")
 
+    return fullfn, file_decoration
+
+
+_PRESETS: dict[str, str] = {
+    "veryfast": "p1",
+    "faster": "p2",
+    "fast": "p3",
+    "medium": "p4",
+    "slow": "p5",
+    "slower": "p6",
+    "veryslow": "p7",
+}
+
+
+def _video_encoder_args() -> list[str]:
+    codec = str(opts.video_codec)
+    flag = "-crf" if "264" in codec else "-qp"
     crf = int(opts.video_crf)
     preset = str(opts.video_preset)
-    profile = str(opts.video_profile)
+    if "nvenc" in codec:
+        preset = _PRESETS[preset]
 
+    cmd = ["-vcodec", codec, flag, str(crf), "-preset", preset, "-pix_fmt", "yuv420p"]
+
+    if "av1" not in codec:
+        cmd += ["-profile:v", "main"]
+
+    return cmd
+
+
+def _build_video_cmd(fullfn: str, width: int, height: int, fps: int, info: str = None, audio_copy: os.PathLike = None) -> list[str]:
     cmd = [
         "ffmpeg",
         "-hide_banner",
@@ -1008,30 +1032,80 @@ def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = ""
             "copy",
         ]
 
-    cmd += [
-        "-vcodec",
-        "h264",
-        "-crf",
-        str(crf),
-        "-preset",
-        str(preset),
-        "-pix_fmt",
-        "yuv420p",
-        "-profile:v",
-        profile,
-        "-metadata",
-        f"description={str(info)}",
-        fullfn,
-    ]
+    cmd += _video_encoder_args()
 
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    if info:
+        cmd += [
+            "-metadata",
+            f"description={str(info)}",
+        ]
+
+    cmd += [fullfn]
+
+    return cmd
+
+
+class StreamingVideoWriter:
+    def __init__(self, basename: str, fps: int, info: str = None, audio_copy: os.PathLike = None):
+        self.fullfn, self.file_decoration = _reserve_video_path(basename)
+        self.fps = fps
+        self.info = info
+        self.audio_copy = audio_copy
+        self.proc = None
+
+    @property
+    def opened(self) -> bool:
+        return self.proc is not None
+
+    def open(self, width: int, height: int):
+        assert width % 2 == 0 and height % 2 == 0
+        self.proc = subprocess.Popen(_build_video_cmd(self.fullfn, width, height, self.fps, self.info, self.audio_copy), stdin=subprocess.PIPE)
+
+    def write(self, frame_rgb_uint8: np.ndarray):
+        if self.proc.poll() is not None:
+            raise RuntimeError(f"FFmpeg: Error while Encoding Video ({self.proc.returncode})")
+
+        try:
+            self.proc.stdin.write(frame_rgb_uint8.tobytes())
+        except BrokenPipeError:
+            rc = self.proc.wait()
+            self.proc = None
+            raise RuntimeError(f"FFmpeg: Failed to Encode Video ({rc})") from None
+
+    def close(self, cancel: bool = False):
+        if self.proc is not None:
+            try:
+                self.proc.stdin.close()
+            except Exception:
+                pass
+            self.proc.wait()
+            self.proc = None
+
+        if cancel:
+            if os.path.exists(self.fullfn):
+                os.remove(self.fullfn)
+            return
+
+        if opts.save_txt and self.info is not None:
+            txt_fullfn = os.path.join(os.path.dirname(self.fullfn), f"{self.file_decoration}.txt")
+            with open(txt_fullfn, "w", encoding="utf8") as file:
+                file.write(f"{self.info}\n")
+
+
+def save_video(p, frames: list[np.ndarray], fps: int = 16, *, basename: str = "", info: str = None, audio_copy: os.PathLike = None) -> str:
+    height, width, channels = frames[0].shape
+    assert channels == 3, "Frames must be in (H, W, 3) RGB format"
+
+    fullfn, file_decoration = _reserve_video_path(p, basename)
+
+    proc = subprocess.Popen(_build_video_cmd(fullfn, width, height, fps, info, audio_copy), stdin=subprocess.PIPE)
     for frame in frames:
         proc.stdin.write(frame.tobytes())
     proc.stdin.close()
     proc.wait()
 
     if opts.save_txt and info is not None:
-        txt_fullfn = os.path.join(folder, f"{file_decoration}.txt")
+        txt_fullfn = os.path.join(os.path.dirname(fullfn), f"{file_decoration}.txt")
         with open(txt_fullfn, "w", encoding="utf8") as file:
             file.write(f"{info}\n")
 

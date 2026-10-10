@@ -2,7 +2,7 @@ GitPython==3.1.57
 Pillow==12.3.0
 accelerate==1.14.0
 audioop-lts==0.2.2;python_version>="3.13"
-av==17.1.0
+av==19.0.1
 comfy-kitchen==0.2.37
 diffusers==0.37.1
 diskcache==5.6.3

@@ -86,13 +86,9 @@ options_templates.update(
             "video_save_frames": OptionInfo(False, "Save intermediate frames when generating video"),
             "video_player_auto": OptionInfo(True, "Play the generated video when done"),
             "video_player_loop": OptionInfo(False, "Make the video player loop the playback"),
-            "video_explanation": OptionHTML("""
-Parameters for encoding videos in <b>H.264</b> using <b>FFmpeg</b><br>
-Refer to the <a href="https://trac.ffmpeg.org/wiki/Encode/H.264">Wiki</a> for what these parameters mean
-                """),
-            "video_crf": OptionInfo(16, "CRF", gr.Slider, {"minimum": 0, "maximum": 51, "step": 1}),
-            "video_preset": OptionInfo("fast", "Preset", gr.Dropdown, {"choices": ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow")}),
-            "video_profile": OptionInfo("main", "Profile", gr.Dropdown, {"choices": ("baseline", "main", "high")}),
+            "video_crf": OptionInfo(16, "Quality", gr.Slider, {"minimum": 0, "maximum": 51, "step": 1}).info("CRF for H.264 ; QP for H.265 ; Ignored for AV1"),
+            "video_preset": OptionInfo("fast", "Preset", gr.Dropdown, {"choices": ("veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow")}),
+            "video_codec": OptionInfo("libx264", "Encoder", gr.Dropdown, {"choices": ("libx264", "h264_nvenc", "libx265", "hevc_nvenc", "av1_nvenc")}),
             "video_container": OptionInfo("mp4", "Extension", gr.Radio, {"choices": ("mp4", "mkv")}),
         },
     )
