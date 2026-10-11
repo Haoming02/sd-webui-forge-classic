@@ -569,30 +569,55 @@ div.toprow-compact-tools {
 
 #settings>div {
     border: none;
-    margin-left: 10em;
+    margin-left: 14em;
     padding: 0 var(--spacing-xl);
 }
 
 #settings>div.tab-nav {
     float: left;
+    position: sticky;
+    top: 0.5em;
     display: block;
     margin-left: 0;
-    width: 10em;
+    width: 13em;
+    max-height: calc(100vh - 1em);
+    overflow-y: auto;
+    padding: 0 0.5em 0.5em 0;
+    border-right: 1px solid var(--border-color-primary);
 }
 
 #settings>div.tab-nav button {
     display: block;
+    width: 100%;
     border: none;
+    border-radius: var(--radius-md);
+    margin: 1px 0;
+    padding: 4px 8px;
     text-align: left;
     white-space: initial;
-    padding: 4px;
+    font-size: var(--text-md);
+    color: var(--body-text-color-subdued);
+}
+
+#settings>div.tab-nav button:hover,
+#settings>div.tab-nav button.selected {
+    background: var(--background-fill-secondary);
+    color: var(--body-text-color);
+}
+
+#settings>div.tab-nav button.selected {
+    font-weight: bold;
 }
 
 #settings>div.tab-nav .settings-category {
     display: block;
     margin: 1em 0 0.25em 0;
+    padding: 0.75em 8px 0 8px;
+    border-top: 1px solid var(--border-color-primary);
+    font-size: var(--text-sm);
     font-weight: bold;
-    text-decoration: underline;
+    text-transform: uppercase;
+    color: var(--body-text-color-subdued);
     cursor: default;
     user-select: none;
 }
