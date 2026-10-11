@@ -75,6 +75,9 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
                     sd[k] = tensor
                 if return_metadata:
                     metadata = f.metadata()
+        except OSError as e:
+            # OS-level failures (e.g. WinError 1455: paging file too small) are not file corruption
+            raise OSError(f'\nFailed to read model "{ckpt}": {e}\nThe file itself may be fine; check free RAM / paging file size\n') from e
         except Exception:
             raise ValueError(f'\nModel "{ckpt}" is corrupt or invalid...\nPlease download the model again\n') from None
 
