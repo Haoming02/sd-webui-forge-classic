@@ -285,7 +285,7 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
         dit_config["layers"] = count_blocks(state_dict_keys, "{}blocks.".format(key_prefix) + "{}.")
         dit_config["heads"] = int(state_dict["{}blocks.0.attn.wq.weight".format(key_prefix)].shape[0]) // head_dim
         dit_config["kvheads"] = int(state_dict["{}blocks.0.attn.wk.weight".format(key_prefix)].shape[0]) // head_dim
-        dit_config["txtlayers"] = int(state_dict["{}txtfusion.projector.weight".format(key_prefix)].shape[1])
+        dit_config["txtlayers"] = int(state_dict["{}txtfusion.projector.weight".format(key_prefix)].shape[-1])
         dit_config["txtdim"] = int(state_dict["{}txtfusion.layerwise_blocks.0.prenorm.scale".format(key_prefix)].shape[0])
         return dit_config
 
