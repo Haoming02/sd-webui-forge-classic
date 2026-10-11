@@ -404,6 +404,37 @@ class ForgeOperations:
 from backend.operations_gguf import dequantize_tensor
 
 
+def _gguf_nvfp4_to_tensorcore(weight, device, dtype):
+    from backend.float import to_blocked
+    from backend.operations_mixed_precision import QuantizedTensor
+    from backend.quant_ops import TensorCoreNVFP4Layout
+    from modules_forge.packages import gguf
+
+    if getattr(weight, "gguf_cls", None) is not gguf.NVFP4:
+        return None
+
+    rows, columns = weight.shape
+    if rows % 128 != 0 or columns % 64 != 0:
+        return None
+
+    blocks = weight.data.to(device=device).contiguous().reshape(rows, columns // 64, 36)
+    packed = blocks[..., 4:].reshape(rows, columns // 64, 4, 8)
+    nibbles = torch.cat((packed & 0xF, packed >> 4), dim=-1)
+    qdata = ((nibbles[..., ::2] << 4) | nibbles[..., 1::2]).reshape(rows, columns // 2).contiguous()
+
+    scale_codes = blocks[..., :4].reshape(rows, columns // 16)
+    scale_codes = torch.where(scale_codes == 0x7F, 0, scale_codes).to(torch.uint8).contiguous()
+    block_scale = to_blocked(scale_codes.view(torch.float8_e4m3fn), flatten=False)
+    scale = torch.ones((), device=device, dtype=torch.float32)
+    params = TensorCoreNVFP4Layout.Params(
+        scale=scale,
+        orig_dtype=dtype,
+        orig_shape=(rows, columns),
+        block_scale=block_scale,
+    )
+    return QuantizedTensor(qdata, "TensorCoreNVFP4Layout", params)
+
+
 class ForgeOperationsGGUF(ForgeOperations):
     class Linear(torch.nn.Module, ForgeWeights):
         def __init__(self, *args, **kwargs):
@@ -418,8 +449,16 @@ class ForgeOperationsGGUF(ForgeOperations):
                     computation_dtype = torch.float16
 
                 if prefix + "weight" in state_dict:
-                    self.weight = state_dict[prefix + "weight"].to(device=self.dummy["device"])
-                    self.weight.computation_dtype = computation_dtype
+                    weight = state_dict[prefix + "weight"].to(device=self.dummy["device"])
+                    if memory_management.supports_nvfp4_compute(memory_management.get_torch_device()):
+                        quantized_weight = _gguf_nvfp4_to_tensorcore(weight, self.dummy["device"], computation_dtype)
+                    else:
+                        quantized_weight = None
+                    if quantized_weight is None:
+                        self.weight = weight
+                        self.weight.computation_dtype = computation_dtype
+                    else:
+                        self.weight = torch.nn.Parameter(quantized_weight, requires_grad=False)
                 if prefix + "bias" in state_dict:
                     self.bias = state_dict[prefix + "bias"].to(device=self.dummy["device"])
                     self.bias.computation_dtype = computation_dtype
@@ -441,6 +480,22 @@ class ForgeOperationsGGUF(ForgeOperations):
                 self.bias = utils.tensor2parameter(dequantize_tensor(self.bias).to(x.dtype))
             if self.weight is not None and self.weight.dtype != x.dtype and getattr(self.weight, "gguf_cls", None) is None:
                 self.weight = utils.tensor2parameter(self.weight.to(x.dtype))
+
+            if isinstance(self.weight, QuantizedTensor) and not self.weight_function and not self.bias_function and x.ndim >= 2:
+                input_shape = x.shape
+                input_reshaped = x.reshape(-1, input_shape[-1]) if x.ndim >= 3 else x
+                quantized_input = QuantizedTensor.from_float(input_reshaped, self.weight._layout_cls)
+                weight, bias, signal = weights_manual_cast(
+                    self,
+                    quantized_input,
+                    skip_weight_dtype=True,
+                    skip_bias_dtype=True,
+                )
+                with main_stream_worker(weight, bias, signal):
+                    output = torch.nn.functional.linear(quantized_input, weight, bias)
+                if x.ndim >= 3:
+                    output = output.reshape((*input_shape[:-1], self.weight.shape[0]))
+                return output
 
             weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, skip_bias_dtype=True)
             with main_stream_worker(weight, bias, signal):

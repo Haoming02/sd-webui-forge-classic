@@ -5,13 +5,18 @@ import torch
 
 def load_state_dict(model: torch.nn.Module, sd: dict[str, torch.Tensor], ignore_errors: list[str] = [], log_name: str = None, ignore_start: str = None):
     is_meta = any(p.is_meta for p in model.parameters())
+    has_gguf = any(getattr(entry, "gguf_cls", None) is not None for entry in sd.values())
 
-    if is_meta:
+    if has_gguf:
+        for name, param in model.named_parameters():
+            if getattr(sd.get(name), "gguf_cls", None) is not None:
+                param.requires_grad_(False)
+    elif is_meta:
         for name, param in [*model.named_parameters(), *model.named_buffers()]:
             if (entry := sd.get(name, None)) is not None and entry.dtype != param.dtype:
                 sd[name] = entry.to(param.dtype)
 
-    missing, unexpected = model.load_state_dict(sd, strict=False, assign=is_meta)
+    missing, unexpected = model.load_state_dict(sd, strict=False, assign=is_meta or has_gguf)
 
     if is_meta:
         for module in model.modules():

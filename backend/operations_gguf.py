@@ -14,6 +14,7 @@ QUANTS_MAPPING: dict[gguf.constants.GGMLQuantizationType, gguf.quants.__Quant] =
     gguf.GGMLQuantizationType.Q6_K: gguf.Q6_K,
     gguf.GGMLQuantizationType.Q8_0: gguf.Q8_0,
     gguf.GGMLQuantizationType.BF16: gguf.BF16,
+    gguf.GGMLQuantizationType.NVFP4: gguf.NVFP4,
 }
 
 
@@ -31,6 +32,13 @@ class ParameterGGUF(torch.nn.Parameter):
     @property
     def shape(self):
         return self.real_shape
+
+    def size(self, dim=None):
+        if self.real_shape is None:
+            return super().size() if dim is None else super().size(dim)
+        if dim is None:
+            return self.real_shape
+        return self.real_shape[dim]
 
     def __new__(cls, torch_tensor, *, tensor_type=None, tensor_shape=None, no_init=False):
         return super().__new__(cls, torch_tensor, requires_grad=False)

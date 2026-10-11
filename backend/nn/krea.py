@@ -13,8 +13,15 @@ from backend.attention import attention_function
 from backend.memory_management import cast_to
 from backend.misc.image_resize import adaptive_resize
 from backend.nn.flux import EmbedND, timestep_embedding
+from backend.operations_gguf import dequantize_tensor
 from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
+
+
+def _cast_parameter(parameter: nn.Parameter, *, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
+    if getattr(parameter, "gguf_cls", None) is not None:
+        parameter = dequantize_tensor(parameter)
+    return cast_to(parameter, dtype=dtype, device=device)
 
 
 def _imgids(bs: int, frame: int, h_: int, w_: int, device: torch.device) -> torch.Tensor:
@@ -34,7 +41,7 @@ class RMSNorm(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         dtype = x.dtype
-        weight = cast_to(self.scale, dtype=torch.float32, device=x.device) + 1.0
+        weight = _cast_parameter(self.scale, dtype=torch.float32, device=x.device) + 1.0
         return F.rms_norm(x.float(), (x.shape[-1],), weight=weight, eps=self.eps).to(dtype)
 
 
@@ -100,7 +107,7 @@ class SimpleModulation(nn.Module):
         self.lin = nn.Parameter(torch.empty(2, dim))
 
     def forward(self, vec):
-        out = vec + cast_to(self.lin, dtype=vec.dtype, device=vec.device).unsqueeze(0)
+        out = vec + _cast_parameter(self.lin, dtype=vec.dtype, device=vec.device).unsqueeze(0)
         scale, shift = out.chunk(2, dim=1)
         return scale, shift
 
@@ -112,7 +119,7 @@ class DoubleSharedModulation(nn.Module):
         self.lin = nn.Parameter(torch.empty(6 * dim))
 
     def forward(self, vec):
-        out = vec + cast_to(self.lin, dtype=vec.dtype, device=vec.device)
+        out = vec + _cast_parameter(self.lin, dtype=vec.dtype, device=vec.device)
         return out.chunk(6, dim=-1)
 
 

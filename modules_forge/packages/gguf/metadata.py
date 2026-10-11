@@ -9,7 +9,7 @@ from typing import Any, Literal, Optional
 
 import yaml
 
-import gguf
+from . import gguf_writer as gguf
 
 from .constants import Keys
 

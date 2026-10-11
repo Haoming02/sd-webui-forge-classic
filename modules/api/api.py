@@ -2,6 +2,7 @@ import base64
 import datetime
 import io
 import ipaddress
+import logging
 import os
 import time
 from contextlib import closing
@@ -29,6 +30,8 @@ from modules.api import models
 from modules.processing import StableDiffusionProcessingImg2Img, StableDiffusionProcessingTxt2Img, process_extra_images, process_images
 from modules.progress import add_task_to_queue, create_task_id, current_task, finish_task, start_task
 from modules.shared import cmd_opts, opts
+
+logger = logging.getLogger(__name__)
 
 
 def script_name_to_index(name, scripts):
@@ -495,7 +498,9 @@ class Api:
 
         b64images = list(map(encode_pil_to_base64, processed.images + processed.extra_images)) if send_images else []
 
-        return models.TextToImageResponse(images=b64images, parameters=vars(txt2imgreq), info=processed.js())
+        generation_info = processed.js()
+        logger.info("API generation result: %s", generation_info)
+        return models.TextToImageResponse(images=b64images, parameters=vars(txt2imgreq), info=generation_info)
 
     def img2imgapi(self, img2imgreq: models.StableDiffusionImg2ImgProcessingAPI):
         task_id = img2imgreq.force_task_id or create_task_id("img2img")
@@ -573,7 +578,9 @@ class Api:
             img2imgreq.init_images = None
             img2imgreq.mask = None
 
-        return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=processed.js())
+        generation_info = processed.js()
+        logger.info("API generation result: %s", generation_info)
+        return models.ImageToImageResponse(images=b64images, parameters=vars(img2imgreq), info=generation_info)
 
     def extras_single_image_api(self, req: models.ExtrasSingleImageRequest):
         reqDict = setUpscalers(req)
