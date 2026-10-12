@@ -565,21 +565,31 @@ div.toprow-compact-tools {
 }
 
 #settings {
-    display: block;
+    display: grid;
+    grid-template-columns: 15em minmax(0, 1fr);
+    align-items: start;
 }
 
 #settings>div {
     border: none;
-    margin-left: 15em;
     padding: 0 var(--spacing-xl);
+    grid-column: 2;
 }
 
 #settings>div.tab-nav {
-    float: left;
+    grid-column: 1;
+    grid-row: 1 / span 1024;
+    align-self: start;
     display: block;
-    margin-left: 0;
-    width: 14em;
     border-right: 1px solid var(--border-color-primary);
+}
+
+#settings_search {
+    position: sticky;
+    top: 1em;
+    z-index: 2;
+    background: var(--body-background-fill);
+    margin-top: 0 !important;
 }
 
 #settings>div.tab-nav button {

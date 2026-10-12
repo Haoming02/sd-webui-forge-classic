@@ -46,6 +46,15 @@ onUiLoaded(function () {
     settings_tabs.appendChild(buttonShowAllPages);
 
     buttonShowAllPages.addEventListener("click", settingsShowAllTabs);
+
+    function settingsScrollToTop() {
+        const button = gradioApp().querySelector("#settings_submit");
+        setTimeout(() => button.scrollIntoView({ block: "start" }), 0);
+    }
+
+    gradioApp()
+        .querySelectorAll("#settings > div.tab-nav > button")
+        .forEach((btn) => btn.addEventListener("click", settingsScrollToTop));
 });
 
 onOptionsChanged(function () {
