@@ -197,6 +197,7 @@ def create_ui():
     reload_javascript()
 
     parameters_copypaste.reset()
+    main_entry.capture_callbacks()
 
     settings = ui_settings.UiSettings()
     settings.register_settings()

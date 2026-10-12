@@ -1,12 +1,13 @@
 import logging
 import os.path
+from typing import Callable
 
 import gradio as gr
 import torch
 from gradio.context import Context
+from gradio.events import Dependency
 from rich import print_json
 
-from backend import memory_management
 from backend.args import dynamic_args
 from backend.logging import setup_logger
 from modules import (
@@ -27,6 +28,7 @@ ui_forge_preset: gr.Radio
 ui_checkpoint: gr.Dropdown
 ui_vae: gr.Dropdown
 ui_forge_unet_dtype: gr.Radio
+_event_refresh: Dependency
 
 forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
     "Automatic": (None, False),
@@ -43,7 +45,7 @@ module_map: dict[str, str] = {}
 
 
 def make_checkpoint_manager_ui():
-    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype
+    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype, _event_refresh
 
     if shared.opts.sd_model_checkpoint in [None, "None", "none", ""]:
         if len(sd_models.checkpoints_list) == 0:
@@ -62,7 +64,7 @@ def make_checkpoint_manager_ui():
         return [gr.update(choices=ckpt_list), gr.update(choices=vae_list)]
 
     refresh_button = ui_common.ToolButton(value=ui_common.refresh_symbol, elem_id="forge_refresh_checkpoint", tooltip="Refresh")
-    refresh_button.click(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
+    _event_refresh = refresh_button.click(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
     Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
 
     ui_forge_unet_dtype = gr.Dropdown(label="Diffusion in Low Bits", value=None, choices=list(forge_unet_storage_dtype_options.keys()), elem_id="forge_ui_dtype")
@@ -84,6 +86,7 @@ def find_files_with_extensions(base_path: os.PathLike, extensions: list[str]) ->
 
 def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
     shared_items.refresh_checkpoints()
+    shared_items.refresh_vae_list()
     ckpt_list = shared_items.list_checkpoint_tiles(shared.opts.sd_checkpoint_dropdown_use_short)
 
     file_extensions = ("ckpt", "pt", "pth", "bin", "safetensors", "sft", "gguf")
@@ -264,6 +267,7 @@ def forge_main_entry():
     Context.root_block.load(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False)
 
     refresh_model_loading_parameters()
+    _refreshed_callback()
 
 
 def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_unet_dtype: str, ui_forge_preset: str):
@@ -327,3 +331,35 @@ def on_preset_change(preset: str):
         gr.update(**batch_args_t2i),
         gr.update(**batch_args_i2i),
     ]
+
+
+# region Callback
+
+
+_CALLBACK_SET = False
+
+_refresh_callbacks: list[tuple[Callable, list[gr.components.Component], list[gr.components.Component]]] = []
+
+
+def capture_callbacks():
+    global _CALLBACK_SET
+    _CALLBACK_SET = False
+    _refresh_callbacks.clear()
+
+
+def on_refresh_checkpoint(callback: Callable, inputs: list[gr.components.Component] = None, outputs: list[gr.components.Component] = None):
+    """register a function to be called after the refresh button for Checkpoint / VAE / Text Encoder is clicked"""
+    if _CALLBACK_SET:
+        raise RuntimeError("Cannot register callback after forge_main_entry")
+    _refresh_callbacks.append((callback, inputs, outputs))
+
+
+def _refreshed_callback():
+    global _CALLBACK_SET
+
+    event = _event_refresh
+
+    for callback, inputs, outputs in _refresh_callbacks:
+        event = event.then(fn=callback, inputs=inputs, outputs=outputs, queue=False, show_progress=False)
+
+    _CALLBACK_SET = True
