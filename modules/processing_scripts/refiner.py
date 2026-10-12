@@ -3,8 +3,8 @@ import torch
 
 from modules import scripts, sd_models, shared
 from modules.infotext_utils import PasteField
-from modules.ui_common import create_refresh_button
 from modules.ui_components import InputAccordion
+from modules_forge import main_entry
 
 
 class ScriptRefiner(scripts.ScriptBuiltinUI):
@@ -20,23 +20,23 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
 
     @classmethod
     def refresh_checkpoints(cls):
-        from modules_forge.main_entry import refresh_models
-
-        ckpt_list, _ = refresh_models()
-        cls.ckpts = ["None"] + ckpt_list
+        ckpts = shared.list_checkpoint_tiles(shared.opts.sd_checkpoint_dropdown_use_short)
+        cls.ckpts = ["None"] + sorted(ckpts)
+        return gr.update(choices=cls.ckpts)
 
     def ui(self, is_img2img):
         self.refresh_checkpoints()
         with InputAccordion(False, label="Refiner", elem_id=self.elem_id("enable")) as enable_refiner:
-            with gr.Row():
-                refiner_checkpoint = gr.Dropdown(
-                    value="None",
-                    label="Checkpoint",
-                    info="(use model of same architecture and quantization)" if shared.opts.refiner_fast_sd else "(use model of same architecture)",
-                    elem_id=self.elem_id("checkpoint"),
-                    choices=self.ckpts,
-                )
-                create_refresh_button(refiner_checkpoint, self.refresh_checkpoints, lambda: {"choices": self.ckpts}, self.elem_id("checkpoint_refresh"))
+            refiner_checkpoint = gr.Dropdown(
+                value="None",
+                label="Checkpoint",
+                info="(use model of same architecture and quantization)" if shared.opts.refiner_fast_sd else "(use model of same architecture)",
+                elem_id=self.elem_id("checkpoint"),
+                choices=self.ckpts,
+            )
+
+            main_entry.on_refresh_checkpoint(self.refresh_checkpoints, outputs=[refiner_checkpoint])
+
             with gr.Row():
                 refiner_switch_at = gr.Slider(
                     value=0.875,
