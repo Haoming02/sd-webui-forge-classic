@@ -2,8 +2,8 @@ import base64
 import datetime
 import io
 import ipaddress
+import json
 import logging
-import os
 import time
 from contextlib import closing
 from io import BytesIO
@@ -17,15 +17,14 @@ import piexif.helper
 import requests
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
-from fastapi.encoders import jsonable_encoder
-from fastapi.exceptions import HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.routing import APIRoute
 from PIL import PngImagePlugin
 
 import modules.shared as shared
 import modules.textual_inversion.textual_inversion
-from modules import errors, images, infotext_utils, postprocessing, restart, script_callbacks, scripts, sd_models, sd_samplers, sd_schedulers, shared_items, ui
+from modules import images, infotext_utils, postprocessing, restart, script_callbacks, scripts, sd_models, sd_samplers, shared_items, ui
 from modules.api import models
 from modules.processing import StableDiffusionProcessingImg2Img, StableDiffusionProcessingTxt2Img, process_extra_images, process_images
 from modules.progress import add_task_to_queue, create_task_id, current_task, finish_task, start_task
@@ -132,71 +131,121 @@ def encode_pil_to_base64(image):
     return base64.b64encode(bytes_data)
 
 
-def api_middleware(app: FastAPI):
-    rich_available = False
-    try:
-        if os.environ.get("WEBUI_RICH_EXCEPTIONS", None) is not None:
-            import anyio  # importing just so it can be placed on silent list
-            import starlette  # importing just so it can be placed on silent list
-            from rich.console import Console
+class ApiLoggingRoute(APIRoute):
+    last_progress_log = None
 
-            console = Console()
-            rich_available = True
-    except Exception:
-        pass
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
 
-    @app.middleware("http")
-    async def log_and_time(req: Request, call_next):
-        ts = time.time()
-        res: Response = await call_next(req)
-        duration = str(round(time.time() - ts, 4))
-        res.headers["X-Process-Time"] = duration
-        endpoint = req.scope.get("path", "err")
-        if shared.cmd_opts.api_log and endpoint.startswith("/sdapi"):
-            print(
-                "API {t} {code} {prot}/{ver} {method} {endpoint} {cli} {duration}".format(
-                    t=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-                    code=res.status_code,
-                    ver=req.scope.get("http_version", "0.0"),
-                    cli=req.scope.get("client", ("0:0.0.0", 0))[0],
-                    prot=req.scope.get("scheme", "err"),
-                    method=req.scope.get("method", "err"),
-                    endpoint=endpoint,
-                    duration=duration,
+        async def log_and_time(request: Request):
+            started_at = time.time()
+            endpoint = request.scope.get("path", "err")
+            should_log = shared.cmd_opts.api_log and endpoint.startswith("/sdapi") and not endpoint.endswith("/progress")
+            should_log_progress = shared.cmd_opts.api_log and endpoint.rstrip("/").endswith("/progress")
+            request_body = await request.body() if should_log else b""
+            try:
+                response = await original_handler(request)
+            except Exception as exc:
+                status_code = getattr(exc, "status_code", 422 if isinstance(exc, RequestValidationError) else 500)
+                if should_log:
+                    error = {"error": type(exc).__name__, "detail": getattr(exc, "detail", str(exc))}
+                    self.log_exchange(request, status_code, started_at, request_body, error)
+                raise
+
+            duration = str(round(time.time() - started_at, 4))
+            response.headers["X-Process-Time"] = duration
+            if should_log:
+                self.log_exchange(request, response.status_code, started_at, request_body, response.body, duration)
+            elif should_log_progress:
+                self.log_progress(request, response.status_code, response.body, duration)
+            return response
+
+        return log_and_time
+
+    def log_progress(self, request: Request, status_code: int, response_body: bytes, duration: str):
+        try:
+            response = json.loads(response_body)
+        except (TypeError, ValueError, UnicodeDecodeError):
+            return
+
+        state = response.get("state") or {}
+        progress = float(response.get("progress", 0))
+        sampling_step = state.get("sampling_step", 0)
+        sampling_steps = state.get("sampling_steps", 0)
+        job_no = state.get("job_no", 0)
+        job_count = state.get("job_count", 0)
+        eta = float(response.get("eta_relative", 0))
+        progress_key = (round(progress, 4), sampling_step, sampling_steps, job_no, job_count)
+        if progress_key == self.last_progress_log:
+            return
+        self.last_progress_log = progress_key
+
+        client = request.client.host if request.client else "0:0.0.0"
+        if sampling_steps and job_count:
+            progress_text = f"Progress: {progress:.0%} | step {sampling_step}/{sampling_steps} | job {job_no}/{job_count} | ETA {eta:.1f}s"
+        else:
+            progress_text = "Progress: idle"
+        print(
+            "API {t} {code} {prot}/{ver} {method} {endpoint} {cli} {duration} | {progress}".format(
+                t=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+                code=status_code,
+                ver=request.scope.get("http_version", "0.0"),
+                cli=client,
+                prot=request.scope.get("scheme", "err"),
+                method=request.scope.get("method", "err"),
+                endpoint=request.scope.get("path", "err"),
+                duration=duration,
+                progress=progress_text,
+            )
+        )
+
+    @staticmethod
+    def format_payload(payload):
+        image_fields = {"image", "images", "init_images", "mask", "imageList", "data"}
+
+        def redact(value, field=None):
+            if field in image_fields and isinstance(value, str):
+                return f"<base64 omitted: {len(value)} characters>"
+            if isinstance(value, dict):
+                return {key: redact(item, key) for key, item in value.items()}
+            if isinstance(value, list):
+                return [redact(item, field) for item in value]
+            return value
+
+        try:
+            parsed = json.loads(payload)
+        except (TypeError, ValueError, UnicodeDecodeError):
+            return payload.decode("utf-8", errors="replace") if isinstance(payload, bytes) else str(payload)
+        return json.dumps(redact(parsed), indent=2, ensure_ascii=False)
+
+    @classmethod
+    def log_exchange(cls, request: Request, status_code: int, started_at: float, request_body: bytes, response_body, duration: str = None):
+        duration = duration or str(round(time.time() - started_at, 4))
+        client = request.client.host if request.client else "0:0.0.0"
+        response_payload = response_body if isinstance(response_body, dict) else cls.format_payload(response_body)
+        if isinstance(response_payload, dict):
+            response_payload = json.dumps(response_payload, indent=2, ensure_ascii=False)
+
+        print(
+            "\n".join(
+                (
+                    "API {t} {code} {prot}/{ver} {method} {endpoint} {cli} {duration}".format(
+                        t=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+                        code=status_code,
+                        ver=request.scope.get("http_version", "0.0"),
+                        cli=client,
+                        prot=request.scope.get("scheme", "err"),
+                        method=request.scope.get("method", "err"),
+                        endpoint=request.scope.get("path", "err"),
+                        duration=duration,
+                    ),
+                    "Request:",
+                    cls.format_payload(request_body) if request_body else "<empty>",
+                    "Response:",
+                    response_payload,
                 )
             )
-        return res
-
-    def handle_exception(request: Request, e: Exception):
-        err = {
-            "error": type(e).__name__,
-            "detail": vars(e).get("detail", ""),
-            "body": vars(e).get("body", ""),
-            "errors": str(e),
-        }
-        if not isinstance(e, HTTPException):  # do not print backtrace on known httpexceptions
-            message = f"API error: {request.method}: {request.url} {err}"
-            if rich_available:
-                print(message)
-                console.print_exception(show_locals=True, max_frames=2, extra_lines=1, suppress=[anyio, starlette], word_wrap=False, width=min([console.width, 200]))
-            else:
-                errors.report(message, exc_info=True)
-        return JSONResponse(status_code=vars(e).get("status_code", 500), content=jsonable_encoder(err))
-
-    @app.middleware("http")
-    async def exception_handling(request: Request, call_next):
-        try:
-            return await call_next(request)
-        except Exception as e:
-            return handle_exception(request, e)
-
-    @app.exception_handler(Exception)
-    async def fastapi_exception_handler(request: Request, e: Exception):
-        return handle_exception(request, e)
-
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, e: HTTPException):
-        return handle_exception(request, e)
+        )
 
 
 class Api:
@@ -210,7 +259,6 @@ class Api:
         self.router = APIRouter()
         self.app = app
         self.queue_lock = queue_lock
-        # api_middleware(self.app)  # FIXME: (legacy) this will have to be fixed
         self.add_api_route("/sdapi/v1/txt2img", self.text2imgapi, methods=["POST"], response_model=models.TextToImageResponse)
         self.add_api_route("/sdapi/v1/img2img", self.img2imgapi, methods=["POST"], response_model=models.ImageToImageResponse)
         self.add_api_route("/sdapi/v1/extra-single-image", self.extras_single_image_api, methods=["POST"], response_model=models.ExtrasSingleImageResponse)
@@ -269,9 +317,16 @@ class Api:
         self.embedding_db.load_textual_inversion_embeddings(force_reload=True, sync_with_sd_model=False)
 
     def add_api_route(self, path: str, endpoint, **kwargs):
+        dependencies = kwargs.pop("dependencies", [])
         if shared.cmd_opts.api_auth:
-            return self.app.add_api_route(path, endpoint, dependencies=[Depends(self.auth)], **kwargs)
-        return self.app.add_api_route(path, endpoint, **kwargs)
+            dependencies = [*dependencies, Depends(self.auth)]
+        return self.app.router.add_api_route(
+            path,
+            endpoint,
+            dependencies=dependencies,
+            route_class_override=ApiLoggingRoute,
+            **kwargs,
+        )
 
     def auth(self, credentials: HTTPBasicCredentials = Depends(HTTPBasic())):
         if credentials.username in self.credentials:
