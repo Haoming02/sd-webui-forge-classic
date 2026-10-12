@@ -482,17 +482,17 @@ class Script(scripts.Script):
         with gr.Group(elem_classes=["xyz_entries"]):
             with gr.Row():
                 x_type = gr.Dropdown(label="X type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[1].label, type="index", elem_id=self.elem_id("x_type"), scale=2)
-                x_values = gr.Textbox(label="X values", lines=1.05, elem_id=self.elem_id("x_values"), scale=5)
+                x_values = gr.Textbox(label="X values", lines=1, elem_id=self.elem_id("x_values"), scale=5)
                 x_values_dropdown = gr.Dropdown(label="X values", visible=False, multiselect=True, interactive=True, scale=5)
                 fill_x_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_x_tool_button", visible=False, scale=1)
             with gr.Row():
                 y_type = gr.Dropdown(label="Y type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[0].label, type="index", elem_id=self.elem_id("y_type"), scale=2)
-                y_values = gr.Textbox(label="Y values", lines=1.05, elem_id=self.elem_id("y_values"), scale=5)
+                y_values = gr.Textbox(label="Y values", lines=1, elem_id=self.elem_id("y_values"), scale=5)
                 y_values_dropdown = gr.Dropdown(label="Y values", visible=False, multiselect=True, interactive=True, scale=5)
                 fill_y_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_y_tool_button", visible=False, scale=1)
             with gr.Row():
                 z_type = gr.Dropdown(label="Z type", choices=[x.label for x in self.current_axis_options], value=self.current_axis_options[0].label, type="index", elem_id=self.elem_id("z_type"), scale=2)
-                z_values = gr.Textbox(label="Z values", lines=1.05, elem_id=self.elem_id("z_values"), scale=5)
+                z_values = gr.Textbox(label="Z values", lines=1, elem_id=self.elem_id("z_values"), scale=5)
                 z_values_dropdown = gr.Dropdown(label="Z values", visible=False, multiselect=True, interactive=True, scale=5)
                 fill_z_button = ToolButton(value=fill_values_symbol, elem_id="xyz_grid_fill_z_tool_button", visible=False, scale=1)
 
@@ -589,6 +589,23 @@ class Script(scripts.Script):
             (z_type, "Z Type"),
             (z_values, "Z Values"),
             (z_values_dropdown, lambda params: get_dropdown_update_from_params("Z", params)),
+        )
+
+        def refresh_xyz_dropdowns(x_idx: int, y_idx: int, z_idx: int):
+
+            def get_choices(axis_idx: int):
+                if (axis := self.current_axis_options[axis_idx]).choices is not None:
+                    return gr.update(choices=axis.choices())
+                return gr.skip()
+
+            return [get_choices(x_idx), get_choices(y_idx), get_choices(z_idx)]
+
+        from modules_forge import main_entry
+
+        main_entry.on_refresh_checkpoint(
+            callback=refresh_xyz_dropdowns,
+            inputs=[x_type, y_type, z_type],
+            outputs=[x_values_dropdown, y_values_dropdown, z_values_dropdown],
         )
 
         return [x_type, x_values, x_values_dropdown, y_type, y_values, y_values_dropdown, z_type, z_values, z_values_dropdown, draw_legend, include_lone_images, include_sub_grids, no_fixed_seeds, vary_seeds_x, vary_seeds_y, vary_seeds_z, row_count, margin_size, csv_mode]
