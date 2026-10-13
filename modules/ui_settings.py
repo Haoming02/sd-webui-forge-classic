@@ -220,8 +220,8 @@ class UiSettings:
                 with gr.TabItem("Licenses", id="licenses", elem_id="settings_tab_licenses") as license_tab:
                     gr.HTML(shared.html("licenses.html"), elem_id="licenses")
 
-                self.show_all_pages = gr.Button(value="Show all pages", elem_id="settings_show_all_pages")
-                self.show_one_page = gr.Button(value="Show only one page", elem_id="settings_show_one_page", visible=False)
+                self.show_all_pages = gr.Button(value="Show All Pages", elem_id="settings_show_all_pages")
+                self.show_one_page = gr.Button(value="Show Single Page", elem_id="settings_show_one_page", visible=False)
                 self.show_one_page.click(lambda: None)
 
                 self.search_input = gr.Textbox(value="", elem_id="settings_search", max_lines=1, placeholder="Search...", show_label=False)
