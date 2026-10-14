@@ -10,7 +10,6 @@ from secrets import compare_digest
 from threading import Lock
 from typing import Any, Union, get_args, get_origin
 
-import gradio as gr
 import piexif
 import piexif.helper
 import requests
@@ -316,14 +315,10 @@ class Api:
         script_args = [None] * last_arg_index
         script_args[0] = 0
 
-        # get default values
-        with gr.Blocks():  # will throw errors calling ui function without this
-            for script in script_runner.scripts:
-                if script.ui(script.is_img2img):
-                    ui_default_values = []
-                    for elem in script.ui(script.is_img2img):
-                        ui_default_values.append(elem.value)
-                    script_args[script.args_from : script.args_to] = ui_default_values
+        # get default values recorded when the UI was built, instead of calling ui() again
+        for script in script_runner.scripts:
+            if script.api_info is not None:
+                script_args[script.args_from : script.args_to] = [arg.value for arg in script.api_info.args]
         return script_args
 
     def init_script_args(self, request, default_script_args, selectable_scripts, selectable_idx, script_runner, *, input_script_args=None):
