@@ -1,8 +1,8 @@
 import gradio as gr
-from lib_spectrum import SpectrumNode, logger
+from lib_spectrum import SpectrumNode
 from lib_spectrum.presets import PresetManager
 
-from modules import scripts, shared
+from modules import scripts
 from modules.infotext_utils import PasteField
 from modules.ui_components import InputAccordion
 
@@ -131,10 +131,6 @@ class SpectrumForForge(scripts.Script):
 
     def process_before_every_sampling(self, p, enable: bool, *args, **kwargs):
         if not enable:
-            return
-
-        if shared.opts.skip_early_cond > 0.0 or shared.opts.s_min_uncond > 0.0:
-            logger.error('Spectrum does not support "Ignore/Skip Negative Prompt" optimizations...')
             return
 
         unet = p.sd_model.forge_objects.unet

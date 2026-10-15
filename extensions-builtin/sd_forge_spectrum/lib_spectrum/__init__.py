@@ -4,7 +4,7 @@ import logging
 import math
 from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from backend.patcher.unet import UnetPatcher
@@ -60,32 +60,43 @@ class SpectrumNode:
 
         def spectrum_unet_wrapper(model_function, kwargs):
             x, timestep, c = kwargs["input"], kwargs["timestep"], kwargs["c"]
-            batch_size = x.shape[0]
             t_scalar = timestep[0].item() if isinstance(timestep, torch.Tensor) and timestep.numel() > 0 else float(timestep)
+
+            cond_or_uncond: list[int] = c["transformer_options"]["cond_or_uncond"]
+            batch_count: int = x.shape[0]
+            batch_size: int = batch_count // len(cond_or_uncond)
+            num_forecasters: int = batch_size * 2
 
             if t_scalar > state.last_t:
                 state.forecasters = None
                 state.cnt = 0
-                state.num_cached = [0] * batch_size
+                state.num_cached = [0] * num_forecasters
                 state.curr_ws = float(window_size)
                 state.total_runs += 1
                 logger.info(f"Detected New Pass ({state.total_runs}) - Reset State")
 
             state.last_t = t_scalar
 
-            if not state.forecasters:
-                state.forecasters = [Spectrum(cheb=ChebyshevForecaster(M=m, K=100, lam=lam, t_max=float(steps)), w=w) for _ in range(batch_size)]
+            if state.forecasters is None:
+                state.forecasters = [Spectrum(cheb=ChebyshevForecaster(M=m, K=100, lam=lam, t_max=float(steps)), w=w) for _ in range(num_forecasters)]
 
-            if len(state.num_cached) != batch_size:
-                state.num_cached = [0] * batch_size
+            assert len(state.forecasters) == len(state.num_cached) == num_forecasters
 
-            do_actual = torch.ones(batch_size, dtype=torch.bool, device=x.device)
+            forecaster_indices: list[int] = []
+            for i in range(batch_count):
+                chunk = i // batch_size
+                b = i % batch_size
+                flag = int(cond_or_uncond[chunk])
+                forecaster_indices.append(flag * batch_size + b)
 
-            for i in range(batch_size):
+            do_actual = torch.ones(batch_count, dtype=torch.bool, device=x.device)
+
+            for i in range(batch_count):
+                f_idx = forecaster_indices[i]
                 is_micro_final = state.cnt >= int(state.estimated_total_steps * stop_caching_step)
                 if state.cnt >= warmup_steps and not is_micro_final:
-                    if state.forecasters[i].ready():
-                        do_actual[i] = (state.num_cached[i] + 1) % math.floor(state.curr_ws) == 0
+                    if state.forecasters[f_idx].ready():
+                        do_actual[i] = (state.num_cached[f_idx] + 1) % math.floor(state.curr_ws) == 0
                     else:
                         do_actual[i] = True
 
@@ -94,10 +105,13 @@ class SpectrumNode:
 
             out = torch.empty_like(x)
 
+            def _mask(v: torch.Tensor | Any, mask: torch.Tensor) -> torch.Tensor | Any:
+                return v[mask.to(v.device)] if isinstance(v, torch.Tensor) and v.shape[0] == batch_count else v
+
             if real_mask.any():
                 x_real = x[real_mask]
-                timestep_real = timestep[real_mask.to(timestep.device)] if isinstance(timestep, torch.Tensor) and timestep.shape[0] == batch_size else timestep
-                c_real = {k: v[real_mask.to(v.device)] if isinstance(v, torch.Tensor) and v.shape[0] == batch_size else v for k, v in c.items()}
+                timestep_real = _mask(timestep, real_mask)
+                c_real = {k: _mask(v, real_mask) for k, v in c.items()}
 
                 with context(main_stream):
                     raw_real = model_function(x_real, timestep_real, **c_real)
@@ -111,8 +125,9 @@ class SpectrumNode:
                     real_indices = real_indices.tolist()
 
                 for i, idx in enumerate(real_indices):
-                    state.forecasters[idx].update(state.cnt, raw_real[i])
-                    state.num_cached[idx] = 0
+                    f_idx = forecaster_indices[idx]
+                    state.forecasters[f_idx].update(state.cnt, raw_real[i])
+                    state.num_cached[f_idx] = 0
 
                 logger.debug(f"Step {state.cnt}: Forward ({real_mask.sum().item()} items)")
 
@@ -127,12 +142,13 @@ class SpectrumNode:
 
                 with context(forecast_stream):
                     for j, i in enumerate(forecast_indices):
-                        raw_pred = state.forecasters[i].predict(state.cnt)
+                        f_idx = forecaster_indices[i]
+                        raw_pred = state.forecasters[f_idx].predict(state.cnt)
                         out_forecast[j] = raw_pred
 
                     out[forecast_mask] = out_forecast
                     for i in forecast_indices:
-                        state.num_cached[i] += 1
+                        state.num_cached[forecaster_indices[i]] += 1
 
                 logger.debug(f"Step {state.cnt}: Forecast ({forecast_mask.sum().item()} items)")
 
