@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import os
+import sys
 from typing import Optional, Any
 
 from fastapi import FastAPI
@@ -124,10 +125,19 @@ class ScriptCallback:
     name: str = "unnamed"
 
 
+def caller_filename():
+    frame = sys._getframe(1)
+    while frame is not None:
+        filename = inspect.getsourcefile(frame) or inspect.getfile(frame)
+        if filename != __file__:
+            return filename
+        frame = frame.f_back
+    return 'unknown file'
+
+
 def add_callback(callbacks, fun, *, name=None, category='unknown', filename=None):
     if filename is None:
-        stack = [x for x in inspect.stack() if x.filename != __file__]
-        filename = stack[0].filename if stack else 'unknown file'
+        filename = caller_filename()
 
     extension = extensions.find_extension(filename)
     extension_name = extension.canonical_name if extension else 'base'
@@ -432,8 +442,7 @@ def before_token_counter_callback(params: BeforeTokenCounterParams):
 
 
 def remove_current_script_callbacks():
-    stack = [x for x in inspect.stack() if x.filename != __file__]
-    filename = stack[0].filename if stack else 'unknown file'
+    filename = caller_filename()
     if filename == 'unknown file':
         return
     for callback_list in callback_map.values():
