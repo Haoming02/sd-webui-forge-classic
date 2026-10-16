@@ -228,6 +228,13 @@ def flow_match_euler_discrete_scheduler(n, sigma_min, sigma_max, inner_model, de
     return torch.FloatTensor(sigmas).to(device)
 
 
+def moss_scheduler(n, sigma_min, sigma_max, inner_model, device):
+    from backend.sampling.moss import moss_sigmas
+
+    predictor = inner_model.inner_model.forge_objects.unet.model.predictor
+    return moss_sigmas(n, predictor.shift).to(device)
+
+
 def generalized_time_snr_shift(t: torch.Tensor, mu: float, sigma: float) -> float:
     return exp(mu) / (exp(mu) + (1 / t - 1) ** sigma)
 
@@ -282,6 +289,7 @@ all_schedulers = [
     Scheduler("bong_tangent", "Bong Tangent", bong_tangent_scheduler),
     Scheduler("flow_match", "FlowMatchEulerDiscrete", flow_match_euler_discrete_scheduler, need_inner_model=True),
     Scheduler("flux2", "Flux2", flux2_scheduler),
+    Scheduler("moss", "MOSS", moss_scheduler, need_inner_model=True),
 ]
 
 schedulers = [s for s in all_schedulers if s.label not in shared.opts.hide_schedulers]

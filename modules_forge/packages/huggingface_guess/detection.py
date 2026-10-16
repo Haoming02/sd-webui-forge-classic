@@ -293,6 +293,22 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
         dit_config = {"image_model": "ernie"}
         return dit_config
 
+    moss_keys = ["video_embedder.bias", "text_embedder.proj.weight", "text_embedder.blocks.0.qkv.weight", "shared_block_modulation.weight", "layers.0.q_norm.weight", "layers.0.proj.ffn_up_gate.weight", "final_linear_video.weight", "video_head_modulation.weight", "time_embedding.0.bias", "time_embedding.0.weight"]
+    if all(key_prefix + k in state_dict for k in moss_keys):  # MOSS-Image
+        dim = int(state_dict[key_prefix + "video_embedder.bias"].shape[0])
+        head_dim = int(state_dict[key_prefix + "layers.0.q_norm.weight"].shape[0])
+        return {
+            "image_model": "moss_image",
+            "dim": dim,
+            "num_heads": dim // head_dim,
+            "num_layers": count_blocks(state_dict_keys, key_prefix + "layers.{}."),
+            "ffn_dim": int(state_dict[key_prefix + "layers.0.proj.ffn_up_gate.weight"].shape[0]) // 2,
+            "latent_channels": int(state_dict[key_prefix + "final_linear_video.weight"].shape[0]),
+            "text_dim": 4096,
+            "freq_dim": 256,
+            "rope_base": 10000.0,
+        }
+
     if "{}input_blocks.0.0.weight".format(key_prefix) not in state_dict_keys:
         return None
 

@@ -293,6 +293,10 @@ def reconstruct_cond_batch(c: list[list[ScheduledPromptConditioning]], current_s
     param = c[0][0].cond
     is_dict = isinstance(param, dict)
 
+    if is_dict and "attention_mask" in param:
+        selected = [next((entry.cond for entry in schedule if current_step <= entry.end_at_step), schedule[-1].cond) for schedule in c]
+        return DictWithShape({k: stack_conds([row[k] for row in selected]) for k in param})
+
     if is_dict:
         dict_cond = param
         res = {k: torch.zeros((len(c),) + param.shape, device=param.device, dtype=param.dtype) for k, param in dict_cond.items()}
