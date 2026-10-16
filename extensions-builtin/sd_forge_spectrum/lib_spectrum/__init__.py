@@ -33,7 +33,6 @@ class State:
 
 
 if stream.should_use_stream():
-    print("stream")
     main_stream = stream.get_current_stream()
     forecast_stream = stream.get_new_stream()
     context = lambda arg: stream.stream_context()(arg)
