@@ -6,8 +6,8 @@ import shutil
 from huggingface_hub import snapshot_download
 
 PIPELINE_PATHS = [
-    # "krea/Krea-2-Raw",
-    "Qwen/Qwen-Image-2.1"
+    # "Qwen/Qwen-Image-2.1",
+    "OpenMOSS-Team/MOSS-Image-SFT"
 ]
 
 for pretrained in PIPELINE_PATHS:

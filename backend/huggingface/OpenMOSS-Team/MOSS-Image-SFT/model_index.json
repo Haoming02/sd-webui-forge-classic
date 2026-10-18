@@ -1,0 +1,24 @@
+{
+  "_class_name": "MOSSImagePipeline",
+  "_diffusers_version": "0.38.0",
+  "scheduler": [
+    "pipeline_moss_image",
+    "MOSSImageScheduler"
+  ],
+  "text_encoder": [
+    "transformers",
+    "Qwen3_5Model"
+  ],
+  "tokenizer": [
+    "transformers",
+    "Qwen2Tokenizer"
+  ],
+  "transformer": [
+    "pipeline_moss_image",
+    "MOSSImageTransformer"
+  ],
+  "vae": [
+    "diffusers",
+    "AutoencoderKLFlux2"
+  ]
+}
