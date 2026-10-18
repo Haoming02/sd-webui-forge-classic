@@ -595,6 +595,37 @@ class QwenImage21(BASE):
         return ModelType.FLUX
 
 
+class MOSSImage(BASE):
+    huggingface_repo = "OpenMOSS-Team/MOSS-Image-SFT"
+
+    unet_config = {
+        "image_model": "moss_image",
+    }
+
+    sampling_settings = {
+        "multiplier": 1.0,
+        "shift": 5.0,
+    }
+
+    memory_usage_factor = 14.6
+
+    unet_extra_config = {}
+    latent_format = latent.Flux2
+
+    supported_inference_dtypes = [torch.bfloat16, torch.float32]
+
+    vae_key_prefix = ["vae."]
+    text_encoder_key_prefix = ["text_encoders."]
+
+    unet_target = "transformer"
+
+    def clip_target(self, state_dict={}):
+        return {"qwen35_9b.transformer": "text_encoder"}
+
+    def model_type(self, state_dict):
+        return ModelType.FLOW
+
+
 class Krea2(BASE):
     huggingface_repo = "krea/Krea-2-Raw"
 
@@ -704,6 +735,7 @@ models = [
     WAN21_I2V,
     QwenImage,
     QwenImage21,
+    MOSSImage,
     Krea2,
     ErnieImage,
     PiD,

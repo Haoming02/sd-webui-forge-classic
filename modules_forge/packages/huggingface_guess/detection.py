@@ -266,6 +266,16 @@ def detect_unet_config(state_dict: dict, key_prefix: str) -> dict:
 
         return dit_config
 
+    if "{}shared_block_modulation.weight".format(key_prefix) in state_dict_keys and "{}layers.0.proj.ffn_up_gate.weight".format(key_prefix) in state_dict_keys:  # MOSS-Image
+        dit_config = {}
+        dit_config["image_model"] = "moss_image"
+        dit_config["dim"] = int(state_dict["{}shared_block_modulation.weight".format(key_prefix)].shape[0]) // 6
+        dit_config["ffn_dim"] = int(state_dict["{}layers.0.proj.ffn_up_gate.weight".format(key_prefix)].shape[0]) // 2
+        dit_config["num_heads"] = dit_config["dim"] // 128
+        dit_config["num_layers"] = count_blocks(state_dict_keys, "{}layers.".format(key_prefix) + "{}.")
+        dit_config["fused_qkv"] = "{}layers.0.proj.qkv.weight".format(key_prefix) in state_dict_keys
+        return dit_config
+
     if "{}txt_norm.weight".format(key_prefix) in state_dict_keys:  # Qwen Image
         _qweight: bool = "{}transformer_blocks.0.attn.to_qkv.qweight".format(key_prefix) in state_dict_keys
         dit_config = {"nunchaku": _qweight}
