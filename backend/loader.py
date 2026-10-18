@@ -20,6 +20,7 @@ from backend.diffusion_engine.flux import Flux
 from backend.diffusion_engine.flux2 import Flux2
 from backend.diffusion_engine.krea import Krea2
 from backend.diffusion_engine.lumina import Lumina2
+from backend.diffusion_engine.moss_image import MOSSImage
 from backend.diffusion_engine.mugen import Mugen
 from backend.diffusion_engine.pid import PiD
 from backend.diffusion_engine.qwen import QwenImage
@@ -44,7 +45,7 @@ from backend.utils import (
 )
 from modules_forge.packages.comfy.utils import convert_diffusers_mmdit
 
-possible_models: tuple["ForgeDiffusionEngine"] = (StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, QwenImage21, Krea2, Lumina2, ZImage, Anima, ErnieImage, PiD)
+possible_models: tuple["ForgeDiffusionEngine"] = (StableDiffusion, StableDiffusionXLRefiner, StableDiffusionXL, Mugen, Chroma, Flux, Flux2, Wan, QwenImage, QwenImage21, Krea2, Lumina2, ZImage, Anima, ErnieImage, PiD, MOSSImage)
 
 logger = logging.getLogger("loader")
 setup_logger(logger)
@@ -58,13 +59,21 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
     if component_name in ["feature_extractor", "safety_checker"]:
         return None
 
-    if lib_name in ["transformers", "diffusers"]:
-        if component_name == "scheduler":
-            cls = getattr(importlib.import_module(lib_name), cls_name)
-            return cls.from_pretrained(os.path.join(repo_path, component_name))
+    if component_name == "scheduler":
+        if lib_name.startswith("pipeline_"):
+            return None
+        cls = getattr(importlib.import_module(lib_name), cls_name)
+        return cls.from_pretrained(os.path.join(repo_path, component_name))
+
+    if lib_name in ["transformers", "diffusers", "pipeline_moss_image"]:
         if component_name.startswith("tokenizer"):
-            cls = getattr(importlib.import_module(lib_name), cls_name)
-            comp = cls.from_pretrained(os.path.join(repo_path, component_name))
+            module = importlib.import_module(lib_name)
+            try:
+                comp = getattr(module, cls_name).from_pretrained(os.path.join(repo_path, component_name))
+            except Exception:
+                if cls_name.endswith("Fast"):
+                    raise
+                comp = getattr(module, cls_name + "Fast").from_pretrained(os.path.join(repo_path, component_name))
             comp._eventual_warn_about_too_long_sequence = lambda *args, **kwargs: None
             return comp
 
@@ -297,6 +306,30 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             load_state_dict(model, state_dict, log_name=cls_name, ignore_start="lm_head.")
             return model
+        if cls_name == "Qwen3_5Model":
+            assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have Qwen 3.5 state dict!"
+
+            from backend.nn.llm.llama import Qwen35_9B
+
+            config = read_arbitrary_config(config_path)
+            if "text_config" in config:
+                config = config["text_config"]
+
+            quant_config = detect_quantization(state_dict)
+            storage_dtype = _detect_dtype("Qwen3.5", memory_management.text_encoder_dtype(), quant_config)
+
+            if storage_dtype == "gguf":
+                with no_init_weights():
+                    with using_forge_operations(device=memory_management.cpu, dtype=memory_management.text_encoder_dtype(), manual_cast_enabled=False, extra_dtype=storage_dtype):
+                        model = Qwen35_9B(config)
+            else:
+                with no_init_weights():
+                    with using_forge_operations(device=memory_management.cpu, dtype=storage_dtype, manual_cast_enabled=True, sd_dtype=state_dict_dtype, extra_dtype=quant_config):
+                        model = Qwen35_9B(config)
+
+            state_dict = state_dict_prefix_replace(state_dict, {"language_model.": "model."})
+            load_state_dict(model, state_dict, log_name=cls_name)
+            return model
         if cls_name in ["T5EncoderModel", "UMT5EncoderModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have T5 state dict!"
 
@@ -331,7 +364,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
         # region UNet / DiT
 
-        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "QwenImage21Transformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel", "PiDTransformer2DModel", "Krea2Transformer2DModel"]:
+        if cls_name in ["UNet2DConditionModel", "FluxTransformer2DModel", "Flux2Transformer2DModel", "ChromaTransformer2DModel", "WanTransformer3DModel", "QwenImageTransformer2DModel", "QwenImage21Transformer2DModel", "Lumina2Transformer2DModel", "ZImageTransformer2DModel", "CosmosTransformer3DModel", "ErnieImageTransformer2DModel", "PiDTransformer2DModel", "Krea2Transformer2DModel", "MOSSImageTransformer"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have model state dict!"
             pre_func: Callable[[torch.nn.Module], torch.nn.Module] = lambda mdl: mdl
             model_loader = None
@@ -401,6 +434,10 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.krea import SingleStreamDiT
 
                 model_loader = lambda c: SingleStreamDiT(**c)
+            elif cls_name == "MOSSImageTransformer":
+                from backend.nn.moss_image import MOSSImage as MOSSImageDiT
+
+                model_loader = lambda c: MOSSImageDiT(**c)
 
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
@@ -684,7 +721,13 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
             sd[f"{text_encoder_key_prefix}t5xxl.transformer.{k}"] = True
         sd[f"{text_encoder_key_prefix}t5xxl.transformer.filename"] = str(path)
 
-    if "model.layers.0.post_feedforward_layernorm.weight" in asd:
+    if "language_model.layers.0.post_attention_layernorm.weight" in asd:
+        for k, v in asd.items():
+            if not k.startswith("language_model."):
+                continue
+            sd[f"{text_encoder_key_prefix}qwen35_9b.transformer.{k}"] = v
+
+    elif "model.layers.0.post_feedforward_layernorm.weight" in asd:
         assert "model.layers.0.self_attn.q_norm.weight" not in asd
         for k, v in asd.items():
             if k == "spiece_model":
