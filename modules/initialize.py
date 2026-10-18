@@ -12,6 +12,7 @@ def shush():
     logging.getLogger("torch.distributed.nn").setLevel(logging.ERROR)
     logging.getLogger("transformers.dynamic_module_utils").setLevel(logging.ERROR)
     logging.getLogger("xformers").addFilter(lambda record: "triton" not in record.getMessage().lower())
+    warnings.filterwarnings(action="ignore", category=FutureWarning, module="torch.jit._script")
     warnings.filterwarnings(action="ignore", category=UserWarning, module="torchvision.transforms.functional_tensor")
     warnings.filterwarnings(action="ignore", category=UserWarning, module="torchvision")
     startup_timer.record("filter logging")
