@@ -6,7 +6,7 @@ from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
-from backend.text_processing.moss_image_engine import MOSSImageEngine
+from backend.text_processing.moss_image_engine import Qwen359BEngine
 
 
 class MOSSImage(ForgeDiffusionEngine):
@@ -17,13 +17,13 @@ class MOSSImage(ForgeDiffusionEngine):
 
         clip = CLIP(model_dict={"qwen35_9b": huggingface_components["text_encoder"]}, tokenizer_dict={"qwen35_9b": huggingface_components["tokenizer"]})
 
-        vae = VAE(model=huggingface_components["vae"])
+        vae = VAE(model=huggingface_components["vae"], is_flux2=True)
 
         k_predictor = self._get_predictor()
 
         unet = UnetPatcher.from_model(model=huggingface_components["transformer"], diffusers_scheduler=None, k_predictor=k_predictor, config=estimated_config)
 
-        self.text_processing_engine_qwen = MOSSImageEngine(
+        self.text_processing_engine_qwen = Qwen359BEngine(
             text_encoder=clip.cond_stage_model.qwen35_9b,
             tokenizer=clip.tokenizer.qwen35_9b,
         )

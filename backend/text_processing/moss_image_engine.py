@@ -1,4 +1,4 @@
-# https://github.com/Comfy-Org/ComfyUI/blob/master/comfy/text_encoders/moss_image.py
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.42.0/comfy/text_encoders/moss_image.py
 
 import torch
 
@@ -8,7 +8,7 @@ from backend.text_processing import emphasis
 from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
 
 
-class MOSSImageEngine:
+class Qwen359BEngine:
     def __init__(self, text_encoder, tokenizer):
         self.text_encoder = SDClipModel(text_encoder, layer="last", layer_idx=None, special_tokens={"pad": 248044}, layer_norm_hidden_state=False, enable_attention_masks=True, return_attention_masks=True)
         self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1, pad_token=248044)

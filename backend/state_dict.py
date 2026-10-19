@@ -3,7 +3,7 @@ import json
 import torch
 
 
-def load_state_dict(model: torch.nn.Module, sd: dict[str, torch.Tensor], ignore_errors: list[str] = [], log_name: str = None, ignore_start: str = None):
+def load_state_dict(model: torch.nn.Module, sd: dict[str, torch.Tensor], ignore_errors: list[str] = [], log_name: str = None, ignore_start: str | list[str] = None):
     is_meta = any(p.is_meta for p in model.parameters())
 
     if is_meta:
@@ -25,9 +25,9 @@ def load_state_dict(model: torch.nn.Module, sd: dict[str, torch.Tensor], ignore_
     missing = [x for x in missing if x not in ignore_errors]
     unexpected = [x for x in unexpected if x not in ignore_errors]
 
-    if isinstance(ignore_start, str):
-        missing = [x for x in missing if not x.startswith(ignore_start)]
-        unexpected = [x for x in unexpected if not x.startswith(ignore_start)]
+    if ignore_start is not None:
+        missing = [x for x in missing if not x.startswith(tuple(ignore_start))]
+        unexpected = [x for x in unexpected if not x.startswith(tuple(ignore_start))]
 
     unexpected = [x for x in unexpected if "comfy_attention" not in x]
 

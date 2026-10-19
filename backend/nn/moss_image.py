@@ -1,3 +1,5 @@
+# https://github.com/Comfy-Org/ComfyUI/blob/v0.42.0/comfy/ldm/moss_image/model.py
+
 import torch
 import torch.nn as nn
 
