@@ -6,6 +6,7 @@ import torch.nn as nn
 from backend.attention import attention_function
 from backend.nn.flux import EmbedND, timestep_embedding
 from backend.operations import main_stream_worker, weights_manual_cast
+from backend.operations_mixed_precision import linear_input_act
 from backend.quant_ops import ck
 
 
@@ -92,13 +93,11 @@ class Block(nn.Module):
         out = attention(q, k, v, self.q_norm, self.k_norm, pe, self.num_heads, transformer_options)
         x = gated_residual(x, self.proj["o"](out), gate_a)
         y = modulated_rms_norm(x, self.norm2, scale_f, shift_f)
-        up = self.proj["ffn_up_gate"](y)
-        hidden, gate = up.chunk(2, dim=-1)
-        return gated_residual(x, self.proj["ffn_down"](situ(hidden, gate)), gate_f)
+        return gated_residual(x, linear_input_act(self.proj["ffn_down"], self.proj["ffn_up_gate"](y), "situ"), gate_f)
 
 
 class MOSSImage(nn.Module):
-    def __init__(self, dim=3072, ffn_dim=8192, num_heads=24, num_layers=42, text_dim=4096, latent_channels=128, fused_qkv=False, image_model=None):
+    def __init__(self, dim=3072, ffn_dim=8192, num_heads=24, num_layers=42, text_dim=4096, latent_channels=128, fused_qkv=False):
         super().__init__()
         self.latent_channels = latent_channels
         head_dim = dim // num_heads

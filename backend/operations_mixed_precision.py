@@ -407,9 +407,15 @@ def _swiglu_eager(x: torch.Tensor) -> torch.Tensor:
     return F.silu(gate).mul_(up)
 
 
+def _situ_eager(x: torch.Tensor) -> torch.Tensor:
+    hidden, gate = x.chunk(2, dim=-1)
+    return (4.0 * torch.tanh(gate / 4.0) * torch.sigmoid(gate)) * (25.0 * torch.tanh(hidden / 25.0))
+
+
 INPUT_ACT_EAGER = {
     "gelu_tanh": lambda x: F.gelu(x, approximate="tanh"),
     "swiglu": _swiglu_eager,
+    "situ": _situ_eager,
 }
 
 
