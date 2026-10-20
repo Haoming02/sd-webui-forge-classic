@@ -372,23 +372,36 @@ onUiLoaded(() => {
 
     // ----- inputs -----
 
+    function applyResolution(w, h) {
+        state.width = w;
+        state.height = h;
+        fitStage();
+        renderCanvas();
+    }
+
+    function clampItemsToCanvas() {
+        for (const item of state.items) {
+            const bw = Math.min(item.bbox[2] - item.bbox[0], state.width);
+            const bh = Math.min(item.bbox[3] - item.bbox[1], state.height);
+            const x1 = clamp(item.bbox[0], 0, state.width - bw);
+            const y1 = clamp(item.bbox[1], 0, state.height - bh);
+            item.bbox = [x1, y1, x1 + bw, y1 + bh];
+            syncListNums(item);
+        }
+        renderCanvas();
+    }
+
     widthInput.addEventListener("input", () => {
         const v = parseInt(widthInput.value, 10);
-        if (v > 0) {
-            state.width = v;
-            fitStage();
-            renderCanvas();
-        }
+        if (v > 0) applyResolution(v, state.height);
     });
+    widthInput.addEventListener("change", clampItemsToCanvas);
 
     heightInput.addEventListener("input", () => {
         const v = parseInt(heightInput.value, 10);
-        if (v > 0) {
-            state.height = v;
-            fitStage();
-            renderCanvas();
-        }
+        if (v > 0) applyResolution(state.width, v);
     });
+    heightInput.addEventListener("change", clampItemsToCanvas);
 
     setResBtn.addEventListener("click", () => {
         const mp = parseFloat(mpInput.value);
@@ -397,12 +410,12 @@ onUiLoaded(() => {
         const area = mp * MP_PIXELS;
         const w = Math.sqrt((area * aw) / ah);
         const hgt = area / w;
-        state.width = round16(w);
-        state.height = round16(hgt);
-        widthInput.value = state.width;
-        heightInput.value = state.height;
-        fitStage();
-        renderCanvas();
+        const width = round16(w);
+        const height = round16(hgt);
+        widthInput.value = width;
+        heightInput.value = height;
+        applyResolution(width, height);
+        clampItemsToCanvas();
     });
 
     sumCaption.addEventListener("input", () => {
@@ -440,8 +453,38 @@ onUiLoaded(() => {
         };
     }
 
+    function validate() {
+        root.querySelectorAll(".jb-invalid").forEach((el) => el.classList.remove("jb-invalid"));
+        const invalid = [];
+
+        if (state.summary.caption.trim() === "") invalid.push(sumCaption);
+
+        for (const item of state.items) {
+            const list = listRefs.get(item.id);
+
+            if (item.caption.trim() === "") {
+                if (list) invalid.push(list.captionInput);
+            }
+            if (item.label === "text" && item.text.trim() === "") {
+                if (list?.textInput) invalid.push(list.textInput);
+            }
+        }
+
+        invalid.forEach((el) => el.classList.add("jb-invalid"));
+        return invalid.length === 0;
+    }
+
     function submit(which) {
-        const prompt = compilePrompt(JSON.stringify(buildJson()));
+        if (!validate()) return;
+        let prompt = null;
+
+        try {
+            prompt = compilePrompt(JSON.stringify(buildJson()));
+        } catch (e) {
+            alert(e);
+            return;
+        }
+
         const promptEl = which === "t2i" ? t2i_prompt : i2i_prompt;
         const widthEl = which === "t2i" ? t2i_width : i2i_width;
         const heightEl = which === "t2i" ? t2i_height : i2i_height;
@@ -457,20 +500,8 @@ onUiLoaded(() => {
         else switch_to_img2img();
     }
 
-    sendT2I.addEventListener("click", () => {
-        try {
-            submit("t2i");
-        } catch (e) {
-            alert(e);
-        }
-    });
-    sendI2I.addEventListener("click", () => {
-        try {
-            submit("i2i");
-        } catch (e) {
-            alert(e);
-        }
-    });
+    sendT2I.addEventListener("click", () => submit("t2i"));
+    sendI2I.addEventListener("click", () => submit("i2i"));
 
     // ----- init -----
 

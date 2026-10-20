@@ -410,3 +410,9 @@ button.jb-remove:hover {
 .jb-submit .jb-send-i2i:hover {
     border-color: var(--button-primary-border-color-hover);
 }
+
+/* ----- validation ----- */
+
+.jb-root .jb-invalid {
+    border: 1px solid var(--error-text-color) !important;
+}
