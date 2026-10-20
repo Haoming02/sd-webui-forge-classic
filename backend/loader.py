@@ -435,7 +435,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
             elif cls_name == "MOSSImageTransformer":
                 from backend.nn.moss_image import MOSSImage as MOSSImageDiT
 
-                model_loader = lambda c: MOSSImageDiT(**c)
+                model_loader = lambda c: MOSSImageDiT(**{k: v for k, v in c.items() if k != "freq_dim"})
 
             load_device = memory_management.get_torch_device()
             offload_device = memory_management.unet_offload_device()
