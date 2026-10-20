@@ -461,12 +461,15 @@ onUiLoaded(() => {
 
         for (const item of state.items) {
             const list = listRefs.get(item.id);
+            const canvas = canvasRefs.get(item.id);
 
             if (item.caption.trim() === "") {
                 if (list) invalid.push(list.captionInput);
+                if (canvas) invalid.push(canvas.caption);
             }
             if (item.label === "text" && item.text.trim() === "") {
                 if (list?.textInput) invalid.push(list.textInput);
+                if (canvas?.text) invalid.push(canvas.text);
             }
         }
 

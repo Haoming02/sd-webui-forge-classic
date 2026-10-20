@@ -89,17 +89,18 @@
 .jb-field {
     flex: 1 1 auto;
     min-height: 0;
-    width: 100%;
+    min-width: 0;
+    width: auto;
     box-sizing: border-box;
-    resize: none;
+    resize: none !important;
     border: none;
     outline: none;
-    padding: 3px 6px;
-    background: transparent !important;
+    margin: 8px !important;
+    padding: 3px 6px !important;
+    border-radius: 4px !important;
+    background: color-mix(in srgb, var(--input-background-fill) 50%, transparent) !important;
     color: var(--body-text-color);
     font-family: inherit;
-    font-size: 11px;
-    line-height: 1.3;
 }
 
 .jb-field::placeholder {
@@ -108,6 +109,11 @@
 
 .jb-field[readonly] {
     cursor: move;
+    user-select: none;
+}
+
+.jb-field:not([readonly]) {
+    user-select: text;
 }
 
 .jb-box-handle {
