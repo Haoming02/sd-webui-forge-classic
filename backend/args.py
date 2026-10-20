@@ -172,6 +172,8 @@ class dynamic_args(metaclass=_DynamicArgsMeta):
     """Anima"""
     krea2: bool = False
     """Krea 2"""
+    moss: bool = False
+    """Moss-Image"""
     ref_latents: list["torch.Tensor"] = []
     """Reference Latent(s) for Flux Kontext / Qwen-Image-Edit / Flux.2 Klein"""
     concat_latent: "torch.Tensor" = None

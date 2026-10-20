@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from modules.processing import StableDiffusionProcessing
 
+from backend.args import dynamic_args
 from backend.patcher.base import set_model_options_patch_replace
 from backend.sampling import sampling_function
 from modules import scripts
@@ -37,7 +38,7 @@ class SkipLayerGuidance(scripts.Script):
         return scripts.AlwaysVisible
 
     def process_before_every_sampling(self, p: "StableDiffusionProcessing", *args, **kwargs):
-        if not opts.slg_enable:
+        if not (dynamic_args.moss and opts.slg_enable):
             return
 
         double_layers = parse_layers("")  # Moss-Image has no double_block
