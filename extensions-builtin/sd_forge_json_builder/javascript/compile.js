@@ -33,20 +33,13 @@ function compilePrompt(input) {
     function centeredBox(box, width, height, location) {
         require(Array.isArray(box) && box.length === 4, `${location} must be [x1,y1,x2,y2]`);
 
-        require(box.every(
-            (v) => typeof v === "number" && Number.isFinite(v),
-        ), `${location} must contain four finite numbers`);
+        require(box.every((v) => typeof v === "number" && Number.isFinite(v)), `${location} must contain four finite numbers`);
 
         const [x1, y1, x2, y2] = box;
 
         require(x1 < x2 && y1 < y2, `${location} must have positive width and height`);
 
-        require(0 <= x1 &&
-            x1 < x2 &&
-            x2 <= width &&
-            0 <= y1 &&
-            y1 < y2 &&
-            y2 <= height, `${location} exceeds the ${width}x${height} canvas`);
+        require(0 <= x1 && x1 < x2 && x2 <= width && 0 <= y1 && y1 < y2 && y2 <= height, `${location} exceeds the ${width}x${height} canvas`);
 
         const pyRound9 = (value) => {
             const rounded = Number(value.toFixed(9));
@@ -196,9 +189,7 @@ function compilePrompt(input) {
         ["width", width],
         ["height", height],
     ]) {
-        require(Number.isInteger(value) &&
-            value > 0 &&
-            value % 16 === 0, `${name} must be a positive integer multiple of 16`);
+        require(Number.isInteger(value) && value > 0 && value % 16 === 0, `${name} must be a positive integer multiple of 16`);
     }
 
     require(draft.bbox_coord_space === "abs", "Draft bbox_coord_space must be abs");
@@ -212,9 +203,7 @@ function compilePrompt(input) {
     text(summary.caption, "summary.caption");
 
     if ("canvas" in summary) {
-        require(["single", "multi_panel", "collage"].includes(
-            summary.canvas,
-        ), "summary.canvas must be single, multi_panel or collage");
+        require(["single", "multi_panel", "collage"].includes(summary.canvas), "summary.canvas must be single, multi_panel or collage");
     }
 
     for (const key of ["meta", "palette"]) {
@@ -230,16 +219,9 @@ function compilePrompt(input) {
     const compiledItems = items.map((item, index) => {
         const location = `items[${index}]`;
 
-        fields(
-            item,
-            new Set(["label", "caption", "bbox", "text", "tags", "palette"]),
-            new Set(["label", "caption", "bbox"]),
-            location,
-        );
+        fields(item, new Set(["label", "caption", "bbox", "text", "tags", "palette"]), new Set(["label", "caption", "bbox"]), location);
 
-        require(["object", "character", "text"].includes(
-            item.label,
-        ), `${location}.label must be object, character or text`);
+        require(["object", "character", "text"].includes(item.label), `${location}.label must be object, character or text`);
 
         text(item.caption, `${location}.caption`);
 
