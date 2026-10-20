@@ -11,7 +11,7 @@ onUiLoaded(() => {
 
     const LABELS = ["object", "character", "text"];
     const CANVAS_TYPES = ["single", "multi_panel", "collage"];
-    const ASPECT_RATIOS = ["1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16", "21:9", "9:21", "5:4", "4:5"];
+    const ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
     const MP_PIXELS = 1024 * 1024;
 
     const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -74,7 +74,7 @@ onUiLoaded(() => {
         { class: "jb-ar" },
         ASPECT_RATIOS.map((r) => h("option", { value: r }, [r])),
     );
-    const setResBtn = h("button", { type: "button", class: "jb-set-res" }, ["Set resolution"]);
+    const setResBtn = h("button", { type: "button", class: "jb-set-res" }, ["Set Resolution"]);
 
     const resolutionSection = h("div", { class: "jb-section" }, [
         h("div", { class: "jb-section-title" }, ["Resolution"]),
@@ -83,7 +83,7 @@ onUiLoaded(() => {
     ]);
 
     const sumCaption = h("input", { type: "text", class: "jb-sum-caption", placeholder: "global caption" });
-    const sumMeta = h("input", { type: "text", class: "jb-sum-meta", placeholder: "meta tags, comma separated" });
+    const sumMeta = h("input", { type: "text", class: "jb-sum-meta", placeholder: "meta tags (comma separated)" });
     const canvasRadios = CANVAS_TYPES.map((t) => {
         const id = `jb-canvas-${t}`;
         const radio = h("input", { type: "radio", name: "jb-canvas", value: t, id, checked: state.summary.canvas === t });
@@ -95,22 +95,19 @@ onUiLoaded(() => {
 
     const summarySection = h("div", { class: "jb-section" }, [
         h("div", { class: "jb-section-title" }, ["Summary"]),
+        h("div", { class: "jb-row" }, canvasRadios),
         h("label", { class: "jb-fld-label", for: "jb-sum-caption" }, ["Caption"]),
         sumCaption,
         h("label", { class: "jb-fld-label", for: "jb-sum-meta" }, ["Meta"]),
         sumMeta,
-        h("div", { class: "jb-row" }, canvasRadios),
     ]);
     sumCaption.id = "jb-sum-caption";
     sumMeta.id = "jb-sum-meta";
 
-    const addBtn = h("button", { type: "button", class: "jb-add" }, ["Add item"]);
-    const clearBtn = h("button", { type: "button", class: "jb-clear" }, ["Clear all"]);
+    const addBtn = h("button", { type: "button", class: "jb-add" }, ["Add Item"]);
+    const clearBtn = h("button", { type: "button", class: "jb-clear" }, ["Clear All"]);
     const listEl = h("div", { class: "jb-list" });
-    const listSection = h("div", { class: "jb-section jb-list-section" }, [
-        h("div", { class: "jb-list-toolbar" }, [addBtn, clearBtn]),
-        listEl,
-    ]);
+    const listSection = h("div", { class: "jb-section jb-list-section" }, [h("div", { class: "jb-list-toolbar" }, [addBtn, clearBtn]), listEl]);
 
     const sendT2I = h("button", { type: "button", class: "jb-send-t2i" }, ["Send to txt2img"]);
     const sendI2I = h("button", { type: "button", class: "jb-send-i2i" }, ["Send to img2img"]);
@@ -320,7 +317,7 @@ onUiLoaded(() => {
             textInput.addEventListener("input", () => {
                 item.text = textInput.value;
                 const ref = canvasRefs.get(item.id);
-                if (ref && ref.text && document.activeElement !== ref.text) ref.text.value = textInput.value;
+                if (ref?.text && document.activeElement !== ref.text) ref.text.value = textInput.value;
             });
             row.appendChild(textInput);
         }
@@ -460,8 +457,20 @@ onUiLoaded(() => {
         else switch_to_img2img();
     }
 
-    sendT2I.addEventListener("click", () => submit("t2i"));
-    sendI2I.addEventListener("click", () => submit("i2i"));
+    sendT2I.addEventListener("click", () => {
+        try {
+            submit("t2i");
+        } catch (e) {
+            alert(e);
+        }
+    });
+    sendI2I.addEventListener("click", () => {
+        try {
+            submit("i2i");
+        } catch (e) {
+            alert(e);
+        }
+    });
 
     // ----- init -----
 

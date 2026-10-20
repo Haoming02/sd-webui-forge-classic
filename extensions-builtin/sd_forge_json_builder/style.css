@@ -8,6 +8,7 @@
     color: var(--body-text-color);
     font-size: var(--body-text-size);
     line-height: 1.4;
+    --color-accent: var(--button-primary-border-color);
 }
 
 /* ----- canvas ----- */
@@ -256,7 +257,8 @@
 }
 
 .jb-ar {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
+    width: 64px;
 }
 
 /* ----- radios ----- */
@@ -324,7 +326,7 @@
     gap: 6px;
     padding: 8px 10px;
     background: var(--background-fill-secondary);
-    border: 1px solid var(--border-color-primary);
+    border: 1px solid transparent;
     border-radius: 10px;
     transition:
         border-color 0.15s ease,
@@ -332,8 +334,7 @@
 }
 
 .jb-item:hover {
-    border-color: var(--border-color-accent);
-    box-shadow: var(--shadow-drop);
+    border-color: var(--border-color-primary);
 }
 
 .jb-item-top {
@@ -360,7 +361,7 @@
     background: var(--checkbox-label-background-fill-hover);
 }
 
-.jb-remove {
+button.jb-remove {
     margin-left: auto;
     padding: 1px 9px;
     font-size: 16px;
@@ -370,9 +371,8 @@
     color: var(--body-text-color-subdued);
 }
 
-.jb-remove:hover {
-    background: var(--button-cancel-background-fill-hover);
-    border-color: transparent;
+button.jb-remove:hover {
+    border-color: var(--button-cancel-background-fill-hover);
     color: var(--error-text-color);
 }
 
@@ -396,20 +396,17 @@
 .jb-submit {
     flex-direction: row;
     gap: 10px;
+    padding: 0px;
+    border: none;
 }
 
-.jb-send-t2i,
-.jb-send-i2i {
+.jb-submit .jb-send-t2i,
+.jb-submit .jb-send-i2i {
     flex: 1 1 0;
-    background: var(--button-primary-background-fill);
-    color: var(--button-primary-text-color);
-    border-color: var(--button-primary-border-color);
-    box-shadow: var(--button-primary-shadow);
+    border-color: var(--border-color-primary);
 }
 
-.jb-send-t2i:hover,
-.jb-send-i2i:hover {
-    background: var(--button-primary-background-fill-hover);
+.jb-submit .jb-send-t2i:hover,
+.jb-submit .jb-send-i2i:hover {
     border-color: var(--button-primary-border-color-hover);
-    box-shadow: var(--button-primary-shadow-hover);
 }
