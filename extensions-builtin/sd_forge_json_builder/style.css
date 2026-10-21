@@ -218,6 +218,28 @@
     color: var(--block-info-text-color);
 }
 
+/* ----- save / load ----- */
+
+.jb-top {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+}
+
+.jb-top>.jb-section {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.jb-top .jb-row label {
+    width: 32px;
+}
+
+.jb-save .jb-row>button {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
 /* ----- inputs ----- */
 
 .jb-root input[type="text"],
@@ -421,4 +443,103 @@ button.jb-remove:hover {
 
 .jb-root .jb-invalid {
     border: 1px solid var(--error-text-color) !important;
+}
+
+/* ----- load prompt modal ----- */
+
+.jb-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    backdrop-filter: blur(4px) brightness(0.5);
+}
+
+.jb-modal.jb-hidden {
+    display: none !important;
+}
+
+.jb-dialog {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-sizing: border-box;
+    width: min(720px, 100%);
+    height: min(80%, 600px);
+    padding: 32px;
+    background: var(--background-fill-primary);
+    border: 1px solid var(--border-color-primary);
+    border-radius: 14px;
+    box-shadow: var(--shadow-drop-lg);
+}
+
+.jb-dialog button.jb-dialog-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    padding: 0px !important;
+    line-height: 1;
+    font-size: 20px;
+    color: var(--error-text-color);
+    border-color: var(--border-color-primary);
+    border-radius: 8px;
+}
+
+.jb-dialog-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    gap: 12px;
+}
+
+.jb-dialog textarea.jb-dialog-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+    resize: none;
+    padding: 10px;
+    background: var(--input-background-fill);
+    color: var(--body-text-color);
+    border: 1px solid var(--input-border-color);
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: var(--input-text-size);
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.jb-dialog textarea.jb-dialog-input:focus {
+    outline: none;
+    border-color: var(--input-border-color-focus);
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+.jb-dialog-dims {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 128px;
+}
+
+.jb-dialog-dims label {
+    font-size: var(--block-info-text-size);
+    color: var(--block-info-text-color);
+}
+
+.jb-dialog-dims input {
+    width: 100%;
+}
+
+.jb-dialog-load {
+    flex: 0 0 auto;
+    width: 100%;
 }

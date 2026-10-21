@@ -84,12 +84,14 @@ onUiLoaded(() => {
 
     const sumCaption = h("input", { type: "text", class: "jb-sum-caption", placeholder: "global caption" });
     const sumMeta = h("input", { type: "text", class: "jb-sum-meta", placeholder: "meta tags (comma separated)" });
+    const canvasRadioInputs = [];
     const canvasRadios = CANVAS_TYPES.map((t) => {
         const id = `jb-canvas-${t}`;
         const radio = h("input", { type: "radio", name: "jb-canvas", value: t, id, checked: state.summary.canvas === t });
         radio.addEventListener("change", () => {
             if (radio.checked) state.summary.canvas = t;
         });
+        canvasRadioInputs.push(radio);
         return h("label", { class: "jb-radio", for: id }, [radio, t]);
     });
 
@@ -113,11 +115,130 @@ onUiLoaded(() => {
     const sendI2I = h("button", { type: "button", class: "jb-send-i2i" }, ["Send to img2img"]);
     const submitSection = h("div", { class: "jb-section jb-submit" }, [sendT2I, sendI2I]);
 
-    const side = h("div", { class: "jb-side" }, [resolutionSection, summarySection, listSection, submitSection]);
-    const root = h("div", { class: "jb-root" }, [canvasSection, side]);
+    // ----- save / load -----
+
+    const loadPromptBtn = h("button", { type: "button", class: "jb-load-prompt" }, ["Load Prompt"]);
+    const saveJsonBtn = h("button", { type: "button", class: "jb-save-json" }, ["Save JSON"]);
+    const loadJsonBtn = h("button", { type: "button", class: "jb-load-json" }, ["Load JSON"]);
+    const saveLoadSection = h("div", { class: "jb-section jb-save" }, [
+        h("div", { class: "jb-section-title" }, ["Save/Load"]),
+        h("div", { class: "jb-row" }, [loadPromptBtn]),
+        h("div", { class: "jb-row" }, [saveJsonBtn, loadJsonBtn]),
+    ]);
+
+    const dialogInput = h("textarea", { class: "jb-dialog-input", placeholder: "Compiled Prompt or Layout Draft", spellcheck: "false" });
+    const dialogWidth = h("input", { type: "number", min: "16", step: "16", class: "jb-dialog-width" });
+    const dialogHeight = h("input", { type: "number", min: "16", step: "16", class: "jb-dialog-height" });
+    const dialogClose = h("button", { type: "button", class: "jb-dialog-close", title: "Close" }, ["\u00D7"]);
+    const dialogLoad = h("button", { type: "button", class: "jb-dialog-load" }, ["Load"]);
+    const modal = h("div", { class: "jb-modal jb-hidden" }, [
+        h("div", { class: "jb-dialog" }, [
+            dialogClose,
+            h("div", { class: "jb-dialog-body" }, [dialogInput, h("div", { class: "jb-dialog-dims" }, [h("label", {}, ["Width"]), dialogWidth, h("label", {}, ["Height"]), dialogHeight])]),
+            dialogLoad,
+        ]),
+    ]);
+
+    const fileInput = h("input", { type: "file", accept: ".json,application/json", class: "jb-file" });
+    fileInput.style.display = "none";
+
+    const topRow = h("div", { class: "jb-top" }, [resolutionSection, saveLoadSection]);
+    const side = h("div", { class: "jb-side" }, [topRow, summarySection, listSection, submitSection]);
+    const root = h("div", { class: "jb-root" }, [canvasSection, side, modal, fileInput]);
 
     tab.textContent = "";
     tab.appendChild(root);
+
+    function loadDraft(draft) {
+        state.width = draft.width;
+        state.height = draft.height;
+        state.summary.caption = draft.summary.caption;
+        state.summary.meta = draft.summary.meta.join(", ");
+        state.summary.canvas = draft.summary.canvas;
+        state.items = draft.items.map((item) => ({
+            id: ++idCounter,
+            label: item.label,
+            caption: item.caption,
+            text: item.text || "",
+            bbox: item.bbox.slice(),
+        }));
+
+        widthInput.value = state.width;
+        heightInput.value = state.height;
+        sumCaption.value = state.summary.caption;
+        sumMeta.value = state.summary.meta;
+        canvasRadioInputs.forEach((radio) => {
+            radio.checked = radio.value === state.summary.canvas;
+        });
+
+        fitStage();
+        renderAll();
+    }
+
+    function openDialog() {
+        loadPromptBtn.classList.remove("jb-invalid");
+        dialogInput.value = "";
+        dialogWidth.value = state.width;
+        dialogHeight.value = state.height;
+        modal.classList.remove("jb-hidden");
+        dialogInput.focus();
+    }
+
+    function closeDialog() {
+        modal.classList.add("jb-hidden");
+    }
+
+    function handleDialogLoad() {
+        const text = dialogInput.value.trim();
+        if (text === "") {
+            closeDialog();
+            return;
+        }
+        try {
+            const draft = decompilePrompt(text, parseFloat(dialogWidth.value), parseFloat(dialogHeight.value));
+            loadDraft(draft);
+        } catch {
+            loadPromptBtn.classList.add("jb-invalid");
+        }
+        closeDialog();
+    }
+
+    loadPromptBtn.addEventListener("click", openDialog);
+    dialogClose.addEventListener("click", closeDialog);
+    dialogLoad.addEventListener("click", handleDialogLoad);
+
+    saveJsonBtn.addEventListener("click", () => {
+        const name = prompt("Save JSON as", "layout.json");
+        if (name === null || name.trim() === "") return;
+        const blob = new Blob([JSON.stringify(buildJson(), null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = h("a", { href: url, download: name.trim() });
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    });
+
+    loadJsonBtn.addEventListener("click", () => {
+        loadJsonBtn.classList.remove("jb-invalid");
+        fileInput.value = "";
+        fileInput.click();
+    });
+
+    fileInput.addEventListener("change", () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.addEventListener("load", () => {
+            try {
+                const draft = decompilePrompt(reader.result, NaN, NaN);
+                loadDraft(draft);
+            } catch {
+                loadJsonBtn.classList.add("jb-invalid");
+            }
+        });
+        reader.readAsText(file);
+    });
 
     // ----- canvas sizing -----
 
@@ -298,7 +419,7 @@ onUiLoaded(() => {
         });
         top.append(...radios);
 
-        const remove = h("button", { type: "button", class: "jb-remove", title: "Remove" }, ["×"]);
+        const remove = h("button", { type: "button", class: "jb-remove", title: "Remove" }, ["\u00D7"]);
         remove.addEventListener("click", () => removeItem(item.id));
         top.appendChild(remove);
         row.appendChild(top);
@@ -454,7 +575,9 @@ onUiLoaded(() => {
     }
 
     function validate() {
-        root.querySelectorAll(".jb-invalid").forEach((el) => el.classList.remove("jb-invalid"));
+        root.querySelectorAll(".jb-invalid").forEach((el) => {
+            el.classList.remove("jb-invalid");
+        });
         const invalid = [];
 
         if (state.summary.caption.trim() === "") invalid.push(sumCaption);
@@ -473,7 +596,9 @@ onUiLoaded(() => {
             }
         }
 
-        invalid.forEach((el) => el.classList.add("jb-invalid"));
+        invalid.forEach((el) => {
+            el.classList.add("jb-invalid");
+        });
         return invalid.length === 0;
     }
 
