@@ -28,16 +28,23 @@
 }
 
 .jb-stage {
+    --jb-text-scale: 1;
     position: relative;
     background-color: var(--background-fill-secondary);
     background-image:
         linear-gradient(to right, color-mix(in srgb, var(--border-color-primary) 60%, transparent) 1px, transparent 1px),
         linear-gradient(to bottom, color-mix(in srgb, var(--border-color-primary) 60%, transparent) 1px, transparent 1px);
-    background-size: 5% 5%;
+    background-size: 16px 16px;
+    background-position: 0 0;
+    transform-origin: center center;
     border: 1px solid var(--border-color-primary);
-    border-radius: 10px;
     box-shadow: var(--shadow-inset);
     overflow: hidden;
+    cursor: grab;
+}
+
+.jb-stage.jb-panning {
+    cursor: grabbing;
 }
 
 .jb-box {
@@ -50,7 +57,7 @@
     overflow: hidden;
     background: color-mix(in srgb, var(--color-accent) 14%, transparent);
     border: 1.5px solid var(--border-color-accent);
-    border-radius: 8px;
+    border-radius: 4px;
     cursor: move;
     user-select: none;
     touch-action: none;
@@ -74,8 +81,8 @@
 .jb-box-tag {
     flex: 0 0 auto;
     padding: 1px 7px;
-    font-size: 10px;
-    line-height: 16px;
+    font-size: calc(12px * var(--jb-text-scale));
+    line-height: 1.5;
     letter-spacing: 0.5px;
     text-transform: uppercase;
     white-space: nowrap;
@@ -83,7 +90,6 @@
     text-overflow: ellipsis;
     background: var(--color-accent);
     color: var(--button-primary-text-color);
-    border-radius: 6px 6px 0 0;
 }
 
 .jb-field {
@@ -101,6 +107,11 @@
     background: color-mix(in srgb, var(--input-background-fill) 50%, transparent) !important;
     color: var(--body-text-color);
     font-family: inherit;
+    font-size: calc(16px * var(--jb-text-scale)) !important;
+    line-height: 1.5 !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 .jb-field::placeholder {

@@ -29,6 +29,10 @@ onUiLoaded(() => {
     const listRefs = new Map();
     const canvasRefs = new Map();
 
+    const MIN_ZOOM = 0.25;
+    const MAX_ZOOM = 8;
+    const view = { scale: 1, panX: 0, panY: 0 };
+
     function h(tag, attrs = {}, children = []) {
         const el = document.createElement(tag);
         for (const [k, v] of Object.entries(attrs)) {
@@ -255,7 +259,87 @@ onUiLoaded(() => {
         }
         stage.style.width = w + "px";
         stage.style.height = hgt + "px";
+        clampPan();
+        resetView();
     }
+
+    function applyView() {
+        stage.style.transform = `translate(${view.panX}px, ${view.panY}px) scale(${view.scale})`;
+        stage.style.setProperty("--jb-text-scale", String(1 / Math.max(1, view.scale)));
+    }
+
+    function clampAxis(pan, canvasSize, stageSize) {
+        const diff = (stageSize - canvasSize) / 2;
+        return diff >= 0 ? clamp(pan, -diff, diff) : clamp(pan, diff, -diff);
+    }
+
+    function clampPan() {
+        const c = canvasSection.getBoundingClientRect();
+        const r = stage.getBoundingClientRect();
+        view.panX = clampAxis(view.panX, c.width, r.width);
+        view.panY = clampAxis(view.panY, c.height, r.height);
+    }
+
+    function zoomAt(clientX, clientY, factor) {
+        const next = clamp(view.scale * factor, MIN_ZOOM, MAX_ZOOM);
+        const ratio = next / view.scale;
+        if (ratio === 1) return;
+        const r = stage.getBoundingClientRect();
+        view.panX += (clientX - (r.left + r.width / 2)) * (1 - ratio);
+        view.panY += (clientY - (r.top + r.height / 2)) * (1 - ratio);
+        view.scale = next;
+        applyView();
+        clampPan();
+        applyView();
+    }
+
+    function resetView() {
+        view.scale = 1;
+        view.panX = 0;
+        view.panY = 0;
+        applyView();
+    }
+
+    function startPan(e) {
+        const sx = e.clientX;
+        const sy = e.clientY;
+        const px = view.panX;
+        const py = view.panY;
+        stage.classList.add("jb-panning");
+        function move(ev) {
+            view.panX = px + (ev.clientX - sx);
+            view.panY = py + (ev.clientY - sy);
+            clampPan();
+            applyView();
+        }
+        function up() {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            stage.classList.remove("jb-panning");
+        }
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+    }
+
+    stage.addEventListener(
+        "wheel",
+        (e) => {
+            e.preventDefault();
+            zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.2 : 1 / 1.2);
+        },
+        { passive: false },
+    );
+
+    stage.addEventListener("pointerdown", (e) => {
+        if (e.button !== 1) return;
+        e.preventDefault();
+        startPan(e);
+    });
+
+    stage.addEventListener("dblclick", (e) => {
+        if (e.target.closest(".jb-box")) return;
+        resetView();
+    });
 
     function updateBoxPosition(item) {
         const ref = canvasRefs.get(item.id);
@@ -374,10 +458,14 @@ onUiLoaded(() => {
         }
 
         const handle = h("div", { class: "jb-box-handle" });
-        handle.addEventListener("pointerdown", (ev) => startResize(item, ev));
+        handle.addEventListener("pointerdown", (ev) => {
+            if (ev.button !== 0) return;
+            startResize(item, ev);
+        });
         el.appendChild(handle);
 
         el.addEventListener("pointerdown", (ev) => {
+            if (ev.button !== 0) return;
             if (ev.target === handle) return;
             if (ev.target.tagName === "TEXTAREA" && !ev.target.readOnly) return;
             startDrag(item, ev);
