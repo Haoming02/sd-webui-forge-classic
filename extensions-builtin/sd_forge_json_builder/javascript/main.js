@@ -22,7 +22,7 @@ onUiLoaded(() => {
     const state = {
         width: 1024,
         height: 1024,
-        summary: { caption: "", meta: "", canvas: "single" },
+        summary: { caption: "", meta: "", extra: "", canvas: "single" },
         items: [],
     };
 
@@ -48,6 +48,33 @@ onUiLoaded(() => {
             el.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
         }
         return el;
+    }
+
+    const growables = new Set();
+
+    function autoGrow(el) {
+        if (el?.tagName !== "TEXTAREA") return;
+        el.style.height = "auto";
+        const cs = getComputedStyle(el);
+        const borders = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+        el.style.height = `${el.scrollHeight + borders}px`;
+    }
+
+    const growObserver = new ResizeObserver(() => growables.forEach(autoGrow));
+
+    function addGrowable(el) {
+        if (growables.has(el)) return;
+        growables.add(el);
+        growObserver.observe(el);
+        requestAnimationFrame(() => autoGrow(el));
+    }
+
+    function pruneGrowables() {
+        for (const el of growables) {
+            if (el.isConnected) continue;
+            growObserver.unobserve(el);
+            growables.delete(el);
+        }
     }
 
     function defaultBbox() {
@@ -86,8 +113,9 @@ onUiLoaded(() => {
         h("div", { class: "jb-row" }, [h("label", {}, ["MP"]), mpInput, h("label", {}, ["AR"]), arSelect, setResBtn]),
     ]);
 
-    const sumCaption = h("input", { type: "text", class: "jb-sum-caption", placeholder: "global caption" });
+    const sumCaption = h("textarea", { class: "jb-sum-caption", placeholder: "global caption", rows: "1" });
     const sumMeta = h("input", { type: "text", class: "jb-sum-meta", placeholder: "meta tags (comma separated)" });
+    const sumExtra = h("input", { type: "text", class: "jb-sum-extra", placeholder: "e.g. LoRA" });
     const canvasRadioInputs = [];
     const canvasRadios = CANVAS_TYPES.map((t) => {
         const id = `jb-canvas-${t}`;
@@ -104,11 +132,14 @@ onUiLoaded(() => {
         h("div", { class: "jb-row" }, canvasRadios),
         h("label", { class: "jb-fld-label", for: "jb-sum-caption" }, ["Caption"]),
         sumCaption,
-        h("label", { class: "jb-fld-label", for: "jb-sum-meta" }, ["Meta"]),
-        sumMeta,
+        h("div", { class: "jb-row" }, [
+            h("div", { class: "jb-half" }, [h("label", { class: "jb-fld-label", for: "jb-sum-meta" }, ["Meta"]), sumMeta]),
+            h("div", { class: "jb-half" }, [h("label", { class: "jb-fld-label", for: "jb-sum-extra" }, ["Extra"]), sumExtra]),
+        ]),
     ]);
     sumCaption.id = "jb-sum-caption";
     sumMeta.id = "jb-sum-meta";
+    sumExtra.id = "jb-sum-extra";
 
     const addBtn = h("button", { type: "button", class: "jb-add" }, ["Add Item"]);
     const clearBtn = h("button", { type: "button", class: "jb-clear" }, ["Clear All"]);
@@ -152,6 +183,7 @@ onUiLoaded(() => {
 
     tab.textContent = "";
     tab.appendChild(root);
+    addGrowable(sumCaption);
 
     function loadDraft(draft) {
         state.width = draft.width;
@@ -159,6 +191,7 @@ onUiLoaded(() => {
         state.summary.caption = draft.summary.caption;
         state.summary.meta = draft.summary.meta.join(", ");
         state.summary.canvas = draft.summary.canvas;
+        state.summary.extra = "";
         state.items = draft.items.map((item) => ({
             id: ++idCounter,
             label: item.label,
@@ -171,6 +204,8 @@ onUiLoaded(() => {
         heightInput.value = state.height;
         sumCaption.value = state.summary.caption;
         sumMeta.value = state.summary.meta;
+        sumExtra.value = state.summary.extra;
+        autoGrow(sumCaption);
         canvasRadioInputs.forEach((radio) => {
             radio.checked = radio.value === state.summary.canvas;
         });
@@ -374,7 +409,10 @@ onUiLoaded(() => {
             const ref = listRefs.get(item.id);
             if (!ref) return;
             const inp = field === "caption" ? ref.captionInput : ref.textInput;
-            if (inp && document.activeElement !== inp) inp.value = ta.value;
+            if (inp && document.activeElement !== inp) {
+                inp.value = ta.value;
+                autoGrow(inp);
+            }
         });
         return ta;
     }
@@ -468,6 +506,7 @@ onUiLoaded(() => {
             if (ev.button !== 0) return;
             if (ev.target === handle) return;
             if (ev.target.tagName === "TEXTAREA" && !ev.target.readOnly) return;
+            ev.preventDefault();
             startDrag(item, ev);
         });
 
@@ -512,13 +551,15 @@ onUiLoaded(() => {
         top.appendChild(remove);
         row.appendChild(top);
 
-        const caption = h("input", { type: "text", class: "jb-item-caption", placeholder: "caption", value: item.caption });
+        const caption = h("textarea", { class: "jb-item-caption", placeholder: "caption", rows: "1", value: item.caption });
         caption.addEventListener("input", () => {
             item.caption = caption.value;
+            autoGrow(caption);
             const ref = canvasRefs.get(item.id);
             if (ref && document.activeElement !== ref.caption) ref.caption.value = caption.value;
         });
         row.appendChild(caption);
+        addGrowable(caption);
 
         let textInput = null;
         if (item.label === "text") {
@@ -554,6 +595,7 @@ onUiLoaded(() => {
     function renderList() {
         listEl.textContent = "";
         listRefs.clear();
+        pruneGrowables();
         for (const item of state.items) listEl.appendChild(createRow(item));
     }
 
@@ -629,9 +671,13 @@ onUiLoaded(() => {
 
     sumCaption.addEventListener("input", () => {
         state.summary.caption = sumCaption.value;
+        autoGrow(sumCaption);
     });
     sumMeta.addEventListener("input", () => {
         state.summary.meta = sumMeta.value;
+    });
+    sumExtra.addEventListener("input", () => {
+        state.summary.extra = sumExtra.value;
     });
 
     addBtn.addEventListener("click", addItem);
@@ -701,11 +747,15 @@ onUiLoaded(() => {
             return;
         }
 
+        if (state.summary.extra.trim() !== "") {
+            prompt += "\n" + state.summary.extra;
+        }
+
         const promptEl = which === "t2i" ? t2i_prompt : i2i_prompt;
         const widthEl = which === "t2i" ? t2i_width : i2i_width;
         const heightEl = which === "t2i" ? t2i_height : i2i_height;
 
-        promptEl.value = prompt;
+        promptEl.value = prompt.replaceAll("\n", " ");
         widthEl.value = state.width;
         heightEl.value = state.height;
         updateInput(promptEl);

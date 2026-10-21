@@ -85,7 +85,9 @@
     line-height: 1.5;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
     background: var(--color-accent);
     color: var(--button-primary-text-color);
 }
@@ -107,8 +109,6 @@
     font-family: inherit;
     font-size: calc(16px * var(--jb-text-scale)) !important;
     line-height: 1.5 !important;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     overflow: hidden;
 }
 
@@ -221,6 +221,14 @@
     flex-wrap: wrap;
 }
 
+.jb-half {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 .jb-row label,
 .jb-fld-label {
     font-size: var(--block-info-text-size);
@@ -253,7 +261,9 @@
 
 .jb-root input[type="text"],
 .jb-root input[type="number"],
-.jb-root select {
+.jb-root select,
+.jb-root textarea.jb-sum-caption,
+.jb-root textarea.jb-item-caption {
     min-width: 0;
     box-sizing: border-box;
     padding: 6px 9px;
@@ -270,20 +280,36 @@
 
 .jb-root input[type="text"]:hover,
 .jb-root input[type="number"]:hover,
-.jb-root select:hover {
+.jb-root select:hover,
+.jb-root textarea.jb-sum-caption:hover,
+.jb-root textarea.jb-item-caption:hover {
     border-color: var(--input-border-color-hover);
 }
 
 .jb-root input[type="text"]:focus,
 .jb-root input[type="number"]:focus,
-.jb-root select:focus {
+.jb-root select:focus,
+.jb-root textarea.jb-sum-caption:focus,
+.jb-root textarea.jb-item-caption:focus {
     outline: none;
     border-color: var(--input-border-color-focus);
     box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 
-.jb-root input::placeholder {
+.jb-root input::placeholder,
+.jb-root textarea.jb-sum-caption::placeholder,
+.jb-root textarea.jb-item-caption::placeholder {
     color: var(--input-placeholder-color);
+}
+
+.jb-sum-caption,
+.jb-item-caption {
+    display: block;
+    width: 100%;
+    resize: none;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
 }
 
 .jb-width,
