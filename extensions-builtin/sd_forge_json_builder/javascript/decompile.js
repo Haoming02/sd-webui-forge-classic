@@ -69,7 +69,12 @@ function decompilePrompt(input, width, height) {
         };
     }
 
-    const draft = typeof input === "string" ? JSON.parse(input) : input;
+    // escaped parenthesis is not valid JSON
+    function restoreJsonParens(prompt) {
+        return prompt.replace(/(?<!\\)((?:\\\\)*)\\([()])/g, (match, runs, paren) => runs + "\\\\" + paren);
+    }
+
+    const draft = typeof input === "string" ? JSON.parse(restoreJsonParens(input)) : input;
 
     require(draft !== null && typeof draft === "object" && !Array.isArray(draft), "Prompt must be a JSON object");
 

@@ -30,6 +30,11 @@ function compilePrompt(input) {
         });
     }
 
+    // escaped parenthesis for emphasis
+    function escapeParens(prompt) {
+        return prompt.replace(/\\*\(/g, "\\(").replace(/\\*\)/g, "\\)");
+    }
+
     function centeredBox(box, width, height, location) {
         require(Array.isArray(box) && box.length === 4, `${location} must be [x1,y1,x2,y2]`);
 
@@ -176,7 +181,7 @@ function compilePrompt(input) {
     if (Object.prototype.hasOwnProperty.call(draft, "caption")) {
         fields(draft, new Set(["caption"]), new Set(["caption"]), "Caption draft");
         text(draft.caption, "caption");
-        return draft.caption;
+        return escapeParens(draft.caption);
     }
 
     const rootFields = new Set(["width", "height", "bbox_coord_space", "bbox_format", "summary", "items"]);
@@ -255,5 +260,5 @@ function compilePrompt(input) {
         bbox_format: "yxyx",
     };
 
-    return JSON.stringify(result);
+    return escapeParens(JSON.stringify(result));
 }
