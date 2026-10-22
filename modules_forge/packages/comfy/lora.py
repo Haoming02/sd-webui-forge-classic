@@ -105,6 +105,11 @@ def load_lora(lora, to_load):
             patch_dict[to_load[x]] = ("set", (set_weight,))
             loaded_keys.add(set_weight_name)
 
+    # MOSS-Image LoRAs may carry both split q/k/v and fused qkv keys (one for each checkpoint layout): on a fused model
+    # the full qkv patch supersedes the q/k/v slice patches from the same file, so the weight is not patched twice
+    for key in [k for k in patch_dict if isinstance(k, tuple) and k[0] in patch_dict and k[0].endswith(".proj.qkv.weight")]:
+        del patch_dict[key]
+
     remaining_dict = {x: y for x, y in lora.items() if x not in loaded_keys}
     return patch_dict, remaining_dict
 
@@ -241,6 +246,22 @@ def model_lora_keys_unet(model, key_map={}):
                     # Support transformer prefix format
                     key_map["transformer.{}".format(key_lora)] = to
                     key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = to  # SimpleTuner lycoris format
+
+    if "moss" in _model_name:
+        for k in sdk:
+            if not (k.startswith("diffusion_model.") and k.endswith(".weight")):
+                continue
+            key_lora = k[len("diffusion_model.") : -len(".weight")]
+            targets = [(key_lora, k)]
+            if key_lora.endswith(".proj.qkv"):  # single-file checkpoints fuse q/k/v; LoRAs on the split layout address thirds
+                dim = sd[k].shape[0] // 3
+                targets += [("{}.{}".format(key_lora[: -len(".qkv")], name), (k, (0, i * dim, dim))) for i, name in enumerate("qkv")]
+            for key_lora, to in targets:
+                key_map["lora_unet_{}".format(key_lora.replace(".", "_"))] = to  # sd-scripts
+                key_map["lycoris_{}".format(key_lora.replace(".", "_"))] = to  # SimpleTuner lycoris
+                key_map["diffusion_model.{}".format(key_lora)] = to
+                key_map["transformer.{}".format(key_lora)] = to  # diffusers / PEFT
+                key_map[key_lora] = to
 
     if "lumina" in _model_name or "z-image" in _model_name:
         diffusers_keys = z_image_to_diffusers(model.diffusion_model.config, output_prefix="diffusion_model.")
