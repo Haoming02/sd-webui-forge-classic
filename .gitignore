@@ -9,6 +9,8 @@ __pycache__
 *.sft
 .DS_Store
 .vscode
+/.idea
+/*.iml
 /cache
 /config.json
 /config_states/
