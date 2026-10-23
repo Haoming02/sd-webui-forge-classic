@@ -19,6 +19,7 @@ from PIL import Image, ImageOps
 from skimage.exposure import match_histograms
 
 import modules.face_restoration
+import modules.idle_release as idle_release
 import modules.paths as paths
 import modules.sd_models as sd_models
 import modules.sd_vae as sd_vae
@@ -801,6 +802,9 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 
     stored_opts = {k: opts.data[k] if k in opts.data else opts.get_default(k) for k in p.override_settings.keys() if k in opts.data}
 
+    # a task is entering processing: cancel any pending idle release before models get touched
+    idle_release.begin_task_tracking()
+
     try:
         # if no checkpoint override or the override checkpoint can't be found, remove override entry and load opts checkpoint
         # and if after running refiner, the refiner model is not unloaded - webui swaps back to main model here, if model over is present it will be reloaded afterwards
@@ -835,6 +839,8 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
             res = process_images_inner(p)
 
     finally:
+        idle_release.end_task_tracking()
+
         # restore original options
         if p.override_settings_restore_afterwards:
             set_config(stored_opts, save_config=False)
