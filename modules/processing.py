@@ -254,6 +254,8 @@ class StableDiffusionProcessing:
 
         self.extra_generation_params = self.extra_generation_params or {}
         self.override_settings = self.override_settings or {}
+        # 任務期模型載入參數快照:純記憶體、生命週期綁定本任務,供強制點主張優先權,永不寫入 shared.opts
+        self.forge_task_loading_params = {}
         self.script_args = self.script_args or {}
 
         self.refiner_checkpoint_info = None
@@ -782,6 +784,9 @@ need_global_unload = False
 def manage_model_and_prompt_cache(p: StableDiffusionProcessing):
     global need_global_unload
 
+    # 強制點:set_config 與載入之間存在被 UI 切換插入的競態窗口,讀取槽位前先回正任務值
+    main_entry.enforce_task_loading_parameters(getattr(p, "forge_task_loading_params", {}))
+
     p.sd_model, just_reloaded = forge_model_reload()
 
     if need_global_unload and not just_reloaded:
@@ -811,6 +816,9 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 
         # apply any options overrides
         set_config(p.override_settings, is_api=True, run_callbacks=False, save_config=False)
+
+        # 套用 override 後立即快照:此後 shared.opts 可能被 UI 切換或還原改寫,任務值一律以快照為準
+        p.forge_task_loading_params = main_entry.snapshot_task_loading_parameters(p.override_settings)
 
         # load/reload model and manage prompt cache as needed
         if getattr(p, "txt2img_upscale", False):
@@ -936,6 +944,8 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
 
             if not getattr(p, "txt2img_upscale", False) or p.hr_checkpoint_name is None:
                 # hiresfix quickbutton may not need reload of firstpass model
+                # 強制點:每輪讀取槽位前回正任務值,使生成期間的 UI 切換不會於下一輪載入生效
+                main_entry.enforce_task_loading_parameters(getattr(p, "forge_task_loading_params", {}))
                 sd_models.forge_model_reload()  # model can be changed for example by refiner, hiresfix
 
             p.sd_model.forge_objects = p.sd_model.forge_objects_original.shallow_copy()
@@ -1392,8 +1402,10 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             else:
                 decoded_samples = None
 
-        fp_checkpoint = getattr(shared.opts, "sd_model_checkpoint")
-        fp_additional_modules = getattr(shared.opts, "forge_additional_modules")
+        # 第一輪模型(fp)以任務快照優先:UI 中途切換 shared.opts 會污染取自 opts 的還原值
+        task_params = getattr(self, "forge_task_loading_params", {})
+        fp_checkpoint = task_params["sd_model_checkpoint"] if "sd_model_checkpoint" in task_params else getattr(shared.opts, "sd_model_checkpoint")
+        fp_additional_modules = task_params["forge_additional_modules"] if "forge_additional_modules" in task_params else getattr(shared.opts, "forge_additional_modules")
 
         reload = False
         if "Use same choices" not in (getattr(self, "hr_additional_modules", []) or []):

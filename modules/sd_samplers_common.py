@@ -345,7 +345,12 @@ def apply_refiner(cfg_denoiser: "CFGDenoiser", x: torch.Tensor, sigma: torch.Ten
 
     sampling_cleanup(shared.sd_model.forge_objects.unet)
 
-    original_checkpoint = getattr(shared.opts, "sd_model_checkpoint")
+    # original_checkpoint 以任務快照優先:UI 中途切換 shared.opts 會污染取自 opts 的還原值
+    task_params = getattr(getattr(cfg_denoiser, "p", None), "forge_task_loading_params", {})
+    if "sd_model_checkpoint" in task_params:
+        original_checkpoint = task_params["sd_model_checkpoint"]
+    else:
+        original_checkpoint = getattr(shared.opts, "sd_model_checkpoint")
     checkpoint_changed = main_entry.checkpoint_change(refiner_checkpoint_info.short_title, preset=None, save=False, refresh=False)
     if not checkpoint_changed:
         return False

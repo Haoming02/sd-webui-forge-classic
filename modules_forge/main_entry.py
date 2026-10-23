@@ -149,6 +149,59 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
     processing.need_global_unload = True
 
 
+def snapshot_task_loading_parameters(override_settings: dict) -> dict:
+    """擷取 override 套用後的模型載入參數作為任務期事實來源;僅收錄 override 實際提供的鍵,且永不寫回 shared.opts。"""
+    params = {}
+
+    # 值取自 shared.opts 是因為已被 checkpoint_change / modules_change 正規化;
+    # 以 override_settings 是否含鍵為收錄條件,可涵蓋「值未變、set_config 跳過套用」但任務仍須受保護的情況
+    if "sd_model_checkpoint" in override_settings:
+        params["sd_model_checkpoint"] = shared.opts.sd_model_checkpoint
+
+    if "forge_additional_modules" in override_settings:
+        params["forge_additional_modules"] = list(shared.opts.forge_additional_modules or [])
+
+    if "forge_unet_storage_dtype" in override_settings:
+        params["forge_unet_storage_dtype"] = shared.opts.forge_unet_storage_dtype
+
+    return params
+
+
+def enforce_task_loading_parameters(task_params: dict) -> bool:
+    """在 forge_model_reload 讀取槽位前,將 forge_loading_parameters 強制回任務值;逐鍵、僅在不符時改寫。"""
+    if not task_params:
+        return False
+
+    current = sd_models.model_data.forge_loading_parameters
+    updated = dict(current)
+    changed = False
+
+    # 比對一律先解析再比(filename / 內容 / dtype),避免別名與 CheckpointInfo 實例重建造成假性不符而多做一次 reload
+    if "sd_model_checkpoint" in task_params:
+        task_checkpoint_info = sd_models.get_closet_checkpoint_match(task_params["sd_model_checkpoint"])
+        current_checkpoint_info = current.get("checkpoint_info")
+        if task_checkpoint_info is not None and getattr(current_checkpoint_info, "filename", None) != task_checkpoint_info.filename:
+            updated["checkpoint_info"] = task_checkpoint_info
+            changed = True
+
+    if "forge_additional_modules" in task_params and current.get("additional_modules") != task_params["forge_additional_modules"]:
+        updated["additional_modules"] = list(task_params["forge_additional_modules"])
+        changed = True
+
+    if "forge_unet_storage_dtype" in task_params:
+        unet_storage_dtype, _ = forge_unet_storage_dtype_options.get(task_params["forge_unet_storage_dtype"], (None, False))
+        if current.get("unet_storage_dtype") != unet_storage_dtype:
+            updated["unet_storage_dtype"] = unet_storage_dtype
+            changed = True
+
+    # 只改寫槽位,不觸碰 need_global_unload:強制是「恢復被覆蓋前的狀態」,不構成新的記憶體意圖
+    if changed:
+        sd_models.model_data.forge_loading_parameters = updated
+        logger.info(f"Task-scoped model loading parameters enforced: {task_params}")
+
+    return changed
+
+
 def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> bool:
     """`ckpt_name` accepts valid aliases; returns `True` if checkpoint changed"""
     new_ckpt_info = sd_models.get_closet_checkpoint_match(ckpt_name)
