@@ -326,7 +326,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 },
             )
 
-            load_state_dict(model, state_dict, log_name=cls_name, ignore_start=["mtp", "visual", "model.lm_head"])
+            load_state_dict(model, state_dict, log_name=cls_name, ignore_start=["mtp", "model.lm_head"])
             return model
         if cls_name in ["T5EncoderModel", "UMT5EncoderModel"]:
             assert isinstance(state_dict, dict) and len(state_dict) > 16, "You do not have T5 state dict!"

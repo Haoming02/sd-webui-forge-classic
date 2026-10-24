@@ -686,7 +686,9 @@ class Ministral3_3B(BaseLlama, nn.Module):
 from backend.nn.llm.qwen35 import (
     QWEN3VL_VISION,
     QWEN3VL_VISION_COMMON,
+    QWEN35_9B_VISION,
     Qwen3VLVisionModel,
+    Qwen35VisionModel,
 )
 
 
@@ -824,11 +826,7 @@ def torch_chunk_gated_delta_rule(query, key, value, g, beta, chunk_size=64, init
     attn = attn + torch.eye(chunk_size, dtype=attn.dtype, device=attn.device)
     value = attn @ v_beta
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
-    last_recurrent_state = (
-        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value)
-        if initial_state is None
-        else initial_state.to(value)
-    )
+    last_recurrent_state = torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim).to(value) if initial_state is None else initial_state.to(value)
     core_attn_out = torch.zeros_like(value)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
 
@@ -839,10 +837,7 @@ def torch_chunk_gated_delta_rule(query, key, value, g, beta, chunk_size=64, init
         v_new = v_i - v_prime
         attn_inter = (q_i * g[:, :, i, :, None].exp()) @ last_recurrent_state
         core_attn_out[:, :, i] = attn_inter + attn @ v_new
-        last_recurrent_state = (
-            last_recurrent_state * g[:, :, i, -1, None, None].exp()
-            + (k_i * (g[:, :, i, -1, None] - g[:, :, i]).exp()[..., None]).transpose(-1, -2) @ v_new
-        )
+        last_recurrent_state = last_recurrent_state * g[:, :, i, -1, None, None].exp() + (k_i * (g[:, :, i, -1, None] - g[:, :, i]).exp()[..., None]).transpose(-1, -2) @ v_new
 
     if not output_final_state:
         last_recurrent_state = None
@@ -951,7 +946,7 @@ class GatedAttention(nn.Module):
 
         qg = self.q_proj(x)
         qg = qg.view(batch_size, seq_length, self.num_heads, self.head_dim * 2)
-        xq, gate = qg[..., :self.head_dim], qg[..., self.head_dim:]
+        xq, gate = qg[..., : self.head_dim], qg[..., self.head_dim :]
         gate = gate.reshape(batch_size, seq_length, -1)
 
         xk = self.k_proj(x)
@@ -1084,3 +1079,17 @@ class Qwen35_9B(BaseLlama, nn.Module):
 
         self.num_layers = config.num_hidden_layers
         self.model = Qwen35Transformer(config)
+        vision_config = {**QWEN35_9B_VISION, "out_hidden_size": config.hidden_size}
+        self.visual = Qwen35VisionModel(vision_config)
+
+    def preprocess_embed(self, embed, device):
+        if embed["type"] == "image":
+            image, grid = qwen_vl.process_qwen2vl_images(embed["data"], patch_size=16, image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            return self.visual(image.to(device, dtype=torch.float32), grid), grid
+        return None, None
+
+    def forward(self, input_ids, attention_mask=None, embeds=None, num_tokens=None, intermediate_output=None, final_layer_norm_intermediate=True, dtype=None, embeds_info=[], **kwargs):
+        position_ids = kwargs.pop("position_ids", None)
+        if position_ids is None and embeds is not None:
+            position_ids = qwen_vl.qwen2vl_mrope_position_ids(embeds_info, embeds.shape[1], embeds.device)
+        return self.model(input_ids, attention_mask=attention_mask, embeds=embeds, num_tokens=num_tokens, intermediate_output=intermediate_output, final_layer_norm_intermediate=final_layer_norm_intermediate, dtype=dtype, position_ids=position_ids, embeds_info=embeds_info, **kwargs)

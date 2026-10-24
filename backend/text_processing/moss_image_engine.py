@@ -5,7 +5,7 @@ import torch
 from backend.args import dynamic_args
 from backend.text_processing import emphasis
 
-from ._comfy import EMBEDDINGS, INF, SDClipModel, SDTokenizer
+from ._comfy import EMBEDDINGS, INF, TOKEN_WEIGHTS, SDClipModel, SDTokenizer
 
 
 class Qwen359BEngine:
@@ -14,6 +14,8 @@ class Qwen359BEngine:
         self.tokenizer = SDTokenizer(tokenizer, pad_with_end=False, has_start_token=False, has_end_token=False, pad_to_max_length=False, max_length=INF, min_length=1, pad_token=248044)
 
         self.llama_template = "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n"
+
+        self.vision_block = "<|vision_start|><|image_pad|><|vision_end|>"
 
     @property
     def emphasis(self) -> "emphasis.Emphasis":
@@ -25,7 +27,7 @@ class Qwen359BEngine:
         else:
             return [self.tokenizer.tokenizer(self.llama_template.format(t))["input_ids"] for t in texts]
 
-    def __call__(self, texts: list[str]) -> list[torch.Tensor]:
+    def __call__(self, texts: list[str], images: list[torch.Tensor] = []) -> list[torch.Tensor]:
         if any(emphasis.uses_emphasis(text) for text in texts):
             dynamic_args.last_extra_generation_params["Emphasis"] = "None"
 
@@ -34,16 +36,34 @@ class Qwen359BEngine:
 
         for line in texts:
             line = line.strip() or " "
-            if not line.startswith("<|im_start|>"):
-                line = self.llama_template.format(line)
 
             if line in cache:
                 cond = cache[line]
             else:
-                chunk = self.tokenizer.tokenize_with_weights(line, disable_weights=True)
+                chunk = self._tokenize_with_weights(line, images)
                 cond = self.text_encoder.encode_token_weights(chunk)[0]
                 cache[line] = cond
 
             zs.extend(cond)
 
         return zs
+
+    def _tokenize_with_weights(self, text: str, images: list[torch.Tensor]) -> TOKEN_WEIGHTS:
+        if len(images) > 0:
+            refs = "".join(f"Picture {i + 1}: {self.vision_block}" for i in range(len(images)))
+            llama_text = self.llama_template.format(refs + text)
+        else:
+            llama_text = self.llama_template.format(text)
+
+        tokens = self.tokenizer.tokenize_with_weights(llama_text, disable_weights=True)
+
+        embed_count = 0
+
+        for r in tokens:
+            for i in range(len(r)):
+                if isinstance(r[i][0], (int, float)) and r[i][0] == 248056:
+                    if len(images) > embed_count:
+                        r[i] = ({"type": "image", "data": images[embed_count], "original_type": "image"},) + r[i][1:]
+                        embed_count += 1
+
+        return tokens

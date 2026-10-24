@@ -264,6 +264,7 @@ options_templates.update(
             "qwen21_do_reference": OptionInfo(True, "[Qwen 2.1] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often"),
             "anima_do_reference": OptionInfo(False, "[Anima] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often").info("requires specfic Edit LoRA"),
             "krea2_do_reference": OptionInfo(False, "[Krea2] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often").info("requires specfic Edit LoRA"),
+            "moss_do_reference": OptionInfo("Disable", "[Moss-Image] Reference Method", gr.Dropdown, {"choices": ("Disable", "ai-toolkit", "Moss-Image-Edit")}).info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often").info("requires specfic Edit LoRA"),
             "reference_explanation": OptionHTML("<b>Note:</b> Remember to change the setting before txt2img to clear the references"),
         },
     )
