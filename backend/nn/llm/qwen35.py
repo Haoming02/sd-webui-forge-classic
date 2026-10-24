@@ -15,6 +15,8 @@ QWEN3VL_VISION = {
     "qwen3vl_8b": dict(hidden_size=1152, intermediate_size=4304, depth=27, deepstack_visual_indexes=[8, 16, 24]),
 }
 
+QWEN35_9B_VISION = dict(hidden_size=1152, num_heads=16, intermediate_size=4304, depth=27, patch_size=16, temporal_patch_size=2, in_channels=3, spatial_merge_size=2, num_position_embeddings=2304)
+
 
 class Qwen35VisionPatchEmbed(nn.Module):
     def __init__(self, config: dict):

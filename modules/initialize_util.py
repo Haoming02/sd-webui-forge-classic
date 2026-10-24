@@ -190,6 +190,7 @@ def configure_opts_onchange():
     shared.opts.onchange("klein_do_reference", clear_references)
     shared.opts.onchange("anima_do_reference", clear_references)
     shared.opts.onchange("krea2_do_reference", clear_references)
+    shared.opts.onchange("moss_do_reference", clear_references)
     startup_timer.record("opts onchange")
 
 
