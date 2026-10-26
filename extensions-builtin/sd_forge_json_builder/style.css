@@ -159,6 +159,7 @@
     flex: 1 1 0;
     min-width: 300px;
     min-height: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -196,7 +197,7 @@
 
 .jb-list-section {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 240px;
 }
 
 .jb-list {
