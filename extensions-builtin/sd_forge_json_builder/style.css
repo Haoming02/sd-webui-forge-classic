@@ -578,3 +578,70 @@ button.jb-remove:hover {
     flex: 0 0 auto;
     width: 100%;
 }
+
+/* ----- LoRA picker ----- */
+
+.jb-extra-row {
+    align-items: flex-start;
+}
+
+.jb-root textarea.jb-sum-extra {
+    flex: 1 1 auto;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 6px 9px;
+    resize: none;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    background: var(--input-background-fill);
+    color: var(--body-text-color);
+    border: 1px solid var(--input-border-color);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: var(--input-text-size);
+}
+
+.jb-root textarea.jb-sum-extra:focus {
+    outline: none;
+    border-color: var(--input-border-color-focus);
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+.jb-root textarea.jb-sum-extra::placeholder {
+    color: var(--input-placeholder-color);
+}
+
+.jb-dialog.jb-lora-dialog {
+    width: min(1200px, 100%);
+    height: min(90%, 900px);
+}
+
+.jb-lora-controls {
+    padding-right: 40px;
+}
+
+.jb-lora-controls .jb-lora-search {
+    flex: 1 1 auto;
+}
+
+.jb-lora-pane.extra-network-pane {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    resize: none;
+}
+
+.jb-lora-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 8px;
+}
+
+.jb-lora-empty {
+    color: var(--body-text-color-subdued);
+}
