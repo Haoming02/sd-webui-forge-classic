@@ -398,7 +398,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Tip]
 > - For **AMD**, refer to <a href="https://github.com/CS1o/Stable-Diffusion-Info/wiki/Webui-Installation-Guides#amd-forge-neo-with-rocm"><ins>CS1o</ins> 's Guide</a>
 > - For **Linux** and **macOS**, refer to [Wiki](https://github.com/Haoming02/sd-webui-forge-classic/wiki/Unix)
-> - For **Docker** (`Nvidia`), refer to [Docker](docker/)
+> - For **Docker** (`Nvidia` / `AMD`), refer to [Docker](docker/)
 
 <br>
 

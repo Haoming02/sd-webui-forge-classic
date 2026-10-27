@@ -1,8 +1,8 @@
 <h2 align="center">Stable Diffusion WebUI Forge - Neo (Docker)</h2>
 
 > [!Warning]
-> Requires an **NVIDIA** GPU<br>
-> Ensure driver is up to date (`560+` required)
+> Requires an **NVIDIA** GPU, or an **AMD** GPU via `Dockerfile.rocm`<br>
+> Ensure NVIDIA driver is up to date (`560+` required)
 
 <hr>
 
@@ -51,14 +51,17 @@ cd sd-webui-forge-neo/docker
 docker build -t forge-neo-local .
 ```
 
+- For **AMD**, add `-f Dockerfile.rocm`
+
 <hr>
 
 ## Pre-Built Image
 
-> a non-official pre-built image is maintained on Docker Hub by [@oromis995](https://github.com/oromis995):
+> non-official pre-built images are maintained on Docker Hub by [@oromis995](https://github.com/oromis995):
 
 ```bash
-docker pull oromis995/sd-forge-neo:latest
+docker pull oromis995/sd-forge-neo-nvidia:latest
+docker pull oromis995/sd-forge-neo-amd:latest
 ```
 
 <hr>
