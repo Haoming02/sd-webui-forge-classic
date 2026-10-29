@@ -356,6 +356,7 @@ def apply_refiner(cfg_denoiser: "CFGDenoiser", x: torch.Tensor, sigma: torch.Ten
         dynamic_args.loading_refiner = True
         main_entry.refresh_model_loading_parameters()
         sd_models.forge_model_reload()
+        sd_models.reconcile_fp16_switch()
     finally:
         main_entry.checkpoint_change(original_checkpoint, preset=None, save=False, refresh=True)
         dynamic_args.loading_refiner = False

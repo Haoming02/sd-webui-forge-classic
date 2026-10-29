@@ -3,6 +3,7 @@ import math
 import torch
 
 from backend import args, attention, memory_management
+from backend.fp16_switch import cast_floating, sage_fp16_cast_active
 from backend.modules.k_prediction import k_prediction_from_diffusers_scheduler
 
 
@@ -54,7 +55,15 @@ class KModel(torch.nn.Module):
                     extra = extra.to(dtype)
             extra_conds[o] = extra
 
-        model_output = self.diffusion_model(xc, t, context=context, control=control, transformer_options=transformer_options, **extra_conds).float()
+        if control is not None and dtype == torch.float16:
+            control = cast_floating(control, dtype)
+
+        token = sage_fp16_cast_active.set(True) if getattr(self, "sage_fp16_cast", False) else None
+        try:
+            model_output = self.diffusion_model(xc, t, context=context, control=control, transformer_options=transformer_options, **extra_conds).float()
+        finally:
+            if token is not None:
+                sage_fp16_cast_active.reset(token)
         return self.predictor.calculate_denoised(sigma, model_output, x)
 
     def memory_required(self, input_shape: list[int]) -> float:

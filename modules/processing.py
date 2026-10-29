@@ -783,6 +783,7 @@ def manage_model_and_prompt_cache(p: StableDiffusionProcessing):
     global need_global_unload
 
     p.sd_model, just_reloaded = forge_model_reload()
+    sd_models.reconcile_fp16_switch()
 
     if need_global_unload and not just_reloaded:
         memory_management.unload_all_models()
@@ -937,6 +938,7 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
             if not getattr(p, "txt2img_upscale", False) or p.hr_checkpoint_name is None:
                 # hiresfix quickbutton may not need reload of firstpass model
                 sd_models.forge_model_reload()  # model can be changed for example by refiner, hiresfix
+                sd_models.reconcile_fp16_switch()
 
             p.sd_model.forge_objects = p.sd_model.forge_objects_original.shallow_copy()
             p.prompts = p.all_prompts[n * p.batch_size : (n + 1) * p.batch_size]
@@ -1410,6 +1412,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             try:
                 main_entry.refresh_model_loading_parameters()
                 sd_models.forge_model_reload()
+                sd_models.reconcile_fp16_switch()
             finally:
                 main_entry.modules_change(fp_additional_modules, preset=None, save=False, refresh=False)
                 main_entry.checkpoint_change(fp_checkpoint, preset=None, save=False, refresh=False)

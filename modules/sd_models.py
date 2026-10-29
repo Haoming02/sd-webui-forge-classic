@@ -8,6 +8,7 @@ import torch
 
 from backend import memory_management
 from backend.args import dynamic_args
+from backend.fp16_switch import apply_fp16_switch
 from backend.loader import forge_loader
 from modules import cache, errors, extra_networks, hashes, modelloader, paths, processing, script_callbacks, sd_unet, sd_vae, shared  # noqa
 from modules.prompt_parser import DictWithShape, SdConditioning  # noqa
@@ -390,3 +391,42 @@ def forge_model_reload():
     model_data.forge_hash = current_hash
 
     return sd_model, True
+
+
+def _fp16_switch_desired() -> tuple[bool, bool]:
+    return bool(opts.forge_compute_fp16), bool(opts.forge_sage_fp16_cast)
+
+
+def reconcile_fp16_switch():
+    """Match the loaded UNet to the fp16 switches.
+
+    Turning a switch on patches the current model once. Turning it off does not
+    undo that patch here; a later generation whose options are off reloads.
+    override_settings_restore_afterwards must not call this.
+    """
+    sd_model = model_data.sd_model
+    if sd_model is None or not getattr(sd_model, "forge_objects", None):
+        return
+
+    desired = _fp16_switch_desired()
+    applied = getattr(sd_model, "forge_fp16_switch", (False, False))
+    if desired == applied:
+        return
+
+    turning_off = (applied[0] and not desired[0]) or (applied[1] and not desired[1])
+    if turning_off and getattr(sd_model, "forge_fp16_switch_dirty", False):
+        memory_management.logger.info("FP16 switch is off; reloading the diffusion model")
+        model_data.forge_hash = ""
+        sd_model, _ = forge_model_reload()
+        if desired == (False, False):
+            return
+        sd_model.forge_fp16_switch_dirty = apply_fp16_switch(sd_model, desired) or getattr(sd_model, "forge_fp16_switch_dirty", False)
+        sd_model.forge_fp16_switch = desired
+        return
+
+    if turning_off:
+        sd_model.forge_fp16_switch = desired
+        return
+
+    sd_model.forge_fp16_switch_dirty = apply_fp16_switch(sd_model, desired, already=applied) or getattr(sd_model, "forge_fp16_switch_dirty", False)
+    sd_model.forge_fp16_switch = desired

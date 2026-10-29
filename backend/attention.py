@@ -10,6 +10,7 @@ from torch import einsum
 
 from backend import memory_management, operations
 from backend.args import args
+from backend.fp16_switch import sage_fp16_cast_active
 from backend.logging import setup_logger
 
 logger = logging.getLogger("attention")
@@ -311,7 +312,8 @@ def attention_pytorch(q, k, v, heads, mask=None, attn_precision=None, skip_resha
 @torch.compiler.disable
 def attention_sage(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
     in_dtype = v.dtype
-    if torch.float32 in (q.dtype, k.dtype, v.dtype):
+    cast_fp16 = sage_fp16_cast_active.get() and in_dtype != torch.float16
+    if cast_fp16 or torch.float32 in (q.dtype, k.dtype, v.dtype):
         q, k, v = q.to(torch.float16), k.to(torch.float16), v.to(torch.float16)
 
     if skip_reshape:
@@ -347,7 +349,10 @@ def attention_sage(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=
                 lambda t: t.transpose(1, 2),
                 (q, k, v),
             )
-        return attention_pytorch(q, k, v, heads, mask=mask, skip_reshape=True, skip_output_reshape=skip_output_reshape, **kwargs)
+        out = attention_pytorch(q, k, v, heads, mask=mask, skip_reshape=True, skip_output_reshape=skip_output_reshape, **kwargs)
+        if cast_fp16 and out.dtype != in_dtype:
+            out = out.to(in_dtype)
+        return out
 
     if tensor_layout == "HND":
         if not skip_output_reshape:
