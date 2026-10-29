@@ -221,15 +221,56 @@ else:
 
 XFORMERS_ENABLED_VAE = XFORMERS_IS_AVAILABLE or args.force_xformers_vae
 
+def _load_sageattn() -> bool:
+    """Import SageAttention.
+
+    The Turing wheel is SageAttention 2.2.0 post3. Its CUDA extension is built for PyTorch 2.9
+    and does not load on the newer torch used here. sm75 only runs the fp16 Triton kernels, which
+    do not use that extension.
+    """
+    try:
+        from sageattention import sageattn  # noqa: F401
+        return True
+    except Exception:
+        if not torch.cuda.is_available() or torch.cuda.get_device_capability(0) != (7, 5):
+            return False
+
+    import importlib.abc
+    import importlib.machinery
+    import types
+
+    class _EmptyLoader(importlib.abc.Loader):
+        def create_module(self, spec):
+            return types.ModuleType(spec.name)
+
+        def exec_module(self, module):
+            return None
+
+    class _FusedStub(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path, target=None):
+            if fullname != "sageattention._fused":
+                return None
+            return importlib.machinery.ModuleSpec(fullname, _EmptyLoader())
+
+    sys.meta_path.insert(0, _FusedStub())
+    for name in list(sys.modules):
+        if name == "sageattention" or name.startswith("sageattention."):
+            del sys.modules[name]
+
+    try:
+        from sageattention import sageattn  # noqa: F401
+    except Exception as error:
+        logger.error(f"SageAttention import failed: {error}")
+        return False
+
+    logger.info("SageAttention CUDA extension unavailable; using Triton kernels")
+    return True
+
+
 if args.disable_sage:
     SAGE_IS_AVAILABLE = False
 else:
-    try:
-        from sageattention import sageattn  # noqa: F401
-    except Exception:
-        SAGE_IS_AVAILABLE = False
-    else:
-        SAGE_IS_AVAILABLE = True
+    SAGE_IS_AVAILABLE = _load_sageattn()
 
 if args.disable_flash:
     FLASH_IS_AVAILABLE = False

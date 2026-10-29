@@ -103,6 +103,46 @@ def _torch_version() -> tuple[str, str]:
     return m.group(1), m.group(2)
 
 
+def _cuda_capability() -> tuple[int, int] | None:
+    """Return compute capability of CUDA device 0, or None when it cannot be read."""
+    probe = (
+        "import torch\n"
+        "cuda = hasattr(torch, 'cuda') and torch.cuda.is_available()\n"
+        "assert cuda\n"
+        "major, minor = torch.cuda.get_device_capability(0)\n"
+        "print(f'CAPABILITY {major}.{minor}')\n"
+    )
+    result = subprocess.run([python, "-c", probe], capture_output=True, text=True, encoding="utf-8", errors="replace", shell=False)
+    if result.returncode != 0:
+        return None
+
+    match = re.search(r"CAPABILITY (\d+)\.(\d+)", result.stdout or "")
+    if match is None:
+        return None
+
+    return int(match.group(1)), int(match.group(2))
+
+
+def _dist_version(*names: str) -> str | None:
+    for name in names:
+        try:
+            return importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return None
+
+
+# Last SageAttention 2.2 build whose fp16 Triton kernels still run on Turing (sm75).
+# post4+ needs Triton >= 3.3, which dropped sm75.
+_SAGE_TURING_RELEASE = "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post3/"
+_SAGE_TURING_WHEELS: dict[str, str] = {
+    "cu124": "sageattention-2.2.0+cu124torch2.5.1.post3-cp39-abi3-win_amd64.whl",
+    "cu126": "sageattention-2.2.0+cu126torch2.6.0.post3-cp39-abi3-win_amd64.whl",
+    "cu128": "sageattention-2.2.0+cu128torch2.9.0.post3-cp39-abi3-win_amd64.whl",
+    "cu130": "sageattention-2.2.0+cu130torch2.9.0.post3-cp39-abi3-win_amd64.whl",
+}
+
+
 def is_installed(package):
     try:
         dist = importlib.metadata.distribution(package)
@@ -343,11 +383,19 @@ assert cuda or xpu or mps
     ver_TORCH, ver_CUDA = _torch_version()
     v_TORCH = ver_TORCH.rsplit(".", 1)[0]
     v_CUDA = f"{ver_CUDA[0:-1]}.{ver_CUDA[-1]}"
+    turing = os.name == "nt" and _cuda_capability() == (7, 5)
 
     if os.name == "nt":
-        sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post6/sageattention-{ver_SAGE}+{ver_CUDA}torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl")
+        if turing and "SAGE_PACKAGE" not in os.environ:
+            wheel = _SAGE_TURING_WHEELS.get(ver_CUDA, _SAGE_TURING_WHEELS["cu130"])
+            sage_package = _SAGE_TURING_RELEASE + wheel
+        else:
+            sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post6/sageattention-{ver_SAGE}+{ver_CUDA}torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl")
         flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.10.2/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
-        triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows<{ver_TRITON}")
+        if turing and "TRITION_PACKAGE" not in os.environ:
+            triton_package = "triton-windows<3.3"
+        else:
+            triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows<{ver_TRITON}")
         nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://huggingface.co/tonera/vitoom-nunchaku/resolve/main/nunchaku-{ver_NUNCHAKU}%2B{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
 
     else:
@@ -361,14 +409,31 @@ assert cuda or xpu or mps
         startup_timer.record("install xformers")
 
     if args.sage:
-        if not is_installed("triton"):
+        import packaging.version
+
+        triton_missing = not is_installed("triton")
+        triton_too_new = False
+        if turing and "TRITION_PACKAGE" not in os.environ and not triton_missing:
+            triton_ver = _dist_version("triton-windows", "triton")
+            if triton_ver is not None and packaging.version.parse(triton_ver) >= packaging.version.parse("3.3"):
+                triton_too_new = True
+                print(f"Turing GPU: replacing Triton {triton_ver} with triton-windows<3.3")
+        if triton_missing or triton_too_new:
             try:
                 run_pip(f"install -U -I --no-deps {triton_package}", "triton")
             except RuntimeError:
                 print("Failed to install triton; Please manually install it")
             else:
                 startup_timer.record("install triton")
-        if not is_installed("sageattention"):
+
+        sage_missing = not is_installed("sageattention")
+        sage_wrong = False
+        if turing and "SAGE_PACKAGE" not in os.environ and not sage_missing:
+            sage_ver = _dist_version("sageattention")
+            if sage_ver is None or "post3" not in sage_ver:
+                sage_wrong = True
+                print(f"Turing GPU: replacing SageAttention {sage_ver or 'unknown'} with 2.2.0 post3")
+        if sage_missing or sage_wrong:
             try:
                 run_pip(f"install -U -I --no-deps {sage_package}", "sageattention")
             except RuntimeError:
