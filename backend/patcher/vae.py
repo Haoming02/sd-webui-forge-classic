@@ -136,8 +136,8 @@ class VAE:
             self.latent_channels = 64
             self.output_channels = 4
             self.pad_channel_value = 1.0
-            self.memory_used_encode = lambda shape, dtype: (600 * shape[2] * shape[3]) * memory_management.dtype_size(dtype)
-            self.memory_used_decode = lambda shape, dtype: (900 * shape[2] * shape[3] * (16 * 16)) * memory_management.dtype_size(dtype)
+            self.memory_used_encode = lambda shape, dtype: (350 * shape[2] * shape[3]) * memory_management.dtype_size(dtype)
+            self.memory_used_decode = lambda shape, dtype: (700 * shape[2] * shape[3] * (16 * 16)) * memory_management.dtype_size(dtype)
 
             dtype = dtype or memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
 
@@ -162,8 +162,10 @@ class VAE:
             self.downscale_index_formula = (4, 8, 8)
             self.latent_dim = 3
             self.latent_channels = int(model.config.z_dim)  # 16
-            self.memory_used_encode = lambda shape, dtype: (1500 if shape[2] <= 4 else 6000) * shape[3] * shape[4] * memory_management.dtype_size(dtype)
-            self.memory_used_decode = lambda shape, dtype: (2200 if shape[2] <= 4 else 7000) * shape[3] * shape[4] * (8 * 8) * memory_management.dtype_size(dtype)
+
+            striped = hasattr(model, "conv1") and hasattr(model, "conv2")
+            self.memory_used_encode = lambda shape, dtype: (400 if striped and shape[2] == 1 else 1500 if shape[2] <= 4 else 6000) * shape[3] * shape[4] * memory_management.dtype_size(dtype)
+            self.memory_used_decode = lambda shape, dtype: (600 if striped and shape[2] == 1 else 2200 if shape[2] <= 4 else 7000) * shape[3] * shape[4] * (8 * 8) * memory_management.dtype_size(dtype)
 
             dtype = dtype or memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
 

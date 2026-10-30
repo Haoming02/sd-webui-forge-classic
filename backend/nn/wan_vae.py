@@ -10,48 +10,7 @@ from einops import rearrange
 
 from backend.attention import attention_function_vae
 from backend.nn._vae import ProcessLatent
-from backend.operations import ForgeOperations as ops
-
-CACHE_T = 2
-
-
-def torch_cat_if_needed(xl, dim):
-    xl = [x for x in xl if x is not None and x.shape[dim] > 0]
-    if len(xl) > 1:
-        return torch.cat(xl, dim)
-    elif len(xl) == 1:
-        return xl[0]
-    else:
-        return None
-
-
-class CausalConv3d(ops.Conv3d):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._padding = 2 * self.padding[0]
-        self.padding = (0, self.padding[1], self.padding[2])
-
-    def forward(self, x, cache_x=None, cache_list=None, cache_idx=None):
-        if cache_list is not None:
-            cache_x = cache_list[cache_idx]
-            cache_list[cache_idx] = None
-
-        if cache_x is None and x.shape[2] == 1:
-            return super().forward(x, autopad="causal_zero")
-
-        if self._padding > 0:
-            padding_needed = self._padding
-            if cache_x is not None:
-                cache_x = cache_x.to(x.device)
-                padding_needed = max(0, padding_needed - cache_x.shape[2])
-            padding_shape = list(x.shape)
-            padding_shape[2] = padding_needed
-            padding = torch.zeros(padding_shape, device=x.device, dtype=x.dtype)
-            x = torch_cat_if_needed([padding, cache_x, x], dim=2)
-            del cache_x
-
-        return super().forward(x)
+from backend.nn._wan_cache import CACHE_T, CausalConv3d, cached_chain, strip_apply, strip_down, strip_residual
 
 
 class RMS_norm(nn.Module):
@@ -115,15 +74,19 @@ class Resample(nn.Module):
                     x = torch.stack((x[:, 0, :, :, :, :], x[:, 1, :, :, :, :]), 3)
                     x = x.reshape(b, c, t * 2, h, w)
         t = x.shape[2]
-        x = rearrange(x, "b c t h w -> (b t) c h w")
-        x = self.resample(x)
-        x = rearrange(x, "(b t) c h w -> b c t h w", t=t)
+        if self.mode != "none":
+            x = rearrange(x, "b c t h w -> (b t) c h w")
+            if self.mode in ("upsample2d", "upsample3d"):
+                x = strip_apply(lambda s, lo: self.resample(s), x, scale=2)
+            else:
+                x = strip_down(self.resample, x)
+            x = rearrange(x, "(b t) c h w -> b c t h w", t=t)
 
         if self.mode == "downsample3d":
             if feat_cache is not None:
                 idx = feat_idx[0]
                 if feat_cache[idx] is None:
-                    feat_cache[idx] = x
+                    feat_cache[idx] = x[:, :, -1:, :, :].clone()
                 else:
 
                     cache_x = x[:, :, -1:, :, :]
@@ -154,17 +117,7 @@ class ResidualBlock(nn.Module):
         self.shortcut = CausalConv3d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
     def forward(self, x, feat_cache=None, feat_idx=[0], final=False):
-        old_x = x
-        for layer in self.residual:
-            if isinstance(layer, CausalConv3d) and feat_cache is not None:
-                idx = feat_idx[0]
-                cache_x = x[:, :, -CACHE_T:, :, :]
-                x = layer(x, cache_list=feat_cache, cache_idx=idx)
-                feat_cache[idx] = cache_x
-                feat_idx[0] += 1
-            else:
-                x = layer(x)
-        return x + self.shortcut(old_x)
+        return strip_residual(self, x, feat_cache, feat_idx)
 
 
 class AttentionBlock(nn.Module):
@@ -249,16 +202,7 @@ class Encoder3d(nn.Module):
             else:
                 x = layer(x)
 
-        for layer in self.head:
-            if isinstance(layer, CausalConv3d) and feat_cache is not None:
-                idx = feat_idx[0]
-                cache_x = x[:, :, -CACHE_T:, :, :]
-                x = layer(x, feat_cache[idx])
-                feat_cache[idx] = cache_x
-                feat_idx[0] += 1
-            else:
-                x = layer(x)
-        return x
+        return strip_apply(cached_chain(self.head, x, feat_cache, feat_idx), x)
 
 
 class Decoder3d(nn.Module):
@@ -301,15 +245,7 @@ class Decoder3d(nn.Module):
         x = x_ref[0]
         x_ref[0] = None
         if layer_idx >= len(self.upsamples):
-            for layer in self.head:
-                if isinstance(layer, CausalConv3d) and feat_cache is not None:
-                    cache_x = x[:, :, -CACHE_T:, :, :]
-                    x = layer(x, feat_cache[feat_idx[0]])
-                    feat_cache[feat_idx[0]] = cache_x
-                    feat_idx[0] += 1
-                else:
-                    x = layer(x)
-            out_chunks.append(x)
+            out_chunks.append(strip_apply(cached_chain(self.head, x, feat_cache, feat_idx), x))
             return
 
         layer = self.upsamples[layer_idx]
