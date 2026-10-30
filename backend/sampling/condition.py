@@ -3,16 +3,12 @@ import math
 import torch
 
 
-def repeat_to_batch_size(tensor, batch_size):
+def repeat_to_batch_size(tensor: torch.Tensor, batch_size: int) -> torch.Tensor:
     if tensor.shape[0] > batch_size:
         return tensor[:batch_size]
     elif tensor.shape[0] < batch_size:
         return tensor.repeat([math.ceil(batch_size / tensor.shape[0])] + [1] * (len(tensor.shape) - 1))[:batch_size]
     return tensor
-
-
-def lcm(a, b):
-    return abs(a * b) // math.gcd(a, b)
 
 
 class Condition:
@@ -44,33 +40,7 @@ class ConditionNoiseShape(Condition):
 
 
 class ConditionCrossAttn(Condition):
-    def can_concat(self, other):
-        s1 = self.cond.shape
-        s2 = other.cond.shape
-        if s1 != s2:
-            if s1[0] != s2[0] or s1[2] != s2[2]:
-                return False
-
-            mult_min = lcm(s1[1], s2[1])
-            diff = mult_min // min(s1[1], s2[1])
-            if diff > 4:
-                return False
-        return True
-
-    def concat(self, others):
-        conds = [self.cond]
-        crossattn_max_len = self.cond.shape[1]
-        for x in others:
-            c = x.cond
-            crossattn_max_len = lcm(crossattn_max_len, c.shape[1])
-            conds.append(c)
-
-        out = []
-        for c in conds:
-            if c.shape[1] < crossattn_max_len:
-                c = c.repeat(1, crossattn_max_len // c.shape[1], *([1] * (c.ndim - 2)))
-            out.append(c)
-        return torch.cat(out)
+    pass
 
 
 class ConditionConstant(Condition):
@@ -89,35 +59,63 @@ class ConditionConstant(Condition):
         return self.cond
 
 
+def conditioning_shape(row):
+    return tuple((k, v.shape) for k, v in row.items()) if isinstance(row, dict) else row.shape
+
+
 def compile_conditions(cond):
     if cond is None:
         return None
+    if isinstance(cond, list):
+        from modules.prompt_parser import stack_conditioning
+
+        groups = {}
+        for i, row in enumerate(cond):
+            groups.setdefault(conditioning_shape(row), []).append(i)
+        result = []
+        for indices in groups.values():
+            compiled = compile_conditions(stack_conditioning([cond[i] for i in indices]))[0]
+            compiled["batch_indices"] = indices
+            result.append(compiled)
+        return result
 
     if isinstance(cond, torch.Tensor):
         result = dict(
             cross_attn=cond,
-            model_conds=dict(
-                c_crossattn=ConditionCrossAttn(cond),
-            ),
+            model_conds=dict(c_crossattn=ConditionCrossAttn(cond)),
         )
-        return [
-            result,
-        ]
+        return [result]
 
     cross_attn = cond["crossattn"]
     pooled_output = cond["vector"]
 
-    result = dict(cross_attn=cross_attn, pooled_output=pooled_output, model_conds=dict(c_crossattn=ConditionCrossAttn(cross_attn), y=Condition(pooled_output)))
+    result = dict(
+        cross_attn=cross_attn,
+        pooled_output=pooled_output,
+        model_conds=dict(c_crossattn=ConditionCrossAttn(cross_attn), y=Condition(pooled_output)),
+    )
 
     if "guidance" in cond:
         result["model_conds"]["guidance"] = Condition(cond["guidance"])
 
-    return [
-        result,
-    ]
+    return [result]
 
 
 def compile_weighted_conditions(cond, weights):
+    if isinstance(cond, list):
+        from modules.prompt_parser import stack_conditioning
+
+        groups = {}
+        for image, composition in enumerate(weights):
+            for term, (index, weight) in enumerate(composition):
+                key = (term, conditioning_shape(cond[index]), weight)
+                groups.setdefault(key, []).append((image, index))
+        results = []
+        for (_, _, weight), rows in groups.items():
+            compiled = compile_conditions(stack_conditioning([cond[index] for _, index in rows]))[0]
+            compiled.update(batch_indices=[image for image, _ in rows], strength=weight)
+            results.append(compiled)
+        return results
     transposed = list(map(list, zip(*weights)))
     results = []
 

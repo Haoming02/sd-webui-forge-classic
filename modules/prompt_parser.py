@@ -290,45 +290,33 @@ class DictWithShape(dict):
 
 
 def reconstruct_cond_batch(c: list[list[ScheduledPromptConditioning]], current_step):
-    param = c[0][0].cond
-    is_dict = isinstance(param, dict)
-
-    if is_dict:
-        dict_cond = param
-        res = {k: torch.zeros((len(c),) + param.shape, device=param.device, dtype=param.dtype) for k, param in dict_cond.items()}
-        res = DictWithShape(res)
-    else:
-        res = torch.zeros((len(c),) + param.shape, device=param.device, dtype=param.dtype)
-
-    for i, cond_schedule in enumerate(c):
+    tensors = []
+    for cond_schedule in c:
         target_index = 0
         for current, entry in enumerate(cond_schedule):
             if current_step <= entry.end_at_step:
                 target_index = current
                 break
-
-        if is_dict:
-            for k, param in cond_schedule[target_index].cond.items():
-                res[k][i] = param
-        else:
-            res[i] = cond_schedule[target_index].cond
-
-    return res
+        tensors.append(cond_schedule[target_index].cond)
+    return stack_conditioning(tensors)
 
 
 def stack_conds(tensors: list[torch.Tensor]) -> torch.Tensor:
-    try:
-        return torch.stack(tensors)
-    except RuntimeError:
-        import math
+    if any(x.shape != tensors[0].shape for x in tensors):
+        raise NotImplementedError("Stacking conditioning with varying shapes is not supported...\nPlease use batch count instead of batch size...")
+    return torch.stack(tensors)
 
-        token_count = math.lcm(*(x.shape[0] for x in tensors))
-        return torch.stack([x.repeat(token_count // x.shape[0], *([1] * (x.dim() - 1))) for x in tensors])
+
+def stack_conditioning(tensors):
+    shapes = [tuple((k, v.shape) for k, v in x.items()) if isinstance(x, dict) else x.shape for x in tensors]
+    if any(shape != shapes[0] for shape in shapes):
+        return tensors
+    if isinstance(tensors[0], dict):
+        return DictWithShape({k: stack_conds([x[k] for x in tensors]) for k in tensors[0]})
+    return stack_conds(tensors)
 
 
 def reconstruct_multicond_batch(c: MulticondLearnedConditioning, current_step: int):
-    param = c.batch[0][0].schedules[0].cond
-
     tensors = []
     conds_list = []
 
@@ -347,11 +335,4 @@ def reconstruct_multicond_batch(c: MulticondLearnedConditioning, current_step: i
 
         conds_list.append(conds_for_batch)
 
-    if isinstance(tensors[0], dict):
-        keys = list(tensors[0].keys())
-        stacked = {k: stack_conds([x[k] for x in tensors]) for k in keys}
-        stacked = DictWithShape(stacked)
-    else:
-        stacked = stack_conds(tensors).to(device=param.device, dtype=param.dtype)
-
-    return conds_list, stacked
+    return conds_list, stack_conditioning(tensors)

@@ -1,14 +1,15 @@
-# Started from some codes from early ComfyUI and then 80% rewritten,
-# mainly for supporting different special control methods in Forge
+# Referenced some codes from ComfyUI, with some parts rewritten
+# to support different special control methods in Forge
 # Copyright Forge 2024
 
-
 import collections
+import contextlib
 import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.patcher.unet import UnetPatcher
+    from modules.sd_samplers_cfg_denoiser import CFGDenoiser, CFGDenoiserParams
 
 import torch
 
@@ -18,11 +19,16 @@ from backend.sampling.condition import (
     Condition,
     compile_conditions,
     compile_weighted_conditions,
+    repeat_to_batch_size,
 )
 from modules import shared
 
 
 def get_area_and_mult(conds, x_in, timestep_in):
+    batch_size = x_in.shape[0]
+    batch_indices = conds.get("batch_indices")
+    if batch_indices is not None:
+        x_in = x_in[batch_indices]
     area = (x_in.shape[2], x_in.shape[3], 0, 0)
     strength = 1.0
 
@@ -46,6 +52,8 @@ def get_area_and_mult(conds, x_in, timestep_in):
         if "mask_strength" in conds:
             mask_strength = conds["mask_strength"]
         mask = conds["mask"]
+        if batch_indices is not None and mask.shape[0] == batch_size:
+            mask = mask[batch_indices]
         assert mask.shape[1] == x_in.shape[2]
         assert mask.shape[2] == x_in.shape[3]
         mask = mask[:, area[2] : area[0] + area[2], area[3] : area[1] + area[3]] * mask_strength
@@ -72,13 +80,16 @@ def get_area_and_mult(conds, x_in, timestep_in):
     conditioning = {}
     model_conds = conds["model_conds"]
     for c in model_conds:
-        conditioning[c] = model_conds[c].process_cond(batch_size=x_in.shape[0], device=x_in.device, area=area)
+        value = model_conds[c]
+        if batch_indices is not None and isinstance(value.cond, torch.Tensor) and value.cond.ndim > 0 and value.cond.shape[0] == batch_size:
+            value = value._copy_with(value.cond[batch_indices])
+        conditioning[c] = value.process_cond(batch_size=x_in.shape[0], device=x_in.device, area=area)
 
     control = conds.get("control", None)
 
     patches = None
-    cond_obj = collections.namedtuple("cond_obj", ["input_x", "mult", "conditioning", "area", "control", "patches"])
-    return cond_obj(input_x, mult, conditioning, area, control, patches)
+    cond_obj = collections.namedtuple("cond_obj", ["input_x", "mult", "conditioning", "area", "control", "patches", "batch_indices"])
+    return cond_obj(input_x, mult, conditioning, area, control, patches, batch_indices)
 
 
 def cond_equal_size(c1, c2):
@@ -94,6 +105,10 @@ def cond_equal_size(c1, c2):
 
 def can_concat_cond(c1, c2):
     if not shared.batch_cond_uncond:
+        return False
+    if c1.batch_indices != c2.batch_indices:
+        return False
+    if any(ref.shape[0] > 1 for ref in dynamic_args.ref_latents):
         return False
     if c1.input_x.shape != c2.input_x.shape:
         return False
@@ -236,7 +251,9 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
         batch_chunks = len(cond_or_uncond)
         input_x = torch.cat(input_x)
         c = cond_cat(c)
-        timestep_ = torch.cat([timestep] * batch_chunks)
+        batch_indices = first[0].batch_indices
+        batch_timestep = timestep if batch_indices is None else repeat_to_batch_size(timestep, x_in.shape[0])[batch_indices]
+        timestep_ = torch.cat([batch_timestep] * batch_chunks)
 
         transformer_options = {}
         if "transformer_options" in model_options:
@@ -254,35 +271,38 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
                 transformer_options["patches"] = patches
 
         transformer_options["cond_or_uncond"] = cond_or_uncond[:]
-        transformer_options["sigmas"] = timestep
+        transformer_options["sigmas"] = batch_timestep
 
-        transformer_options["cond_mark"] = compute_cond_mark(cond_or_uncond=cond_or_uncond, sigmas=timestep)
-        transformer_options["cond_indices"], transformer_options["uncond_indices"] = compute_cond_indices(cond_or_uncond=cond_or_uncond, sigmas=timestep)
+        transformer_options["cond_mark"] = compute_cond_mark(cond_or_uncond=cond_or_uncond, sigmas=batch_timestep)
+        transformer_options["cond_indices"], transformer_options["uncond_indices"] = compute_cond_indices(cond_or_uncond=cond_or_uncond, sigmas=batch_timestep)
 
         c["transformer_options"] = transformer_options
 
-        if control is not None:
-            p = control
-            while p is not None:
-                p.transformer_options = transformer_options
-                p = p.previous_controlnet
-            control_cond = c.copy()  # get_control may change items in this dict, so we need to copy it
-            c["control"] = control.get_control(input_x, timestep_, control_cond, len(cond_or_uncond))
-            c["control_model"] = control
+        batch_context = contextlib.nullcontext() if batch_indices is None else conditioning_batch(control, batch_indices, x_in.shape[0])
+        with batch_context:
+            if control is not None:
+                p = control
+                while p is not None:
+                    p.transformer_options = transformer_options
+                    p = p.previous_controlnet
+                control_cond = c.copy()  # get_control may change items in this dict, so we need to copy it
+                c["control"] = control.get_control(input_x, timestep_, control_cond, len(cond_or_uncond))
+                c["control_model"] = control
 
-        if "model_function_wrapper" in model_options:
-            output = model_options["model_function_wrapper"](model.apply_model, {"input": input_x, "timestep": timestep_, "c": c, "cond_or_uncond": cond_or_uncond}).chunk(batch_chunks)
-        else:
-            output = model.apply_model(input_x, timestep_, **c).chunk(batch_chunks)
+            if "model_function_wrapper" in model_options:
+                output = model_options["model_function_wrapper"](model.apply_model, {"input": input_x, "timestep": timestep_, "c": c, "cond_or_uncond": cond_or_uncond}).chunk(batch_chunks)
+            else:
+                output = model.apply_model(input_x, timestep_, **c).chunk(batch_chunks)
         del input_x
 
+        rows = slice(None) if batch_indices is None else batch_indices
         for o in range(batch_chunks):
             if cond_or_uncond[o] == COND:
-                out_cond[:, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += output[o] * mult[o]
-                out_count[:, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += mult[o]
+                out_cond[rows, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += output[o] * mult[o]
+                out_count[rows, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += mult[o]
             else:
-                out_uncond[:, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += output[o] * mult[o]
-                out_uncond_count[:, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += mult[o]
+                out_uncond[rows, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += output[o] * mult[o]
+                out_uncond_count[rows, :, area[o][2] : area[o][0] + area[o][2], area[o][3] : area[o][1] + area[o][3]] += mult[o]
         del mult
 
     out_cond /= out_count
@@ -293,7 +313,13 @@ def calc_cond_uncond_batch(model, cond, uncond, x_in, timestep, model_options):
 
 
 def sampling_function_inner(model, x, timestep, uncond, cond, cond_scale, model_options={}, seed=None, return_full=False):
-    edit_strength = sum((item["strength"] if "strength" in item else 1) for item in cond)
+    if any("batch_indices" in item for item in cond):
+        edit_strength = x.new_zeros(x.shape[0])
+        for item in cond:
+            edit_strength[item.get("batch_indices", slice(None))] += item.get("strength", 1)
+        edit_strength = edit_strength.reshape((-1,) + (1,) * (x.ndim - 1))
+    else:
+        edit_strength = sum((item["strength"] if "strength" in item else 1) for item in cond)
 
     if math.isclose(cond_scale, 1.0) and model_options.get("disable_cfg1_optimization", False) == False:
         uncond_ = None
@@ -311,7 +337,7 @@ def sampling_function_inner(model, x, timestep, uncond, cond, cond_scale, model_
     if "sampler_cfg_function" in model_options:
         args = {"cond": x - cond_pred, "uncond": x - uncond_pred, "cond_scale": cond_scale, "timestep": timestep, "input": x, "sigma": timestep, "cond_denoised": cond_pred, "uncond_denoised": uncond_pred, "model": model, "model_options": model_options}
         cfg_result = x - model_options["sampler_cfg_function"](args)
-    elif not math.isclose(edit_strength, 1.0):
+    elif isinstance(edit_strength, torch.Tensor) or not math.isclose(edit_strength, 1.0):
         cfg_result = uncond_pred + (cond_pred - uncond_pred) * cond_scale * edit_strength
     else:
         cfg_result = uncond_pred + (cond_pred - uncond_pred) * cond_scale
@@ -326,7 +352,47 @@ def sampling_function_inner(model, x, timestep, uncond, cond, cond_scale, model_
     return cfg_result
 
 
-def sampling_function(self, denoiser_params, cond_scale, cond_composition, extra_model_options=None):
+@contextlib.contextmanager
+def conditioning_batch(control, indices, batch_size):
+    saved = []
+
+    def select(obj, key):
+        value = getattr(obj, key)
+        saved.append((obj, key, value))
+        setattr(obj, key, repeat_to_batch_size(value, batch_size)[indices])
+
+    try:
+        refs = dynamic_args.ref_latents
+        if any(ref.shape[0] > 1 for ref in refs):
+            saved.append((dynamic_args, "ref_latents", refs))
+            dynamic_args.ref_latents = [repeat_to_batch_size(ref, batch_size)[indices] for ref in refs]
+            saved.append((dynamic_args, "moss_ref_kv", dynamic_args.get("moss_ref_kv")))
+            dynamic_args.moss_ref_kv = None
+
+        while control is not None:
+            if isinstance(control.cond_hint_original, torch.Tensor) and control.cond_hint_original.shape[0] > 1:
+                select(control, "cond_hint_original")
+                for key in ("cond_hint", "control_input"):
+                    if hasattr(control, key):
+                        saved.append((control, key, getattr(control, key)))
+                        setattr(control, key, None)
+            mask = getattr(control, "advanced_mask_weighting", None)
+            if isinstance(mask, torch.Tensor) and mask.shape[0] > 1:
+                select(control, "advanced_mask_weighting")
+            frames = getattr(control, "advanced_frame_weighting", None)
+            if frames is not None and len(frames) == batch_size:
+                saved.append((control, "advanced_frame_weighting", frames))
+                control.advanced_frame_weighting = [frames[i] for i in indices]
+            control = control.previous_controlnet
+
+        yield
+
+    finally:
+        for obj, key, value in reversed(saved):
+            setattr(obj, key, value)
+
+
+def sampling_function(self: "CFGDenoiser", denoiser_params: "CFGDenoiserParams", cond_scale: float, cond_composition, extra_model_options=None):
     unet_patcher = self.inner_model.inner_model.forge_objects.unet
     model = unet_patcher.model
     control = unet_patcher.controlnet_linked_list
