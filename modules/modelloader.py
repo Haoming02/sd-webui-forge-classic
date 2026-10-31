@@ -64,7 +64,9 @@ def load_models(model_path: str, model_url: str = None, command_path: str = None
     except Exception:
         pass
 
-    return output
+    # callers merge these results into unsorted sets/lists, so hand back a
+    # deterministic case-insensitive order here
+    return sorted(output, key=str.casefold)
 
 
 def friendly_name(file: str):
