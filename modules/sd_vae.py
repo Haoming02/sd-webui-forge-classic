@@ -1,6 +1,7 @@
 import glob
 import os.path
 from copy import deepcopy
+from typing import OrderedDict
 
 import torch
 
@@ -9,7 +10,7 @@ from modules import hashes, paths, sd_models, shared
 
 vae_path = os.path.abspath(os.path.join(paths.models_path, "VAE"))
 vae_ignore_keys: set[str] = {"model_ema.decay", "model_ema.num_updates"}
-vae_dict: dict[str, os.PathLike] = {}
+vae_dict: OrderedDict[str, os.PathLike] = OrderedDict()
 
 base_vae: dict[str, torch.Tensor] = None
 loaded_vae_file: os.PathLike = None
@@ -79,15 +80,13 @@ def refresh_vae_list():
         for ext in file_extensions:
             paths.append(os.path.join(_dir, f"**/*.{ext}"))
 
-    candidates = []
+    candidates: set[str] = set()
     for path in paths:
-        candidates += glob.iglob(path, recursive=True)
+        candidates.update(glob.iglob(path, recursive=True))
 
-    for filepath in candidates:
+    for filepath in sorted(candidates, key=lambda path: shared.natural_sort_key(get_filename(path))):
         name = get_filename(filepath)
         vae_dict[name] = filepath
-
-    vae_dict.update(dict(sorted(vae_dict.items(), key=lambda item: shared.natural_sort_key(item[0]))))
 
 
 def reload_vae_weights(vae: str) -> bool:
