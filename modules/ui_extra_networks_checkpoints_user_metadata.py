@@ -43,7 +43,7 @@ class CheckpointUserMetadataEditor(ui_extra_networks_user_metadata.UserMetadataE
                 "checkpoint_edit_user_metadata_refresh_modules",
             )
 
-        self.edit_notes = gr.TextArea(label="Notes", lines=4)
+        self.edit_notes = gr.TextArea(label="Notes", lines=1.05)
 
         self.create_default_buttons()
 

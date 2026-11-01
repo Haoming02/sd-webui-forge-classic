@@ -151,7 +151,7 @@ class UserMetadataEditor:
     def create_editor(self):
         self.create_default_editor_elems()
 
-        self.edit_notes = gr.TextArea(label="Notes", lines=4)
+        self.edit_notes = gr.TextArea(label="Notes", lines=1.05)
 
         self.create_default_buttons()
 
