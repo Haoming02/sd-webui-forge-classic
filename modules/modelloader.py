@@ -64,7 +64,7 @@ def load_models(model_path: str, model_url: str = None, command_path: str = None
     except Exception:
         pass
 
-    return sorted(output, key=str.casefold)
+    return sorted(output, key=shared.natural_sort_key)
 
 
 def friendly_name(file: str):

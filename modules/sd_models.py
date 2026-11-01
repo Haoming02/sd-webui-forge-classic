@@ -136,7 +136,7 @@ def list_models():
     for _dir in (*cmd_opts.ckpt_dirs, model_path):
         model_list.update(modelloader.load_models(model_path=_dir, ext_filter=[".ckpt", ".safetensors", ".gguf"], ext_blacklist=[".vae.ckpt", ".vae.safetensors"]))
 
-    for filename in sorted(model_list, key=str.casefold):
+    for filename in sorted(model_list, key=shared.natural_sort_key):
         checkpoint_info = CheckpointInfo(filename)
         checkpoint_info.register()
 

@@ -217,7 +217,7 @@ def process_network_files(names: Optional[list[str]] = None):
     for _dir in [shared.cmd_opts.lora_dir, *shared.cmd_opts.lora_dirs]:
         candidates.update(shared.walk_files(_dir, allowed_extensions=[".pt", ".ckpt", ".safetensors"]))
 
-    for filename in sorted(candidates, key=str.casefold):
+    for filename in sorted(candidates, key=shared.natural_sort_key):
         if os.path.isdir(filename):
             continue
         name = os.path.splitext(os.path.basename(filename))[0]
