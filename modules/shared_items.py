@@ -14,7 +14,7 @@ def postprocessing_scripts():
 def sd_vae_items():
     import modules.sd_vae
 
-    return ["Automatic", "None", *list(modules.sd_vae.vae_dict)]
+    return ["Automatic", "None", *sorted(modules.sd_vae.vae_dict)]
 
 
 def refresh_vae_list():
@@ -42,7 +42,7 @@ def refresh_unet_list():
 def list_checkpoint_tiles(use_short=False):
     import modules.sd_models
 
-    return modules.sd_models.checkpoint_tiles(use_short)
+    return sorted(modules.sd_models.checkpoint_tiles(use_short))
 
 
 def refresh_checkpoints():

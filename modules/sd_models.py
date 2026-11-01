@@ -3,6 +3,7 @@ import math
 import os.path
 import re
 import sys
+from typing import OrderedDict
 
 import torch
 
@@ -17,8 +18,8 @@ from modules.timer import Timer
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
 
-checkpoints_list: dict[str, "CheckpointInfo"] = {}
-checkpoint_aliases: dict[str, "CheckpointInfo"] = {}
+checkpoints_list: OrderedDict[str, "CheckpointInfo"] = OrderedDict()
+checkpoint_aliases: OrderedDict[str, "CheckpointInfo"] = OrderedDict()
 
 
 def replace_key(d, key, new_key, value):
@@ -135,8 +136,6 @@ def list_models():
     for _dir in (*cmd_opts.ckpt_dirs, model_path):
         model_list.update(modelloader.load_models(model_path=_dir, ext_filter=[".ckpt", ".safetensors", ".gguf"], ext_blacklist=[".vae.ckpt", ".vae.safetensors"]))
 
-    # model_list is a set, so register in case-insensitive path order to keep
-    # checkpoints_list (dropdown and first-item fallback) deterministic
     for filename in sorted(model_list, key=str.casefold):
         checkpoint_info = CheckpointInfo(filename)
         checkpoint_info.register()

@@ -1,6 +1,6 @@
 import logging
 import os.path
-from typing import Callable
+from typing import Callable, OrderedDict
 
 import gradio as gr
 import torch
@@ -40,8 +40,8 @@ forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
 }
 
 
-module_list: dict[str, os.PathLike] = {}
-module_map: dict[str, str] = {}
+module_list: OrderedDict[str, os.PathLike] = OrderedDict()
+module_map: OrderedDict[str, str] = OrderedDict()
 
 
 def make_checkpoint_manager_ui():
@@ -91,8 +91,8 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
 
     file_extensions = ("ckpt", "pt", "pth", "bin", "safetensors", "sft", "gguf")
 
-    module_list.clear()
-    module_map.clear()
+    _module_list: dict[str, os.PathLike] = {}
+    _module_map: dict[str, str] = {}
 
     module_paths: set[os.PathLike] = {
         os.path.abspath(os.path.join(paths.models_path, "VAE")),
@@ -103,16 +103,22 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
 
     for vae_path in module_paths:
         vae_files = find_files_with_extensions(vae_path, file_extensions)
-        module_list.update(vae_files)
+        _module_list.update(vae_files)
 
         for file, path in vae_files.items():
             rel = os.path.normpath(os.path.relpath(path, vae_path))
-            module_map[file] = rel
+            _module_map[file] = rel
+
+    module_list.clear()
+    module_map.clear()
+
+    module_list.update({title: _module_list[title] for title in sorted(_module_list)})
+    module_map.update({title: _module_map[title] for title in sorted(_module_map)})
 
     if shared.opts.sd_modules_dropdown_use_short:
-        return sorted(ckpt_list), sorted(module_list.keys())
+        return ckpt_list, module_list.keys()
     else:
-        return sorted(ckpt_list), sorted(module_map.values())
+        return ckpt_list, module_map.values()
 
 
 def refresh_model_loading_parameters(*, refresh: bool = True):
