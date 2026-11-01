@@ -437,7 +437,9 @@ function currentImg2imgSourceResolution(w, h, r) {
     if (!img) return [0, 0, r];
     const width = img.naturalWidth || img.width;
     const height = img.naturalHeight || img.height;
-    return [width, height, r];
+    const _step = parseInt(opts.res_step);
+
+    return [sRound(width, _step), sRound(height, _step), r];
 }
 
 function updateImg2imgResizeToTextAfterChangingImage() {
