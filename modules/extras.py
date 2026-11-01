@@ -285,4 +285,4 @@ def run_modelmerger(id_task, primary_model_name: str, secondary_model_name: str,
     shared.state.end()
 
     sd_models.list_models()
-    return [gr.update(choices=sorted(sd_models.checkpoint_tiles()))] * 4 + [f"Checkpoint saved to {output_modelname}"]
+    return [gr.update(choices=sd_models.checkpoint_tiles())] * 4 + [f"Checkpoint saved to {output_modelname}"]

@@ -64,13 +64,13 @@ class UiCheckpointMerger:
             with gr.Row(equal_height=False):
                 with gr.Column(variant="compact"):
                     with FormRow(elem_id="modelmerger_models"):
-                        self.primary_model_name = gr.Dropdown(label="Primary Model (A)", choices=sorted(sd_models.checkpoint_tiles()), elem_id="modelmerger_primary_model_name", visible=True)
-                        self.secondary_model_name = gr.Dropdown(label="Secondary Model (B)", choices=sorted(sd_models.checkpoint_tiles()), elem_id="modelmerger_secondary_model_name", visible=True)
-                        self.tertiary_model_name = gr.Dropdown(label="Tertiary Model (C)", choices=sorted(sd_models.checkpoint_tiles()), elem_id="modelmerger_tertiary_model_name", visible=False)
+                        self.primary_model_name = gr.Dropdown(label="Primary Model (A)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_primary_model_name", visible=True)
+                        self.secondary_model_name = gr.Dropdown(label="Secondary Model (B)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_secondary_model_name", visible=True)
+                        self.tertiary_model_name = gr.Dropdown(label="Tertiary Model (C)", choices=sd_models.checkpoint_tiles(), elem_id="modelmerger_tertiary_model_name", visible=False)
                         create_refresh_button(
                             [self.primary_model_name, self.secondary_model_name, self.tertiary_model_name],
                             sd_models.list_models,
-                            lambda: {"choices": sorted(sd_models.checkpoint_tiles())},
+                            lambda: {"choices": sd_models.checkpoint_tiles()},
                             "modelmerger_refresh_checkpoint",
                         )
 

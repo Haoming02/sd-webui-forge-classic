@@ -273,7 +273,7 @@ def create_ui():
                                     def _load_models():
                                         checkpoints = shared.list_checkpoint_tiles(shared.opts.sd_checkpoint_dropdown_use_short)
                                         modules = main_entry.module_list.keys() if shared.opts.sd_modules_dropdown_use_short else main_entry.module_map.values()
-                                        return [["Use same checkpoint"] + sorted(checkpoints), ["Use same choices"] + sorted(modules)]
+                                        return [["Use same checkpoint"] + checkpoints, ["Use same choices"] + list(modules)]
 
                                     checkpoints_list, modules_list = _load_models()
 
