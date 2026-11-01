@@ -106,7 +106,19 @@ def apply_size(p: StableDiffusionProcessing, x: str, _):
 
 
 def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
-    p.override_settings["sd_model_checkpoint"] = get_closet_checkpoint_match(x).name
+    # override_settings["sd_model_checkpoint"] spams selection logs in the console...
+
+    if (info := get_closet_checkpoint_match(x)) is None:
+        raise ValueError(f'Unknown Checkpoint: "{x}"')
+
+    if info.name == p.override_settings.get("sd_model_checkpoint", None):
+        return
+
+    orig_ckpt = opts.data.get("sd_model_checkpoint", None)
+
+    opts.set("sd_model_checkpoint", info.name)
+    refresh_loading_params_for_xyz_grid()
+    opts.set("sd_model_checkpoint", orig_ckpt)
 
 
 def apply_vae_fast(p: StableDiffusionProcessing, x: str, _):
