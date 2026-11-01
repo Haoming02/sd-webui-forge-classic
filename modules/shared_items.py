@@ -14,7 +14,7 @@ def postprocessing_scripts():
 def sd_vae_items():
     import modules.sd_vae
 
-    return ["Automatic", "None", *list(modules.sd_vae.vae_dict)]
+    return ["Automatic", "None", *modules.sd_vae.vae_dict]
 
 
 def refresh_vae_list():

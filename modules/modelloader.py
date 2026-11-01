@@ -18,7 +18,7 @@ spandrel_extra_arches.install()
 logger = logging.getLogger(__name__)
 
 
-def load_models(model_path: str, model_url: str = None, command_path: str = None, ext_filter=None, download_name=None, ext_blacklist=None, hash_prefix=None) -> list:
+def load_models(model_path: str, model_url: str = None, command_path: str = None, ext_filter=None, download_name=None, ext_blacklist=None, hash_prefix=None) -> list[str]:
     """
     A one-and done loader to try finding the desired models in specified directories.
 
@@ -30,7 +30,7 @@ def load_models(model_path: str, model_url: str = None, command_path: str = None
     @param hash_prefix: the expected sha256 of the model_url
     @return: A list of paths containing the desired model(s)
     """
-    output = []
+    output: set[str] = set()
 
     try:
         places = []
@@ -53,18 +53,18 @@ def load_models(model_path: str, model_url: str = None, command_path: str = None
                 if ext_blacklist is not None and any(full_path.endswith(x) for x in ext_blacklist):
                     continue
                 if full_path not in output:
-                    output.append(full_path)
+                    output.add(full_path)
 
         if model_url is not None and len(output) == 0:
             if download_name is not None:
-                output.append(load_file_from_url(model_url, model_dir=places[0], file_name=download_name, hash_prefix=hash_prefix))
+                output.add(load_file_from_url(model_url, model_dir=places[0], file_name=download_name, hash_prefix=hash_prefix))
             else:
-                output.append(model_url)
+                output.add(model_url)
 
     except Exception:
         pass
 
-    return output
+    return sorted(output, key=shared.natural_sort_key)
 
 
 def friendly_name(file: str):

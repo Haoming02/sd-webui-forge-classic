@@ -212,12 +212,12 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
 
 
 def process_network_files(names: Optional[list[str]] = None):
-    candidates = []
+    candidates: set[str] = set()
 
     for _dir in [shared.cmd_opts.lora_dir, *shared.cmd_opts.lora_dirs]:
-        candidates.extend(shared.walk_files(_dir, allowed_extensions=[".pt", ".ckpt", ".safetensors"]))
+        candidates.update(shared.walk_files(_dir, allowed_extensions=[".pt", ".ckpt", ".safetensors"]))
 
-    for filename in candidates:
+    for filename in sorted(candidates, key=shared.natural_sort_key):
         if os.path.isdir(filename):
             continue
         name = os.path.splitext(os.path.basename(filename))[0]

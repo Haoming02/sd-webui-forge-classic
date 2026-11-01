@@ -21,7 +21,7 @@ class ScriptRefiner(scripts.ScriptBuiltinUI):
     @classmethod
     def refresh_checkpoints(cls):
         ckpts = shared.list_checkpoint_tiles(shared.opts.sd_checkpoint_dropdown_use_short)
-        cls.ckpts = ["None"] + sorted(ckpts)
+        cls.ckpts = ["None"] + ckpts
         return gr.update(choices=cls.ckpts)
 
     def ui(self, is_img2img):
