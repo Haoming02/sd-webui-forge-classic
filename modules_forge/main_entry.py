@@ -116,9 +116,9 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
     module_map.update({title: _module_map[title] for title in sorted(_module_map)})
 
     if shared.opts.sd_modules_dropdown_use_short:
-        return ckpt_list, module_list.keys()
+        return ckpt_list, list(module_list.keys())
     else:
-        return ckpt_list, module_map.values()
+        return ckpt_list, list(module_map.values())
 
 
 def refresh_model_loading_parameters(*, refresh: bool = True):
