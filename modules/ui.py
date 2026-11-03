@@ -23,7 +23,7 @@ from modules.ui_common import create_refresh_button  # noqa: F401
 from modules.ui_components import FormGroup, FormHTML, FormRow, InputAccordion, ResizeHandleRow, ToolButton
 from modules.ui_gradio_extensions import reload_javascript
 from modules_forge import main_entry
-from modules_forge.forge_canvas.canvas import ForgeCanvas, canvas_head
+from modules_forge.forge_canvas.canvas import ForgeCanvas
 
 create_setting_component = ui_settings.create_setting_component
 
@@ -206,7 +206,7 @@ def create_ui():
     scripts.scripts_current = scripts.scripts_txt2img
     scripts.scripts_txt2img.initialize_scripts(is_img2img=False)
 
-    with gr.Blocks(analytics_enabled=False, head=canvas_head) as txt2img_interface:
+    with gr.Blocks(analytics_enabled=False) as txt2img_interface:
         toprow = ui_toprow.Toprow(is_img2img=False)
 
         dummy_component = gr.Textbox(visible=False)
@@ -481,7 +481,7 @@ def create_ui():
     scripts.scripts_current = scripts.scripts_img2img
     scripts.scripts_img2img.initialize_scripts(is_img2img=True)
 
-    with gr.Blocks(analytics_enabled=False, head=canvas_head) as img2img_interface:
+    with gr.Blocks(analytics_enabled=False) as img2img_interface:
         toprow = ui_toprow.Toprow(is_img2img=True)
 
         extra_tabs = gr.Tabs(elem_id="img2img_extra_tabs", elem_classes=["extra-networks"])
@@ -885,7 +885,7 @@ def create_ui():
     for _interface, label, _ifid in interfaces:
         shared.tab_names.append(label)
 
-    with gr.Blocks(theme=shared.gradio_theme, analytics_enabled=False, title="Stable Diffusion", head=canvas_head) as demo:
+    with gr.Blocks(analytics_enabled=False, title="Stable Diffusion") as demo:
         settings.add_quicksettings()
 
         parameters_copypaste.connect_paste_params_buttons()

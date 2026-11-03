@@ -102,9 +102,11 @@ def webui_worker():
             elif shared.opts.auto_launch_browser == "Local":
                 auto_launch_browser = not cmd_opts.webui_is_non_local
 
-        from modules_forge.forge_canvas.canvas import canvas_js_root_path
+        from modules_forge.forge_canvas.canvas import canvas_head, canvas_js_root_path
 
         app, local_url, share_url = shared.demo.launch(
+            theme=shared.gradio_theme,
+            head=canvas_head,
             share=cmd_opts.share,
             server_name=initialize_util.gradio_server_name(),
             server_port=cmd_opts.port,

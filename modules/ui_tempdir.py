@@ -6,6 +6,7 @@ from pathlib import Path
 import gradio as gr
 import gradio.processing_utils
 import gradio.utils
+from gradio.route_utils import API_PREFIX
 from PIL import Image, PngImagePlugin
 
 from modules import shared
@@ -23,7 +24,7 @@ def check_tmp_file(gradio_app: gr.Blocks, filename: os.PathLike) -> bool:
     return any(filename in fileset for fileset in gradio_app.temp_file_sets)
 
 
-def save_pil_to_file(pil_image: Image.Image, cache_dir: os.PathLike = None, format: str = "png"):
+def save_pil_to_file(pil_image: Image.Image, cache_dir: os.PathLike = None, name: str = "image", format: str = "png"):
     already_saved_as = getattr(pil_image, "already_saved_as", None)
     if already_saved_as and os.path.isfile(already_saved_as):
         register_tmp_file(shared.demo, already_saved_as)
@@ -68,7 +69,8 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
 
     from gradio import FileData
     from gradio.data_classes import GradioModel, GradioRootModel
-    from gradio.utils import get_upload_folder, is_in_or_equal, is_static_file
+    from gradio.processing_utils import _check_allowed
+    from gradio.utils import is_static_file
     from gradio_client import utils as client_utils
 
     async def _move_to_cache(d: dict):
@@ -83,10 +85,8 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
             if check_tmp_file(shared.demo, payload.path):
                 temp_file_path = payload.path
             else:
-                if check_in_upload_folder and not client_utils.is_http_url_like(payload.path):
-                    path = os.path.abspath(payload.path)
-                    if not is_in_or_equal(path, get_upload_folder()):
-                        raise ValueError(f"File {path} is not in the upload folder and cannot be accessed.")
+                if not client_utils.is_http_url_like(payload.path):
+                    _check_allowed(payload.path, check_in_upload_folder)
                 if not payload.is_stream:
                     temp_file_path = await block.async_move_resource_to_block_cache(payload.path)
                     if temp_file_path is None:
@@ -95,10 +95,10 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
                     if keep_in_cache:
                         block.keep_in_cache.add(payload.path)
 
-        url_prefix = "/stream/" if payload.is_stream else "/file="
+        url_prefix = f"{API_PREFIX}/stream/" if payload.is_stream else f"{API_PREFIX}/file="
         if block.proxy_url:
             proxy_url = block.proxy_url.rstrip("/")
-            url = f"/proxy={proxy_url}{url_prefix}{payload.path}"
+            url = f"{API_PREFIX}/proxy={proxy_url}{url_prefix}{payload.path}"
         elif client_utils.is_http_url_like(payload.path) or payload.path.startswith(f"{url_prefix}"):
             url = payload.path
         else:
@@ -110,13 +110,13 @@ async def async_move_files_to_cache(data, block, postprocess=False, check_in_upl
     if isinstance(data, (GradioRootModel, GradioModel)):
         data = data.model_dump()
 
-    return await client_utils.async_traverse(data, _move_to_cache, client_utils.is_file_obj)
+    return await client_utils.async_traverse(data, _move_to_cache, client_utils.is_file_obj_with_meta)
 
 
 def install_ui_tempdir_override():
     """
     override save to file function so that it also writes PNG info.
-    override gradio4's move_files_to_cache function to prevent it from writing a copy into a temporary directory.
+    override move_files_to_cache to reuse images already saved by the pipeline.
     """
 
     gradio.processing_utils.save_pil_to_cache = save_pil_to_file
