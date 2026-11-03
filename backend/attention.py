@@ -119,7 +119,7 @@ if memory_management.ck_enabled():
 
 
 def get_attn_precision(attn_precision: torch.dtype, current_dtype: torch.dtype) -> torch.dtype:
-    memory_management.force_upcast_attention_dtype().get(current_dtype, attn_precision)
+    return memory_management.force_upcast_attention_dtype().get(current_dtype, attn_precision)
 
 
 def exists(val) -> bool:
