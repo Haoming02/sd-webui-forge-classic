@@ -1,0 +1,3 @@
+frontend/node_modules/
+*.pyi
+*package-lock.json
