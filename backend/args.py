@@ -3,26 +3,6 @@
 import argparse
 import enum
 
-
-class EnumAction(argparse.Action):
-    """Argparse `action` for handling Enum"""
-
-    def __init__(self, **kwargs):
-        enum_type = kwargs.pop("type", None)
-        assert issubclass(enum_type, enum.Enum)
-
-        choices = tuple(e.value for e in enum_type)
-        kwargs.setdefault("choices", choices)
-        kwargs.setdefault("metavar", f"[{','.join(choices)}]")
-
-        super(EnumAction, self).__init__(**kwargs)
-        self._enum = enum_type
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        value = self._enum(values)
-        setattr(namespace, self.dest, value)
-
-
 parser = argparse.ArgumentParser(add_help=False)
 
 parser.add_argument("--loglevel", type=str, default=None, choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Set the logging level")
@@ -116,7 +96,7 @@ class SageAttentionFuncs(enum.Enum):
 
 
 sage = parser.add_argument_group(description="SageAttention")
-sage.add_argument("--sage-function", type=SageAttentionFuncs, default=SageAttentionFuncs.auto, action=EnumAction)
+sage.add_argument("--sage-function", type=SageAttentionFuncs, default=SageAttentionFuncs.auto)
 
 
 args, _ = parser.parse_known_args()
