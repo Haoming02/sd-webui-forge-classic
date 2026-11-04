@@ -239,6 +239,16 @@ def format_value(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> T:
     return x
 
 
+def format_lora_label(p: StableDiffusionProcessing, opt: "AxisOption", x: str) -> str:
+    if not (found := re.findall(r"<lora:([^:>]+)(:[^:>]+)?(:[^:>]+)?>", x)):
+        return x
+
+    labels = []
+    for name, *weights in found:
+        labels.append(":".join((name.strip(), *[str(round(float(weight.split(":")[1]), 3)) for weight in weights if weight])))
+    return ", ".join(labels)
+
+
 def format_value_join_list(p: StableDiffusionProcessing, opt: "AxisOption", x: str) -> str:
     return ", ".join(x)
 
@@ -309,6 +319,7 @@ axis_options = [
     AxisOption("Rescale CFG", float, apply_field("rescale_cfg")),
     AxisOption("MaHiRo", str, apply_field("mahiro"), choices=boolean_choice(reverse=True)),
     AxisOption("Prompt S/R", str, apply_prompt, cost=0.1, format_value=format_value),
+    AxisOption("Prompt S/R (LoRA)", str, apply_prompt, cost=0.1, format_value=format_lora_label),
     AxisOption("Prompt order", str_permutations, apply_order, cost=0.1, format_value=format_value_join_list),
     AxisOptionTxt2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers if x.name not in opts.hide_samplers]),
     AxisOptionTxt2Img("Hires sampler", str, apply_field("hr_sampler_name"), confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
