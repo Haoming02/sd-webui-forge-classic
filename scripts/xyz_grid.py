@@ -135,6 +135,73 @@ def apply_vae(p: StableDiffusionProcessing, x: str, xs: list[str]):
     p.override_settings["forge_additional_modules"] = modules + [find_vae(x)]
 
 
+def _is_text_encoder_module_path(path: os.PathLike | str) -> bool:
+    norm = os.path.normpath(str(path)).lower()
+    return f"{os.path.sep}text_encoder{os.path.sep}" in norm
+
+
+def _current_forge_modules(p: StableDiffusionProcessing) -> list[str]:
+    if "forge_additional_modules" in p.override_settings:
+        return list(p.override_settings["forge_additional_modules"])
+    return list(getattr(shared.opts, "forge_additional_modules", []) or [])
+
+
+def _resolve_forge_module(name: str) -> str:
+    from modules_forge import main_entry
+
+    if not main_entry.module_list:
+        main_entry.refresh_models()
+    path = main_entry.module_list.get(name)
+    if path is None:
+        raise ValueError(f'Unknown Text Encoder: "{name}"')
+    return path
+
+
+def text_encoder_choices() -> list[str]:
+    from modules_forge import main_entry
+
+    if not main_entry.module_list:
+        main_entry.refresh_models()
+    return sorted(
+        name
+        for name, path in main_entry.module_list.items()
+        if _is_text_encoder_module_path(path)
+    )
+
+
+def apply_text_encoder(p: StableDiffusionProcessing, x: str, _):
+    # Mirror apply_checkpoint: update forge_loading_parameters so forge_model_reload() swaps TE.
+    # Keep opts.forge_additional_modules aligned with the axis value for the whole cell.
+    # Do NOT restore opts here: process_images() would store the UI default, then finally
+    # re-apply it via modules_change → need_global_unload without reload → from the 2nd cell
+    # on (same TE, different seed) the model is unloaded and images look identical.
+    # SharedSettingsStackHelper restores the original modules after the full XYZ run.
+    te_path = _resolve_forge_module(x)
+    modules = _current_forge_modules(p)
+    te_indices = [i for i, m in enumerate(modules) if _is_text_encoder_module_path(m)]
+
+    if te_indices:
+        modules[te_indices[-1]] = te_path
+    elif len(modules) >= 2:
+        modules[-1] = te_path
+    elif len(modules) == 1 and not _is_text_encoder_module_path(modules[0]):
+        modules.append(te_path)
+    else:
+        modules = [te_path]
+
+    if modules == list(getattr(opts, "forge_additional_modules", []) or []) and modules == p.override_settings.get("forge_additional_modules"):
+        return
+
+    modules = list(modules)
+    p.override_settings["forge_additional_modules"] = modules
+    opts.set("forge_additional_modules", list(modules))
+    # apply_checkpoint keeps its axis value only in forge_loading_parameters: a refresh would select the UI checkpoint.
+    if "checkpoint_info" in model_data.forge_loading_parameters:
+        model_data.forge_loading_parameters = dict(model_data.forge_loading_parameters, additional_modules=list(modules))
+    else:
+        refresh_loading_params_for_xyz_grid()
+
+
 def apply_styles(p: StableDiffusionProcessing, x: str, _):
     p.styles.extend(x.split(","))
 
@@ -191,6 +258,13 @@ def confirm_checkpoints_or_none(p: StableDiffusionProcessing, xs: list[str]):
             raise RuntimeError(f'Unknown Checkpoint: "{x}"')
 
 
+def confirm_text_encoders(p: StableDiffusionProcessing, xs: list[str]):
+    valid = set(text_encoder_choices())
+    for x in xs:
+        if x not in valid:
+            raise RuntimeError(f'Unknown Text Encoder: "{x}"')
+
+
 def confirm_range(min_val: float, max_val: float, axis_label: str):
     """Generates a AxisOption.confirm() function that checks all values are within the specified range."""
 
@@ -209,7 +283,12 @@ def refresh_loading_params_for_xyz_grid():
     """
     checkpoint_info = select_checkpoint()
 
-    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=opts.forge_additional_modules, unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None))
+    # Copy additional_modules so later opts/override mutations cannot rewrite the hash key in-place.
+    model_data.forge_loading_parameters = dict(
+        checkpoint_info=checkpoint_info,
+        additional_modules=list(opts.forge_additional_modules or []),
+        unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None),
+    )
 
 
 def find_vae(name: str) -> str:
@@ -317,6 +396,15 @@ axis_options = [
     AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=2.0, choices=lambda: list(checkpoints_list)),
     AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["None", *sd_vae.vae_dict]),
     AxisOption('VAE ("state_dict" only)', str, apply_vae_fast, cost=0.3, choices=lambda: ["None", *sd_vae.vae_dict]),
+    AxisOption(
+        "Text Encoder",
+        str,
+        apply_text_encoder,
+        format_value=format_remove_path,
+        confirm=confirm_text_encoders,
+        cost=0.7,
+        choices=text_encoder_choices,
+    ),
     AxisOption("Clip skip", int, apply_override("CLIP_stop_at_last_layers")),
     AxisOption("Denoising", float, apply_field("denoising_strength")),
     AxisOption("Initial noise multiplier", float, apply_field("initial_noise_multiplier")),
@@ -472,11 +560,14 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
 
 
 class SharedSettingsStackHelper:
+    """Save/restore forge_additional_modules around XYZ (needed for Text Encoder axis)."""
+
     def __enter__(self):
-        pass
+        self._modules = list(getattr(opts, "forge_additional_modules", []) or [])
+        return self
 
     def __exit__(self, *args, **kwargs):
-        pass
+        opts.set("forge_additional_modules", self._modules)
 
 
 re_range = re.compile(r"\s*([+-]?\s*\d+)\s*-\s*([+-]?\s*\d+)(?:\s*\(([+-]\d+)\s*\))?\s*")
@@ -803,6 +894,7 @@ class Script(scripts.Script):
 
             pc = copy(p)
             pc.styles = pc.styles[:]
+            pc.override_settings = dict(p.override_settings)
             x_opt.apply(pc, x, xs)
             y_opt.apply(pc, y, ys)
             z_opt.apply(pc, z, zs)
