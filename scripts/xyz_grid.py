@@ -136,8 +136,9 @@ def apply_vae(p: StableDiffusionProcessing, x: str, xs: list[str]):
 
 
 def _is_text_encoder_module_path(path: os.PathLike | str) -> bool:
-    norm = os.path.normpath(str(path)).lower()
-    return f"{os.path.sep}text_encoder{os.path.sep}" in norm
+    # Every module that is not a VAE is a text encoder, wherever its folder is (e.g. when linking another UI's models)
+    vae_paths = {os.path.normcase(os.path.normpath(str(p))) for p in sd_vae.vae_dict.values()}
+    return os.path.normcase(os.path.normpath(str(path))) not in vae_paths
 
 
 def _current_forge_modules(p: StableDiffusionProcessing) -> list[str]:
