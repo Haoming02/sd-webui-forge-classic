@@ -206,7 +206,7 @@ def get_config():
         except Exception as e:
             return str(e)
 
-def set_config(req: dict[str, Any], is_api=False, run_callbacks=True, save_config=True):
+def set_config(req: dict[str, Any], is_api=False, run_callbacks=True, save_config=True, *, disable_log=False):
     from modules import shared, sd_models
     from modules_forge import main_entry
 
@@ -235,7 +235,7 @@ def set_config(req: dict[str, Any], is_api=False, run_callbacks=True, save_confi
             shared.opts.set(k, v, is_api=is_api, run_callbacks=run_callbacks)
 
     if should_refresh_model_loading_params:
-        main_entry.refresh_model_loading_parameters()
+        main_entry.refresh_model_loading_parameters(disable_log=disable_log)
 
     if save_config:
         shared.opts.save(shared.config_filename)

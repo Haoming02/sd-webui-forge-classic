@@ -106,33 +106,22 @@ def apply_size(p: StableDiffusionProcessing, x: str, _):
 
 
 def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
-    # override_settings["sd_model_checkpoint"] spams selection logs in the console...
-
-    if (info := get_closet_checkpoint_match(x)) is None:
-        raise ValueError(f'Unknown Checkpoint: "{x}"')
-
-    if info.name == p.override_settings.get("sd_model_checkpoint", None):
-        return
-
-    orig_ckpt = opts.data.get("sd_model_checkpoint", None)
-
-    opts.set("sd_model_checkpoint", info.name)
-    refresh_loading_params_for_xyz_grid()
-    opts.set("sd_model_checkpoint", orig_ckpt)
+    p.override_settings["sd_model_checkpoint"] = get_closet_checkpoint_match(x).name
 
 
 def apply_vae_fast(p: StableDiffusionProcessing, x: str, _):
-    p.override_settings["sd_vae"] = find_vae(x)
+    p.override_settings["sd_vae"] = find_module(x)
 
 
-def apply_vae(p: StableDiffusionProcessing, x: str, xs: list[str]):
+def apply_module(p: StableDiffusionProcessing, x: str, xs: list[str]):
 
     def to_replace(v: str) -> bool:
         return any(v.endswith(x) for x in xs)
 
-    modules: list[str] = [m for m in opts.forge_additional_modules if not to_replace(m)]
+    current = p.override_settings.get("forge_additional_modules", opts.forge_additional_modules)
+    modules: list[str] = [m for m in current if not to_replace(m)]
 
-    p.override_settings["forge_additional_modules"] = modules + [find_vae(x)]
+    p.override_settings["forge_additional_modules"] = modules + find_module(x, as_list=True)
 
 
 def apply_styles(p: StableDiffusionProcessing, x: str, _):
@@ -184,11 +173,22 @@ def confirm_checkpoints(p: StableDiffusionProcessing, xs: list[str]):
 
 def confirm_checkpoints_or_none(p: StableDiffusionProcessing, xs: list[str]):
     for x in xs:
-        if x in (None, "None", "none", ""):
+        if x in (None, "None", "none"):
             continue
 
         if get_closet_checkpoint_match(x) is None:
             raise RuntimeError(f'Unknown Checkpoint: "{x}"')
+
+
+def confirm_modules_or_none(p: StableDiffusionProcessing, xs: list[str]):
+    for x in xs:
+        if x in (None, "None", "none"):
+            continue
+
+        from modules_forge import main_entry
+
+        if x not in main_entry.module_list:
+            raise RuntimeError(f'Unknown Module: "{x}"')
 
 
 def confirm_range(min_val: float, max_val: float, axis_label: str):
@@ -209,14 +209,22 @@ def refresh_loading_params_for_xyz_grid():
     """
     checkpoint_info = select_checkpoint()
 
-    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=opts.forge_additional_modules, unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None))
+    # Copy additional_modules so later opts/override mutations cannot rewrite the hash key in-place
+    model_data.forge_loading_parameters = dict(
+        checkpoint_info=checkpoint_info,
+        additional_modules=list(opts.forge_additional_modules),
+        unet_storage_dtype=str(opts.forge_unet_storage_dtype),
+    )
 
 
-def find_vae(name: str) -> str:
-    if name in (None, "None"):
-        return "None"
+def find_module(name: str, *, as_list: bool = False) -> str | list[str]:
+    if name in (None, "None", "none"):
+        return [] if as_list else "None"
     else:
-        return sd_vae.vae_dict[name]
+        from modules_forge import main_entry
+
+        path = main_entry.module_list[name]
+        return [path] if as_list else path
 
 
 def boolean_choice(reverse: bool = False):
@@ -224,6 +232,12 @@ def boolean_choice(reverse: bool = False):
         return ["False", "True"] if reverse else ["True", "False"]
 
     return choice
+
+
+def text_encoder_choice() -> list[str]:
+    from modules_forge import main_entry
+
+    return ["None"] + sorted(name for name in main_entry.module_list if name not in sd_vae.vae_dict)
 
 
 def format_value_add_label(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> str:
@@ -326,8 +340,9 @@ axis_options = [
     AxisOptionImg2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
     AxisOption("Schedule type", str, apply_field("scheduler"), choices=lambda: [x.label for x in sd_schedulers.schedulers]),
     AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=2.0, choices=lambda: list(checkpoints_list)),
-    AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["None", *sd_vae.vae_dict]),
-    AxisOption('VAE ("state_dict" only)', str, apply_vae_fast, cost=0.3, choices=lambda: ["None", *sd_vae.vae_dict]),
+    AxisOption("VAE", str, apply_module, confirm=confirm_modules_or_none, cost=0.7, choices=lambda: ["None", *sd_vae.vae_dict]),
+    AxisOption('VAE ("state_dict" only)', str, apply_vae_fast, confirm=confirm_modules_or_none, cost=0.3, choices=lambda: ["None", *sd_vae.vae_dict]),
+    AxisOption("Text Encoder", str, apply_module, format_value=format_remove_path, confirm=confirm_modules_or_none, cost=0.7, choices=text_encoder_choice),
     AxisOption("Clip skip", int, apply_override("CLIP_stop_at_last_layers")),
     AxisOption("Denoising", float, apply_field("denoising_strength")),
     AxisOption("Initial noise multiplier", float, apply_field("initial_noise_multiplier")),
@@ -402,7 +417,7 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
 
         idx = index(ix, iy, iz)
         if processed.images:
-            # Non-empty list indicates some degree of success.
+            # Non-empty list indicates some degree of success
             processed_result.images[idx] = processed.images[0]
             processed_result.all_prompts[idx] = processed.prompt
             processed_result.all_seeds[idx] = processed.seed
@@ -448,7 +463,7 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
                         process_cell(x, y, z, ix, iy, iz)
 
     if not processed_result:
-        # Should never happen, I've only seen it on one of four open tabs and it needed to refresh.
+        # Should never happen
         logger.error("Processing could not begin, you may need to refresh the page or restart the WebUI")
         return Processed(p, [])
     elif not any(processed_result.images):
@@ -474,7 +489,7 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
     if draw_legend:
         z_grid = images.draw_grid_annotations(z_grid, z_sub_grid_max_w, z_sub_grid_max_h, title_texts, [[images.GridAnnotation()]])
     processed_result.images.insert(0, z_grid)
-    # TODO: Deeper aspects of the program rely on grid info being misaligned between metadata arrays, which is not ideal.
+    # TODO: Deeper aspects of the program rely on grid info being misaligned between metadata arrays, which is not ideal
     # processed_result.all_prompts.insert(0, processed_result.all_prompts[0])
     # processed_result.all_seeds.insert(0, processed_result.all_seeds[0])
     processed_result.infotexts.insert(0, processed_result.infotexts[0])
@@ -814,6 +829,8 @@ class Script(scripts.Script):
 
             pc = copy(p)
             pc.styles = pc.styles[:]
+            pc.override_settings = p.override_settings.copy()
+            pc.is_xyz_pass = True
             x_opt.apply(pc, x, xs)
             y_opt.apply(pc, y, ys)
             z_opt.apply(pc, z, zs)
@@ -876,7 +893,7 @@ class Script(scripts.Script):
         refresh_loading_params_for_xyz_grid()
 
         if not processed.images:
-            # It broke, no further handling needed.
+            # It broke, no further handling needed
             return processed
 
         z_count = len(zs)
@@ -935,7 +952,7 @@ class Script(scripts.Script):
             # Auto-save main and sub-grids:
             grid_count = z_count + 1 if z_count > 1 else 1
             for g in range(grid_count):
-                # TODO: See previous comment about intentional data misalignment.
+                # TODO: See previous comment about intentional data misalignment
                 adj_g = g - 1 if g > 0 else g
                 images.save_image(processed.images[g], p.outpath_grids, "xyz_grid", info=processed.infotexts[g], extension=opts.grid_format, prompt=processed.all_prompts[adj_g], seed=processed.all_seeds[adj_g], grid=True, p=processed)
                 if not include_sub_grids:  # if not include_sub_grids then skip saving after the first grid
