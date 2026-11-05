@@ -122,85 +122,18 @@ def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
 
 
 def apply_vae_fast(p: StableDiffusionProcessing, x: str, _):
-    p.override_settings["sd_vae"] = find_vae(x)
+    p.override_settings["sd_vae"] = find_module(x)
 
 
-def apply_vae(p: StableDiffusionProcessing, x: str, xs: list[str]):
+def apply_module(p: StableDiffusionProcessing, x: str, xs: list[str]):
 
     def to_replace(v: str) -> bool:
         return any(v.endswith(x) for x in xs)
 
-    modules: list[str] = [m for m in opts.forge_additional_modules if not to_replace(m)]
+    current = p.override_settings.get("forge_additional_modules", opts.forge_additional_modules)
+    modules: list[str] = [m for m in current if not to_replace(m)]
 
-    p.override_settings["forge_additional_modules"] = modules + [find_vae(x)]
-
-
-def _is_text_encoder_module_path(path: os.PathLike | str) -> bool:
-    # Every module that is not a VAE is a text encoder, wherever its folder is (e.g. when linking another UI's models)
-    vae_paths = {os.path.normcase(os.path.normpath(str(p))) for p in sd_vae.vae_dict.values()}
-    return os.path.normcase(os.path.normpath(str(path))) not in vae_paths
-
-
-def _current_forge_modules(p: StableDiffusionProcessing) -> list[str]:
-    if "forge_additional_modules" in p.override_settings:
-        return list(p.override_settings["forge_additional_modules"])
-    return list(getattr(shared.opts, "forge_additional_modules", []) or [])
-
-
-def _resolve_forge_module(name: str) -> str:
-    from modules_forge import main_entry
-
-    if not main_entry.module_list:
-        main_entry.refresh_models()
-    path = main_entry.module_list.get(name)
-    if path is None:
-        raise ValueError(f'Unknown Text Encoder: "{name}"')
-    return path
-
-
-def text_encoder_choices() -> list[str]:
-    from modules_forge import main_entry
-
-    if not main_entry.module_list:
-        main_entry.refresh_models()
-    return sorted(
-        name
-        for name, path in main_entry.module_list.items()
-        if _is_text_encoder_module_path(path)
-    )
-
-
-def apply_text_encoder(p: StableDiffusionProcessing, x: str, _):
-    # Mirror apply_checkpoint: update forge_loading_parameters so forge_model_reload() swaps TE.
-    # Keep opts.forge_additional_modules aligned with the axis value for the whole cell.
-    # Do NOT restore opts here: process_images() would store the UI default, then finally
-    # re-apply it via modules_change → need_global_unload without reload → from the 2nd cell
-    # on (same TE, different seed) the model is unloaded and images look identical.
-    # SharedSettingsStackHelper restores the original modules after the full XYZ run.
-    te_path = _resolve_forge_module(x)
-    modules = _current_forge_modules(p)
-    te_indices = [i for i, m in enumerate(modules) if _is_text_encoder_module_path(m)]
-
-    if te_indices:
-        modules[te_indices[-1]] = te_path
-    elif len(modules) >= 2:
-        modules[-1] = te_path
-    elif len(modules) == 1 and not _is_text_encoder_module_path(modules[0]):
-        modules.append(te_path)
-    else:
-        modules = [te_path]
-
-    if modules == list(getattr(opts, "forge_additional_modules", []) or []) and modules == p.override_settings.get("forge_additional_modules"):
-        return
-
-    modules = list(modules)
-    p.override_settings["forge_additional_modules"] = modules
-    opts.set("forge_additional_modules", list(modules))
-    # apply_checkpoint keeps its axis value only in forge_loading_parameters: a refresh would select the UI checkpoint.
-    if "checkpoint_info" in model_data.forge_loading_parameters:
-        model_data.forge_loading_parameters = dict(model_data.forge_loading_parameters, additional_modules=list(modules))
-    else:
-        refresh_loading_params_for_xyz_grid()
+    p.override_settings["forge_additional_modules"] = modules + find_module(x, as_list=True)
 
 
 def apply_styles(p: StableDiffusionProcessing, x: str, _):
@@ -252,17 +185,21 @@ def confirm_checkpoints(p: StableDiffusionProcessing, xs: list[str]):
 
 def confirm_checkpoints_or_none(p: StableDiffusionProcessing, xs: list[str]):
     for x in xs:
-        if x in (None, "None", "none", ""):
+        if x in (None, "None", "none"):
             continue
 
         if get_closet_checkpoint_match(x) is None:
             raise RuntimeError(f'Unknown Checkpoint: "{x}"')
 
 
-def confirm_text_encoders(p: StableDiffusionProcessing, xs: list[str]):
-    valid = set(text_encoder_choices())
+def confirm_modules_or_none(p: StableDiffusionProcessing, xs: list[str]):
     for x in xs:
-        if x not in valid:
+        if x in (None, "None", "none"):
+            continue
+
+        from modules_forge import main_entry
+
+        if x not in main_entry.module_list:
             raise RuntimeError(f'Unknown Text Encoder: "{x}"')
 
 
@@ -292,11 +229,14 @@ def refresh_loading_params_for_xyz_grid():
     )
 
 
-def find_vae(name: str) -> str:
-    if name in (None, "None"):
-        return "None"
+def find_module(name: str, *, as_list: bool = False) -> str | list[str]:
+    if name in (None, "None", "none"):
+        return [] if as_list else "None"
     else:
-        return sd_vae.vae_dict[name]
+        from modules_forge import main_entry
+
+        path = main_entry.module_list[name]
+        return [path] if as_list else path
 
 
 def boolean_choice(reverse: bool = False):
@@ -304,6 +244,12 @@ def boolean_choice(reverse: bool = False):
         return ["False", "True"] if reverse else ["True", "False"]
 
     return choice
+
+
+def text_encoder_choice() -> list[str]:
+    from modules_forge import main_entry
+
+    return ["None"] + sorted(name for name in main_entry.module_list if name not in sd_vae.vae_dict)
 
 
 def format_value_add_label(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> str:
@@ -395,17 +341,9 @@ axis_options = [
     AxisOptionImg2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
     AxisOption("Schedule type", str, apply_field("scheduler"), choices=lambda: [x.label for x in sd_schedulers.schedulers]),
     AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=2.0, choices=lambda: list(checkpoints_list)),
-    AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["None", *sd_vae.vae_dict]),
-    AxisOption('VAE ("state_dict" only)', str, apply_vae_fast, cost=0.3, choices=lambda: ["None", *sd_vae.vae_dict]),
-    AxisOption(
-        "Text Encoder",
-        str,
-        apply_text_encoder,
-        format_value=format_remove_path,
-        confirm=confirm_text_encoders,
-        cost=0.7,
-        choices=text_encoder_choices,
-    ),
+    AxisOption("VAE", str, apply_module, confirm=confirm_modules_or_none, cost=0.7, choices=lambda: ["None", *sd_vae.vae_dict]),
+    AxisOption('VAE ("state_dict" only)', str, apply_vae_fast, confirm=confirm_modules_or_none, cost=0.3, choices=lambda: ["None", *sd_vae.vae_dict]),
+    AxisOption("Text Encoder", str, apply_module, format_value=format_remove_path, confirm=confirm_modules_or_none, cost=0.7, choices=text_encoder_choice),
     AxisOption("Clip skip", int, apply_override("CLIP_stop_at_last_layers")),
     AxisOption("Denoising", float, apply_field("denoising_strength")),
     AxisOption("Initial noise multiplier", float, apply_field("initial_noise_multiplier")),
@@ -561,14 +499,11 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
 
 
 class SharedSettingsStackHelper:
-    """Save/restore forge_additional_modules around XYZ (needed for Text Encoder axis)."""
-
     def __enter__(self):
-        self._modules = list(getattr(opts, "forge_additional_modules", []) or [])
-        return self
+        pass
 
     def __exit__(self, *args, **kwargs):
-        opts.set("forge_additional_modules", self._modules)
+        pass
 
 
 re_range = re.compile(r"\s*([+-]?\s*\d+)\s*-\s*([+-]?\s*\d+)(?:\s*\(([+-]\d+)\s*\))?\s*")
@@ -895,7 +830,7 @@ class Script(scripts.Script):
 
             pc = copy(p)
             pc.styles = pc.styles[:]
-            pc.override_settings = dict(p.override_settings)
+            pc.override_settings = p.override_settings.copy()
             x_opt.apply(pc, x, xs)
             y_opt.apply(pc, y, ys)
             z_opt.apply(pc, z, zs)
