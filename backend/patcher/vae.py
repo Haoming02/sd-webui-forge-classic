@@ -162,6 +162,7 @@ class VAE:
             self.downscale_index_formula = (4, 8, 8)
             self.latent_dim = 3
             self.latent_channels = int(model.config.z_dim)  # 16
+            self.output_channels = int(model.decoder.head[-1].out_channels)  # 3 | 4
 
             striped = hasattr(model, "conv1") and hasattr(model, "conv2")
             self.memory_used_encode = lambda shape, dtype: (400 if striped and shape[2] == 1 else 1500 if shape[2] <= 4 else 6000) * shape[3] * shape[4] * memory_management.dtype_size(dtype)
@@ -184,6 +185,7 @@ class VAE:
     def clone(self):
         n = VAE(no_init=True)
         n.patcher = self.patcher.clone()
+        n.output_channels = self.output_channels
         n.memory_used_encode = self.memory_used_encode
         n.memory_used_decode = self.memory_used_decode
         n.downscale_ratio = self.downscale_ratio

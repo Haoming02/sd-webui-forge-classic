@@ -320,6 +320,9 @@ class WanVAE(nn.Module, ProcessLatent, ConfigMixin):
         self.decoder = Decoder3d(base_dim, z_dim, conv_out_channels, dim_mult, num_res_blocks, attn_scales, self.temporal_upsample, dropout)
 
     def encode(self, x):
+        if self.encoder.conv1.in_channels == 4 and x.shape[1] == 3:
+            x = torch.cat((x, torch.ones_like(x[:, :1])), dim=1)
+
         conv_idx = [0]
         t = x.shape[2]
         t = 1 + ((t - 1) // 4) * 4

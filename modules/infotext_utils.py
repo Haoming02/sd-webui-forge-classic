@@ -250,7 +250,7 @@ def send_image_and_dimensions(x) -> tuple[Image.Image, int, int]:
     if img is None:
         return None, gr.skip(), gr.skip()
 
-    if img.mode != "RGB":
+    if img.mode not in ("RGB", "RGBA"):
         img = img.convert("RGB")
 
     from modules.ui import sRound
