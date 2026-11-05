@@ -188,7 +188,7 @@ def confirm_modules_or_none(p: StableDiffusionProcessing, xs: list[str]):
         from modules_forge import main_entry
 
         if x not in main_entry.module_list:
-            raise RuntimeError(f'Unknown Text Encoder: "{x}"')
+            raise RuntimeError(f'Unknown Module: "{x}"')
 
 
 def confirm_range(min_val: float, max_val: float, axis_label: str):
@@ -209,11 +209,11 @@ def refresh_loading_params_for_xyz_grid():
     """
     checkpoint_info = select_checkpoint()
 
-    # Copy additional_modules so later opts/override mutations cannot rewrite the hash key in-place.
+    # Copy additional_modules so later opts/override mutations cannot rewrite the hash key in-place
     model_data.forge_loading_parameters = dict(
         checkpoint_info=checkpoint_info,
-        additional_modules=list(opts.forge_additional_modules or []),
-        unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None),
+        additional_modules=list(opts.forge_additional_modules),
+        unet_storage_dtype=str(opts.forge_unet_storage_dtype),
     )
 
 
@@ -406,7 +406,7 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
 
         idx = index(ix, iy, iz)
         if processed.images:
-            # Non-empty list indicates some degree of success.
+            # Non-empty list indicates some degree of success
             processed_result.images[idx] = processed.images[0]
             processed_result.all_prompts[idx] = processed.prompt
             processed_result.all_seeds[idx] = processed.seed
@@ -452,7 +452,7 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
                         process_cell(x, y, z, ix, iy, iz)
 
     if not processed_result:
-        # Should never happen, I've only seen it on one of four open tabs and it needed to refresh.
+        # Should never happen
         logger.error("Processing could not begin, you may need to refresh the page or restart the WebUI")
         return Processed(p, [])
     elif not any(processed_result.images):
@@ -478,7 +478,7 @@ def draw_xyz_grid(p, xs, ys, zs, x_labels, y_labels, z_labels, cell, draw_legend
     if draw_legend:
         z_grid = images.draw_grid_annotations(z_grid, z_sub_grid_max_w, z_sub_grid_max_h, title_texts, [[images.GridAnnotation()]])
     processed_result.images.insert(0, z_grid)
-    # TODO: Deeper aspects of the program rely on grid info being misaligned between metadata arrays, which is not ideal.
+    # TODO: Deeper aspects of the program rely on grid info being misaligned between metadata arrays, which is not ideal
     # processed_result.all_prompts.insert(0, processed_result.all_prompts[0])
     # processed_result.all_seeds.insert(0, processed_result.all_seeds[0])
     processed_result.infotexts.insert(0, processed_result.infotexts[0])
@@ -882,7 +882,7 @@ class Script(scripts.Script):
         refresh_loading_params_for_xyz_grid()
 
         if not processed.images:
-            # It broke, no further handling needed.
+            # It broke, no further handling needed
             return processed
 
         z_count = len(zs)
@@ -941,7 +941,7 @@ class Script(scripts.Script):
             # Auto-save main and sub-grids:
             grid_count = z_count + 1 if z_count > 1 else 1
             for g in range(grid_count):
-                # TODO: See previous comment about intentional data misalignment.
+                # TODO: See previous comment about intentional data misalignment
                 adj_g = g - 1 if g > 0 else g
                 images.save_image(processed.images[g], p.outpath_grids, "xyz_grid", info=processed.infotexts[g], extension=opts.grid_format, prompt=processed.all_prompts[adj_g], seed=processed.all_seeds[adj_g], grid=True, p=processed)
                 if not include_sub_grids:  # if not include_sub_grids then skip saving after the first grid
