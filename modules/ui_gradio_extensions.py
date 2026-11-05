@@ -1,13 +1,14 @@
 import os
 
 import gradio as gr
+from gradio.route_utils import API_PREFIX
 
 from modules import localization, scripts, shared, util
 from modules.paths import data_path, script_path
 
 
 def webpath(fn):
-    return f"file={util.truncate_path(fn)}?{os.path.getmtime(fn)}"
+    return f"{API_PREFIX.lstrip('/')}/file={util.truncate_path(fn)}?{os.path.getmtime(fn)}"
 
 
 def javascript_html():

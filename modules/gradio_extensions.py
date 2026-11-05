@@ -45,8 +45,8 @@ def IOComponent_init(self, *args, **kwargs):
     return res
 
 
-def Block_get_config(self):
-    config = original_Block_get_config(self)
+def Block_get_config(self, *args, **kwargs):
+    config = original_Block_get_config(self, *args, **kwargs)
 
     webui_tooltip = getattr(self, "webui_tooltip", None)
     if webui_tooltip:
@@ -116,6 +116,9 @@ class EventWrapper:
         self.callback = getattr(replaced_event, "callback", None)
         self.real_self = getattr(replaced_event, "__self__", None)
 
+    def __getattr__(self, name):
+        return getattr(self.replaced_event, name)
+
     def __call__(self, *args, **kwargs):
         if "_js" in kwargs:
             kwargs["js"] = kwargs.pop("_js")
@@ -134,6 +137,12 @@ def repair(grclass):
     def __repaired_init__(self, *args, tooltip=None, source=None, original=grclass.__init__, **kwargs):
         if source:
             kwargs["sources"] = [source]
+
+        # JavaScript bindings need inactive tabs and hidden controls to remain in the DOM.
+        if grclass is gr.Tab:
+            kwargs.setdefault("render_children", True)
+        if kwargs.get("visible") is False and kwargs.get("elem_id"):
+            kwargs["visible"] = "hidden"
 
         allowed_kwargs = inspect.signature(original).parameters
         fixed_kwargs = {}
