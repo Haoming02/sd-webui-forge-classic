@@ -13,6 +13,7 @@ from backend.attention import attention_function
 from backend.memory_management import cast_to
 from backend.misc.image_resize import adaptive_resize
 from backend.nn.flux import EmbedND, timestep_embedding
+from backend.operations import repeat_kv_for_gqa
 from backend.quant_ops import ck
 from backend.utils import pad_to_patch_size
 
@@ -32,10 +33,18 @@ class RMSNorm(nn.Module):
         self.eps = eps
         self.scale = nn.Parameter(torch.empty(features))
 
+    def fp32_weight(self, x):
+        return cast_to(self.scale, dtype=torch.float32, device=x.device) + 1.0
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        dtype = x.dtype
-        weight = cast_to(self.scale, dtype=torch.float32, device=x.device) + 1.0
-        return F.rms_norm(x.float(), (x.shape[-1],), weight=weight, eps=self.eps).to(dtype)
+        return F.rms_norm(x, (x.shape[-1],), weight=self.fp32_weight(x).to(x.dtype), eps=self.eps)
+
+    def modulated(self, x, scale, shift):
+        if torch.is_grad_enabled():
+            return torch.addcmul(shift, 1 + scale, self(x))
+        # Fold the learned RMSNorm weight into the AdaLN scale before rounding.
+        scale = (self.fp32_weight(x) * (1 + scale.float()) - 1).to(x.dtype)
+        return ck.rms_adaln(x, scale, shift, self.eps)
 
 
 class QKNorm(nn.Module):
@@ -79,16 +88,18 @@ class Attention(nn.Module):
 
     def forward(self, x, freqs=None, mask=None, transformer_options={}):
         q, k, v, gate = self.wq(x), self.wk(x), self.wv(x), self.gate(x)
-        q = rearrange(q, "B L (H D) -> B H L D", H=self.heads)
-        k = rearrange(k, "B L (H D) -> B H L D", H=self.kvheads)
-        v = rearrange(v, "B L (H D) -> B H L D", H=self.kvheads)
-        q, k = self.qknorm(q, k)
-        if freqs is not None:
-            q, k = ck.apply_rope(q, k, freqs)
-        if self.kvheads != self.heads:
-            rep = self.heads // self.kvheads
-            k = k.repeat_interleave(rep, dim=1)
-            v = v.repeat_interleave(rep, dim=1)
+        q = q.unflatten(-1, (self.heads, self.headdim))
+        k = k.unflatten(-1, (self.kvheads, self.headdim))
+        v = v.unflatten(-1, (self.kvheads, self.headdim))
+        if freqs is not None and not torch.is_grad_enabled():
+            qnorm, knorm = self.qknorm.qnorm, self.qknorm.knorm
+            q, k = ck.rms_rope_(q, k, freqs.transpose(1, 2), qnorm.fp32_weight(q), knorm.fp32_weight(k), qnorm.eps)
+            q, k = q.transpose(1, 2), k.transpose(1, 2)
+        else:
+            q, k = self.qknorm(q.transpose(1, 2), k.transpose(1, 2))
+            if freqs is not None:
+                q, k = ck.apply_rope(q, k, freqs)
+        k, v = repeat_kv_for_gqa(k, v.transpose(1, 2), self.heads, 1)
         out = attention_function(q, k, v, self.heads, mask=mask, skip_reshape=True, transformer_options=transformer_options)
         return self.wo(out * F.sigmoid(gate))
 
@@ -144,8 +155,7 @@ class TextFusionTransformer(nn.Module):
         x = x.reshape(b * l, n, d)
         for block in self.layerwise_blocks:
             x = block(x.contiguous(), mask=None, transformer_options=transformer_options)
-        x = rearrange(x, "(b l) n d -> b l d n", b=b, l=l)
-        x = self.projector(x).squeeze(-1)
+        x = self.projector(x.unflatten(0, (b, l)).transpose(2, 3)).squeeze(-1)
         for block in self.refiner_blocks:
             x = block(x, mask=mask, transformer_options=transformer_options)
         return x
@@ -163,8 +173,8 @@ class SingleStreamBlock(nn.Module):
 
     def forward(self, x, vec, freqs, mask=None, transformer_options={}):
         prescale, preshift, pregate, postscale, postshift, postgate = self.mod(vec)
-        x.addcmul_(pregate, self.attn(torch.addcmul(preshift, 1 + prescale, self.prenorm(x)), freqs, mask, transformer_options=transformer_options))
-        x.addcmul_(postgate, self.mlp(torch.addcmul(postshift, 1 + postscale, self.postnorm(x))))
+        x.addcmul_(pregate, self.attn(self.prenorm.modulated(x, prescale, preshift), freqs, mask, transformer_options=transformer_options))
+        x.addcmul_(postgate, self.mlp(self.postnorm.modulated(x, postscale, postshift)))
         return x
 
 
@@ -178,8 +188,7 @@ class LastLayer(nn.Module):
 
     def forward(self, x, tvec):
         scale, shift = self.modulation(tvec)
-        x = torch.addcmul(shift, 1 + scale, self.norm(x))
-        return self.linear(x)
+        return self.linear(self.norm.modulated(x, scale, shift))
 
 
 class SingleStreamDiT(nn.Module):
@@ -297,8 +306,7 @@ class SingleStreamDiT(nn.Module):
         for block in self.blocks:
             combined = block(combined, tvec, freqs, None, transformer_options=transformer_options)
 
-        final = self.last(combined, t)
-        out = final[:, txtlen + reflen : txtlen + reflen + imglen, :]
+        out = self.last(combined[:, txtlen + reflen : txtlen + reflen + imglen], t)
         out = rearrange(out, "b (h w) (c ph pw) -> b c (h ph) (w pw)", h=h_, w=w_, ph=patch, pw=patch, c=self.channels)
         out = out[:, :, :H_orig, :W_orig]
 
