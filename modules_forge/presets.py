@@ -128,9 +128,13 @@ def register(options_templates: dict):
 
     from modules.options import OptionInfo, OptionRow, options_section
     from modules.shared_items import list_samplers, list_schedulers
+    from modules.shared import cmd_opts
 
     for arch in PresetArch:
         name = arch.name
+
+        if name in cmd_opts.disable_preset:
+            continue
 
         options_templates.update(
             options_section(

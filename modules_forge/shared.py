@@ -7,6 +7,22 @@ if TYPE_CHECKING:
 
 from backend import utils
 from modules.paths_internal import models_path, normalized_filepath, parser
+from modules_forge.presets import PresetArch
+
+parser.add_argument(
+    "--disable-preset",
+    nargs="+",
+    default=[],
+    type=str,
+    choices=PresetArch.choices(),
+    help="Presets to be disabled",
+)
+
+parser.add_argument(
+    "--sort-preset",
+    action="store_true",
+    help="Sort the Preset dropdown alphabetically",
+)
 
 parser.add_argument(
     "--controlnet-dir",
