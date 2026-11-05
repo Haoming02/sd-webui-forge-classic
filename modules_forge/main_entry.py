@@ -121,7 +121,7 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
         return ckpt_list, list(module_map.values())
 
 
-def refresh_model_loading_parameters(*, refresh: bool = True):
+def refresh_model_loading_parameters(*, refresh: bool = True, disable_log: bool = False):
     if not refresh:
         return
 
@@ -140,17 +140,21 @@ def refresh_model_loading_parameters(*, refresh: bool = True):
     modules: list[str] = [os.path.basename(x) for x in shared.opts.forge_additional_modules]
     dtype = str(unet_storage_dtype or [torch.float16, torch.bfloat16])
 
-    logger.info("Model Selected:")
-    print_json(data=dict(checkpoint=os.path.basename(ckpt), modules=modules, dtype=dtype))
+    if not disable_log:
+        logger.info("Model Selected:")
+        print_json(data=dict(checkpoint=os.path.basename(ckpt), modules=modules, dtype=dtype))
 
     if ckpt.endswith(("gguf", "GGUF")) and not lora_fp16:
-        logger.warning("GGUF requires fp16 LoRA ; overriding option")
         lora_fp16 = True
+        if not disable_log:
+            logger.warning("GGUF requires fp16 LoRA ; overriding option")
 
     dynamic_args.online_lora = lora_fp16
-    logger.info(f"Patch LoRAs on-the-fly: {lora_fp16}")
-    if not ckpt.endswith(("gguf", "GGUF")) and lora_fp16:
-        logger.warning("on-the-fly WILL be slower ; enable only if you know what you are doing")
+
+    if not disable_log:
+        logger.info(f"Patch LoRAs on-the-fly: {lora_fp16}")
+        if not ckpt.endswith(("gguf", "GGUF")) and lora_fp16:
+            logger.warning("on-the-fly WILL be slower ; enable only if you know what you are doing")
 
     processing.need_global_unload = True
 
