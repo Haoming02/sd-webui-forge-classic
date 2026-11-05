@@ -165,8 +165,8 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
                 from backend.nn.wan_vae import WanVAE
 
                 config = WanVAE.load_config(config_path)
-                config["image_channels"] = state_dict["encoder.conv1.weight"].shape[1]
-                config["conv_out_channels"] = state_dict["decoder.head.2.weight"].shape[0]
+                config["image_channels"] = int(state_dict["encoder.conv1.weight"].shape[1])
+                config["conv_out_channels"] = int(state_dict["decoder.head.2.weight"].shape[0])
                 dtype = memory_management.vae_dtype(allowed_dtypes=[torch.bfloat16, torch.float16, torch.float32])
 
             with no_init_weights():
