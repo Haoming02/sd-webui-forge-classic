@@ -207,18 +207,10 @@ def refresh_loading_params_for_xyz_grid():
     Refreshes the loading parameters for the model,
     causes a reload in sd_models.forge_model_reload()
     """
-    from modules_forge.main_entry import forge_unet_storage_dtype_options
 
     checkpoint_info = select_checkpoint()
-    # Same conversion as main_entry.refresh_model_loading_parameters: the option is a string, the loader expects a torch.dtype (or None)
-    unet_storage_dtype, _ = forge_unet_storage_dtype_options.get(opts.forge_unet_storage_dtype, (None, False))
 
-    # Copy additional_modules so later opts/override mutations cannot rewrite the hash key in-place
-    model_data.forge_loading_parameters = dict(
-        checkpoint_info=checkpoint_info,
-        additional_modules=list(opts.forge_additional_modules),
-        unet_storage_dtype=unet_storage_dtype,
-    )
+    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=opts.forge_additional_modules.copy(), unet_storage_dtype=model_data.forge_loading_parameters.get("unet_storage_dtype", None))
 
 
 def find_module(name: str, *, as_list: bool = False) -> str | list[str]:
