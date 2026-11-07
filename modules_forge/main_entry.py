@@ -1,6 +1,6 @@
 import logging
 import os.path
-from typing import Callable, OrderedDict
+from typing import Callable, Optional, OrderedDict
 
 import gradio as gr
 import torch
@@ -125,32 +125,55 @@ def refresh_models() -> tuple[list[os.PathLike], list[os.PathLike]]:
         return ckpt_list, list(module_map.values())
 
 
-def refresh_model_loading_parameters(*, refresh: bool = True, disable_log: bool = False):
+def resolve_dtype(dtype_name: str, checkpoint_info) -> tuple[torch.dtype, bool, bool]:
+    """A dtype option carries both the storage dtype and the on-the-fly LoRA mode; they must be restored together.
+    Returns (unet_storage_dtype, online_lora, gguf_overridden)"""
+    unet_storage_dtype, lora_fp16 = forge_unet_storage_dtype_options.get(dtype_name, (None, False))
+
+    filename = getattr(checkpoint_info, "filename", "") or ""
+    gguf_overridden = filename.endswith(("gguf", "GGUF")) and not lora_fp16
+
+    return unet_storage_dtype, True if gguf_overridden else lora_fp16, gguf_overridden
+
+
+def refresh_model_loading_parameters(*, refresh: bool = True, disable_log: bool = False, checkpoint=None, modules=None, dtype=None):
+    """checkpoint/modules/dtype default to shared.opts; task-scoped callers must pass snapshot values,
+    otherwise a mid-job UI switch would be taken as the value to load"""
     if not refresh:
         return
 
     from modules.sd_models import model_data, select_checkpoint
 
-    checkpoint_info = select_checkpoint()
-    if checkpoint_info is None:
-        logger.critical('You do not have any model... Please download models to "models/Stable-diffusion"')
-        return
+    if checkpoint is None:
+        checkpoint_info = select_checkpoint()
+        if checkpoint_info is None:
+            logger.critical('You do not have any model... Please download models to "models/Stable-diffusion"')
+            return
+    else:
+        checkpoint_info = sd_models.get_closet_checkpoint_match(checkpoint) if isinstance(checkpoint, str) else checkpoint
+        if checkpoint_info is None:
+            logger.warning(f'Checkpoint "{checkpoint}" not found ; loading parameters unchanged')
+            return
 
-    unet_storage_dtype, lora_fp16 = forge_unet_storage_dtype_options.get(shared.opts.forge_unet_storage_dtype, (None, False))
+    if modules is None:
+        modules = shared.opts.forge_additional_modules
+    if dtype is None:
+        dtype = shared.opts.forge_unet_storage_dtype
 
-    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=shared.opts.forge_additional_modules, unet_storage_dtype=unet_storage_dtype)
+    unet_storage_dtype, lora_fp16, gguf_overridden = resolve_dtype(dtype, checkpoint_info)
+
+    # key order must match enforce_task_loading_parameters / xyz_grid: forge_hash compares str(dict)
+    model_data.forge_loading_parameters = dict(checkpoint_info=checkpoint_info, additional_modules=list(modules), unet_storage_dtype=unet_storage_dtype)
 
     ckpt: str = checkpoint_info.filename
-    modules: list[str] = [os.path.basename(x) for x in shared.opts.forge_additional_modules]
-    dtype = str(unet_storage_dtype or [torch.float16, torch.bfloat16])
+    module_names: list[str] = [os.path.basename(x) for x in modules]
+    dtype_label = str(unet_storage_dtype or [torch.float16, torch.bfloat16])
 
     if not disable_log:
         logger.info("Model Selected:")
-        print_json(data=dict(checkpoint=os.path.basename(ckpt), modules=modules, dtype=dtype))
+        print_json(data=dict(checkpoint=os.path.basename(ckpt), modules=module_names, dtype=dtype_label))
 
-    if ckpt.endswith(("gguf", "GGUF")) and not lora_fp16:
-        lora_fp16 = True
-        if not disable_log:
+        if gguf_overridden:
             logger.warning("GGUF requires fp16 LoRA ; overriding option")
 
     dynamic_args.online_lora = lora_fp16
@@ -161,6 +184,55 @@ def refresh_model_loading_parameters(*, refresh: bool = True, disable_log: bool 
             logger.warning("on-the-fly WILL be slower ; enable only if you know what you are doing")
 
     processing.need_global_unload = True
+
+
+def snapshot_task_loading_parameters() -> dict:
+    """Capture the effective model loading parameters after overrides as the task-scoped source of truth; never written back to shared.opts.
+
+    All three keys are captured unconditionally: a plain generation has no override, but is equally affected by UI switches during sampling"""
+    return dict(
+        sd_model_checkpoint=shared.opts.sd_model_checkpoint,
+        forge_additional_modules=list(shared.opts.forge_additional_modules or []),
+        forge_unet_storage_dtype=shared.opts.forge_unet_storage_dtype,
+    )
+
+
+def enforce_task_loading_parameters(task_params: dict) -> Optional[dict]:
+    """Build loading parameters from the task snapshot, store them in the slot and return them for forge_model_reload
+    to consume, so loading no longer depends on a shared slot that UI callbacks can rewrite.
+    Returns None on an invalid snapshot to keep current behaviour"""
+    if not task_params:
+        return None
+
+    checkpoint_value = task_params.get("sd_model_checkpoint")
+    checkpoint_info = sd_models.get_closet_checkpoint_match(checkpoint_value) if checkpoint_value else None
+    if checkpoint_info is None:
+        # the snapshotted model no longer exists (e.g. deleted while generating): fall back to the current slot so the job is not aborted
+        checkpoint_info = sd_models.model_data.forge_loading_parameters.get("checkpoint_info")
+    if checkpoint_info is None:
+        return None
+
+    modules = list(task_params.get("forge_additional_modules", shared.opts.forge_additional_modules) or [])
+    dtype = task_params.get("forge_unet_storage_dtype", shared.opts.forge_unet_storage_dtype)
+    unet_storage_dtype, lora_fp16, _ = resolve_dtype(dtype, checkpoint_info)
+
+    params = dict(checkpoint_info=checkpoint_info, additional_modules=modules, unet_storage_dtype=unet_storage_dtype)
+
+    current = sd_models.model_data.forge_loading_parameters
+    changed = (
+        getattr(current.get("checkpoint_info"), "filename", None) != checkpoint_info.filename
+        or current.get("additional_modules") != modules
+        or current.get("unet_storage_dtype") != unet_storage_dtype
+    )
+
+    # only the slot and the LoRA mode are rewritten, never need_global_unload: enforcing restores the pre-override state, it is not a new memory intent
+    if changed:
+        sd_models.model_data.forge_loading_parameters = params
+        logger.info(f"Task-scoped model loading parameters enforced: {task_params}")
+
+    dynamic_args.online_lora = lora_fp16
+
+    return params
 
 
 def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> bool:
@@ -180,14 +252,20 @@ def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> b
     return True
 
 
-def modules_change(module_values: list, preset: str, save=True, refresh=True) -> bool:
-    """`module_values` accepts file paths or just the module names; returns `True` if modules changed"""
+def normalize_modules(module_values: list) -> list[str]:
+    """Accept file paths or module names; return the normalized module list (unknown entries filtered out, sorted)"""
     modules = []
     for v in module_values:
         module_name = os.path.basename(v)  # If the input is a filepath, extract the filename
         if module_name in module_list:
             modules.append(module_list[module_name])
     modules.sort()
+    return modules
+
+
+def modules_change(module_values: list, preset: str, save=True, refresh=True) -> bool:
+    """`module_values` accepts file paths or just the module names; returns `True` if modules changed"""
+    modules = normalize_modules(module_values)
 
     # skip further processing if value unchanged
     if modules == getattr(shared.opts, "forge_additional_modules", []):

@@ -345,7 +345,13 @@ def apply_refiner(cfg_denoiser: "CFGDenoiser", x: torch.Tensor, sigma: torch.Ten
 
     sampling_cleanup(shared.sd_model.forge_objects.unet)
 
-    original_checkpoint = getattr(shared.opts, "sd_model_checkpoint")
+    # task snapshot wins: a mid-job UI switch pollutes the restore values and the second-pass parameters taken from shared.opts
+    task_params = getattr(getattr(cfg_denoiser, "p", None), "forge_task_loading_params", {})
+    original_checkpoint = task_params["sd_model_checkpoint"] if "sd_model_checkpoint" in task_params else getattr(shared.opts, "sd_model_checkpoint")
+    fp_additional_modules = task_params["forge_additional_modules"] if "forge_additional_modules" in task_params else getattr(shared.opts, "forge_additional_modules")
+    fp_dtype = task_params["forge_unet_storage_dtype"] if "forge_unet_storage_dtype" in task_params else getattr(shared.opts, "forge_unet_storage_dtype")
+    fp_info = sd_models.get_closet_checkpoint_match(original_checkpoint)
+
     checkpoint_changed = main_entry.checkpoint_change(refiner_checkpoint_info.short_title, preset=None, save=False, refresh=False)
     if not checkpoint_changed:
         return False
@@ -354,10 +360,12 @@ def apply_refiner(cfg_denoiser: "CFGDenoiser", x: torch.Tensor, sigma: torch.Ten
 
     try:
         dynamic_args.loading_refiner = True
-        main_entry.refresh_model_loading_parameters()
+        # second-pass parameters are built from the task snapshot, applying only the intentional refiner checkpoint
+        main_entry.refresh_model_loading_parameters(checkpoint=refiner_checkpoint_info, modules=fp_additional_modules, dtype=fp_dtype)
         sd_models.forge_model_reload()
     finally:
-        main_entry.checkpoint_change(original_checkpoint, preset=None, save=False, refresh=True)
+        main_entry.checkpoint_change(original_checkpoint, preset=None, save=False, refresh=False)
+        main_entry.refresh_model_loading_parameters(checkpoint=fp_info, modules=fp_additional_modules, dtype=fp_dtype)
         dynamic_args.loading_refiner = False
 
     if not cfg_denoiser.p.disable_extra_networks:

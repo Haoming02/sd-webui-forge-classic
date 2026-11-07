@@ -782,7 +782,10 @@ need_global_unload = False
 def manage_model_and_prompt_cache(p: StableDiffusionProcessing):
     global need_global_unload
 
-    p.sd_model, just_reloaded = forge_model_reload()
+    # enforcement point: a UI switch can slip in between set_config and loading; build parameters from the task snapshot and load with them
+    task_loading_params = main_entry.enforce_task_loading_parameters(getattr(p, "forge_task_loading_params", {}))
+
+    p.sd_model, just_reloaded = forge_model_reload(task_loading_params)
 
     if need_global_unload and not just_reloaded:
         memory_management.unload_all_models()
@@ -811,6 +814,9 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
 
         # apply any options overrides
         set_config(p.override_settings, is_api=True, run_callbacks=False, save_config=False, disable_log=hasattr(p, "is_xyz_pass"))
+
+        # snapshot right after overrides are applied: from here on shared.opts may be rewritten by UI switches or by the restore, task values always come from the snapshot
+        p.forge_task_loading_params = main_entry.snapshot_task_loading_parameters()
 
         # load/reload model and manage prompt cache as needed
         if getattr(p, "txt2img_upscale", False):
@@ -936,7 +942,9 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
 
             if not getattr(p, "txt2img_upscale", False) or p.hr_checkpoint_name is None:
                 # hiresfix quickbutton may not need reload of firstpass model
-                sd_models.forge_model_reload()  # model can be changed for example by refiner, hiresfix
+                # enforcement point: correct the values back to the task snapshot before reading the slot each iteration, so UI switches during sampling never take effect on the next batch
+                task_loading_params = main_entry.enforce_task_loading_parameters(getattr(p, "forge_task_loading_params", {}))
+                sd_models.forge_model_reload(task_loading_params)  # model can be changed for example by refiner, hiresfix
 
             p.sd_model.forge_objects = p.sd_model.forge_objects_original.shallow_copy()
             p.prompts = p.all_prompts[n * p.batch_size : (n + 1) * p.batch_size]
@@ -1392,28 +1400,41 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
             else:
                 decoded_samples = None
 
-        fp_checkpoint = getattr(shared.opts, "sd_model_checkpoint")
-        fp_additional_modules = getattr(shared.opts, "forge_additional_modules")
+        # first-pass (fp) model prefers the task snapshot: a mid-job UI switch pollutes the restore values taken from shared.opts
+        task_params = getattr(self, "forge_task_loading_params", {})
+        fp_checkpoint = task_params["sd_model_checkpoint"] if "sd_model_checkpoint" in task_params else getattr(shared.opts, "sd_model_checkpoint")
+        fp_additional_modules = task_params["forge_additional_modules"] if "forge_additional_modules" in task_params else getattr(shared.opts, "forge_additional_modules")
+        fp_dtype = task_params["forge_unet_storage_dtype"] if "forge_unet_storage_dtype" in task_params else getattr(shared.opts, "forge_unet_storage_dtype")
+
+        fp_info = sd_models.get_closet_checkpoint_match(fp_checkpoint)
+        hr_info = fp_info
+        hr_modules = list(fp_additional_modules)
 
         reload = False
         if "Use same choices" not in (getattr(self, "hr_additional_modules", []) or []):
-            modules_changed = main_entry.modules_change(self.hr_additional_modules, preset=None, save=False, refresh=False)
-            if modules_changed:
+            hr_modules = main_entry.normalize_modules(self.hr_additional_modules)
+            if hr_modules != list(fp_additional_modules):
                 reload = True
+            main_entry.modules_change(self.hr_additional_modules, preset=None, save=False, refresh=False)
 
         if self.hr_checkpoint_name and self.hr_checkpoint_name != "Use same checkpoint":
-            checkpoint_changed = main_entry.checkpoint_change(self.hr_checkpoint_name, preset=None, save=False, refresh=False)
-            if checkpoint_changed:
+            matched_info = sd_models.get_closet_checkpoint_match(self.hr_checkpoint_name)
+            if matched_info is None:
+                raise ValueError(f'Could not find checkpoint with name "{self.hr_checkpoint_name}"')
+            hr_info = matched_info
+            if fp_info is None or hr_info.filename != fp_info.filename:
                 reload = True
+            main_entry.checkpoint_change(self.hr_checkpoint_name, preset=None, save=False, refresh=False)
 
         if reload:
             try:
-                main_entry.refresh_model_loading_parameters()
+                # second-pass parameters are built from the snapshot plus the intentional hires choice, never from shared.opts
+                main_entry.refresh_model_loading_parameters(checkpoint=hr_info, modules=hr_modules, dtype=fp_dtype)
                 sd_models.forge_model_reload()
             finally:
                 main_entry.modules_change(fp_additional_modules, preset=None, save=False, refresh=False)
                 main_entry.checkpoint_change(fp_checkpoint, preset=None, save=False, refresh=False)
-                main_entry.refresh_model_loading_parameters()
+                main_entry.refresh_model_loading_parameters(checkpoint=fp_info, modules=fp_additional_modules, dtype=fp_dtype)
 
         return self.sample_hr_pass(samples, decoded_samples, seeds, subseeds, subseed_strength, prompts)
 

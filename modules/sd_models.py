@@ -320,13 +320,20 @@ def apply_token_merging(sd_model, token_merging_ratio):
 
 
 @torch.inference_mode()
-def forge_model_reload():
-    current_hash = str(model_data.forge_loading_parameters)
+def forge_model_reload(parameters=None):
+    """parameters accepts an immutable task-scoped parameter set, read once at entry so UI
+    rewrites happening during the load cannot mix into this load"""
+    params = model_data.forge_loading_parameters if parameters is None else parameters
+    current_hash = str(params)
+
+    if parameters is not None:
+        # the slot must describe the loaded model: prompt cache keys and other readers must not see another parameter set written by the UI
+        model_data.forge_loading_parameters = params
 
     if model_data.forge_hash == current_hash:
         return model_data.sd_model, False
 
-    print("Loading Model: " + str(model_data.forge_loading_parameters))
+    print("Loading Model: " + str(params))
 
     timer = Timer()
 
@@ -347,15 +354,15 @@ def forge_model_reload():
     timer.record("unload existing model")
 
     try:
-        checkpoint_info = model_data.forge_loading_parameters["checkpoint_info"]
+        checkpoint_info = params["checkpoint_info"]
         assert checkpoint_info is not None
     except Exception:
         raise ValueError("Failed to find available model...") from None
 
     state_dict = checkpoint_info.filename
-    additional_state_dicts = model_data.forge_loading_parameters.get("additional_modules", [])
+    additional_state_dicts = params.get("additional_modules", [])
 
-    dynamic_args.forge_unet_storage_dtype = model_data.forge_loading_parameters.get("unet_storage_dtype", None)
+    dynamic_args.forge_unet_storage_dtype = params.get("unet_storage_dtype", None)
     dynamic_args.embedding_dir = cmd_opts.embeddings_dir
 
     try:
