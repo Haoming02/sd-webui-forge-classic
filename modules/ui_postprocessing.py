@@ -42,7 +42,7 @@ def create_ui():
 
     submit_click_inputs = [dummy_component, tab_index, extras_image, image_batch, extras_batch_input_dir, extras_batch_output_dir, show_extras_results, extras_video_input, *script_inputs]
 
-    submit.click(
+    submit_args = dict(
         fn=call_queue.wrap_gradio_gpu_call(postprocessing.run_postprocessing_webui, extra_outputs=[None, ""]),
         _js="submit_extras",
         inputs=submit_click_inputs,
@@ -53,6 +53,9 @@ def create_ui():
         ],
         show_progress=False,
     )
+
+    submit.click(**submit_args)
+    toprow.queue.click(**submit_args, trigger_mode="multiple")
 
     parameters_copypaste.add_paste_fields("extras", extras_image, None)
 

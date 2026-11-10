@@ -386,6 +386,7 @@ def create_ui():
 
             toprow.prompt.submit(**txt2img_args).then(fn=cleanup)
             toprow.submit.click(**txt2img_args).then(fn=cleanup)
+            toprow.queue.click(**txt2img_args, trigger_mode="multiple").then(fn=cleanup)
 
             def select_gallery_image(index):
                 index = int(index)
@@ -757,6 +758,7 @@ def create_ui():
 
             toprow.prompt.submit(**img2img_args).then(fn=cleanup)
             toprow.submit.click(**img2img_args).then(fn=cleanup)
+            toprow.queue.click(**img2img_args, trigger_mode="multiple").then(fn=cleanup)
 
             res_switch_btn.click(lambda w, h: (h, w), inputs=[width, height], outputs=[width, height], show_progress=False)
 

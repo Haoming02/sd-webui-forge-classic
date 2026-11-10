@@ -74,7 +74,13 @@ function randomId() {
 // starts sending progress requests to "/internal/progress" uri, creating progressbar above progressbarContainer element and
 // preview inside gallery element. Cleans up all created stuff when the task is over and calls atEnd.
 // calls onProgress every time there is a progress update
-function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgress, inactivityTimeout = 40) {
+// getLabel (optional) returns a prefix for the progress text / title, e.g. the queue position "Q 2/3"
+
+// number of progressbars currently alive ; the title is only reset once the last one ends,
+// so that it does not flicker between queued generations
+let liveProgressbars = 0;
+
+function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgress, inactivityTimeout = 40, getLabel = null) {
     let dateStart = new Date();
     let wasEverActive = false;
     let parentProgressbar = progressbarContainer.parentNode;
@@ -111,12 +117,14 @@ function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgre
     parentProgressbar.insertBefore(divProgress, progressbarContainer);
 
     let livePreview = null;
+    liveProgressbars += 1;
 
     let removeProgressBar = function () {
         releaseWakeLock();
         if (!divProgress) return;
 
-        setTitle("");
+        liveProgressbars = Math.max(0, liveProgressbars - 1);
+        if (liveProgressbars === 0) setTitle("");
         parentProgressbar.removeChild(divProgress);
         if (gallery && livePreview) gallery.removeChild(livePreview);
         atEnd();
@@ -148,7 +156,19 @@ function requestProgress(id_task, progressbarContainer, gallery, atEnd, onProgre
                     progressText += " ETA: " + formatTime(res.eta);
                 }
 
-                setTitle(progressText);
+                // progressbars are absolutely positioned at the same spot: while this job is waiting
+                // behind another one of this panel, hide it so it does not cover the running job's bar
+                // (the running bar already shows the queue position)
+                const othersInPanel = Array.from(parentProgressbar.querySelectorAll(":scope > .progressDiv")).some((d) => d !== divProgress);
+                const hidden = !res.active && othersInPanel;
+                divProgress.style.display = opts.show_progressbar && !hidden ? "block" : "none";
+
+                if (res.active) {
+                    const label = getLabel ? getLabel() : "";
+                    if (label) progressText = progressText.trim() ? label + " · " + progressText.trim() : label;
+                    // only the running job owns the title ; queued ones would reset it
+                    setTitle(progressText);
+                }
 
                 if (res.textinfo && res.textinfo.indexOf("\n") == -1) {
                     progressText = res.textinfo + " " + progressText;

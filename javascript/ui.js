@@ -127,18 +127,87 @@ function create_submit_args(args) {
     return res;
 }
 
-function setSubmitButtonsVisibility(tabname, showInterrupt, showSkip, showInterrupting) {
+function setSubmitButtonsVisibility(tabname, showInterrupt, showSkip, showInterrupting, showQueue) {
     gradioApp().getElementById(tabname + "_interrupt").style.display = showInterrupt ? "block" : "none";
     gradioApp().getElementById(tabname + "_skip").style.display = showSkip ? "block" : "none";
     gradioApp().getElementById(tabname + "_interrupting").style.display = showInterrupting ? "block" : "none";
+    const queue = gradioApp().getElementById(tabname + "_queue");
+    if (queue) queue.style.display = showQueue ? "block" : "none";
 }
 
 function showSubmitButtons(tabname, show) {
-    setSubmitButtonsVisibility(tabname, !show, !show, false);
+    setSubmitButtonsVisibility(tabname, !show, !show, false, !show);
 }
 
 function showSubmitInterruptingPlaceholder(tabname) {
-    setSubmitButtonsVisibility(tabname, false, true, true);
+    setSubmitButtonsVisibility(tabname, false, true, true, true);
+}
+
+// per-tab bookkeeping of generations submitted from this page (Generate + Queue)
+const submitQueue = {};
+
+function getSubmitQueue(tabname) {
+    if (!submitQueue[tabname]) submitQueue[tabname] = { pending: 0, total: 0, done: 0 };
+    return submitQueue[tabname];
+}
+
+function queueJobStarted(tabname) {
+    const q = getSubmitQueue(tabname);
+    q.pending += 1;
+    q.total += 1;
+}
+
+// returns true when no more jobs are pending for this tab
+function queueJobFinished(tabname) {
+    const q = getSubmitQueue(tabname);
+    q.pending = Math.max(0, q.pending - 1);
+    q.done += 1;
+
+    if (q.pending > 0) return false;
+
+    q.total = 0;
+    q.done = 0;
+    return true;
+}
+
+// label shown in the browser tab / progressbar, e.g. "Q 2/3" ; empty when a single job is running
+function queueLabel(tabname) {
+    const q = getSubmitQueue(tabname);
+    if (q.total <= 1) return "";
+    return "Q " + Math.min(q.done + 1, q.total) + "/" + q.total;
+}
+
+function submitTask(tabname, args, rememberTask) {
+    showSubmitButtons(tabname, false);
+    queueJobStarted(tabname);
+
+    const id = randomId();
+    if (rememberTask) localSet(tabname + "_task_id", id);
+
+    requestProgress(
+        id,
+        gradioApp().getElementById(tabname + "_gallery_container"),
+        gradioApp().getElementById(tabname + "_gallery"),
+        function () {
+            if (queueJobFinished(tabname)) {
+                showSubmitButtons(tabname, true);
+                if (rememberTask) localRemove(tabname + "_task_id");
+                showRestoreProgressButton(tabname, false);
+            } else {
+                // next queued job takes over: reset an eventual "Interrupting..." state
+                showSubmitButtons(tabname, false);
+            }
+        },
+        null,
+        40,
+        function () {
+            return queueLabel(tabname);
+        },
+    );
+
+    const res = create_submit_args(args);
+    res[0] = id;
+    return res;
 }
 
 function showRestoreProgressButton(tabname, show) {
@@ -148,25 +217,7 @@ function showRestoreProgressButton(tabname, show) {
 }
 
 function submit() {
-    showSubmitButtons("txt2img", false);
-
-    const id = randomId();
-    localSet("txt2img_task_id", id);
-
-    requestProgress(
-        id,
-        gradioApp().getElementById("txt2img_gallery_container"),
-        gradioApp().getElementById("txt2img_gallery"),
-        function () {
-            showSubmitButtons("txt2img", true);
-            localRemove("txt2img_task_id");
-            showRestoreProgressButton("txt2img", false);
-        },
-    );
-
-    const res = create_submit_args(arguments);
-    res[0] = id;
-    return res;
+    return submitTask("txt2img", arguments, true);
 }
 
 function submit_txt2img_upscale() {
@@ -176,44 +227,11 @@ function submit_txt2img_upscale() {
 }
 
 function submit_img2img() {
-    showSubmitButtons("img2img", false);
-
-    const id = randomId();
-    localSet("img2img_task_id", id);
-
-    requestProgress(
-        id,
-        gradioApp().getElementById("img2img_gallery_container"),
-        gradioApp().getElementById("img2img_gallery"),
-        function () {
-            showSubmitButtons("img2img", true);
-            localRemove("img2img_task_id");
-            showRestoreProgressButton("img2img", false);
-        },
-    );
-
-    const res = create_submit_args(arguments);
-    res[0] = id;
-    return res;
+    return submitTask("img2img", arguments, true);
 }
 
 function submit_extras() {
-    showSubmitButtons("extras", false);
-
-    const id = randomId();
-
-    requestProgress(
-        id,
-        gradioApp().getElementById("extras_gallery_container"),
-        gradioApp().getElementById("extras_gallery"),
-        function () {
-            showSubmitButtons("extras", true);
-        },
-    );
-
-    const res = create_submit_args(arguments);
-    res[0] = id;
-    return res;
+    return submitTask("extras", arguments, false);
 }
 
 function restoreProgressTxt2img() {

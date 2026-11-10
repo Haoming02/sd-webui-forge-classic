@@ -40,25 +40,32 @@ def wrap_gradio_gpu_call(func, extra_outputs=None):
                 progress.record_results(id_task, res)
             finally:
                 progress.finish_task(id_task)
-
-            shared.state.end()
+                shared.state.end()
+                # reset while still holding the lock, so a queued job that
+                # starts right after does not get its state clobbered
+                shared.state.skipped = False
+                shared.state.interrupted = False
+                shared.state.stopping_generation = False
 
         return res
 
-    return wrap_gradio_call(f, extra_outputs=extra_outputs, add_stats=True)
+    # state is already reset inside queue_lock above; resetting it again here
+    # (after the lock is released) would race with the next queued job
+    return wrap_gradio_call(f, extra_outputs=extra_outputs, add_stats=True, reset_state=False)
 
 
-def wrap_gradio_call(func, extra_outputs=None, add_stats=False):
+def wrap_gradio_call(func, extra_outputs=None, add_stats=False, reset_state=True):
     @wraps(func)
     def f(*args, **kwargs):
         try:
             res = func(*args, **kwargs)
         finally:
-            shared.state.skipped = False
-            shared.state.interrupted = False
-            shared.state.stopping_generation = False
-            shared.state.job_count = 0
-            shared.state.job = ""
+            if reset_state:
+                shared.state.skipped = False
+                shared.state.interrupted = False
+                shared.state.stopping_generation = False
+                shared.state.job_count = 0
+                shared.state.job = ""
         return res
 
     return wrap_gradio_call_no_job(f, extra_outputs, add_stats)
