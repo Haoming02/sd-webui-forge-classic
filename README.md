@@ -22,12 +22,14 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Oct.]
+## Features [Sep.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
 
 - [X] Support [Moss-Image](https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT)
+- [X] Support **Moss-Image-Edit**
+    - require specific [LoRA](https://huggingface.co/chinoll/Moss-Image-Edit)
 - [X] Support [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)
 - [X] Support [Krea 2](https://huggingface.co/krea/Krea-2-Turbo)
 - [X] Support **Krea 2 Identity Edit**
@@ -41,7 +43,13 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - `4B` / `9B` (**not** `FLUX.2-Dev`)
 
 > [!Note]
-> To toggle between `img2img` and `reference` (`edit`) for `Qwen-Image-2.1` / `Krea 2` / `Anima` / `Flux.2-Klein`, refer to **Settings/Stable Diffusion**
+> To toggle between `img2img` and `reference` for Models with Edit capability, refer to **Settings/Stable Diffusion**
+
+- [X] Support **Anima RGBA**
+    - require specific [LoRA & VAE](https://huggingface.co/localai0301/Anima-RGBA)
+
+> [!Tip]
+> Set `img2img_background_color` to `(255, 255, 255)` to support `img2img` for transparent image
 
 - [X] Support [Ernie-Image](https://huggingface.co/baidu/ERNIE-Image)
 - [X] Support [PiD 1.5](https://huggingface.co/nvidia/PiD)
@@ -149,6 +157,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - enable in **Settings/Upscaling**
 - [X] Support (short) videos in **Extras** tab
 - [X] Add support for `.avif`, `.heif`, and `.jxl` image formats
+- [X] Checkpoint cards now also apply preferred Text Encoder & VAE
 - [X] Automatically determine the optimal row count for `X/Y/Z Plot`
 - [X] Update **LLLite** Controlnet
     - [SDXL](https://huggingface.co/kohya-ss/controlnet-lllite/tree/main) / [Anima](https://huggingface.co/kohya-ss/Anima-LLLite/tree/main)
@@ -221,6 +230,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Optimize certain operations in `Spandrel`
 - [X] Optimize certain operations for `VAE`
 - [X] Speed up model loading
+- [X] Streamline model sorting
 - [X] Improve color correction
 - [X] Improve memory management
 - [X] Unload all models on `OutOfMemory`
@@ -342,10 +352,17 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
+- `--disable-preset`: Remove the specified Preset(s) from the dropdown and settings
+- `--sort-preset`: Sort the Preset dropdown alphabetically
+
+<br>
+
 - `--use-ck-attention`: Use the Comfy-Kitchen attention to speed up generation
     - override other attention packages
 - `--enable-triton-backend`: Enable the use of Triton backend in `comfy-kitchen`
     - *might* speed up inference
+- `--force-w4a8`: Always load `convrot_w4a4` models in `w4a8` format instead
+    - improve quality
 - `--pynvml`: Use the NVIDIA Management Library to determine the actual amount of free VRAM
     - prevent system freeze when running other programs
 
