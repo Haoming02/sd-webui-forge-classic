@@ -3,7 +3,6 @@ ftfy
 fvcore
 mediapipe
 onnx
-onnxruntime
 opencv-python
 svglib
 timm
