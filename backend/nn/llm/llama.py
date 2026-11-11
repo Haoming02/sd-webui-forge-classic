@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from backend.memory_management import pytorch_attention_enabled
+from backend.memory_management import pytorch_attention_enabled, text_encoder_device
 
 if pytorch_attention_enabled():
     from backend.attention import attention_pytorch as attention_function
@@ -710,8 +710,8 @@ class Qwen3VL(BaseLlama, nn.Module):
     def preprocess_embed(self, embed, device):
         if embed["type"] == "image":
             image, grid = qwen_vl.process_qwen2vl_images(embed["data"], patch_size=16, image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
-            merged, deepstack = self.visual(image.to(device, dtype=torch.float32), grid)
-            return merged, {"grid": grid, "deepstack": deepstack}
+            merged, deepstack = self.visual(image.to(text_encoder_device(), dtype=torch.float32), grid)
+            return merged.to(device), {"grid": grid, "deepstack": [features.to(device) for features in deepstack]}
         return None, None
 
     def build_image_inputs(self, embeds, embeds_info):
