@@ -15,6 +15,15 @@ QUANTS_MAPPING: dict[GGMLQuantizationType, type[quants.TorchQuant]] = {
     GGMLQuantizationType.Q6_K: quants.Q6_K,
     GGMLQuantizationType.Q8_0: quants.Q8_0,
     GGMLQuantizationType.BF16: quants.BF16,
+    GGMLQuantizationType.IQ1_S: quants.IQ1_S,
+    GGMLQuantizationType.IQ1_M: quants.IQ1_M,
+    GGMLQuantizationType.IQ2_XXS: quants.IQ2_XXS,
+    GGMLQuantizationType.IQ2_XS: quants.IQ2_XS,
+    GGMLQuantizationType.IQ2_S: quants.IQ2_S,
+    GGMLQuantizationType.IQ3_XXS: quants.IQ3_XXS,
+    GGMLQuantizationType.IQ3_S: quants.IQ3_S,
+    GGMLQuantizationType.IQ4_NL: quants.IQ4_NL,
+    GGMLQuantizationType.IQ4_XS: quants.IQ4_XS,
 }
 
 

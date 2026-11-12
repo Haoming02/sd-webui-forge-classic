@@ -2,8 +2,10 @@
 # AGPL V3 + CC-BY-SA
 
 from abc import ABC, abstractmethod
+from functools import cache
 
 import torch
+from gguf import quants as gguf_quants
 from gguf.constants import GGML_QUANT_SIZES, QK_K, GGMLQuantizationType
 
 from .quick_4bits_ops import (
@@ -358,3 +360,158 @@ class Q6_K(TorchQuant, qtype=GGMLQuantizationType.Q6_K):
         q = (ql | (qh << 4)).to(torch.int8) - 32
         q = q.reshape((n_blocks, QK_K // 16, -1))
         return (d * q).reshape((n_blocks, QK_K))
+
+
+# region I-Quants
+
+
+def _iq_bits(values, width, count):
+    shifts = torch.arange(count, device=values.device, dtype=values.dtype) * width
+    return (values.unsqueeze(-1) >> shifts) & ((1 << width) - 1)
+
+
+def _iq_words(values):
+    b0, b1, b2, b3 = values.reshape(values.size(0), -1, 4).to(torch.int32).unbind(-1)
+    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+
+
+def _iq_lookup(table, indices):
+    return table.index_select(0, indices.flatten().to(torch.int32))
+
+
+@cache
+def _iq_grid(quant, device):
+    quant.init_grid()
+    return torch.tensor(quant.grid.reshape(quant.grid_shape), dtype=torch.int8, device=device)
+
+
+@cache
+def _iq_sign_table(device):
+    return torch.tensor(list(gguf_quants.IQ2_XXS.ksigns), dtype=torch.uint8, device=device)
+
+
+def _iq_signs(values):
+    return 1 - 2 * _iq_bits(values, 1, 8).to(torch.int8)
+
+
+def _iq_apply_scale(values, scales, dtype):
+    return values.float().mul_(scales).flatten(1).to(dtype)
+
+
+class IQ2_XXS(TorchQuant, qtype=GGMLQuantizationType.IQ2_XXS):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, qs = quick_split(blocks, [2])
+        qs = qs.reshape(blocks.size(0), -1, 8)
+        scale_signs = _iq_words(qs[..., 4:])
+        scales = (d.view(torch.float16).float() * (0.5 + ((scale_signs >> 28) & 15)) * 0.25).unsqueeze(-1)
+        sign_bytes = _iq_lookup(_iq_sign_table(blocks.device), _iq_bits(scale_signs, 7, 4))
+        grid = _iq_lookup(_iq_grid(gguf_quants.IQ2_XXS, blocks.device), qs[..., :4])
+        values = grid.mul_(_iq_signs(sign_bytes)).reshape(blocks.size(0), -1, 32)
+        return _iq_apply_scale(values, scales, parameter.computation_dtype)
+
+
+class IQ2_XS(TorchQuant, qtype=GGMLQuantizationType.IQ2_XS):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, qs, scales = quick_split(blocks, [2, QK_K // 4])
+        qs = qs.view(torch.int16)
+        scales = (d.view(torch.float16).float() * (0.5 + _iq_bits(scales, 4, 2).flatten(1)) * 0.25).unsqueeze(-1)
+        sign_bytes = _iq_lookup(_iq_sign_table(blocks.device), (qs >> 9) & 127)
+        grid = _iq_lookup(_iq_grid(gguf_quants.IQ2_XS, blocks.device), qs & 511)
+        values = grid.mul_(_iq_signs(sign_bytes)).reshape(blocks.size(0), -1, 16)
+        return _iq_apply_scale(values, scales, parameter.computation_dtype)
+
+
+class IQ2_S(TorchQuant, qtype=GGMLQuantizationType.IQ2_S):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, qs, signs, qh, scales = quick_split(blocks, [2, QK_K // 8, QK_K // 8, QK_K // 32])
+        scales = (d.view(torch.float16).float() * (0.5 + _iq_bits(scales, 4, 2).flatten(1)) * 0.25).unsqueeze(-1)
+        indices = qs.to(torch.int16) | (_iq_bits(qh, 2, 4).flatten(1).to(torch.int16) << 8)
+        grid = _iq_lookup(_iq_grid(gguf_quants.IQ2_S, blocks.device), indices)
+        values = grid.mul_(_iq_signs(signs.flatten())).reshape(blocks.size(0), -1, 16)
+        return _iq_apply_scale(values, scales, parameter.computation_dtype)
+
+
+class IQ3_XXS(TorchQuant, qtype=GGMLQuantizationType.IQ3_XXS):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, qs, scale_signs = quick_split(blocks, [2, QK_K // 4])
+        scale_signs = _iq_words(scale_signs)
+        scales = (d.view(torch.float16).float() * (0.5 + ((scale_signs >> 28) & 15)) * 0.5).unsqueeze(-1)
+        sign_bytes = _iq_lookup(_iq_sign_table(blocks.device), _iq_bits(scale_signs, 7, 4))
+        grid = _iq_lookup(_iq_grid(gguf_quants.IQ3_XXS, blocks.device), qs).reshape(-1, 8)
+        values = grid.mul_(_iq_signs(sign_bytes)).reshape(blocks.size(0), -1, 32)
+        return _iq_apply_scale(values, scales, parameter.computation_dtype)
+
+
+class IQ3_S(TorchQuant, qtype=GGMLQuantizationType.IQ3_S):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, qs, qh, signs, scales = quick_split(blocks, [2, QK_K // 4, QK_K // 32, QK_K // 8])
+        scales = (d.view(torch.float16).float() * (2 * _iq_bits(scales, 4, 2).flatten(1) + 1)).unsqueeze(-1)
+        indices = qs.to(torch.int16) | (_iq_bits(qh, 1, 8).flatten(1).to(torch.int16) << 8)
+        grid = _iq_lookup(_iq_grid(gguf_quants.IQ3_S, blocks.device), indices).reshape(-1, 8)
+        values = grid.mul_(_iq_signs(signs.flatten())).reshape(blocks.size(0), -1, 32)
+        return _iq_apply_scale(values, scales, parameter.computation_dtype)
+
+
+class IQ1_S(TorchQuant, qtype=GGMLQuantizationType.IQ1_S):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, qs, qh = quick_split(blocks, [2, QK_K // 8])
+        qh = qh.view(torch.int16)
+        scales = d.view(torch.float16).float() * (2 * ((qh >> 12) & 7) + 1)
+        indices = qs.to(torch.int16) | (_iq_bits(qh, 3, 4).flatten(1) << 8)
+        grid = _iq_lookup(_iq_grid(gguf_quants.IQ1_S, blocks.device), indices).reshape(blocks.size(0), -1, 32)
+        delta = (1 - 2 * ((qh >> 15) & 1)).to(torch.int8).unsqueeze(-1)
+        values = 8 * grid + delta
+        return _iq_apply_scale(values, (scales * 0.125).unsqueeze(-1), parameter.computation_dtype)
+
+
+class IQ1_M(TorchQuant, qtype=GGMLQuantizationType.IQ1_M):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        qs, qh, scales = quick_split(blocks, [QK_K // 8, QK_K // 16])
+        scales = scales.view(torch.int16)
+
+        s0, s1, s2, s3 = ((scales >> 12) & 15).unbind(1)
+        d = (s0 | (s1 << 4) | (s2 << 8) | (s3 << 12)).view(torch.float16).float().unsqueeze(-1)
+        scales = d * (2 * _iq_bits(scales, 3, 4).flatten(1) + 1)
+        qh = _iq_bits(qh, 4, 2).flatten(1)
+        indices = qs.to(torch.int16) | ((qh & 7).to(torch.int16) << 8)
+        grid = _iq_lookup(_iq_grid(gguf_quants.IQ1_S, blocks.device), indices)
+        delta = (1 - 2 * (qh >> 3).to(torch.int8)).reshape(-1, 1)
+        values = (8 * grid + delta).reshape(blocks.size(0), -1, 16)
+        return _iq_apply_scale(values, (scales * 0.125).unsqueeze(-1), parameter.computation_dtype)
+
+
+@cache
+def _iq4_table(device):
+    values = torch.tensor(gguf_quants.IQ4_NL.kvalues, dtype=torch.int8)
+    packed = torch.arange(256)
+    return torch.stack((values[packed & 15], values[packed >> 4]), dim=-1).to(device)
+
+
+def _iq4_values(qs):
+    values = _iq_lookup(_iq4_table(qs.device), qs)
+    return values.reshape(qs.size(0), -1, 16, 2).transpose(-2, -1).flatten(2)
+
+
+class IQ4_NL(TorchQuant, qtype=GGMLQuantizationType.IQ4_NL):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, qs = quick_split(blocks, [2])
+        return _iq_apply_scale(_iq4_values(qs), d.view(torch.float16).float().unsqueeze(-1), parameter.computation_dtype)
+
+
+class IQ4_XS(TorchQuant, qtype=GGMLQuantizationType.IQ4_XS):
+    @classmethod
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter):
+        d, scales_h, scales_l, qs = quick_split(blocks, [2, 2, QK_K // 64])
+        scales_h = _iq_bits(scales_h.view(torch.int16), 2, 8).flatten(1).to(torch.int8)
+        scales_l = _iq_bits(scales_l, 4, 2).flatten(1).to(torch.int8)
+        scales = (scales_l | (scales_h << 4)) - 32
+        d = d.view(torch.float16).float() * scales
+        return _iq_apply_scale(_iq4_values(qs), d.unsqueeze(-1), parameter.computation_dtype)
