@@ -25,7 +25,7 @@ def attention(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, pe: torch.Tenso
 
 def rope(pos: torch.Tensor, dim: int, theta: int) -> torch.Tensor:
     assert dim % 2 == 0
-    if memory_management.is_device_mps(pos.device) or memory_management.is_intel_xpu() or memory_management.is_directml_enabled():
+    if not memory_management.supports_fp64(pos.device):
         device = torch.device("cpu")
     else:
         device = pos.device
