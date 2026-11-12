@@ -1,19 +1,20 @@
 import torch
+from gguf import GGMLQuantizationType
 
-from modules_forge.packages import gguf
+from modules_forge.packages.gguf import quants
 
-QUANTS_MAPPING: dict[gguf.constants.GGMLQuantizationType, gguf.quants.__Quant] = {
-    gguf.GGMLQuantizationType.Q2_K: gguf.Q2_K,
-    gguf.GGMLQuantizationType.Q3_K: gguf.Q3_K,
-    gguf.GGMLQuantizationType.Q4_0: gguf.Q4_0,
-    gguf.GGMLQuantizationType.Q4_1: gguf.Q4_1,
-    gguf.GGMLQuantizationType.Q4_K: gguf.Q4_K,
-    gguf.GGMLQuantizationType.Q5_0: gguf.Q5_0,
-    gguf.GGMLQuantizationType.Q5_1: gguf.Q5_1,
-    gguf.GGMLQuantizationType.Q5_K: gguf.Q5_K,
-    gguf.GGMLQuantizationType.Q6_K: gguf.Q6_K,
-    gguf.GGMLQuantizationType.Q8_0: gguf.Q8_0,
-    gguf.GGMLQuantizationType.BF16: gguf.BF16,
+QUANTS_MAPPING: dict[GGMLQuantizationType, type[quants.TorchQuant]] = {
+    GGMLQuantizationType.Q2_K: quants.Q2_K,
+    GGMLQuantizationType.Q3_K: quants.Q3_K,
+    GGMLQuantizationType.Q4_0: quants.Q4_0,
+    GGMLQuantizationType.Q4_1: quants.Q4_1,
+    GGMLQuantizationType.Q4_K: quants.Q4_K,
+    GGMLQuantizationType.Q5_0: quants.Q5_0,
+    GGMLQuantizationType.Q5_1: quants.Q5_1,
+    GGMLQuantizationType.Q5_K: quants.Q5_K,
+    GGMLQuantizationType.Q6_K: quants.Q6_K,
+    GGMLQuantizationType.Q8_0: quants.Q8_0,
+    GGMLQuantizationType.BF16: quants.BF16,
 }
 
 
@@ -23,7 +24,7 @@ class ParameterGGUF(torch.nn.Parameter):
         if no_init:
             return
 
-        self.gguf_cls: "gguf.quants.__Quant" = QUANTS_MAPPING.get(tensor_type, None)
+        self.gguf_cls = QUANTS_MAPPING.get(tensor_type)
         self.real_shape: torch.Size = tensor_shape
         self.computation_dtype = torch.float16
         self.baked = False

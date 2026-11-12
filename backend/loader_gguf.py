@@ -2,6 +2,7 @@
 # (c) City96
 
 
+import gguf
 import torch
 
 
@@ -130,9 +131,6 @@ def gguf_remapping(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tenso
         del attns
 
     return state_dict
-
-
-from modules_forge.packages import gguf
 
 
 def get_orig_shape(reader: gguf.GGUFReader, tensor_name: str) -> torch.Size | None:

@@ -9,6 +9,7 @@ diskcache==5.6.3
 einops==0.8.2
 facexlib==0.3.0
 fastapi==0.127.1
+gguf==0.19.0
 httpx==0.28.1
 huggingface-hub==0.36.2
 inflection==0.5.1

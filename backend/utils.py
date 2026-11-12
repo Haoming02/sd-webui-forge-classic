@@ -2,6 +2,7 @@ import json
 import math
 import os.path
 
+import gguf
 import safetensors
 import torch
 from einops import rearrange, repeat
@@ -10,7 +11,6 @@ from backend.args import args
 from backend.loader_gguf import dequantize, get_orig_shape
 from backend.memory_management import logger
 from backend.operations_gguf import ParameterGGUF
-from modules_forge.packages import gguf
 from modules_forge.packages.comfy.weight_adapter.base import WeightAdapterBase
 
 if not hasattr(torch.serialization, "add_safe_globals"):
