@@ -511,14 +511,14 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
     return None
 
 
-def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor], guess, path: os.PathLike):
+def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor], metadata: dict, guess, path: os.PathLike):
     vae_key_prefix = guess.vae_key_prefix[0]
     text_encoder_key_prefix = guess.text_encoder_key_prefix[0]
 
     if path.endswith("gguf"):
         from backend.loader_gguf import gguf_remapping
 
-        asd = gguf_remapping(asd)
+        asd = gguf_remapping(asd, metadata)
 
     #   flux 2
     if "decoder.post_quant_conv.weight" in asd:
@@ -857,8 +857,8 @@ def split_state_dict(path: os.PathLike, additional_state_dicts: list[os.PathLike
     if isinstance(additional_state_dicts, list):
         for asd in additional_state_dicts:
             _asd, _meta = load_torch_file(asd, return_metadata=True)
-            _asd, _ = convert_quantization(_asd, _meta)
-            sd = replace_state_dict(sd, _asd, guess, asd)
+            _asd, _meta = convert_quantization(_asd, _meta)
+            sd = replace_state_dict(sd, _asd, _meta, guess, asd)
             del _asd
 
     guess.clip_target = guess.clip_target(sd)

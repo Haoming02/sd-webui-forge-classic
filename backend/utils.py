@@ -94,6 +94,8 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
             sd[tensor_name] = ParameterGGUF(torch_tensor, tensor_type=tensor.tensor_type, tensor_shape=shape)
             if len(shape) <= 1 and tensor.tensor_type == gguf.GGMLQuantizationType.BF16:
                 sd[tensor_name] = dequantize(sd[tensor_name], dtype=torch.float32)
+        if return_metadata:
+            metadata = {key: field.contents() for key, field in reader.fields.items() if not key.startswith("tokenizer")}
 
     else:
         assert safe_load
