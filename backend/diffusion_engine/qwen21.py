@@ -1,6 +1,5 @@
 # https://github.com/Comfy-Org/ComfyUI/blob/v0.38.0/comfy_extras/nodes_qwen.py
 
-import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,6 +11,7 @@ from huggingface_guess import model_list
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
+from backend.misc.image_resize import resize_reference
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
@@ -87,20 +87,8 @@ class QwenImage21(ForgeDiffusionEngine):
         return self.text_processing_engine_qwen(prompt, images=images_vl)
 
     @torch.inference_mode()
-    def encode_vision(self, image: torch.Tensor, resolution: int = 1024) -> tuple[torch.Tensor, torch.Tensor]:
-        samples = image[:1].movedim(-1, 1)  # b, c, h, w
-
-        if resolution > 0:
-            ratio = samples.shape[3] / samples.shape[2]
-            width = round(math.sqrt(resolution * resolution * ratio) / 32) * 32
-            height = round(math.sqrt(resolution * resolution / ratio) / 32) * 32
-        else:
-            width, height = round(samples.shape[3] / 32) * 32, round(samples.shape[2] / 32) * 32
-
-        if (width, height) == (samples.shape[3], samples.shape[2]):
-            s = image[:1]
-        else:
-            s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area").movedim(1, -1)
+    def encode_vision(self, image: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        s = resize_reference(image[:1].movedim(-1, 1), 32, 1024).movedim(1, -1)
 
         rgb = s[:, :, :, :3]
         if s.shape[-1] > 3:
@@ -119,14 +107,10 @@ class QwenImage21(ForgeDiffusionEngine):
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
         if x.size(1) == 3:
-            a = torch.ones((1, 1, x.size(2), x.size(3)), dtype=x.dtype, device=x.device)
-            x = torch.cat([x, a], dim=1)
+            x = torch.cat([x, torch.ones_like(x[:, :1])], dim=1)
 
         if opts.qwen21_do_reference:
-            start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
-            if dynamic_args.is_referencing:
-                self.ref_latents.append(start_image.cpu())
-            else:
-                self.ini_latent = start_image.cpu()
+            self.store_reference(x[:1].movedim(1, -1).mul(0.5).add(0.5).cpu())
 
-        return super().encode_first_stage(x)
+        if not dynamic_args.is_referencing:
+            return super().encode_first_stage(x)

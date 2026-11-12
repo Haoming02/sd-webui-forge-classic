@@ -259,7 +259,7 @@ options_templates.update(
                 {"lines": 3, "max_lines": 6, "placeholder": "<Prompt Start>"},
             ),
             "divmisc": OptionDiv(),
-            "qwen_vae_resize": OptionInfo(False, "[Qwen-Image-Edit] Resize input image to 1 megapixel for ref_latent"),
+            "reference_max_side": OptionInfo(1024, "Maximum Side Length for Reference Images", gr.Slider, {"minimum": 0, "maximum": 2048, "step": 256}).info("applies to reference images from img2img and ImageStitch").info("set to 0 for no limit"),
             "klein_do_reference": OptionInfo(True, "[Klein] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often"),
             "qwen21_do_reference": OptionInfo(True, "[Qwen 2.1] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often"),
             "anima_do_reference": OptionInfo(False, "[Anima] Enable Reference").info("enable Edit ; disable img2img").info("pin to <b>Quicksettings</b> is recommended if changed often").info("requires specfic Edit LoRA"),

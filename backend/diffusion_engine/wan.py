@@ -4,7 +4,7 @@ from huggingface_guess import model_list
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
-from backend.misc.image_resize import adaptive_resize
+from backend.misc.image_resize import adaptive_resize, resize_reference
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
@@ -80,25 +80,25 @@ class Wan(ForgeDiffusionEngine):
     def image_to_video(self, length: int, latent_shape: list[int]):
         # https://github.com/Comfy-Org/ComfyUI/blob/v0.20.1/comfy_extras/nodes_wan.py#L209
 
-        if self.start_image is not None:
-            start_image = self.start_image.movedim(1, -1)
-            _, h, w, _ = start_image.shape
+        frame = self.start_image if self.start_image is not None else self.end_image
+        if frame is None:
+            raise SystemError("No images passed to Wan I2V...?")
 
+        frame = resize_reference(frame)
+        h, w = frame.shape[-2:]
+
+        if self.start_image is not None:
+            start_image = frame.movedim(1, -1)
         if self.end_image is not None:
-            if self.start_image is not None:
-                end_image = adaptive_resize(self.end_image, w, h, "bilinear", "center").movedim(1, -1)
-            else:
-                end_image = self.end_image.movedim(1, -1)
-                _, h, w, _ = end_image.shape
+            end_image = frame if self.start_image is None else adaptive_resize(self.end_image, w, h, "bilinear", "center")
+            end_image = end_image.movedim(1, -1)
 
         if self.start_image is not None and self.end_image is not None:
             memory_management.logger.info("[Wan] FirstLastFrameToVideo")
         elif self.start_image is not None and self.end_image is None:
             memory_management.logger.info("[Wan] ImageToVideo")
-        elif self.start_image is None and self.end_image is not None:
-            memory_management.logger.info("[Wan] LastFrameToVideo")
         else:
-            raise SystemError("No images passed to Wan I2V...?")
+            memory_management.logger.info("[Wan] LastFrameToVideo")
 
         image = torch.ones((length, h, w, 3), device="cpu", dtype=torch.float32).mul(0.5)
         mask = torch.ones((1, 1, latent_shape[2] * 4, latent_shape[-2], latent_shape[-1]), device="cpu", dtype=torch.float32)
@@ -126,6 +126,9 @@ class Wan(ForgeDiffusionEngine):
             image[:, i : i + latent_dim] = self.forge_objects.vae.first_stage_model.process_in(image[:, i : i + latent_dim])
         image = resize_to_batch_size(image, latent_shape[0])
 
+        if image.shape[-2:] != tuple(latent_shape[-2:]):
+            image = adaptive_resize(image, latent_shape[-1], latent_shape[-2], "bilinear", "disabled")
+
         if image.shape[1] > (extra_channels - 4):
             image = image[:, : (extra_channels - 4)]
 
@@ -145,34 +148,28 @@ class Wan(ForgeDiffusionEngine):
 
         self.start_image = None
 
+    def set_end_image(self, image: torch.Tensor, length: int):
+        assert self.forge_objects.unet.model.diffusion_model.in_dim == 36
+        self.end_image = image.cpu()
+        if length > 1:
+            h, w = image.shape[-2:]
+            self.image_to_video(length, [1, 16, (length - 1) // 4 + 1, h // 8, w // 8])
+
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
         b, _, h, w = x.shape
         x = x[0].mul(0.5).add(0.5).unsqueeze(0)  # enforce batch_size of 1
 
-        if dynamic_args.is_referencing:
-            if b == 1:
-                # FirstLastFrameToVideo
-                self.end_image = x.cpu()
-                assert self.forge_objects.unet.model.diffusion_model.in_dim == 36
-                return
-            else:
-                # LastFrameToVideo
-                self.end_image = x.cpu()
-                assert self.forge_objects.unet.model.diffusion_model.in_dim == 36
+        if b == 1:
+            # img2img
+            sample = self.forge_objects.vae.encode(x.movedim(1, -1))
+            sample = self.forge_objects.vae.first_stage_model.process_in(sample)
+            assert self.forge_objects.unet.model.diffusion_model.in_dim == 16
+            return sample.to(x)
 
-        else:
-            if b == 1:
-                # img2img
-                sample = self.forge_objects.vae.encode(x.movedim(1, -1))
-                sample = self.forge_objects.vae.first_stage_model.process_in(sample)
-                assert self.forge_objects.unet.model.diffusion_model.in_dim == 16
-                return sample.to(x)
-            else:
-                # FirstFrameToVideo
-                self.start_image = x.cpu()
-                assert self.forge_objects.unet.model.diffusion_model.in_dim == 36
-
+        # FirstFrameToVideo
+        self.start_image = x.cpu()
+        assert self.forge_objects.unet.model.diffusion_model.in_dim == 36
         latent = torch.zeros([1, 16, ((b - 1) // 4) + 1, h // 8, w // 8], device=self.forge_objects.vae.device)
         self.image_to_video(b, list(latent.shape))
         sample = self.forge_objects.vae.first_stage_model.process_in(latent)
