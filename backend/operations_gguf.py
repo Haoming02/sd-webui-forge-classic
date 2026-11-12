@@ -73,7 +73,7 @@ def dequantize_tensor(tensor: "ParameterGGUF", *, input: torch.Tensor = None) ->
         return tensor
 
     if (gguf_cls := tensor.gguf_cls) is not None:
-        if input is not None and input.is_cuda and gguf_cls in (quants.Q3_K, quants.Q5_K, quants.Q6_K):
+        if input is not None and input.is_cuda and gguf_cls in (quants.Q2_K, quants.Q3_K, quants.Q4_K, quants.Q5_K, quants.Q6_K):
             from modules_forge.packages.gguf.kquant_triton import try_dequantize
 
             if (weight := try_dequantize(tensor, input)) is not None:

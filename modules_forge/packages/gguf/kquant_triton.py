@@ -31,7 +31,18 @@ else:
         block = tl.program_id(0).to(tl.int64)
         local = tl.arange(0, 256)
 
-        if QTYPE == "Q3_K":
+        if QTYPE == "Q2_K":
+            base = q_ptr + block * 84
+            group = local // 16
+            d = tl.load((base + 80).to(tl.pointer_type(tl.float16))).to(DECODE_DTYPE).to(tl.float32)
+            dmin = tl.load((base + 82).to(tl.pointer_type(tl.float16))).to(DECODE_DTYPE).to(tl.float32)
+            scale = tl.load(base + group)
+            dl = (d * (scale & 15).to(tl.float32)).to(DECODE_DTYPE).to(tl.float32)
+            ml = (dmin * (scale >> 4).to(tl.float32)).to(DECODE_DTYPE).to(tl.float32)
+
+            q = (tl.load(base + 16 + local // 128 * 32 + local % 32) >> (local // 32 % 4 * 2)) & 3
+            w = (dl * q.to(tl.float32)).to(DECODE_DTYPE).to(tl.float32) - ml
+        elif QTYPE == "Q3_K":
             base = q_ptr + block * 110
             group = local // 16
             d = tl.load((base + 108).to(tl.pointer_type(tl.float16))).to(DECODE_DTYPE).to(tl.float32)
@@ -45,6 +56,15 @@ else:
             qh = ((tl.load(base + local % 32) >> (local // 32)) & 1) ^ 1
             q = ql.to(tl.int32) - (qh.to(tl.int32) << 2)
             w = scaled * q.to(tl.float32)
+        elif QTYPE == "Q4_K":
+            base = q_ptr + block * 160
+            group = local // 32
+            d = tl.load((base + group * 2).to(tl.pointer_type(DECODE_DTYPE))).to(tl.float32)
+            dm = tl.load((base + 16 + group * 2).to(tl.pointer_type(DECODE_DTYPE))).to(tl.float32)
+
+            q = (tl.load(base + 32 + local // 2) >> (local % 2 * 4)) & 15
+            product = (d * q.to(tl.float32)).to(DECODE_DTYPE).to(tl.float32)
+            w = product - dm
         elif QTYPE == "Q5_K":
             base = q_ptr + block * 176
             d = tl.load(base.to(tl.pointer_type(tl.float16))).to(DECODE_DTYPE).to(tl.float32)
@@ -96,12 +116,16 @@ def try_dequantize(tensor: "ParameterGGUF", input: torch.Tensor):
 
     rows = input.numel() // shape[1]
 
-    if qtype == "Q3_K":
-        supported = 0 < rows <= 8192
+    if qtype == "Q2_K":
+        supported, block_bytes = 0 < rows <= 8192, 84
+    elif qtype == "Q3_K":
+        supported, block_bytes = 0 < rows <= 8192, 110
+    elif qtype == "Q4_K":
+        supported, block_bytes = 0 < rows <= 8192, 160
     elif qtype == "Q5_K":
-        supported = 0 < rows <= 1024 and tuple(shape) in {(4096, 4096), (16384, 4096)}
+        supported, block_bytes = 0 < rows <= 1024 and tuple(shape) in {(4096, 4096), (16384, 4096)}, 176
     elif qtype == "Q6_K":
-        supported = 0 < rows <= 1024 and tuple(shape) == (4096, 16384)
+        supported, block_bytes = 0 < rows <= 1024 and tuple(shape) == (4096, 16384), 210
     else:
         return None
     route = (input.device, qtype, tensor.computation_dtype, input.dtype)
@@ -110,7 +134,7 @@ def try_dequantize(tensor: "ParameterGGUF", input: torch.Tensor):
 
     data = tensor.data
     blocks = shape[0] * shape[1] // 256
-    if not blocks or data.dtype != torch.uint8 or data.shape != (blocks, quant.type_size) or not data.is_contiguous():
+    if not blocks or data.dtype != torch.uint8 or data.shape != (blocks, block_bytes) or not data.is_contiguous():
         return None
 
     weight = torch.empty(shape, device=input.device, dtype=input.dtype)
