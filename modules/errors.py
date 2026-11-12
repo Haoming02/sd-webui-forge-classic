@@ -102,7 +102,7 @@ def check_versions():
     else:
         expected_torch = "2.14.0"
 
-    expected_gradio = "4.40.0"
+    expected_gradio = "6.31.0"
 
     outdated: list[str] = []
 

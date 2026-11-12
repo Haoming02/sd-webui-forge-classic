@@ -1,0 +1,1 @@
+import{aO as d,aP as r}from"./render-BijsvVNj.js";const e="5";typeof window<"u"&&((window.__svelte??={}).v??=new Set).add(e);const o=Object.freeze(Object.defineProperty({__proto__:null},Symbol.toStringTag,{value:"Module"}));export{o as SVELTE_VERSION,d as mount,r as unmount};

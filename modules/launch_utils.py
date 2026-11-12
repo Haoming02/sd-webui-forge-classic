@@ -290,7 +290,7 @@ def prepare_environment():
     pynvml_package = os.environ.get("PYNVML_PACKAGE", "nvidia-ml-py==13.615.71")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.3")
-    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==4.40.0 gradio_rangeslider==0.0.8")
+    gradio_package = os.environ.get("GRADIO_PACKAGE", "gradio==6.31.0")
     requirements_file = os.environ.get("REQS_FILE", "requirements.txt")
 
     try:
