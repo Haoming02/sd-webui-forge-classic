@@ -1,6 +1,25 @@
+import math
+
 import numpy as np
 import torch
 from PIL import Image
+
+
+def resize_reference(samples: torch.Tensor, multiple: int = 16, resolution: int = 0) -> torch.Tensor:
+    from modules.shared import opts
+
+    height, width = samples.shape[-2:]
+
+    scale = min(
+        (val / math.sqrt(width * height) for val in (resolution, opts.reference_max_side) if val > 0),
+        default=1.0,
+    )
+
+    size = tuple(max(multiple, round(side * scale / multiple) * multiple) for side in (height, width))
+    if size == (height, width):
+        return samples
+
+    return torch.nn.functional.interpolate(samples, size=size, mode="area")
 
 
 def bislerp(samples: torch.Tensor, width: int, height: int) -> torch.Tensor:

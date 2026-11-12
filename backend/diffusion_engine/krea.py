@@ -1,4 +1,3 @@
-import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,6 +9,7 @@ from huggingface_guess import model_list
 from backend import memory_management
 from backend.args import dynamic_args
 from backend.diffusion_engine.base import ForgeDiffusionEngine, ForgeObjects
+from backend.misc.image_resize import resize_reference
 from backend.patcher.clip import CLIP
 from backend.patcher.unet import UnetPatcher
 from backend.patcher.vae import VAE
@@ -74,20 +74,9 @@ class Krea2(ForgeDiffusionEngine):
     def encode_vision(self, image: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         samples = image.movedim(-1, 1)  # b, c, h, w
 
-        total = int(768 * 768)
-        scale_by = math.sqrt(total / (samples.shape[3] * samples.shape[2]))
-        width = round(samples.shape[3] * scale_by)
-        height = round(samples.shape[2] * scale_by)
+        _vision = resize_reference(samples, 1, 768).movedim(1, -1)[:, :, :, :3]
 
-        s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
-        _vision = s.movedim(1, -1)[:, :, :, :3]
-
-        width = samples.shape[3]
-        height = samples.shape[2]
-
-        width = round(width / 16.0) * 16
-        height = round(height / 16.0) * 16
-        s = torch.nn.functional.interpolate(samples, size=(height, width), mode="area")
+        s = resize_reference(samples)
         sample = self.forge_objects.vae.encode(s.movedim(1, -1)[:, :, :, :3])
         _latent = self.forge_objects.vae.first_stage_model.process_in(sample)
 
@@ -101,10 +90,7 @@ class Krea2(ForgeDiffusionEngine):
     @torch.inference_mode()
     def encode_first_stage(self, x: torch.Tensor):
         if opts.krea2_do_reference:
-            start_image = x[0].movedim(0, -1).mul(0.5).add(0.5).unsqueeze(0)
-            if dynamic_args.is_referencing:
-                self.ref_latents.append(start_image.cpu())
-            else:
-                self.ini_latent = start_image.cpu()
+            self.store_reference(x[:1].movedim(1, -1).mul(0.5).add(0.5).cpu())
 
-        return super().encode_first_stage(x)
+        if not dynamic_args.is_referencing:
+            return super().encode_first_stage(x)

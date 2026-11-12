@@ -11,6 +11,8 @@ import torch
 from safetensors.torch import save_file
 
 from backend import memory_management, utils
+from backend.args import dynamic_args
+from backend.misc.image_resize import resize_reference
 from backend.modules.k_prediction import PredictionDiscreteFlow, PredictionFlux
 
 
@@ -71,7 +73,21 @@ class ForgeDiffusionEngine:
         raise NotImplementedError
 
     @torch.inference_mode()
-    def encode_first_stage(self, x: torch.Tensor):
+    def encode_first_stage(self, x: torch.Tensor, *, multiple: int = -1):
+        if multiple < 1:
+            return self._encode_first_stage(x)
+
+        reference = resize_reference(x[:1], multiple)
+        if dynamic_args.is_referencing:
+            self.store_reference(self._encode_first_stage(reference).cpu())
+            return
+
+        samples = self._encode_first_stage(x)
+        latent = samples[:1].clone() if reference.shape[-2:] == x.shape[-2:] else self._encode_first_stage(reference)
+        self.store_reference(latent.cpu())
+        return samples
+
+    def _encode_first_stage(self, x: torch.Tensor):
         if self.is_wan:  # otherwise image batch turns into video...
             samples: list[torch.Tensor] = []
             for i in range(x.size(0)):
@@ -113,6 +129,12 @@ class ForgeDiffusionEngine:
         # called by ImageStitch
         self.ref_latents.clear()
         memory_management.soft_empty_cache()
+
+    def store_reference(self, reference: torch.Tensor):
+        if dynamic_args.is_referencing:
+            self.ref_latents.append(reference)
+        else:
+            self.ini_latent = reference
 
     def set_shift(self, shift: float, *args, **kwargs):
         if not self.use_shift:
