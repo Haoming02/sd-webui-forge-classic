@@ -442,7 +442,8 @@ class ForgeOperationsGGUF(ForgeOperations):
             if self.weight is not None and self.weight.dtype != x.dtype and getattr(self.weight, "gguf_cls", None) is None:
                 self.weight = utils.tensor2parameter(self.weight.to(x.dtype))
 
-            weight, bias, signal = weights_manual_cast(self, x, weight_fn=dequantize_tensor, skip_bias_dtype=True)
+            weight_fn = (lambda weight: dequantize_tensor(weight, input=x)) if args.enable_triton_backend else dequantize_tensor
+            weight, bias, signal = weights_manual_cast(self, x, weight_fn=weight_fn, skip_bias_dtype=True)
             with main_stream_worker(weight, bias, signal):
                 return torch.nn.functional.linear(x, weight, bias)
 

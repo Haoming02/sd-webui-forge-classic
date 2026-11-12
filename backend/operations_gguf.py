@@ -65,7 +65,7 @@ class ParameterGGUF(torch.nn.Parameter):
         return self.copy_with_data(torch.Tensor.pin_memory(self, device=device))
 
 
-def dequantize_tensor(tensor: "ParameterGGUF") -> torch.Tensor:
+def dequantize_tensor(tensor: "ParameterGGUF", *, input: torch.Tensor = None) -> torch.Tensor:
     if tensor is None:
         return None
 
@@ -73,6 +73,11 @@ def dequantize_tensor(tensor: "ParameterGGUF") -> torch.Tensor:
         return tensor
 
     if (gguf_cls := tensor.gguf_cls) is not None:
+        if input is not None and input.is_cuda and gguf_cls in (quants.Q3_K, quants.Q5_K, quants.Q6_K):
+            from modules_forge.packages.gguf.kquant_triton import try_dequantize
+
+            if (weight := try_dequantize(tensor, input)) is not None:
+                return weight
         return gguf_cls.dequantize_pytorch(tensor)
 
     return tensor
