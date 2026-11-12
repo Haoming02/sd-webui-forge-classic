@@ -146,9 +146,10 @@ class ImageStitch(scripts.Script):
         p.sd_model.clear_references()
 
     def process(self, p: StableDiffusionProcessing, enable: bool, references: list[str | tuple[Image.Image, str]]):
-        references: list[Image.Image] = []
         if enable and references and dynamic_args.can_reference():
-            references = self.extract_images(references)
+            references: list[Image.Image] = self.extract_images(references)
+        else:
+            references = None
 
         is_WanT2I: bool = dynamic_args.wan and isinstance(p, StableDiffusionProcessingTxt2Img)
 
