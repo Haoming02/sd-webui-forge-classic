@@ -5,6 +5,12 @@
 import gguf
 import torch
 
+TORCH_COMPATIBLE_QTYPES = (None, gguf.GGMLQuantizationType.F32, gguf.GGMLQuantizationType.F16)
+
+
+def is_quantized(tensor) -> bool:
+    return tensor is not None and getattr(tensor, "tensor_type", None) not in TORCH_COMPATIBLE_QTYPES
+
 
 def dequantize(p: torch.nn.Parameter, dtype: torch.dtype) -> torch.Tensor:
     from backend.operations_gguf import dequantize_tensor
