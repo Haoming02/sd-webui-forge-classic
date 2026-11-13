@@ -760,7 +760,11 @@ def replace_state_dict(sd: dict[str, torch.Tensor], asd: dict[str, torch.Tensor]
                 continue
             sd[f"{text_encoder_key_prefix}ministral3_3b.transformer.{k}"] = v
 
-    if "visual.blocks.0.attn.proj.weight" in asd:
+    if "visual.merger.linear_fc2.weight" in asd:
+        for k, v in asd.items():
+            if k.startswith("visual."):
+                sd[f"{text_encoder_key_prefix}qwen35_9b.transformer.model.{k}"] = v
+    elif "visual.blocks.0.attn.proj.weight" in asd:
         for k, v in asd.items():
             sd[f"{text_encoder_key_prefix}qwen25_7b.{k}"] = v
 

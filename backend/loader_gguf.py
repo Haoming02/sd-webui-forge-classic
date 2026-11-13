@@ -152,17 +152,34 @@ def gguf_remapping(state_dict: dict[str, torch.Tensor], metadata: dict) -> dict[
 
     if "mm.0.weight" in state_dict:
         gguf_clip_vision_format = {
-            "mm.": "visual.merger.mlp.",
-            "v.post_ln.": "visual.merger.ln_q.",
             "v.patch_embd": "visual.patch_embed.proj",
             "v.blk.": "visual.blocks.",
-            "ffn_up": "mlp.up_proj",
-            "ffn_down": "mlp.down_proj",
-            "ffn_gate": "mlp.gate_proj",
             "attn_out.": "attn.proj.",
             "ln1.": "norm1.",
             "ln2.": "norm2.",
         }
+        if metadata.get("clip.projector_type") == "qwen3vl_merger":
+            gguf_clip_vision_format.update(
+                {
+                    "mm.0.": "visual.merger.linear_fc1.",
+                    "mm.2.": "visual.merger.linear_fc2.",
+                    "v.post_ln.": "visual.merger.norm.",
+                    "v.position_embd.": "visual.pos_embed.",
+                    "attn_qkv.": "attn.qkv.",
+                    "ffn_up.": "mlp.linear_fc1.",
+                    "ffn_down.": "mlp.linear_fc2.",
+                }
+            )
+        else:
+            gguf_clip_vision_format.update(
+                {
+                    "mm.": "visual.merger.mlp.",
+                    "v.post_ln.": "visual.merger.ln_q.",
+                    "ffn_up": "mlp.up_proj",
+                    "ffn_down": "mlp.down_proj",
+                    "ffn_gate": "mlp.gate_proj",
+                }
+            )
         new_sd = {}
         for k, v in state_dict.items():
             for s, d in gguf_clip_vision_format.items():
