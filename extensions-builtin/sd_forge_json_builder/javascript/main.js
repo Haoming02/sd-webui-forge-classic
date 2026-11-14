@@ -67,7 +67,11 @@
             el.style.height = "auto";
             const cs = getComputedStyle(el);
             const borders = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
-            el.style.height = `${el.scrollHeight + borders}px`;
+            const lineHeight = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2 || 16;
+            const padding = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+            const oneLine = Math.ceil(lineHeight) + padding + borders;
+            const next = `${Math.max(el.scrollHeight + borders, oneLine)}px`;
+            if (el.style.height !== next) el.style.height = next;
         }
 
         const growObserver = new ResizeObserver(() => growables.forEach(autoGrow));
@@ -755,15 +759,16 @@
                 return;
             }
 
+            prompt = prompt.replaceAll("\\n", "\n").replaceAll("\n", " ")
             if (state.summary.extra.trim() !== "") {
-                prompt += "\n" + state.summary.extra;
+                prompt += "\n" + state.summary.extra.replace(/\s+/g, " ").trim();
             }
 
             const promptEl = which === "t2i" ? t2i_prompt : i2i_prompt;
             const widthEl = which === "t2i" ? t2i_width : i2i_width;
             const heightEl = which === "t2i" ? t2i_height : i2i_height;
 
-            promptEl.value = prompt.replaceAll("\n", " ");
+            promptEl.value = prompt;
             widthEl.value = state.width;
             heightEl.value = state.height;
             updateInput(promptEl);
