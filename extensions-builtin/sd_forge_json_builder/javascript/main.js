@@ -1,6 +1,15 @@
-onUiLoaded(() => {
-    const tab = document.getElementById("tab_sd-forge-json-builder");
+let instance;
 
+onUiTabChange(() => {
+    const tab = get_uiCurrentTab().textContent.trim();
+    const div = document.getElementById(`${tab}_json_builder`);
+    if (div == null) return;
+
+    div.childNodes[0].style.display = "none";
+    div.appendChild(instance);
+});
+
+onUiLoaded(() => {
     const t2i_prompt = document.getElementById("txt2img_prompt").querySelector("textarea");
     const t2i_width = document.getElementById("txt2img_width").querySelector("input");
     const t2i_height = document.getElementById("txt2img_height").querySelector("input");
@@ -181,8 +190,6 @@ onUiLoaded(() => {
     const side = h("div", { class: "jb-side" }, [topRow, summarySection, listSection, submitSection]);
     const root = h("div", { class: "jb-root" }, [canvasSection, side, modal, fileInput]);
 
-    tab.textContent = "";
-    tab.appendChild(root);
     addGrowable(sumCaption);
 
     function loadDraft(draft) {
@@ -771,6 +778,7 @@ onUiLoaded(() => {
 
     // ----- init -----
 
+    instance = root;
     renderAll();
     fitStage();
     requestAnimationFrame(fitStage);
