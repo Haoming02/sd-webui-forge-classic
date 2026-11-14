@@ -2,7 +2,14 @@
 # (c) City96
 
 
+import gguf
 import torch
+
+TORCH_COMPATIBLE_QTYPES = (None, gguf.GGMLQuantizationType.F32, gguf.GGMLQuantizationType.F16)
+
+
+def is_quantized(tensor) -> bool:
+    return tensor is not None and getattr(tensor, "tensor_type", None) not in TORCH_COMPATIBLE_QTYPES
 
 
 def dequantize(p: torch.nn.Parameter, dtype: torch.dtype) -> torch.Tensor:
@@ -15,7 +22,74 @@ def dequantize(p: torch.nn.Parameter, dtype: torch.dtype) -> torch.Tensor:
     return dequantize_tensor(p).to(dtype=dtype)
 
 
-def gguf_remapping(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+def _reverse_qwen35(sd: dict[str, torch.Tensor], num_k_heads: int):
+    plain = lambda x: dequantize(x, torch.float32).as_subclass(torch.Tensor)
+
+    for key in list(sd.keys()):
+        if key.endswith("norm.weight") and not key.endswith("linear_attn.norm.weight"):
+            sd[key] = plain(sd[key]) - 1.0
+        elif key.endswith("linear_attn.A_log"):
+            sd[key] = torch.log(-plain(sd[key]))
+        elif key.endswith("linear_attn.conv1d.weight"):
+            sd[key] = plain(sd[key]).unsqueeze(1)
+
+    for key in [k for k in sd.keys() if k.endswith("linear_attn.A_log")]:
+        prefix = key[: -len("A_log")]
+        num_v_heads = sd[key].shape[0]
+        head_v_dim = sd[f"{prefix}norm.weight"].shape[0]
+        perm = lambda d: torch.arange(num_v_heads * d).reshape(num_v_heads // num_k_heads, num_k_heads, d).transpose(0, 1).flatten()
+        v_perm = perm(head_v_dim)
+
+        for name in ("in_proj_qkv.weight", "conv1d.weight", "in_proj_z.weight"):
+            t = sd[f"{prefix}{name}"]
+            offset = t.shape[0] - v_perm.shape[0]
+            t.data = t.data[torch.cat([torch.arange(offset), offset + v_perm])]
+        for name in ("in_proj_a.weight", "in_proj_b.weight", "A_log", "dt_bias"):
+            t = sd[f"{prefix}{name}"]
+            t.data = t.data[perm(1)]
+
+        sd[f"{prefix}out_proj.weight"] = dequantize(sd[f"{prefix}out_proj.weight"], torch.float16)[:, v_perm]
+
+    return sd
+
+
+def gguf_remapping(state_dict: dict[str, torch.Tensor], metadata: dict) -> dict[str, torch.Tensor]:
+
+    if metadata.get("general.architecture", None) == "qwen35":
+        qwen_35_format = {
+            "blk.": "model.language_model.layers.",
+            "attn_norm": "input_layernorm",
+            "post_attention_norm": "post_attention_layernorm",
+            "attn_q_norm.": "self_attn.q_norm.",
+            "attn_k_norm.": "self_attn.k_norm.",
+            "attn_qkv": "linear_attn.in_proj_qkv",
+            "attn_gate": "linear_attn.in_proj_z",
+            "attn_q.": "self_attn.q_proj.",
+            "attn_k.": "self_attn.k_proj.",
+            "attn_v.": "self_attn.v_proj.",
+            "attn_output": "self_attn.o_proj",
+            "ssm_alpha": "linear_attn.in_proj_a",
+            "ssm_beta": "linear_attn.in_proj_b",
+            "ssm_out": "linear_attn.out_proj",
+            "ssm_norm": "linear_attn.norm",
+            "ssm_conv1d": "linear_attn.conv1d",
+            "ssm_dt.bias": "linear_attn.dt_bias",
+            "ssm_a": "linear_attn.A_log",
+            "ffn_up": "mlp.up_proj",
+            "ffn_down": "mlp.down_proj",
+            "ffn_gate": "mlp.gate_proj",
+            "token_embd": "model.language_model.embed_tokens",
+            "output_norm": "model.language_model.norm",
+            "output.weight": "lm_head.weight",
+        }
+        new_sd = {}
+        for k, v in state_dict.items():
+            for s, d in qwen_35_format.items():
+                k = k.replace(s, d)
+            new_sd[k] = v
+        new_sd["model.language_model.embed_tokens.weight"] = new_sd["model.language_model.embed_tokens.weight"].dequantize_as_pytorch_parameter()
+        state_dict.clear()
+        state_dict = _reverse_qwen35(new_sd, int(metadata["qwen35.ssm.group_count"]))
 
     if "enc.blk.0.attn_k.weight" in state_dict:
         gguf_t5_format = {
@@ -78,17 +152,34 @@ def gguf_remapping(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tenso
 
     if "mm.0.weight" in state_dict:
         gguf_clip_vision_format = {
-            "mm.": "visual.merger.mlp.",
-            "v.post_ln.": "visual.merger.ln_q.",
             "v.patch_embd": "visual.patch_embed.proj",
             "v.blk.": "visual.blocks.",
-            "ffn_up": "mlp.up_proj",
-            "ffn_down": "mlp.down_proj",
-            "ffn_gate": "mlp.gate_proj",
             "attn_out.": "attn.proj.",
             "ln1.": "norm1.",
             "ln2.": "norm2.",
         }
+        if metadata.get("clip.projector_type") == "qwen3vl_merger":
+            gguf_clip_vision_format.update(
+                {
+                    "mm.0.": "visual.merger.linear_fc1.",
+                    "mm.2.": "visual.merger.linear_fc2.",
+                    "v.post_ln.": "visual.merger.norm.",
+                    "v.position_embd.": "visual.pos_embed.",
+                    "attn_qkv.": "attn.qkv.",
+                    "ffn_up.": "mlp.linear_fc1.",
+                    "ffn_down.": "mlp.linear_fc2.",
+                }
+            )
+        else:
+            gguf_clip_vision_format.update(
+                {
+                    "mm.": "visual.merger.mlp.",
+                    "v.post_ln.": "visual.merger.ln_q.",
+                    "ffn_up": "mlp.up_proj",
+                    "ffn_down": "mlp.down_proj",
+                    "ffn_gate": "mlp.gate_proj",
+                }
+            )
         new_sd = {}
         for k, v in state_dict.items():
             for s, d in gguf_clip_vision_format.items():
@@ -130,9 +221,6 @@ def gguf_remapping(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tenso
         del attns
 
     return state_dict
-
-
-from modules_forge.packages import gguf
 
 
 def get_orig_shape(reader: gguf.GGUFReader, tensor_name: str) -> torch.Size | None:

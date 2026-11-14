@@ -2,15 +2,15 @@ import json
 import math
 import os.path
 
+import gguf
 import safetensors
 import torch
 from einops import rearrange, repeat
 
 from backend.args import args
-from backend.loader_gguf import dequantize, get_orig_shape
+from backend.loader_gguf import dequantize, get_orig_shape, is_quantized
 from backend.memory_management import logger
 from backend.operations_gguf import ParameterGGUF
-from modules_forge.packages import gguf
 from modules_forge.packages.comfy.weight_adapter.base import WeightAdapterBase
 
 if not hasattr(torch.serialization, "add_safe_globals"):
@@ -92,8 +92,10 @@ def load_torch_file(ckpt: str, *, safe_load=True, device=None, return_metadata=F
             if tensor.tensor_type in {gguf.GGMLQuantizationType.F32, gguf.GGMLQuantizationType.F16}:
                 torch_tensor = torch_tensor.view(*shape)
             sd[tensor_name] = ParameterGGUF(torch_tensor, tensor_type=tensor.tensor_type, tensor_shape=shape)
-            if len(shape) <= 1 and tensor.tensor_type == gguf.GGMLQuantizationType.BF16:
+            if len(shape) <= 1 and is_quantized(sd[tensor_name]):
                 sd[tensor_name] = dequantize(sd[tensor_name], dtype=torch.float32)
+        if return_metadata:
+            metadata = {key: field.contents() for key, field in reader.fields.items() if not key.startswith("tokenizer")}
 
     else:
         assert safe_load

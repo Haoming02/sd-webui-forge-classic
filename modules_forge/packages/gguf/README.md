@@ -1,3 +1,5 @@
-## Forge's implementation of GGUF
-- Code is based on **llama.cpp**'s GGUF
-- The main difference is that it supports PyTorch quant/dequant
+## Forge Neo GGUF Kernels
+
+This directory contains Forge's PyTorch quantization and dequantization kernels based on `llama.cpp`. Forge uses the stock `gguf` package for file parsing and quantization constants.
+
+Keep this directory as a namespace package so `import gguf` resolves to the installed package when Forge adds `modules_forge/packages` to `sys.path`.

@@ -188,7 +188,6 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Stealth Infotext
 - [X] `bitsandbytes` Support
 - [ ] `Nunchaku` Support
-- [ ] `GGUF` Support
 
 #### Optimizations
 
