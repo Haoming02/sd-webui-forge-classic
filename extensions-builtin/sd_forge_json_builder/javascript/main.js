@@ -199,6 +199,7 @@
 
             fitStage();
             renderAll();
+            root.querySelectorAll(".jb-invalid").forEach((el) => el.classList.remove("jb-invalid"));
         }
 
         saveJsonBtn.addEventListener("click", () => {
@@ -227,8 +228,9 @@
                 try {
                     const draft = decompilePrompt(reader.result, NaN, NaN);
                     loadDraft(draft);
-                } catch {
+                } catch (e) {
                     loadJsonBtn.classList.add("jb-invalid");
+                    console.error("Failed to load JSON:", e.message);
                 }
             });
             reader.readAsText(file);
@@ -728,8 +730,9 @@
             if (text === "") return;
             try {
                 loadDraft(decompilePrompt(text, parseFloat(widthEl.value), parseFloat(heightEl.value)));
-            } catch {
+            } catch (e) {
                 loadPromptBtn.classList.add("jb-invalid");
+                console.error("Failed to load Prompt:", e.message);
             }
         }
 
