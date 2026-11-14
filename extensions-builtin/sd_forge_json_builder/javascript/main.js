@@ -1,9 +1,10 @@
 (function () {
     let instance;
+    let currentTab;
 
     onUiTabChange(() => {
-        const tab = get_uiCurrentTab().textContent.trim();
-        const div = document.getElementById(`${tab}_json_builder`);
+        currentTab = get_uiCurrentTab().textContent.trim();
+        const div = document.getElementById(`${currentTab}_json_builder`);
         if (div == null) return;
 
         div.childNodes[0].style.display = "none";
@@ -11,14 +12,6 @@
     });
 
     onUiLoaded(() => {
-        const t2i_prompt = document.getElementById("txt2img_prompt").querySelector("textarea");
-        const t2i_width = document.getElementById("txt2img_width").querySelector("input");
-        const t2i_height = document.getElementById("txt2img_height").querySelector("input");
-
-        const i2i_prompt = document.getElementById("img2img_prompt").querySelector("textarea");
-        const i2i_width = document.getElementById("img2img_width").querySelector("input");
-        const i2i_height = document.getElementById("img2img_height").querySelector("input");
-
         const LABELS = ["object", "character", "text"];
         const CANVAS_TYPES = ["single", "multi_panel", "collage"];
         const ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
@@ -160,40 +153,22 @@
         const listEl = h("div", { class: "jb-list" });
         const listSection = h("div", { class: "jb-section jb-list-section" }, [h("div", { class: "jb-list-toolbar" }, [addBtn, clearBtn]), listEl]);
 
-        const sendT2I = h("button", { type: "button", class: "jb-send-t2i" }, ["Send to txt2img"]);
-        const sendI2I = h("button", { type: "button", class: "jb-send-i2i" }, ["Send to img2img"]);
-        const submitSection = h("div", { class: "jb-section jb-submit" }, [sendT2I, sendI2I]);
+        const sendPromptBtn = h("button", { type: "button", class: "jb-send-prompt" }, ["Send to Prompt"]);
+        const loadPromptBtn = h("button", { type: "button", class: "jb-load-prompt" }, ["Load from Prompt"]);
+        const submitSection = h("div", { class: "jb-section jb-submit" }, [sendPromptBtn, loadPromptBtn]);
 
         // ----- save / load -----
 
-        const loadPromptBtn = h("button", { type: "button", class: "jb-load-prompt" }, ["Load Prompt"]);
         const saveJsonBtn = h("button", { type: "button", class: "jb-save-json" }, ["Save JSON"]);
         const loadJsonBtn = h("button", { type: "button", class: "jb-load-json" }, ["Load JSON"]);
-        const saveLoadSection = h("div", { class: "jb-section jb-save" }, [
-            h("div", { class: "jb-section-title" }, ["Save/Load"]),
-            h("div", { class: "jb-row" }, [loadPromptBtn]),
-            h("div", { class: "jb-row" }, [saveJsonBtn, loadJsonBtn]),
-        ]);
-
-        const dialogInput = h("textarea", { class: "jb-dialog-input", placeholder: "Compiled Prompt or Layout Draft", spellcheck: "false" });
-        const dialogWidth = h("input", { type: "number", min: "16", step: "16", class: "jb-dialog-width" });
-        const dialogHeight = h("input", { type: "number", min: "16", step: "16", class: "jb-dialog-height" });
-        const dialogClose = h("button", { type: "button", class: "jb-dialog-close", title: "Close" }, ["\u00D7"]);
-        const dialogLoad = h("button", { type: "button", class: "jb-dialog-load" }, ["Load"]);
-        const modal = h("div", { class: "jb-modal jb-hidden" }, [
-            h("div", { class: "jb-dialog" }, [
-                dialogClose,
-                h("div", { class: "jb-dialog-body" }, [dialogInput, h("div", { class: "jb-dialog-dims" }, [h("label", {}, ["Width"]), dialogWidth, h("label", {}, ["Height"]), dialogHeight])]),
-                dialogLoad,
-            ]),
-        ]);
+        const saveLoadSection = h("div", { class: "jb-section jb-save" }, [h("div", { class: "jb-section-title" }, ["Save/Load"]), h("div", { class: "jb-row" }, [saveJsonBtn, loadJsonBtn])]);
 
         const fileInput = h("input", { type: "file", accept: ".json,application/json", class: "jb-file" });
         fileInput.style.display = "none";
 
         const topRow = h("div", { class: "jb-top" }, [resolutionSection, saveLoadSection]);
         const side = h("div", { class: "jb-side" }, [topRow, summarySection, listSection, submitSection]);
-        const root = h("div", { class: "jb-root" }, [canvasSection, side, modal, fileInput]);
+        const root = h("div", { class: "jb-root" }, [canvasSection, side, fileInput]);
 
         addGrowable(sumCaption);
 
@@ -225,38 +200,6 @@
             fitStage();
             renderAll();
         }
-
-        function openDialog() {
-            loadPromptBtn.classList.remove("jb-invalid");
-            dialogInput.value = "";
-            dialogWidth.value = state.width;
-            dialogHeight.value = state.height;
-            modal.classList.remove("jb-hidden");
-            dialogInput.focus();
-        }
-
-        function closeDialog() {
-            modal.classList.add("jb-hidden");
-        }
-
-        function handleDialogLoad() {
-            const text = dialogInput.value.trim();
-            if (text === "") {
-                closeDialog();
-                return;
-            }
-            try {
-                const draft = decompilePrompt(text, parseFloat(dialogWidth.value), parseFloat(dialogHeight.value));
-                loadDraft(draft);
-            } catch {
-                loadPromptBtn.classList.add("jb-invalid");
-            }
-            closeDialog();
-        }
-
-        loadPromptBtn.addEventListener("click", openDialog);
-        dialogClose.addEventListener("click", closeDialog);
-        dialogLoad.addEventListener("click", handleDialogLoad);
 
         saveJsonBtn.addEventListener("click", () => {
             const name = prompt("Save JSON as", "layout.json");
@@ -748,7 +691,7 @@
             return invalid.length === 0;
         }
 
-        function submit(which) {
+        function submit() {
             if (!validate()) return;
             let prompt = null;
 
@@ -759,14 +702,14 @@
                 return;
             }
 
-            prompt = prompt.replaceAll("\\n", "\n").replaceAll("\n", " ")
+            prompt = prompt.replaceAll("\\n", "\n").replaceAll("\n", " ");
             if (state.summary.extra.trim() !== "") {
                 prompt += "\n" + state.summary.extra.replace(/\s+/g, " ").trim();
             }
 
-            const promptEl = which === "t2i" ? t2i_prompt : i2i_prompt;
-            const widthEl = which === "t2i" ? t2i_width : i2i_width;
-            const heightEl = which === "t2i" ? t2i_height : i2i_height;
+            const promptEl = document.getElementById(`${currentTab}_prompt`).querySelector("textarea");
+            const widthEl = document.getElementById(`${currentTab}_width`).querySelector("input");
+            const heightEl = document.getElementById(`${currentTab}_height`).querySelector("input");
 
             promptEl.value = prompt;
             widthEl.value = state.width;
@@ -774,13 +717,24 @@
             updateInput(promptEl);
             updateInput(widthEl);
             updateInput(heightEl);
-
-            if (which === "t2i") switch_to_txt2img();
-            else switch_to_img2img();
         }
 
-        sendT2I.addEventListener("click", () => submit("t2i"));
-        sendI2I.addEventListener("click", () => submit("i2i"));
+        function loadPrompt() {
+            loadPromptBtn.classList.remove("jb-invalid");
+            const promptEl = document.getElementById(`${currentTab}_prompt`).querySelector("textarea");
+            const widthEl = document.getElementById(`${currentTab}_width`).querySelector("input");
+            const heightEl = document.getElementById(`${currentTab}_height`).querySelector("input");
+            const text = promptEl.value.trim();
+            if (text === "") return;
+            try {
+                loadDraft(decompilePrompt(text, parseFloat(widthEl.value), parseFloat(heightEl.value)));
+            } catch {
+                loadPromptBtn.classList.add("jb-invalid");
+            }
+        }
+
+        sendPromptBtn.addEventListener("click", submit);
+        loadPromptBtn.addEventListener("click", loadPrompt);
 
         // ----- init -----
 
