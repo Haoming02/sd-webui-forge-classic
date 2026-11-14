@@ -9,7 +9,16 @@ from diffusers.configuration_utils import ConfigMixin, register_to_config
 from einops import rearrange
 
 from backend.nn._vae import ProcessLatent
-from backend.nn._wan_cache import CACHE_T, STRIP_ELEMS, CausalConv3d, cached_chain, keep_two_frames, strip_apply, strip_down, strip_residual
+from backend.nn._wan_cache import (
+    CACHE_T,
+    STRIP_ELEMS,
+    CausalConv3d,
+    cached_chain,
+    keep_two_frames,
+    strip_apply,
+    strip_down,
+    strip_residual,
+)
 from backend.nn.wan_vae import AttentionBlock, CausalConv3d, RMS_norm
 
 

@@ -10,7 +10,14 @@ from einops import rearrange
 
 from backend.attention import attention_function_vae
 from backend.nn._vae import ProcessLatent
-from backend.nn._wan_cache import CACHE_T, CausalConv3d, cached_chain, strip_apply, strip_down, strip_residual
+from backend.nn._wan_cache import (
+    CACHE_T,
+    CausalConv3d,
+    cached_chain,
+    strip_apply,
+    strip_down,
+    strip_residual,
+)
 
 
 class RMS_norm(nn.Module):

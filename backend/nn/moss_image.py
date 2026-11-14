@@ -9,7 +9,7 @@ from backend.nn.flux import EmbedND, timestep_embedding
 from backend.operations import main_stream_worker, weights_manual_cast
 from backend.operations_mixed_precision import linear_input_act
 from backend.quant_ops import ck
-from backend.utils import resize_to_batch_size
+from backend.utils import fp16_fix, resize_to_batch_size
 
 
 def situ(hidden, gate):
@@ -122,7 +122,9 @@ class Block(nn.Module):
         del out
         y = modulate(x, self.norm2, mod, 3, ref)
         y = self.proj["ffn_up_gate"](y)
-        return residual(x, linear_input_act(self.proj["ffn_down"], y, "situ"), mod, 5, ref)
+        z = residual(x, linear_input_act(self.proj["ffn_down"], y, "situ"), mod, 5, ref)
+        del x, y
+        return fp16_fix(z)
 
 
 class MOSSImage(nn.Module):

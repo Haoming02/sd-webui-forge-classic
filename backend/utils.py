@@ -204,11 +204,11 @@ def tensor2parameter(x):
         return torch.nn.Parameter(x, requires_grad=False)
 
 
-def fp16_fix(x):
+def fp16_fix(x: torch.Tensor) -> torch.Tensor:
     # avoid fp16 overflow
     # https://github.com/comfyanonymous/ComfyUI/blob/v0.3.64/comfy/ldm/chroma/layers.py#L111
 
-    if x.dtype == torch.float16:
+    if x.dtype is torch.float16:
         return torch.nan_to_num(x, nan=0.0, posinf=65504, neginf=-65504)
     return x
 
