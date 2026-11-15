@@ -1,4 +1,6 @@
 (function () {
+    const TUTORIAL = "";
+
     let instance;
     let currentTab;
     let stopPromptLink = () => { };
@@ -168,8 +170,15 @@
         // ----- canvas -----
 
         const canvasSection = h("div", { class: "jb-canvas" });
+        canvasSection.style.position = "relative";
         const stage = h("div", { class: "jb-stage" });
         canvasSection.appendChild(stage);
+
+        const fitCanvasBtn = h("button", { type: "button", class: "jb-fit-canvas", title: "Fit to View", "aria-label": "Fit to View" }, ["\u{1F50D}"]);
+        Object.assign(fitCanvasBtn.style, { position: "absolute", left: "8px", bottom: "8px", zIndex: "64" });
+        const helpBtn = h("button", { type: "button", class: "jb-help", title: TUTORIAL, "aria-label": "How to Use" }, ["\u2754"]);
+        Object.assign(helpBtn.style, { position: "absolute", right: "8px", bottom: "8px", zIndex: "64" });
+        canvasSection.append(fitCanvasBtn, helpBtn);
 
         // ----- side panel -----
 
@@ -219,8 +228,9 @@
 
         const addBtn = h("button", { type: "button", class: "jb-add" }, ["Add Item"]);
         const clearBtn = h("button", { type: "button", class: "jb-clear" }, ["Clear All"]);
+        const expandItemsBtn = h("button", { type: "button", class: "jb-expand-items", title: "Expand items", "aria-expanded": "false" }, ["\u{1F53C}"]);
         const listEl = h("div", { class: "jb-list" });
-        const listSection = h("div", { class: "jb-section jb-list-section" }, [h("div", { class: "jb-list-toolbar" }, [addBtn, clearBtn]), listEl]);
+        const listSection = h("div", { class: "jb-section jb-list-section" }, [h("div", { class: "jb-list-toolbar" }, [addBtn, clearBtn, expandItemsBtn]), listEl]);
 
         const sendPromptBtn = h("button", { type: "button", class: "jb-send-prompt" }, ["Send to Prompt"]);
         const loadPromptBtn = h("button", { type: "button", class: "jb-load-prompt" }, ["Load from Prompt"]);
@@ -238,6 +248,42 @@
         const topRow = h("div", { class: "jb-top" }, [resolutionSection, saveLoadSection]);
         const side = h("div", { class: "jb-side" }, [topRow, summarySection, listSection, submitSection]);
         const root = h("div", { class: "jb-root" }, [canvasSection, side, fileInput]);
+
+        let itemsExpanded = false;
+        let listSpacer;
+
+        expandItemsBtn.addEventListener("click", () => {
+            itemsExpanded = !itemsExpanded;
+            if (itemsExpanded) {
+                const sideRect = side.getBoundingClientRect();
+                const listRect = listSection.getBoundingClientRect();
+                listSpacer = h("div", { class: "jb-section jb-list-section" });
+                Object.assign(listSpacer.style, { boxSizing: "border-box", flex: `0 0 ${listRect.height}px`, minHeight: "0", visibility: "hidden" });
+                side.insertBefore(listSpacer, listSection);
+                side.style.position = "relative";
+                listSection.style.position = "absolute";
+                listSection.style.inset = `0 0 ${sideRect.bottom - listRect.bottom}px`;
+                listSection.style.zIndex = "5";
+                submitSection.style.position = "relative";
+                submitSection.style.zIndex = "6";
+                expandItemsBtn.textContent = "\u{1F53D}";
+                expandItemsBtn.title = "Collapse Items";
+            } else {
+                listSpacer.remove();
+                listSpacer = null;
+                listSection.style.position = "";
+                listSection.style.inset = "";
+                listSection.style.zIndex = "";
+                submitSection.style.position = "";
+                submitSection.style.zIndex = "";
+                side.style.position = "";
+                expandItemsBtn.textContent = "\u{1F53C}";
+                expandItemsBtn.title = "Expand Items";
+            }
+            expandItemsBtn.setAttribute("aria-expanded", String(itemsExpanded));
+        });
+
+        fitCanvasBtn.addEventListener("click", fitStage);
 
         addGrowable(sumCaption);
 

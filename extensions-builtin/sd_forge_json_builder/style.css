@@ -212,6 +212,13 @@
 .jb-list-toolbar {
     display: flex;
     gap: 8px;
+    position: relative;
+}
+
+.jb-expand-items {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
 .jb-row {
