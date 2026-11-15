@@ -1,8 +1,10 @@
 (function () {
     let instance;
     let currentTab;
+    let stopPromptLink = () => { };
 
     onUiTabChange(() => {
+        stopPromptLink();
         currentTab = get_uiCurrentTab().textContent.trim();
         const div = document.getElementById(`${currentTab}_json_builder`);
         if (div == null) return;
@@ -12,7 +14,74 @@
     });
 
     onUiLoaded(() => {
+        currentTab = get_uiCurrentTab().textContent.trim();
+        const PASTEL_COLORS = ["#ffb3ba", "#ffdfba", "#ffffba", "#baffc9", "#bae1ff", "#d7baff", "#ffbaf2"];
+        let activePromptLink = null;
+
+        stopPromptLink = () => {
+            if (!activePromptLink) return;
+            activePromptLink.prompt.removeEventListener("input", activePromptLink.onPromptInput);
+            for (const el of [activePromptLink.prompt, ...activePromptLink.fields]) {
+                el.style.removeProperty("outline");
+                el.style.removeProperty("outline-offset");
+            }
+            activePromptLink = null;
+        };
+
+        function updatePromptLink(key, value) {
+            const link = activePromptLink;
+            if (!link || link.key !== key || link.syncing) return;
+            link.syncing = true;
+            link.prompt.value = value;
+            updateInput(link.prompt);
+            link.syncing = false;
+        }
+
+        function addPromptLink(field, key, color, getValue, setValue) {
+            field.dataset.promptLinkKey = key;
+
+            field.addEventListener("dblclick", () => {
+                if (activePromptLink?.key === key) {
+                    stopPromptLink();
+                    return;
+                }
+
+                stopPromptLink();
+                const prompt = document.getElementById(`${currentTab}_prompt`).querySelector("textarea");
+                const fields = new Set(root.querySelectorAll(`[data-prompt-link-key="${key}"]`));
+                const link = { key, fields, prompt, syncing: true, setValue };
+                activePromptLink = link;
+
+                link.onPromptInput = () => {
+                    if (activePromptLink !== link || link.syncing) return;
+                    link.syncing = true;
+                    link.setValue(prompt.value);
+                    link.syncing = false;
+                };
+
+                for (const el of [prompt, ...fields]) {
+                    el.style.setProperty("outline", `2px solid ${color}`, "important");
+                    el.style.setProperty("outline-offset", "1px");
+                }
+
+                prompt.addEventListener("input", link.onPromptInput);
+                prompt.value = getValue();
+                updateInput(prompt);
+                link.syncing = false;
+            });
+
+            field.addEventListener("input", () => updatePromptLink(key, getValue()));
+
+            if (activePromptLink?.key === key) {
+                field.style.setProperty("outline", `2px solid ${color}`, "important");
+                field.style.setProperty("outline-offset", "1px");
+                activePromptLink.fields.add(field);
+            }
+        }
+
         const LABELS = ["object", "character", "text"];
+        const itemColor = (index) => PASTEL_COLORS[index % PASTEL_COLORS.length];
+        const itemFieldKey = (item, field) => `item-${item.id}-${field}`;
         const CANVAS_TYPES = ["single", "multi_panel", "collage"];
         const ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
         const MP_PIXELS = 1024 * 1024;
@@ -199,7 +268,9 @@
 
             fitStage();
             renderAll();
-            root.querySelectorAll(".jb-invalid").forEach((el) => el.classList.remove("jb-invalid"));
+            root.querySelectorAll(".jb-invalid").forEach((el) => {
+                el.classList.remove("jb-invalid");
+            });
         }
 
         saveJsonBtn.addEventListener("click", () => {
@@ -215,6 +286,7 @@
         });
 
         loadJsonBtn.addEventListener("click", () => {
+            stopPromptLink();
             loadJsonBtn.classList.remove("jb-invalid");
             fileInput.value = "";
             fileInput.click();
@@ -232,6 +304,10 @@
                     loadJsonBtn.classList.add("jb-invalid");
                     console.error("Failed to load JSON:", e.message);
                 }
+            });
+            reader.addEventListener("error", () => {
+                loadJsonBtn.classList.add("jb-invalid");
+                console.error("Failed to load JSON:", reader.error);
             });
             reader.readAsText(file);
         });
@@ -351,7 +427,19 @@
             });
         }
 
-        function makeEditable(item, field) {
+        function setItemField(item, field, value, source) {
+            item[field] = value;
+            const ref = listRefs.get(item.id);
+            const listField = field === "caption" ? ref?.captionInput : ref?.textInput;
+            const canvasField = canvasRefs.get(item.id)?.[field === "caption" ? "caption" : "text"];
+            for (const target of [listField, canvasField]) {
+                if (!target || target === source) continue;
+                target.value = value;
+                autoGrow(target);
+            }
+        }
+
+        function makeEditable(item, field, color) {
             const ta = h("textarea", { class: "jb-field", placeholder: field, readonly: "", spellcheck: "false" });
             ta.value = item[field] || "";
             ta.addEventListener("dblclick", () => {
@@ -362,15 +450,16 @@
                 ta.readOnly = true;
             });
             ta.addEventListener("input", () => {
-                item[field] = ta.value;
-                const ref = listRefs.get(item.id);
-                if (!ref) return;
-                const inp = field === "caption" ? ref.captionInput : ref.textInput;
-                if (inp && document.activeElement !== inp) {
-                    inp.value = ta.value;
-                    autoGrow(inp);
-                }
+                setItemField(item, field, ta.value, ta);
             });
+            const key = itemFieldKey(item, field);
+            addPromptLink(
+                ta,
+                key,
+                color,
+                () => item[field] || "",
+                (value) => setItemField(item, field, value),
+            );
             return ta;
         }
 
@@ -438,16 +527,21 @@
             window.addEventListener("pointerup", up);
         }
 
-        function createBox(item) {
+        function createBox(item, color) {
             const el = h("div", { class: "jb-box", dataset: { id: String(item.id) } });
-            el.appendChild(h("div", { class: "jb-box-tag" }, [item.label]));
+            el.style.borderColor = color;
+            el.style.background = `color-mix(in srgb, ${color} 20%, transparent)`;
+            const tag = h("div", { class: "jb-box-tag" }, [item.label]);
+            tag.style.background = color;
+            tag.style.color = "var(--body-text-color)";
+            el.appendChild(tag);
 
-            const caption = makeEditable(item, "caption");
+            const caption = makeEditable(item, "caption", color);
             el.appendChild(caption);
 
             let text = null;
             if (item.label === "text") {
-                text = makeEditable(item, "text");
+                text = makeEditable(item, "text", color);
                 text.classList.add("jb-box-text");
                 el.appendChild(text);
             }
@@ -475,13 +569,17 @@
         function renderCanvas() {
             stage.textContent = "";
             canvasRefs.clear();
-            for (const item of state.items) stage.appendChild(createBox(item));
+            state.items.forEach((item, index) => {
+                stage.appendChild(createBox(item, itemColor(index)));
+            });
         }
 
         // ----- list -----
 
-        function createRow(item) {
+        function createRow(item, color) {
             const row = h("div", { class: "jb-item", dataset: { id: String(item.id) } });
+            row.style.borderColor = color;
+            row.style.background = `color-mix(in srgb, ${color} 16%, var(--background-fill-secondary))`;
 
             const top = h("div", { class: "jb-item-top" });
             const radios = LABELS.map((label) => {
@@ -510,11 +608,16 @@
 
             const caption = h("textarea", { class: "jb-item-caption", placeholder: "caption", rows: "1", value: item.caption });
             caption.addEventListener("input", () => {
-                item.caption = caption.value;
+                setItemField(item, "caption", caption.value, caption);
                 autoGrow(caption);
-                const ref = canvasRefs.get(item.id);
-                if (ref && document.activeElement !== ref.caption) ref.caption.value = caption.value;
             });
+            addPromptLink(
+                caption,
+                itemFieldKey(item, "caption"),
+                color,
+                () => item.caption || "",
+                (value) => setItemField(item, "caption", value),
+            );
             row.appendChild(caption);
             addGrowable(caption);
 
@@ -522,10 +625,15 @@
             if (item.label === "text") {
                 textInput = h("input", { type: "text", class: "jb-item-text", placeholder: "text", value: item.text });
                 textInput.addEventListener("input", () => {
-                    item.text = textInput.value;
-                    const ref = canvasRefs.get(item.id);
-                    if (ref?.text && document.activeElement !== ref.text) ref.text.value = textInput.value;
+                    setItemField(item, "text", textInput.value, textInput);
                 });
+                addPromptLink(
+                    textInput,
+                    itemFieldKey(item, "text"),
+                    color,
+                    () => item.text || "",
+                    (value) => setItemField(item, "text", value),
+                );
                 row.appendChild(textInput);
             }
 
@@ -553,12 +661,15 @@
             listEl.textContent = "";
             listRefs.clear();
             pruneGrowables();
-            for (const item of state.items) listEl.appendChild(createRow(item));
+            state.items.forEach((item, index) => {
+                listEl.appendChild(createRow(item, itemColor(index)));
+            });
         }
 
         function renderAll() {
             renderList();
             renderCanvas();
+            if (activePromptLink && !root.querySelector(`[data-prompt-link-key="${activePromptLink.key}"]`)) stopPromptLink();
         }
 
         function addItem() {
@@ -630,6 +741,17 @@
             state.summary.caption = sumCaption.value;
             autoGrow(sumCaption);
         });
+        addPromptLink(
+            sumCaption,
+            "summary-caption",
+            "#808080",
+            () => state.summary.caption,
+            (value) => {
+                state.summary.caption = value;
+                sumCaption.value = value;
+                autoGrow(sumCaption);
+            },
+        );
         sumMeta.addEventListener("input", () => {
             state.summary.meta = sumMeta.value;
         });
@@ -694,6 +816,7 @@
         }
 
         function submit() {
+            stopPromptLink();
             if (!validate()) return;
             let prompt = null;
 
@@ -722,6 +845,7 @@
         }
 
         function loadPrompt() {
+            stopPromptLink();
             loadPromptBtn.classList.remove("jb-invalid");
             const promptEl = document.getElementById(`${currentTab}_prompt`).querySelector("textarea");
             const widthEl = document.getElementById(`${currentTab}_width`).querySelector("input");
