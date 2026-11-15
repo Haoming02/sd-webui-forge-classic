@@ -4,6 +4,16 @@ import torch
 
 
 def load_state_dict(model: torch.nn.Module, sd: dict[str, torch.Tensor], ignore_errors: list[str] = [], log_name: str = None, ignore_start: str | list[str] = None):
+    gguf_targets = dict(model.named_parameters())
+    gguf_targets.update(model.named_buffers())
+    gguf_entries = [(name, tensor) for name, tensor in sd.items() if name in gguf_targets and getattr(tensor, "gguf_cls", None) is not None]
+
+    if gguf_entries:
+        from backend.loader_gguf import dequantize
+
+        for name, tensor in gguf_entries:
+            sd[name] = dequantize(tensor, dtype=gguf_targets[name].dtype)
+
     is_meta = any(p.is_meta for p in model.parameters())
 
     if is_meta:
