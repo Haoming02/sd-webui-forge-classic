@@ -1,5 +1,11 @@
 (function () {
-    const TUTORIAL = "";
+    const TUTORIAL = `
+Each item is one region: pick a label (object / character / text), write a caption, then drag the bounding box to position it, or drag the bottom-right corner to resize it. Double-clicking a bounding box or the text field in the list brings it to the front.
+Fields in the side list are edited with a single click. Double-clicking any field syncs it to the main prompt: both fields become highlighted, and editing one updates the other, allowing the usage of Extensions like auto-complete. Double-click the same field again to unlink.
+"Send to Prompt" validates the layout then compiles it into the main prompt, and sets the width and height; "Load from Prompt" reads a compiled prompt and the sizes back into the editor, mainly for reading infotext; "Save/Load JSON" stores the draft as a .json file on disk.
+"Extra" is appended to the prompt after the JSON structure, mainly for LoRA syntax.
+Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or click magnifier button to reset view.
+    `;
 
     let instance;
     let currentTab;
