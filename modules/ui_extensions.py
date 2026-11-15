@@ -423,7 +423,7 @@ def refresh_available_extensions(url, selected_tags, showing_type, filtering_typ
 
     code, tags = refresh_available_extensions_from_data(selected_tags, showing_type, filtering_type, sort_column)
 
-    return url, code, gr.update(choices=tags), "", ""
+    return url, code, gr.update(value=["ads", "localization", "installed"], choices=sorted(tags)), "", ""
 
 
 def refresh_available_extensions_for_tags(selected_tags, showing_type, filtering_type, sort_column, filter_text):
@@ -493,7 +493,7 @@ def refresh_available_extensions_from_data(selected_tags, showing_type, filterin
 
         if len(selected_tags) > 0:
             matched_tags = [x for x in extension_tags if x in selected_tags]
-            if filtering_type == "or":
+            if filtering_type == "any":
                 need_hide = len(matched_tags) > 0
             else:
                 need_hide = len(matched_tags) == len(selected_tags)
@@ -551,18 +551,17 @@ def create_ui():
 
     with gr.Blocks(analytics_enabled=False) as ui:
         with gr.Tabs(elem_id="tabs_extensions"):
-            with gr.TabItem("Installed", id="installed"):
+            with gr.Tab("Installed", id="tabs_extensions_installed"):
+                dummy_component = gr.Textbox(visible=False)
 
                 with gr.Row(elem_id="extensions_installed_top"):
-                    apply_label = "Apply and Restart UI" if restart.is_restartable() else "Apply and Quit"
+                    apply_label: str = "Apply and Restart UI" if restart.is_restartable() else "Apply and Quit"
                     apply = gr.Button(value=apply_label, variant="primary")
                     check = gr.Button(value="Check for Updates")
                     extensions_disable_all = gr.Radio(label="Disable Extensions", choices=["none", "extra", "all"], value=shared.opts.disable_all_extensions, elem_id="extensions_disable_all")
-                    extensions_disabled_list = gr.Text(elem_id="extensions_disabled_list", visible=False, container=False)
-                    extensions_update_list = gr.Text(elem_id="extensions_update_list", visible=False, container=False)
                     refresh = gr.Button(value="Refresh", variant="compact")
 
-                html = ""
+                html: str = ""
 
                 if shared.cmd_opts.disable_all_extensions or shared.cmd_opts.disable_extra_extensions or shared.opts.disable_all_extensions != "none":
                     if shared.cmd_opts.disable_all_extensions:
@@ -579,41 +578,39 @@ def create_ui():
                 with gr.Row(elem_classes="progress-container"):
                     extensions_table = gr.HTML("Loading...", elem_id="extensions_installed_html")
 
-                ui.load(fn=extension_table, inputs=[], outputs=[extensions_table], show_progress=False)
-                refresh.click(fn=extension_table, inputs=[], outputs=[extensions_table], show_progress=False)
+                ui.load(fn=extension_table, outputs=[extensions_table], show_progress=False)
+                refresh.click(fn=extension_table, outputs=[extensions_table], show_progress=False)
 
                 apply.click(
                     fn=apply_and_restart,
                     _js="extensions_apply",
-                    inputs=[extensions_disabled_list, extensions_update_list, extensions_disable_all],
-                    outputs=[],
+                    inputs=[dummy_component, dummy_component, extensions_disable_all],
                 )
 
                 check.click(
                     fn=wrap_gradio_gpu_call(check_updates, extra_outputs=[gr.skip()]),
                     _js="extensions_check",
-                    inputs=[info, extensions_disabled_list],
+                    inputs=[info, dummy_component],
                     outputs=[extensions_table, info],
                 )
 
-            with gr.TabItem("Available", id="available"):
+            with gr.Tab("Available", id="tabs_extensions_available"):
                 with gr.Row():
-                    refresh_available_extensions_button = gr.Button(value="Load from:", variant="primary")
+                    refresh_available_extensions_button = gr.Button(value="Load from Index", variant="primary", scale=1)
                     extensions_index_url = os.environ.get("WEBUI_EXTENSIONS_INDEX", "https://raw.githubusercontent.com/eduardoabreu81/forge-neo-extensions/main/index.json")
-                    available_extensions_index = gr.Text(value=extensions_index_url, label="Extension index URL", container=False)
-                    extension_to_install = gr.Text(elem_id="extension_to_install", visible=False)
+                    available_extensions_index = gr.Textbox(value=extensions_index_url, show_label=False, info="Note: This index is maintained by third parties ; Please verify the Extension before installing", scale=4)
+                    extension_to_install = gr.Textbox(elem_id="extension_to_install", visible=False)
                     install_extension_button = gr.Button(elem_id="install_extension_button", visible=False)
 
-                with gr.Row():
-                    selected_tags = gr.CheckboxGroup(value=["ads", "localization", "installed"], label="Extension tags", choices=["script", "ads", "localization", "installed"], elem_classes=["compact-checkbox-group"])
-                    sort_column = gr.Radio(value="newest first", label="Order", choices=["newest first", "oldest first", "a-z", "z-a", "internal order", "update time", "create time", "stars"], type="index", elem_classes=["compact-checkbox-group"])
+                with gr.Group(visible=False) as extensions_filter:
+                    with gr.Row():
+                        showing_type = gr.Radio(value="hide", label="Filter Type", choices=["hide", "show"], elem_classes=["compact-checkbox-group"], scale=1)
+                        filtering_type = gr.Radio(value="any", label="Tags Logic", choices=["any", "all"], elem_classes=["compact-checkbox-group"], scale=1)
+                        sort_column = gr.Radio(value="newest first", label="Order", choices=["newest first", "oldest first", "a-z", "z-a", "internal order", "update time", "create time", "stars"], type="index", elem_classes=["compact-checkbox-group"], scale=8)
 
-                with gr.Row():
-                    showing_type = gr.Radio(value="hide", label="Showing type", choices=["hide", "show"], elem_classes=["compact-checkbox-group"])
-                    filtering_type = gr.Radio(value="or", label="Filtering type", choices=["or", "and"], elem_classes=["compact-checkbox-group"])
+                    selected_tags = gr.CheckboxGroup(value=[], label="Hidden Tags", choices=[], elem_classes=["compact-checkbox-group"])
 
-                with gr.Row():
-                    search_extensions_text = gr.Text(label="Search", container=False)
+                search_extensions_text = gr.Textbox(label="Search", visible=False)
 
                 install_result = gr.HTML()
                 available_extensions_table = gr.HTML()
@@ -622,7 +619,7 @@ def create_ui():
                     fn=modules.ui.wrap_gradio_call(refresh_available_extensions, extra_outputs=[gr.skip(), gr.skip(), gr.skip(), gr.skip()]),
                     inputs=[available_extensions_index, selected_tags, showing_type, filtering_type, sort_column],
                     outputs=[available_extensions_index, available_extensions_table, selected_tags, search_extensions_text, install_result],
-                )
+                ).then(fn=lambda: [gr.update(visible=True)] * 2, outputs=[extensions_filter, search_extensions_text], show_progress=False)
 
                 install_extension_button.click(
                     fn=modules.ui.wrap_gradio_call_no_job(install_extension_from_index, extra_outputs=[gr.skip(), gr.skip()]),
@@ -638,16 +635,16 @@ def create_ui():
 
                 selected_tags.change(fn=modules.ui.wrap_gradio_call_no_job(refresh_available_extensions_for_tags, extra_outputs=[gr.skip()]), inputs=[selected_tags, showing_type, filtering_type, sort_column, search_extensions_text], outputs=[available_extensions_table, install_result])
 
-                showing_type.change(fn=modules.ui.wrap_gradio_call_no_job(refresh_available_extensions_for_tags, extra_outputs=[gr.skip()]), inputs=[selected_tags, showing_type, filtering_type, sort_column, search_extensions_text], outputs=[available_extensions_table, install_result])
+                showing_type.change(fn=modules.ui.wrap_gradio_call_no_job(refresh_available_extensions_for_tags, extra_outputs=[gr.skip()]), inputs=[selected_tags, showing_type, filtering_type, sort_column, search_extensions_text], outputs=[available_extensions_table, install_result]).then(fn=lambda m: gr.update(label=("Hidden" if m == "hide" else "Shown") + " Tags"), inputs=[showing_type], outputs=[selected_tags], show_progress=False)
 
                 filtering_type.change(fn=modules.ui.wrap_gradio_call_no_job(refresh_available_extensions_for_tags, extra_outputs=[gr.skip()]), inputs=[selected_tags, showing_type, filtering_type, sort_column, search_extensions_text], outputs=[available_extensions_table, install_result])
 
                 sort_column.change(fn=modules.ui.wrap_gradio_call_no_job(refresh_available_extensions_for_tags, extra_outputs=[gr.skip()]), inputs=[selected_tags, showing_type, filtering_type, sort_column, search_extensions_text], outputs=[available_extensions_table, install_result])
 
-            with gr.TabItem("Install from URL", id="install_from_url"):
-                install_url = gr.Text(label="URL for extension's git repository")
-                install_branch = gr.Text(label="Specific branch name", placeholder="Leave empty for default main branch")
-                install_dirname = gr.Text(label="Local directory name", placeholder="Leave empty for auto")
+            with gr.Tab("Install from URL", id="tabs_extensions_install_from_url"):
+                install_url = gr.Textbox(label="URL for extension's git repository")
+                install_branch = gr.Textbox(label="Specific branch name", placeholder="Leave empty for default main branch")
+                install_dirname = gr.Textbox(label="Local directory name", placeholder="Leave empty for auto")
                 install_button = gr.Button(value="Install", variant="primary")
                 install_result = gr.HTML(elem_id="extension_install_result")
 
@@ -657,7 +654,7 @@ def create_ui():
                     outputs=[install_url, extensions_table, install_result],
                 )
 
-            with gr.TabItem("Backup/Restore"):
+            with gr.Tab("Backup/Restore", id="tabs_extensions_backup_restore"):
                 with gr.Row(elem_id="extensions_backup_top_row"):
                     config_states_list = gr.Dropdown(label="Saved Configs", elem_id="extension_backup_saved_configs", value="Current", choices=["Current"] + list(config_states.all_config_states.keys()))
                     modules.ui.create_refresh_button(config_states_list, config_states.list_config_states, lambda: {"choices": ["Current"] + list(config_states.all_config_states.keys())}, "refresh_config_states")
