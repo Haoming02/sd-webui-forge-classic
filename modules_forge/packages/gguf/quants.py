@@ -48,7 +48,6 @@ class TorchQuant(ABC):
         parameter.data = blocks.contiguous()
         cls.bake_inner(parameter)
         parameter.baked = True
-        return
 
     @classmethod
     def bake_inner(cls, parameter):
@@ -80,18 +79,15 @@ class BF16(TorchQuant, qtype=GGMLQuantizationType.BF16):
 
 class NVFP4(TorchQuant, qtype=GGMLQuantizationType.NVFP4):
     @classmethod
-    def dequantize_blocks_pytorch(
-        cls, blocks, block_size, type_size, parameter
-    ) -> torch.Tensor:
+    def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter) -> torch.Tensor:
         blocks = blocks.reshape(-1, type_size).to(torch.uint8)
         scale_codes = blocks[:, :4].to(torch.int32)
         scale_exponents = (scale_codes >> 3) & 0xF
         scale_mantissas = scale_codes & 0x7
         scales = torch.where(
             scale_exponents == 0,
-            scale_mantissas.to(torch.float32) * (2.0 ** -9),
-            (1.0 + scale_mantissas.to(torch.float32) / 8.0)
-            * torch.pow(2.0, scale_exponents.to(torch.float32) - 7.0),
+            scale_mantissas.to(torch.float32) * (2.0**-9),
+            (1.0 + scale_mantissas.to(torch.float32) / 8.0) * torch.pow(2.0, scale_exponents.to(torch.float32) - 7.0),
         )
         scales = scales.masked_fill((scale_codes == 0) | (scale_codes == 0x7F), 0.0)
 
@@ -103,8 +99,7 @@ class NVFP4(TorchQuant, qtype=GGMLQuantizationType.NVFP4):
         values = torch.where(
             exponents == 0,
             mantissas.to(torch.float32) * 0.5,
-            (1.0 + mantissas.to(torch.float32) * 0.5)
-            * torch.pow(2.0, exponents.to(torch.float32) - 1.0),
+            (1.0 + mantissas.to(torch.float32) * 0.5) * torch.pow(2.0, exponents.to(torch.float32) - 1.0),
         )
         values = torch.where(signs, -values, values)
         return (values * scales.unsqueeze(-1)).reshape(-1, block_size)
@@ -118,7 +113,6 @@ class Q4_0(TorchQuant, qtype=GGMLQuantizationType.Q4_0):
         d = d.view(torch.float16).to(parameter.computation_dtype).view(torch.uint8)
         x = change_4bits_order(x).view(torch.uint8)
         parameter.data = torch.cat([d, x], dim=-1).contiguous()
-        return
 
     @classmethod
     def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter) -> torch.Tensor:
@@ -158,8 +152,6 @@ class Q4_1(TorchQuant, qtype=GGMLQuantizationType.Q4_1):
         qs = change_4bits_order(qs).view(torch.uint8)
 
         parameter.data = torch.cat([d, m, qs], dim=-1).contiguous()
-
-        return
 
     @classmethod
     def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter) -> torch.Tensor:
@@ -251,7 +243,6 @@ class Q8_0(TorchQuant, qtype=GGMLQuantizationType.Q8_0):
         x = x.view(torch.int8)
         d = d.view(torch.float16).to(parameter.computation_dtype).view(torch.int8)
         parameter.data = torch.cat([d, x], dim=-1).contiguous()
-        return
 
     @classmethod
     def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter) -> torch.Tensor:
@@ -342,7 +333,6 @@ class Q4_K(TorchQuant, qtype=GGMLQuantizationType.Q4_K):
         qs = qs.view(torch.uint8)
 
         parameter.data = torch.cat([d, dm, qs], dim=-1).contiguous()
-        return
 
     @classmethod
     def dequantize_blocks_pytorch(cls, blocks, block_size, type_size, parameter) -> torch.Tensor:
