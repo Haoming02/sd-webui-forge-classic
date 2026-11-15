@@ -1562,3 +1562,21 @@ try:
             NVIDIA_CONV3D_WORKAROUND = True
 except Exception:
     pass
+
+
+# region cu130
+
+
+if is_nvidia():
+    device = get_torch_device()
+    cuda_version = torch.version.cuda
+    if device.type == "cuda" and int(cuda_version.split(".")[0]) < 13:
+        capability = torch.cuda.get_device_capability(device)
+        if capability >= (7, 5):
+            logger.warning(f"""Warning\n
+========================================================================
+Your GPU has compute capability {capability} but PyTorch is using CUDA {cuda_version}
+Performance might be degraded...
+Please upgrade PyTorch to cu130 or newer (update your NVIDIA driver if needed)
+========================================================================
+            """)
