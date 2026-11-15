@@ -6,8 +6,15 @@ from rich.containers import Renderables
 from rich.logging import RichHandler
 from rich.table import Table
 from rich.text import Text
+from tqdm import tqdm
 
 from backend.args import args
+
+
+class TqdmRichHandler(RichHandler):
+    def emit(self, record: logging.LogRecord):
+        with tqdm.external_write_mode(file=self.console.file):
+            super().emit(record)
 
 
 class ForgeRender:
@@ -51,7 +58,7 @@ KEYWORDS: dict[str, list[str]] = {
 def setup_logger(logger: logging.Logger):
     logger.propagate = False
     if not logger.handlers:
-        handler = RichHandler(keywords=KEYWORDS.get(logger.name, None))
+        handler = TqdmRichHandler(keywords=KEYWORDS.get(logger.name, None))
         handler._log_render = ForgeRender()
         handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)

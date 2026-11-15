@@ -23,9 +23,9 @@ def setup_logging(loglevel: str = None):
     loglevel: str = loglevel or os.environ.get("SD_WEBUI_LOG_LEVEL") or logging.ERROR
 
     if os.environ.get("SD_WEBUI_RICH_LOG"):
-        from rich.logging import RichHandler
+        from backend.logging import TqdmRichHandler
 
-        handler = RichHandler(show_path=False)
+        handler = TqdmRichHandler(show_path=False)
     else:
         formatter = logging.Formatter("%(message)s")
 
