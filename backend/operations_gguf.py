@@ -34,6 +34,7 @@ class ParameterGGUF(torch.nn.Parameter):
         if no_init:
             return
 
+        self.tensor_type = tensor_type
         self.gguf_cls = QUANTS_MAPPING.get(tensor_type)
         self.real_shape: torch.Size = tensor_shape
         self.computation_dtype = torch.float16
@@ -53,6 +54,7 @@ class ParameterGGUF(torch.nn.Parameter):
 
     def copy_with_data(self, data):
         new = ParameterGGUF(data, no_init=True)
+        new.tensor_type = self.tensor_type
         new.gguf_cls = self.gguf_cls
         new.real_shape = self.real_shape
         new.computation_dtype = self.computation_dtype
