@@ -92,6 +92,7 @@
         const round16 = (v) => Math.max(16, Math.round(v / 16) * 16);
 
         let idCounter = 0;
+        let spawnCount = 0;
 
         const state = {
             width: 1024,
@@ -155,14 +156,16 @@
             }
         }
 
-        function defaultBbox() {
+        function defaultBbox(index) {
             const m = Math.round(Math.min(state.width, state.height) * 0.1);
             const s = Math.round(Math.min(state.width, state.height) * 0.3);
-            return [m, m, m + s, m + s];
+            const offset = Math.min(index * Math.max(16, Math.round(Math.min(state.width, state.height) * 0.05)), state.width - m - s, state.height - m - s);
+            return [m + offset, m + offset, m + s + offset, m + s + offset];
         }
 
         function newItem() {
-            return { id: ++idCounter, label: "object", caption: "", text: "", bbox: defaultBbox() };
+            const index = spawnCount++;
+            return { id: ++idCounter, label: "object", caption: "", text: "", bbox: defaultBbox(index) };
         }
 
         state.items.push(newItem());
@@ -172,6 +175,17 @@
         const canvasSection = h("div", { class: "jb-canvas" });
         canvasSection.style.position = "relative";
         const stage = h("div", { class: "jb-stage" });
+        let selectedItemId = null;
+
+        function selectItem(id) {
+            selectedItemId = id;
+            canvasRefs.forEach((ref, itemId) => {
+                ref.el.style.zIndex = itemId === id ? "1" : "";
+            });
+            const box = canvasRefs.get(id)?.el;
+            if (box) stage.appendChild(box);
+        }
+
         canvasSection.appendChild(stage);
 
         const fitCanvasBtn = h("button", { type: "button", class: "jb-fit-canvas", title: "Fit to View", "aria-label": "Fit to View" }, ["\u{1F50D}"]);
@@ -301,6 +315,7 @@
                 text: item.text || "",
                 bbox: item.bbox.slice(),
             }));
+            spawnCount = state.items.length;
 
             widthInput.value = state.width;
             heightInput.value = state.height;
@@ -575,6 +590,7 @@
 
         function createBox(item, color) {
             const el = h("div", { class: "jb-box", dataset: { id: String(item.id) } });
+            el.addEventListener("dblclick", () => selectItem(item.id));
             el.style.borderColor = color;
             el.style.background = `color-mix(in srgb, ${color} 20%, transparent)`;
             const tag = h("div", { class: "jb-box-tag" }, [item.label]);
@@ -618,6 +634,8 @@
             state.items.forEach((item, index) => {
                 stage.appendChild(createBox(item, itemColor(index)));
             });
+            if (canvasRefs.has(selectedItemId)) selectItem(selectedItemId);
+            else selectedItemId = null;
         }
 
         // ----- list -----
@@ -626,6 +644,10 @@
             const row = h("div", { class: "jb-item", dataset: { id: String(item.id) } });
             row.style.borderColor = color;
             row.style.background = `color-mix(in srgb, ${color} 16%, var(--background-fill-secondary))`;
+            row.addEventListener("dblclick", (event) => {
+                if (event.target.closest(".jb-remove, .jb-radio")) return;
+                selectItem(item.id);
+            });
 
             const top = h("div", { class: "jb-item-top" });
             const radios = LABELS.map((label) => {
@@ -724,6 +746,7 @@
         }
 
         function removeItem(id) {
+            spawnCount--;
             const index = state.items.findIndex((it) => it.id === id);
             if (index >= 0) state.items.splice(index, 1);
             if (state.items.length === 0) state.items.push(newItem());
@@ -731,6 +754,7 @@
         }
 
         function clearItems() {
+            spawnCount = 0;
             state.items = [newItem()];
             renderAll();
         }
