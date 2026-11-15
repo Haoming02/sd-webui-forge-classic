@@ -24,6 +24,7 @@ QUANTS_MAPPING: dict[GGMLQuantizationType, type[quants.TorchQuant]] = {
     GGMLQuantizationType.IQ3_S: quants.IQ3_S,
     GGMLQuantizationType.IQ4_NL: quants.IQ4_NL,
     GGMLQuantizationType.IQ4_XS: quants.IQ4_XS,
+    GGMLQuantizationType.NVFP4: quants.NVFP4,
 }
 
 

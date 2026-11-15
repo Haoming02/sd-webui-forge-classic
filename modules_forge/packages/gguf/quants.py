@@ -78,6 +78,38 @@ class BF16(TorchQuant, qtype=GGMLQuantizationType.BF16):
         return (blocks.view(torch.int16).to(torch.int32) << 16).view(torch.float32)
 
 
+class NVFP4(TorchQuant, qtype=GGMLQuantizationType.NVFP4):
+    @classmethod
+    def dequantize_blocks_pytorch(
+        cls, blocks, block_size, type_size, parameter
+    ) -> torch.Tensor:
+        blocks = blocks.reshape(-1, type_size).to(torch.uint8)
+        scale_codes = blocks[:, :4].to(torch.int32)
+        scale_exponents = (scale_codes >> 3) & 0xF
+        scale_mantissas = scale_codes & 0x7
+        scales = torch.where(
+            scale_exponents == 0,
+            scale_mantissas.to(torch.float32) * (2.0 ** -9),
+            (1.0 + scale_mantissas.to(torch.float32) / 8.0)
+            * torch.pow(2.0, scale_exponents.to(torch.float32) - 7.0),
+        )
+        scales = scales.masked_fill((scale_codes == 0) | (scale_codes == 0x7F), 0.0)
+
+        packed = blocks[:, 4:].reshape(-1, 4, 8)
+        values = torch.cat((packed & 0xF, packed >> 4), dim=-1).to(torch.int32)
+        signs = (values & 0x8) != 0
+        exponents = (values >> 1) & 0x3
+        mantissas = values & 0x1
+        values = torch.where(
+            exponents == 0,
+            mantissas.to(torch.float32) * 0.5,
+            (1.0 + mantissas.to(torch.float32) * 0.5)
+            * torch.pow(2.0, exponents.to(torch.float32) - 1.0),
+        )
+        values = torch.where(signs, -values, values)
+        return (values * scales.unsqueeze(-1)).reshape(-1, block_size)
+
+
 class Q4_0(TorchQuant, qtype=GGMLQuantizationType.Q4_0):
     @classmethod
     def bake_inner(cls, parameter):
