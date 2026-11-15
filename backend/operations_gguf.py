@@ -65,7 +65,7 @@ class ParameterGGUF(torch.nn.Parameter):
         return self.copy_with_data(self.data.to(*args, **kwargs))
 
     def pin_memory(self, device=None):
-        return self.copy_with_data(torch.Tensor.pin_memory(self, device=device))
+        return self.copy_with_data(self.data.pin_memory(device=device))
 
 
 def dequantize_tensor(tensor: "ParameterGGUF", *, input: torch.Tensor = None) -> torch.Tensor:
