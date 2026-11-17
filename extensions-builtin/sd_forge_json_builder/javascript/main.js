@@ -310,6 +310,8 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
         function loadDraft(draft) {
             state.width = draft.width;
             state.height = draft.height;
+            committedWidth = state.width;
+            committedHeight = state.height;
             state.summary.caption = draft.summary.caption;
             state.summary.meta = draft.summary.meta.join(", ");
             state.summary.canvas = draft.summary.canvas;
@@ -774,13 +776,21 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
             renderCanvas();
         }
 
-        function clampItemsToCanvas() {
+        let committedWidth = state.width;
+        let committedHeight = state.height;
+
+        function rescaleItemsToCanvas() {
+            const rw = state.width / committedWidth;
+            const rh = state.height / committedHeight;
+            committedWidth = state.width;
+            committedHeight = state.height;
             for (const item of state.items) {
-                const bw = Math.min(item.bbox[2] - item.bbox[0], state.width);
-                const bh = Math.min(item.bbox[3] - item.bbox[1], state.height);
-                const x1 = clamp(item.bbox[0], 0, state.width - bw);
-                const y1 = clamp(item.bbox[1], 0, state.height - bh);
-                item.bbox = [x1, y1, x1 + bw, y1 + bh];
+                const [x1, y1, x2, y2] = item.bbox;
+                const nx1 = clamp(Math.round(x1 * rw), 0, state.width - 16);
+                const ny1 = clamp(Math.round(y1 * rh), 0, state.height - 16);
+                const nx2 = clamp(Math.max(Math.round(x2 * rw), nx1 + 16), nx1 + 16, state.width);
+                const ny2 = clamp(Math.max(Math.round(y2 * rh), ny1 + 16), ny1 + 16, state.height);
+                item.bbox = [nx1, ny1, nx2, ny2];
                 syncListNums(item);
             }
             renderCanvas();
@@ -790,13 +800,13 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
             const v = parseInt(widthInput.value, 10);
             if (v > 0) applyResolution(v, state.height);
         });
-        widthInput.addEventListener("change", clampItemsToCanvas);
+        widthInput.addEventListener("change", rescaleItemsToCanvas);
 
         heightInput.addEventListener("input", () => {
             const v = parseInt(heightInput.value, 10);
             if (v > 0) applyResolution(state.width, v);
         });
-        heightInput.addEventListener("change", clampItemsToCanvas);
+        heightInput.addEventListener("change", rescaleItemsToCanvas);
 
         setResBtn.addEventListener("click", () => {
             const mp = parseFloat(mpInput.value);
@@ -810,7 +820,7 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
             widthInput.value = width;
             heightInput.value = height;
             applyResolution(width, height);
-            clampItemsToCanvas();
+            rescaleItemsToCanvas();
         });
 
         sumCaption.addEventListener("input", () => {
