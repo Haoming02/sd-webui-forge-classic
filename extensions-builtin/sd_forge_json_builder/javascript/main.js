@@ -36,6 +36,34 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
             activePromptLink = null;
         };
 
+        async function flushSelectedStyles(link) {
+            const dropdown = document.getElementById(`${currentTab}_styles`);
+            const names = Array.from(dropdown?.querySelectorAll(".token > span") ?? []).map((el) => el.textContent.trim());
+            if (!dropdown || names.length === 0) return;
+
+            let styles;
+            try {
+                const req = await (await fetch("/internal/json_builder_prompt_styles")).json();
+                styles = Object.fromEntries(req.map((s) => [s.name, s]));
+            } catch (e) {
+                console.error("Failed to fetch Styles:", e.message);
+                return;
+            }
+
+            const promptEl = link.prompt;
+            let prompt = promptEl.value;
+
+            for (let i = 0; i < names.length; i++) {
+                if (!(names[i] in styles)) continue;
+                const s = styles[names[i]].prompt.trim();
+                if (s.includes("{prompt}")) prompt = s.replaceAll("{prompt}", prompt);
+                else prompt = prompt + s;
+            }
+
+            link.setValue(prompt);
+            dropdown.querySelector(".token-remove.remove-all")?.click();
+        }
+
         function updatePromptLink(key, value) {
             const link = activePromptLink;
             if (!link || link.key !== key || link.syncing) return;
@@ -48,13 +76,14 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
         function addPromptLink(field, key, color, getValue, setValue) {
             field.dataset.promptLinkKey = key;
 
-            field.addEventListener("dblclick", () => {
-                if (activePromptLink?.key === key) {
+            field.addEventListener("dblclick", async () => {
+                if (activePromptLink) {
+                    await flushSelectedStyles(activePromptLink);
+                    const unlinkOnly = activePromptLink.key === key;
                     stopPromptLink();
-                    return;
+                    if (unlinkOnly) return;
                 }
 
-                stopPromptLink();
                 const prompt = document.getElementById(`${currentTab}_prompt`).querySelector("textarea");
                 const fields = new Set(root.querySelectorAll(`[data-prompt-link-key="${key}"]`));
                 const link = { key, fields, prompt, syncing: true, setValue };
@@ -945,7 +974,8 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
             return invalid.length === 0;
         }
 
-        function submit() {
+        async function submit() {
+            if (activePromptLink) await flushSelectedStyles(activePromptLink);
             stopPromptLink();
             if (!validate()) return;
             let prompt = null;
