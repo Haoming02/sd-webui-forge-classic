@@ -200,6 +200,50 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
         Object.assign(helpBtn.style, { position: "absolute", right: "8px", bottom: "8px", zIndex: "64" });
         canvasSection.append(fitCanvasBtn, helpBtn);
 
+        const bgGalleryBtn = h("button", { type: "button", class: "jb-bg-btn", title: "Use Selected Gallery Image" }, ["\u{1F5BC}"]);
+        const bgFileBtn = h("button", { type: "button", class: "jb-bg-btn", title: "Load Background From File" }, ["\u{1F4C2}"]);
+        const bgClearBtn = h("button", { type: "button", class: "jb-bg-btn", title: "Reset Background" }, ["\u{1F5D1}"]);
+
+        const bgButtons = h("div", { style: { position: "absolute", left: "8px", top: "8px", zIndex: "64", display: "flex", gap: "4px" } }, [bgGalleryBtn, bgFileBtn, bgClearBtn]);
+        canvasSection.appendChild(bgButtons);
+
+        const bgFileInput = h("input", { type: "file", accept: "image/*" });
+        bgFileInput.style.display = "none";
+        canvasSection.appendChild(bgFileInput);
+
+        function setStageBackground(src) {
+            stage.style.backgroundImage = `url("${src}")`;
+            stage.style.backgroundSize = "100% 100%";
+            stage.style.backgroundRepeat = "no-repeat";
+        }
+
+        let bgFileURL = null;
+
+        bgGalleryBtn.addEventListener("click", () => {
+            const thumbs = Array.from(gradioApp().querySelectorAll(`#${currentTab}_gallery_container .thumbnail-item.thumbnail-small`));
+            const src = (thumbs.find((elem) => elem.classList.contains("selected")) ?? thumbs[0])?.querySelector("img")?.src;
+            if (src) setStageBackground(src);
+        });
+        bgFileBtn.addEventListener("click", () => {
+            bgFileInput.value = "";
+            bgFileInput.click();
+        });
+        bgClearBtn.addEventListener("click", () => {
+            if (bgFileURL) URL.revokeObjectURL(bgFileURL);
+            bgFileURL = null;
+            for (const prop of ["background-image", "background-size", "background-repeat"]) {
+                stage.style.removeProperty(prop);
+            }
+        });
+
+        bgFileInput.addEventListener("change", () => {
+            const file = bgFileInput.files?.[0];
+            if (!file) return;
+            if (bgFileURL) URL.revokeObjectURL(bgFileURL);
+            bgFileURL = URL.createObjectURL(file);
+            setStageBackground(bgFileURL);
+        });
+
         // ----- side panel -----
 
         const widthInput = h("input", { type: "number", class: "jb-width", min: "16", step: "16", value: state.width });

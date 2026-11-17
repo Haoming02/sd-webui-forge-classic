@@ -396,6 +396,19 @@
     border-color: var(--button-secondary-border-color-hover);
 }
 
+.jb-fit-canvas,
+.jb-help,
+.jb-bg-btn {
+    box-sizing: border-box;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--button-secondary-background-fill) !important;
+}
+
 /* ----- list items ----- */
 
 .jb-item {
