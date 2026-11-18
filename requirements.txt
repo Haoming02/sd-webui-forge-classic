@@ -30,7 +30,6 @@ pyyaml==6.0.3
 rich==14.3.4
 safetensors==0.8.0
 scikit-image==0.25.2
-spandrel-extra-arches==0.2.0
 spandrel==0.4.2
 torchsde==0.2.6
 tqdm==4.70.1

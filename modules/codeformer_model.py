@@ -27,6 +27,14 @@ class FaceRestorerCodeFormer(face_restoration_utils.CommonFaceRestoration):
             model_dir=self.model_path,
             file_name="codeformer-v0.1.0.pth",
         )
+
+        try:
+            import spandrel_extra_arches
+        except ImportError:
+            raise NotImplementedError("Please manually install the spandrel_extra_arches package to use CodeFormer")
+        else:
+            spandrel_extra_arches.install()
+
         return modelloader.load_spandrel_model(model_path, device=devices.device_codeformer).model
 
     def restore(self, np_image, w: float | None = None):

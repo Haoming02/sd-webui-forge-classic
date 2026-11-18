@@ -5,15 +5,12 @@ import os
 from urllib.parse import urlparse
 
 import spandrel
-import spandrel_extra_arches
 import torch
 
 from backend.utils import load_torch_file
 from modules import shared
 from modules.upscaler import Upscaler, UpscalerLanczos, UpscalerNearest, UpscalerNone  # noqa
 from modules.util import load_file_from_url  # noqa
-
-spandrel_extra_arches.install()
 
 logger = logging.getLogger(__name__)
 
