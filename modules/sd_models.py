@@ -137,7 +137,11 @@ def list_models():
         model_list.update(modelloader.load_models(model_path=_dir, ext_filter=[".ckpt", ".safetensors", ".gguf"], ext_blacklist=[".vae.ckpt", ".vae.safetensors"]))
 
     for filename in sorted(model_list, key=shared.natural_sort_key):
-        checkpoint_info = CheckpointInfo(filename)
+        try:
+            checkpoint_info = CheckpointInfo(filename)
+        except OSError as e:
+            errors.display(e, f"reading checkpoint {filename}")
+            continue
         checkpoint_info.register()
 
 
