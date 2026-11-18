@@ -312,7 +312,7 @@ def on_preset_change(preset: str):
 
     modules_value = [os.path.basename(m) for m in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]
     if not shared.opts.sd_modules_dropdown_use_short:
-        modules_value = [module_map[m] for m in modules_value]
+        modules_value = [module_map[m] for m in modules_value if m in module_map]
 
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
