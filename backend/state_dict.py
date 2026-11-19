@@ -10,15 +10,18 @@ def load_state_dict(model: torch.nn.Module, sd: dict[str, torch.Tensor], ignore_
 
     if gguf_entries:
         from backend.loader_gguf import dequantize
+        from backend.operations import ForgeOperationsGGUF
 
+        gguf_layers = (ForgeOperationsGGUF.Linear, ForgeOperationsGGUF.Conv2d, ForgeOperationsGGUF.Embedding)
         for name, tensor in gguf_entries:
-            sd[name] = dequantize(tensor, dtype=gguf_targets[name].dtype)
+            if not isinstance(model.get_submodule(name.rpartition(".")[0]), gguf_layers):
+                sd[name] = dequantize(tensor, dtype=gguf_targets[name].dtype)
 
     is_meta = any(p.is_meta for p in model.parameters())
 
     if is_meta:
         for name, param in [*model.named_parameters(), *model.named_buffers()]:
-            if (entry := sd.get(name, None)) is not None and entry.dtype != param.dtype:
+            if (entry := sd.get(name, None)) is not None and entry.dtype != param.dtype and getattr(entry, "gguf_cls", None) is None:
                 sd[name] = entry.to(param.dtype)
 
     missing, unexpected = model.load_state_dict(sd, strict=False, assign=is_meta)
