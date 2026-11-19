@@ -1002,6 +1002,8 @@ Canvas Controls: scroll to zoom, middle-drag to pan, double-click empty space or
             updateInput(promptEl);
             updateInput(widthEl);
             updateInput(heightEl);
+
+            promptEl.scrollIntoView({ behavior: "smooth", block: "center" });
         }
 
         function loadPrompt() {
