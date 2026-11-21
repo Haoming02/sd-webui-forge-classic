@@ -22,12 +22,13 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 <br>
 
-## Features [Sep.]
+## Features [Nov.]
 > Most base features of the original [Automatic1111 Webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) should still function
 
 #### New Features
 
 - [X] Support [Moss-Image](https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT)
+- [X] JSON Builder
 - [X] Support **Moss-Image-Edit**
     - require specific [LoRA](https://huggingface.co/chinoll/Moss-Image-Edit)
 - [X] Support [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)
@@ -82,9 +83,12 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 > [!Note]
 > To be detected as a **Kontext** model, the model must include "`kontext`" in its path *(**e.g.** file name or folder name)*
 
-- Implement `ImageStitch Integrated`
-    - [X] support multi-image inputs for **Edit** models
-    - [X] support FirstLastFrameToVideo for `Wan 2.2`
+- [X] Implement `ImageStitch Integrated`
+    - support multi-image inputs for **Edit** models
+    - support FirstLastFrameToVideo for `Wan 2.2`
+- [X] Enforce Reference Resize
+    - **Edit** models resize image inputs to 1 megapixel by default
+    - adjust in **Settings/Stable Diffusion**
 - [X] Support [Nunchaku](https://github.com/nunchaku-tech/nunchaku) (`SVDQ`) Models (**Deprecated**)
     - `flux-dev`, `flux-krea`, `flux-kontext`, `qwen-image`, `qwen-image-edit`, `z-image-turbo`
     - only `Flux` and `Qwen` support LoRA currently
@@ -186,7 +190,10 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Some Samplers & Schedulers
 - [X] Some Compatibility Settings
 - [X] Stealth Infotext
+- [X] `spandrel-extra-arches` Support
+    - manually install the package to use `CodeFormer`
 - [X] `bitsandbytes` Support
+- [X] `DirectML` Support
 - [ ] `Nunchaku` Support
 
 #### Optimizations
@@ -195,6 +202,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] No longer `git` `clone` any repository on fresh install
 - [X] No longer create the UI twice when using `--api`
 - [X] No longer install `open-clip`
+- [X] No longer reinstall `onnxruntime`
 - [X] Fix memory leak when switching checkpoints
 - [X] Restore the ability to drag-and-drop images onto `gr.Image` that already contains image
 - [X] Speed up launch time
@@ -243,6 +251,9 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 - [X] Revamp settings
     - improve formatting
     - update descriptions
+- [X] Revamp extensions
+    - improve formatting
+    - now pull from 3rd-party index
 - [X] Check for Extension updates in parallel
 - [X] Move `embeddings` folder into `models` folder
 - [X] Infotext Rewrite
@@ -267,6 +278,8 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
     - faster image processing
 - [X] Update `protobuf`
     - faster `insightface` loading
+- [X] Update `gguf`
+    - support new quant types
 - [X] Update to latest PyTorch
     - `torch==2.14.0+cu130`
 
