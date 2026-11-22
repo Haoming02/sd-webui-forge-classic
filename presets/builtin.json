@@ -1,0 +1,105 @@
+[
+    {
+        "name": "SD1",
+        "arch": "sd",
+        "t2i" : {"sampler": "Euler a", "scheduler": "Automatic", "step": 32, "cfg": 6.0, "width": 0, "height": 0, "batch_size": 1},
+        "hr"  : {"sampler": "Euler a", "scheduler": "Automatic", "step": 32, "cfg": 6.0, "width": 0, "height": 0},
+        "i2i" : {"sampler": "Euler a", "scheduler": "Automatic", "step": 32, "cfg": 6.0, "width": 0, "height": 0, "batch_size": 1}
+    },
+    {
+        "name": "SDXL",
+        "arch": "xl",
+        "t2i" : {"sampler": "Euler a", "scheduler": "Automatic", "step": 24, "cfg": 5.0, "width": 0, "height": 0, "batch_size": 1},
+        "hr"  : {"sampler": "Euler a", "scheduler": "Automatic", "step": 24, "cfg": 5.0, "width": 0, "height": 0},
+        "i2i" : {"sampler": "Euler a", "scheduler": "Automatic", "step": 24, "cfg": 5.0, "width": 0, "height": 0, "batch_size": 1}
+    },
+    {
+        "name"   : "Flux.1-Dev",
+        "arch"   : "flux",
+        "distill": true,
+        "t2i"    : {"sampler": "Euler", "scheduler": "Beta", "step": 20, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "dcfg": 3.0},
+        "hr"     : {"sampler": "Euler", "scheduler": "Beta", "step": 20, "cfg": 1.0, "width": 0, "height": 0, "dcfg": 3.0},
+        "i2i"    : {"sampler": "Euler", "scheduler": "Beta", "step": 20, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "dcfg": 3.0}
+    },
+    {
+        "name" : "Flux.2-Klein",
+        "arch" : "klein",
+        "shift": true,
+        "t2i"  : {"sampler": "Euler", "scheduler": "Beta", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0},
+        "hr"   : {"sampler": "Euler", "scheduler": "Beta", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "shift": 3.0},
+        "i2i"  : {"sampler": "Euler", "scheduler": "Beta", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0}
+    },
+    {
+        "name" : "Qwen-Image Turbo",
+        "arch" : "qwen",
+        "shift": true,
+        "t2i"  : {"sampler": "LCM", "scheduler": "Normal", "step": 8, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0},
+        "hr"   : {"sampler": "LCM", "scheduler": "Normal", "step": 8, "cfg": 1.0, "width": 0, "height": 0, "shift": 3.0},
+        "i2i"  : {"sampler": "LCM", "scheduler": "Normal", "step": 8, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0}
+    },
+    {
+        "name" : "Qwen-Image-2.1",
+        "arch" : "qwen21",
+        "shift": true,
+        "t2i"  : {"sampler": "Euler", "scheduler": "Simple", "step": 24, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0},
+        "hr"   : {"sampler": "Euler", "scheduler": "Simple", "step": 24, "cfg": 1.0, "width": 0, "height": 0, "shift": 3.0},
+        "i2i"  : {"sampler": "Euler", "scheduler": "Simple", "step": 24, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0}
+    },
+    {
+        "name" : "Lumina-Image-2.0",
+        "arch" : "lumina",
+        "shift": true,
+        "t2i"  : {"sampler": "Res Multistep", "scheduler": "Simple", "step": 32, "cfg": 4.0, "width": 0, "height": 0, "batch_size": 1, "shift": 6.0},
+        "hr"   : {"sampler": "Res Multistep", "scheduler": "Simple", "step": 32, "cfg": 4.0, "width": 0, "height": 0, "shift": 6.0},
+        "i2i"  : {"sampler": "Res Multistep", "scheduler": "Simple", "step": 32, "cfg": 4.0, "width": 0, "height": 0, "batch_size": 1, "shift": 6.0}
+    },
+    {
+        "name" : "Z-Image-Turbo",
+        "arch" : "zit",
+        "shift": true,
+        "t2i"  : {"sampler": "Euler", "scheduler": "Beta", "step": 9, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 9.0},
+        "hr"   : {"sampler": "Euler", "scheduler": "Beta", "step": 9, "cfg": 1.0, "width": 0, "height": 0, "shift": 9.0},
+        "i2i"  : {"sampler": "Euler", "scheduler": "Beta", "step": 9, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 9.0}
+    },
+    {
+        "name" : "Wan 2.2 Distill",
+        "arch" : "wan",
+        "shift": true,
+        "t2i"  : {"sampler": "Euler", "scheduler": "Simple", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 81, "shift": 5.0},
+        "hr"   : {"sampler": "Euler", "scheduler": "Simple", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "shift": 5.0},
+        "i2i"  : {"sampler": "Euler", "scheduler": "Simple", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 81, "shift": 5.0},
+        "fps"  : 16
+    },
+    {
+        "name" : "Anima",
+        "arch" : "anima",
+        "shift": true,
+        "t2i"  : {"sampler": "ER SDE", "scheduler": "Beta", "step": 32, "cfg": 4.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0},
+        "hr"   : {"sampler": "ER SDE", "scheduler": "Beta", "step": 32, "cfg": 4.0, "width": 0, "height": 0, "shift": 3.0},
+        "i2i"  : {"sampler": "ER SDE", "scheduler": "Beta", "step": 32, "cfg": 4.0, "width": 0, "height": 0, "batch_size": 1, "shift": 3.0}
+    },
+    {
+        "name" : "PiD",
+        "arch" : "pid",
+        "shift": true,
+        "t2i"  : {"sampler": "LCM", "scheduler": "Simple", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 1.5},
+        "hr"   : {"sampler": "LCM", "scheduler": "Simple", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "shift": 1.5},
+        "i2i"  : {"sampler": "LCM", "scheduler": "Simple", "step": 4, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 1.5}
+    },
+    {
+        "name" : "Krea-2-Turbo",
+        "arch" : "krea",
+        "shift": true,
+        "t2i"  : {"sampler": "Euler", "scheduler": "Beta", "step": 8, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 1.15},
+        "hr"   : {"sampler": "Euler", "scheduler": "Beta", "step": 8, "cfg": 1.0, "width": 0, "height": 0, "shift": 1.15},
+        "i2i"  : {"sampler": "Euler", "scheduler": "Beta", "step": 8, "cfg": 1.0, "width": 0, "height": 0, "batch_size": 1, "shift": 1.15}
+    },
+    {
+        "name" : "Moss-Image",
+        "arch" : "moss",
+        "shift": true,
+        "t2i"  : {"sampler": "Heun", "scheduler": "Linear Quadratic", "step": 30, "cfg": 5.0, "width": 0, "height": 0, "batch_size": 1, "shift": 5.0},
+        "hr"   : {"sampler": "Heun", "scheduler": "Linear Quadratic", "step": 30, "cfg": 5.0, "width": 0, "height": 0, "shift": 5.0},
+        "i2i"  : {"sampler": "Heun", "scheduler": "Linear Quadratic", "step": 30, "cfg": 5.0, "width": 0, "height": 0, "batch_size": 1, "shift": 5.0}
+    }
+]
