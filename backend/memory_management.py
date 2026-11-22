@@ -194,12 +194,18 @@ if args.disable_xformers:
     XFORMERS_IS_AVAILABLE = False
 else:
     try:
-        import xformers
-        import xformers.ops  # noqa: F401
-
-        XFORMERS_IS_AVAILABLE = xformers._has_cpp_library
+        import mslk  # noqa: F401
+        import mslk.attention.fmha  # noqa: F401
     except Exception:
-        XFORMERS_IS_AVAILABLE = False
+        try:
+            import xformers  # noqa: F401
+            import xformers.ops  # noqa: F401
+        except Exception:
+            XFORMERS_IS_AVAILABLE = False
+        else:
+            XFORMERS_IS_AVAILABLE = True
+    else:
+        XFORMERS_IS_AVAILABLE = True
 
 XFORMERS_ENABLED_VAE = XFORMERS_IS_AVAILABLE or args.force_xformers_vae
 

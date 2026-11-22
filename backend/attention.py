@@ -36,9 +36,16 @@ def wrap_attn(func):
 
 
 if memory_management.xformers_enabled() or memory_management.xformers_enabled_vae():
-    import xformers
-    import xformers.ops
+    try:
+        import mslk
+        import mslk.attention.fmha
 
+        xmea = mslk.attention.fmha.memory_efficient_attention
+    except Exception:
+        import xformers
+        import xformers.ops
+
+        xmea = xformers.ops.memory_efficient_attention
 
 if memory_management.sage_enabled():
     import importlib.metadata
@@ -246,7 +253,7 @@ def attention_xformers(q, k, v, heads, mask=None, attn_precision=None, skip_resh
         mask = mask.expand(b, heads, -1, -1)
 
     try:
-        out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=mask)
+        out = xmea(q, k, v, attn_bias=mask)
         _fallback = False
     except Exception as e:
         if "(too new)" in str(e):
@@ -512,7 +519,7 @@ def xformers_attention_vae(q, k, v):
     )
 
     try:
-        out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None)
+        out = xmea(q, k, v, attn_bias=None)
         out = out.transpose(1, 2).reshape(orig_shape)
         _fallback = False
     except Exception:

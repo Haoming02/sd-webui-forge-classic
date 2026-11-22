@@ -284,9 +284,9 @@ def requirements_met(requirements_file):
 
 
 def prepare_environment():
-    torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu130")
-    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.14.0+cu130 torchvision==0.29.0+cu130 --extra-index-url {torch_index_url}")
-    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.35 --extra-index-url {torch_index_url}")
+    torch_index_url = os.environ.get("TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu134")
+    torch_command = os.environ.get("TORCH_COMMAND", f"pip install torch==2.15.0+cu134 torchvision==0.29.2+cu134 --extra-index-url {torch_index_url}")
+    xformers_package = os.environ.get("XFORMERS_PACKAGE", f"xformers==0.0.36 mslk==1.4.0+cu134 --extra-index-url {torch_index_url}")
     pynvml_package = os.environ.get("PYNVML_PACKAGE", "nvidia-ml-py==13.615.71")
 
     packaging_package = os.environ.get("PACKAGING_PACKAGE", "packaging==26.3")
@@ -319,7 +319,8 @@ def prepare_environment():
 import torch
 device = torch.accelerator.current_accelerator(check_available=True)
 assert device is not None
-torch.ones([1], device=device).mul_(2.0).cpu()
+x = torch.ones([1], device=device)
+y = x.mul(2.0).cpu()
         """
 
         success, err = check_run_python(TORCH_CHECK, return_error=True)
@@ -337,23 +338,23 @@ torch.ones([1], device=device).mul_(2.0).cpu()
     ver_PY = f"cp{sys.version_info.major}{sys.version_info.minor}"
     ver_SAGE = "2.2.0"
     ver_FLASH = "2.8.3"
-    ver_TRITON = "3.9"  # upper bound
-    ver_NUNCHAKU = "1.4.0"
+    ver_TRITON = "3.10"  # upper bound
+    ver_NUNCHAKU = "1.3.0"
     ver_TORCH, ver_CUDA = _torch_version()
     v_TORCH = ver_TORCH.rsplit(".", 1)[0]
     v_CUDA = f"{ver_CUDA[0:-1]}.{ver_CUDA[-1]}"
 
     if os.name == "nt":
-        sage_package = os.environ.get("SAGE_PACKAGE", f"https://github.com/woct0rdho/SageAttention/releases/download/v{ver_SAGE}-windows.post6/sageattention-{ver_SAGE}+{ver_CUDA}torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.10.2/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        sage_package = os.environ.get("SAGE_PACKAGE", f"https://huggingface.co/ussoewwin/Sage-Attention-built-for-Windows/resolve/main/sageattention-{ver_SAGE}.post6%2B{ver_CUDA}torch{ver_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v1.6.1/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton-windows<{ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://huggingface.co/tonera/vitoom-nunchaku/resolve/main/nunchaku-{ver_NUNCHAKU}%2B{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
+        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://huggingface.co/ussoewwin/nunchaku-built-on-cu134/blob/main/nunchaku-{ver_NUNCHAKU}.dev20261031%2B{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-win_amd64.whl")
 
     else:
         sage_package = os.environ.get("SAGE_PACKAGE", f"sageattention=={ver_SAGE}")
-        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v0.10.0/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        flash_package = os.environ.get("FLASH_PACKAGE", f"https://github.com/mjun0812/flash-attention-prebuild-wheels/releases/download/v1.5.0/flash_attn-{ver_FLASH}+{ver_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
         triton_package = os.environ.get("TRITION_PACKAGE", f"triton<{ver_TRITON}")
-        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://huggingface.co/tonera/vitoom-nunchaku/resolve/main/nunchaku-{ver_NUNCHAKU}%2B{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
+        nunchaku_package = os.environ.get("NUNCHAKU_PACKAGE", f"https://huggingface.co/ussoewwin/nunchaku-built-on-cu134/blob/main/nunchaku-{ver_NUNCHAKU}.dev20261031%2B{v_CUDA}torch{v_TORCH}-{ver_PY}-{ver_PY}-linux_x86_64.whl")
 
     if args.xformers and (not is_installed("xformers") or args.reinstall_xformers):
         run_pip(f"install -U -I --no-deps {xformers_package}", "xformers")
