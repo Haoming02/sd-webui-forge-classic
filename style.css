@@ -457,16 +457,16 @@ div.toprow-compact-tools {
 }
 
 /* settings */
-#quicksettings {
+#quicksettings .quicksettings_row {
     --checkbox-label-padding: 0.5em;
     align-items: flex-start;
 }
 
-#quicksettings>* {
+#quicksettings .quicksettings_row>* {
     min-width: unset !important;
 }
 
-#quicksettings>div {
+#quicksettings .quicksettings_row>div {
     width: fit-content;
     flex: 0 1 fit-content;
     padding: 0;
@@ -475,60 +475,60 @@ div.toprow-compact-tools {
     background: none;
 }
 
-#quicksettings>button {
+#quicksettings .quicksettings_row>button {
     margin: auto 0;
     margin-top: 1.5em;
 }
 
-#quicksettings div span[data-testid="block-info"] {
+#quicksettings .quicksettings_row div span[data-testid="block-info"] {
     margin-bottom: 0.25em !important;
 }
 
-#quicksettings .icon-wrap {
+#quicksettings .quicksettings_row .icon-wrap {
     margin-right: -1em !important;
     background: none;
 }
 
-#quicksettings>div.gradio-dropdown input {
+#quicksettings .quicksettings_row>div.gradio-dropdown input {
     cursor: pointer;
     padding-right: 1em;
 }
 
-#quicksettings>div.model_selection ul {
+#quicksettings .quicksettings_row>div.model_selection ul {
     border: var(--input-border-width) solid var(--input-border-color);
     border-radius: var(--input-radius);
     padding: 0 0.5em;
 }
 
-#quicksettings>div.model_selection li {
+#quicksettings .quicksettings_row>div.model_selection li {
     overflow-x: visible !important;
     width: 100% !important;
     border-radius: 0 !important;
 }
 
-#quicksettings .gradio-slider {
+#quicksettings .quicksettings_row .gradio-slider {
     min-width: 10em !important;
     margin-top: 1em;
 }
 
-#quicksettings .gradio-slider span {
+#quicksettings .quicksettings_row .gradio-slider span {
     margin-right: 1em;
 }
 
-#quicksettings .gradio-slider input[type="range"] {
+#quicksettings .quicksettings_row .gradio-slider input[type="range"] {
     width: 100%;
 }
 
-#quicksettings .gradio-checkbox {
+#quicksettings .quicksettings_row .gradio-checkbox {
     margin-top: 2em;
 }
 
 #forge_ui_preset input {
-    width: 5em;
+    width: 12em;
 }
 
 #setting_sd_model_checkpoint input {
-    width: 20vw;
+    width: 24vw;
 }
 
 #setting_sd_modules input {
@@ -737,7 +737,6 @@ table.popup-table .link {
     color: white;
     font-weight: bold;
     line-height: 20px;
-    padding: 0 8px 0 0;
     text-align: right;
     border-radius: 3px;
     overflow: visible;
