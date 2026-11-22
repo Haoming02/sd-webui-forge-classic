@@ -21,9 +21,6 @@ class Token:
 
     anima = os.path.join(folder, "circlestone-labs", "Anima", "tokenizer", "tokenizer.json")
 
-    ernie_compress = os.path.join(folder, "ernie.tokenizer.json.xz")
-    ernie = os.path.join(folder, "baidu", "ERNIE-Image", "tokenizer", "tokenizer.json")
-
     moss_compress = os.path.join(folder, "moss.tokenizer.json.xz")
     moss = os.path.join(folder, "OpenMOSS-Team", "MOSS-Image-SFT", "tokenizer", "tokenizer.json")
 
@@ -40,9 +37,6 @@ class sha256:
 
     f2 = "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
     # https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/blob/main/tokenizer/tokenizer.json
-
-    ernie = "577575622324b2e099e2648be26bdeb5e5815ffe66d7004e9e3ddbf421db6bf1"
-    # https://huggingface.co/baidu/ERNIE-Image/blob/main/tokenizer/tokenizer.json
 
     moss = "0a04a9fd30a9fd98e9ce0328986f698c66329c3e4367bed61586f2be0a9b2bec"
     # https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT/blob/main/tokenizer/tokenizer.json
@@ -89,9 +83,6 @@ def process():
     if not os.path.isfile(Token.anima):
         decompress(Token.z_compress, Token.anima)
         compare_sha256(Token.anima, sha256.f2)
-    if not os.path.isfile(Token.ernie):
-        decompress(Token.ernie_compress, Token.ernie)
-        compare_sha256(Token.ernie, sha256.ernie)
     if not os.path.isfile(Token.moss):
         decompress(Token.moss_compress, Token.moss)
         compare_sha256(Token.moss, sha256.moss)
@@ -103,8 +94,6 @@ def process():
     #     compress(Token.neta_lumina, Token.neta_compress)
     # if not os.path.isfile(Token.z_compress):
     #     compress(Token.z_image, Token.z_compress)
-    # if not os.path.isfile(Token.ernie_compress):
-    #     compress(Token.ernie, Token.ernie_compress)
 
 
 def compare_sha256(path: str, target: str):
