@@ -1,4 +1,15 @@
+import json
+import logging
+import os
+from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
+
+from backend.logging import setup_logger
+from modules.paths_internal import presets_dir
+
+logger = logging.getLogger("presets")
+setup_logger(logger)
 
 
 class PresetArch(Enum):
@@ -21,240 +32,97 @@ class PresetArch(Enum):
         return [preset.name for preset in PresetArch]
 
 
-SAMPLERS = {
-    PresetArch.sd: "Euler a",
-    PresetArch.xl: "Euler a",
-    PresetArch.flux: "Euler",
-    PresetArch.klein: "Euler",
-    PresetArch.qwen: "LCM",
-    PresetArch.lumina: "Res Multistep",
-    PresetArch.zit: "Euler",
-    PresetArch.wan: "Euler",
-    PresetArch.anima: "ER SDE",
-    PresetArch.pid: "LCM",
-    PresetArch.krea: "Euler",
-    PresetArch.qwen21: "Euler",
-    PresetArch.moss: "Euler",
-}
-
-SCHEDULERS = {
-    PresetArch.sd: "Automatic",
-    PresetArch.xl: "Automatic",
-    PresetArch.flux: "Beta",
-    PresetArch.klein: "Beta",
-    PresetArch.qwen: "Normal",
-    PresetArch.lumina: "Simple",
-    PresetArch.zit: "Beta",
-    PresetArch.wan: "Simple",
-    PresetArch.anima: "Beta",
-    PresetArch.pid: "Simple",
-    PresetArch.krea: "Simple",
-    PresetArch.qwen21: "Simple",
-    PresetArch.moss: "Simple",
-}
-
-STEPS = {
-    PresetArch.sd: 32,
-    PresetArch.xl: 24,
-    PresetArch.flux: 20,
-    PresetArch.klein: 4,
-    PresetArch.qwen: 8,
-    PresetArch.lumina: 32,
-    PresetArch.zit: 9,
-    PresetArch.wan: 4,
-    PresetArch.anima: 32,
-    PresetArch.pid: 4,
-    PresetArch.krea: 8,
-    PresetArch.qwen21: 32,
-    PresetArch.moss: 50,
-}
-
-CFG = {
-    PresetArch.sd: 6.0,
-    PresetArch.xl: 4.5,
-    PresetArch.flux: 1.0,
-    PresetArch.klein: 1.0,
-    PresetArch.qwen: 1.0,
-    PresetArch.lumina: 4.0,
-    PresetArch.zit: 1.0,
-    PresetArch.wan: 1.0,
-    PresetArch.anima: 4.0,
-    PresetArch.pid: 1.0,
-    PresetArch.krea: 1.0,
-    PresetArch.qwen21: 2.5,
-    PresetArch.moss: 3.0,
-}
-
-DISTILL = {
-    PresetArch.flux: 3.0,
-}
-
-SHIFT = {
-    PresetArch.xl: -9.0,
-    PresetArch.lumina: 6.0,
-    PresetArch.zit: 9.0,
-    PresetArch.wan: 5.0,
-    PresetArch.anima: 3.0,
-    PresetArch.pid: -1.5,
-    PresetArch.krea: -1.15,
-    PresetArch.moss: 5.0,
-}
-
-FRAMES = {
-    PresetArch.wan.name: 16,
-}
+@dataclass
+class Sampling:
+    sampler: Optional[str] = None
+    scheduler: Optional[str] = None
+    step: Optional[int] = None
+    cfg: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    batch_size: Optional[int] = None
+    dcfg: Optional[float] = None
+    shift: Optional[float] = None
 
 
-def use_distill(arch: str) -> bool:
-    return arch in [preset.name for preset in DISTILL.keys()]
+@dataclass
+class Preset:
+    name: str
+    arch: str
+    t2i: Sampling
+    hr: Sampling
+    i2i: Sampling
+    distill: Optional[bool] = False
+    shift: Optional[bool] = False
+    fps: int = 0
+
+    def __post_init__(self):
+        for field in ("t2i", "hr", "i2i"):
+            value = getattr(self, field)
+            if isinstance(value, dict):
+                setattr(self, field, Sampling(**value))
 
 
-def use_shift(arch: str) -> bool:
-    return arch in [preset.name for preset in SHIFT.keys()]
+def use_distill(preset: "Preset", default: "Preset") -> bool:
+    return bool(preset.distill if preset.distill is not None else default.distill)
 
 
-def is_video(arch: str) -> int:
-    return FRAMES.get(arch, 1)
+def use_shift(preset: "Preset", default: "Preset") -> bool:
+    return bool(preset.shift if preset.shift is not None else default.shift)
 
 
-def register(options_templates: dict):
-    from gradio import Dropdown, Slider
+def is_video(preset: "Preset", default: "Preset") -> int:
+    return int(preset.fps or default.fps or 1)
 
-    from modules.options import OptionInfo, OptionRow, options_section
-    from modules.shared_items import list_samplers, list_schedulers
-    from modules.shared import cmd_opts
 
-    for arch in PresetArch:
-        name = arch.name
+def load_presets(disabled: set[str]) -> tuple[dict[str, "Preset"], dict[str, "Preset"]]:
+    builtin = os.path.join(presets_dir, "builtin.json")
+    assert os.path.isfile(builtin)
 
-        if name in cmd_opts.disable_preset:
+    with open(builtin, "r") as f:
+        builtin_presets: list[dict] = json.load(f)
+
+    assert len(builtin_presets) == len(PresetArch)
+    assert {p["arch"] for p in builtin_presets} == set(PresetArch.choices())
+
+    all_presets: dict[str, "Preset"] = dict()
+    _loaded: set[str] = set()
+
+    def register_preset(preset: dict[str, str | int | float]):
+        assert isinstance(preset, dict)
+        arch = preset["arch"].strip()
+        assert arch in PresetArch.choices()
+        name = preset["name"].strip()
+        assert name not in _loaded
+        if arch not in disabled:
+            all_presets[name] = Preset(**preset)
+            _loaded.add(name)
+
+    for preset in builtin_presets:
+        try:
+            register_preset(preset)
+        except Exception as e:
+            logger.error(e)
+            raise SystemExit
+
+    defaults: dict[str, "Preset"] = {p.arch: p for p in all_presets.values()}
+
+    for path in os.listdir(presets_dir):
+        if not path.endswith(".json"):
+            continue
+        if path == "builtin.json":
             continue
 
-        options_templates.update(
-            options_section(
-                (None, "Forge Hidden Options"),
-                {
-                    f"forge_checkpoint_{name}": OptionInfo(None),
-                    f"forge_additional_modules_{name}": OptionInfo([]),
-                    f"forge_unet_storage_dtype_{name}": OptionInfo("Automatic"),
-                },
-            )
-        )
+        with open(os.path.join(presets_dir, path), "r") as f:
+            _presets = json.load(f)
+            if isinstance(_presets, dict):
+                _presets = [_presets]
 
-        sampler, scheduler = SAMPLERS[arch], SCHEDULERS[arch]
+        for _preset in _presets:
+            try:
+                register_preset(_preset)
+            except Exception as e:
+                logger.error(e)
 
-        options_templates.update(
-            options_section(
-                (f"ui_{name}", name.upper(), "presets"),
-                {
-                    f"{name}_t2i_ss1": OptionRow(),
-                    f"{name}_t2i_sampler": OptionInfo(sampler, "txt2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()], "allow_custom_value": True}),
-                    f"{name}_t2i_scheduler": OptionInfo(scheduler, "txt2img Scheduler", Dropdown, lambda: {"choices": list_schedulers(), "allow_custom_value": True}),
-                    f"{name}_t2i_ss0": OptionRow(),
-                    f"{name}_i2i_ss1": OptionRow(),
-                    f"{name}_i2i_sampler": OptionInfo(sampler, "img2img Sampler", Dropdown, lambda: {"choices": [x.name for x in list_samplers()], "allow_custom_value": True}),
-                    f"{name}_i2i_scheduler": OptionInfo(scheduler, "img2img Scheduler", Dropdown, lambda: {"choices": list_schedulers(), "allow_custom_value": True}),
-                    f"{name}_i2i_ss0": OptionRow(),
-                },
-            )
-        )
-
-        step = STEPS[arch]
-
-        options_templates.update(
-            options_section(
-                (f"ui_{name}", name.upper(), "presets"),
-                {
-                    f"{name}_steps1": OptionRow(),
-                    f"{name}_t2i_step": OptionInfo(step, "txt2img Steps", Slider, {"minimum": 0, "maximum": 150, "step": 1}),
-                    f"{name}_t2i_hr_step": OptionInfo(step, "txt2img Hires. Steps", Slider, {"minimum": 0, "maximum": 150, "step": 1}),
-                    f"{name}_i2i_step": OptionInfo(step, "img2img Steps", Slider, {"minimum": 0, "maximum": 150, "step": 1}),
-                    f"{name}_steps0": OptionRow(),
-                },
-            )
-        )
-
-        cfg = CFG[arch]
-
-        options_templates.update(
-            options_section(
-                (f"ui_{name}", name.upper(), "presets"),
-                {
-                    f"{name}_cfg1": OptionRow(),
-                    f"{name}_t2i_cfg": OptionInfo(cfg, "txt2img CFG", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
-                    f"{name}_t2i_hr_cfg": OptionInfo(cfg, "txt2img Hires. CFG", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
-                    f"{name}_i2i_cfg": OptionInfo(cfg, "img2img CFG", Slider, {"minimum": 0, "maximum": 24, "step": 0.5}),
-                    f"{name}_cfg0": OptionRow(),
-                },
-            )
-        )
-
-        if (distill := DISTILL.get(arch, None)) is not None:
-            options_templates.update(
-                options_section(
-                    (f"ui_{name}", name.upper(), "presets"),
-                    {
-                        f"{name}_dcfg1": OptionRow(),
-                        f"{name}_t2i_dcfg": OptionInfo(distill, "txt2img Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_t2i_hr_dcfg": OptionInfo(distill, "txt2img Hires. Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_i2i_dcfg": OptionInfo(distill, "img2img Distilled CFG", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_dcfg0": OptionRow(),
-                    },
-                )
-            )
-
-        if (shift := SHIFT.get(arch, None)) is not None:
-            options_templates.update(
-                options_section(
-                    (f"ui_{name}", name.upper(), "presets"),
-                    {
-                        f"{name}_show_shift": OptionInfo((shift > 0.0), "Display Shift Slider"),
-                        f"{name}_dcfg1": OptionRow(),
-                        f"{name}_t2i_dcfg": OptionInfo(abs(shift), "txt2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_t2i_hr_dcfg": OptionInfo(abs(shift), "txt2img Hires. Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_i2i_dcfg": OptionInfo(abs(shift), "img2img Shift", Slider, {"minimum": 1, "maximum": 24, "step": 0.5}),
-                        f"{name}_dcfg0": OptionRow(),
-                    },
-                )
-            )
-
-        if (fps := FRAMES.get(arch.name, 1)) > 1:
-            options_templates.update(
-                options_section(
-                    (f"ui_{name}", name.upper(), "presets"),
-                    {
-                        f"{name}_batch1": OptionRow(),
-                        f"{name}_t2i_batch_size": OptionInfo(1, "txt2img Frames", Slider, {"minimum": 1, "maximum": fps * 15 + 1, "step": fps}),
-                        f"{name}_i2i_batch_size": OptionInfo(1, "img2img Frames", Slider, {"minimum": 1, "maximum": fps * 15 + 1, "step": fps}),
-                        f"{name}_batch0": OptionRow(),
-                    },
-                )
-            )
-        else:
-            options_templates.update(
-                options_section(
-                    (f"ui_{name}", name.upper(), "presets"),
-                    {
-                        f"{name}_batch1": OptionRow(),
-                        f"{name}_t2i_batch_size": OptionInfo(1, "txt2img Batch Size", Slider, {"minimum": 1, "maximum": 8, "step": 1}),
-                        f"{name}_i2i_batch_size": OptionInfo(1, "img2img Batch Size", Slider, {"minimum": 1, "maximum": 8, "step": 1}),
-                        f"{name}_batch0": OptionRow(),
-                    },
-                )
-            )
-
-        options_templates.update(
-            options_section(
-                (f"ui_{name}", name.upper(), "presets"),
-                {
-                    f"{name}_t2i_dim1": OptionRow(),
-                    f"{name}_t2i_width": OptionInfo(0, "txt2img Width", Slider, {"minimum": 0, "maximum": 2048, "step": 64}),
-                    f"{name}_i2i_width": OptionInfo(0, "img2img Width", Slider, {"minimum": 0, "maximum": 2048, "step": 64}),
-                    f"{name}_t2i_dim0": OptionRow(),
-                    f"{name}_i2i_dim1": OptionRow(),
-                    f"{name}_t2i_height": OptionInfo(0, "txt2img Height", Slider, {"minimum": 0, "maximum": 2048, "step": 64}),
-                    f"{name}_i2i_height": OptionInfo(0, "img2img Height", Slider, {"minimum": 0, "maximum": 2048, "step": 64}),
-                    f"{name}_i2i_dim0": OptionRow(),
-                },
-            )
-        )
+    logger.info(f"Loaded {len(all_presets)} Presets")
+    return defaults, all_presets

@@ -3,11 +3,24 @@ import os
 import gradio as gr
 
 from backend.text_processing import emphasis as sd_emphasis
-from modules import localization, shared, shared_gradio_themes, shared_items, ui_components, util
-from modules.options import OptionDiv, OptionHTML, OptionInfo, OptionRow, categories, options_section
+from modules import (
+    localization,
+    shared,
+    shared_gradio_themes,
+    shared_items,
+    ui_components,
+    util,
+)
+from modules.options import (
+    OptionDiv,
+    OptionHTML,
+    OptionInfo,
+    OptionRow,
+    categories,
+    options_section,
+)
 from modules.paths_internal import data_path, default_output_dir
 from modules.shared_cmd_options import cmd_opts
-from modules_forge import presets as forge_presets
 from modules_forge import shared_options as forge_shared_options
 
 options_templates = {}
@@ -31,7 +44,6 @@ restricted_opts = {
 categories.register_category("saving", "Saving")
 categories.register_category("sd", "Stable Diffusion")
 categories.register_category("ui", "User Interface")
-categories.register_category("presets", "Presets")
 categories.register_category("system", "System")
 categories.register_category("postprocessing", "Postprocessing")
 categories.register_category("svdq", "Nunchaku")
@@ -610,4 +622,3 @@ options_templates.update(
 )
 
 forge_shared_options.register(options_templates, options_section, OptionInfo)
-forge_presets.register(options_templates)

@@ -26,8 +26,9 @@ data_path = cmd_opts_pre.data_dir
 
 models_path = cmd_opts_pre.model_ref or os.path.join(data_path, "models")
 extensions_dir = os.path.join(data_path, "extensions")
+default_output_dir = os.path.join(data_path, "output")
 extensions_builtin_dir = os.path.join(script_path, "extensions-builtin")
 config_states_dir = os.path.join(script_path, "config_states")
-default_output_dir = os.path.join(data_path, "output")
+presets_dir = os.path.join(script_path, "presets")
 
 roboto_ttf_file = os.path.join(modules_path, "Roboto-Regular.ttf")

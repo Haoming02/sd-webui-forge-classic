@@ -19,15 +19,18 @@ from modules import (
     shared_items,
     ui_common,
 )
-from modules_forge.presets import PresetArch, is_video, use_distill, use_shift
+from modules_forge.presets import Preset, is_video, load_presets, use_distill, use_shift
 
 logger = logging.getLogger("ui_models")
 setup_logger(logger)
 
-ui_forge_preset: gr.Radio
+DEFAULTS: dict[str, Preset] = {}
+ALL_PRESETS: dict[str, Preset] = {}
+
+ui_forge_preset: gr.Dropdown
 ui_checkpoint: gr.Dropdown
 ui_vae: gr.Dropdown
-ui_forge_unet_dtype: gr.Radio
+ui_forge_unet_dtype: gr.Dropdown
 _event_refresh: Dependency
 
 forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
@@ -46,6 +49,7 @@ module_map: OrderedDict[str, str] = OrderedDict()
 
 def make_checkpoint_manager_ui():
     global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype, _event_refresh
+    global DEFAULTS, ALL_PRESETS
 
     if shared.opts.sd_model_checkpoint in [None, "None", "none", ""]:
         if len(sd_models.checkpoints_list) == 0:
@@ -53,11 +57,14 @@ def make_checkpoint_manager_ui():
         if len(sd_models.checkpoints_list) > 0:
             shared.opts.set("sd_model_checkpoint", next(iter(sd_models.checkpoints_list.values())).name)
 
-    def preset_choices():
-        presets = [p for p in PresetArch.choices() if p not in shared.cmd_opts.disable_preset]
-        return sorted(presets) if shared.cmd_opts.sort_preset else presets
+    DEFAULTS, ALL_PRESETS = load_presets(set(shared.cmd_opts.disable_preset))
+    if not ALL_PRESETS:
+        raise ValueError("No Preset is Available...")
 
-    ui_forge_preset = gr.Dropdown(label="UI Preset", value=shared.opts.forge_preset, choices=preset_choices(), elem_id="forge_ui_preset")
+    choices: list[str] = sorted(ALL_PRESETS) if shared.cmd_opts.sort_preset else list(ALL_PRESETS)
+    selected: str = next((p for p in choices if p == shared.opts.forge_preset), choices[0])
+
+    ui_forge_preset = gr.Dropdown(label="UI Preset", value=selected, choices=choices, elem_id="forge_ui_preset")
 
     ui_checkpoint = gr.Dropdown(label="Checkpoint", value=None, choices=None, elem_id="setting_sd_model_checkpoint", elem_classes=["model_selection"])
 
@@ -163,6 +170,13 @@ def refresh_model_loading_parameters(*, refresh: bool = True, disable_log: bool 
     processing.need_global_unload = True
 
 
+def _save_models_to_preset(preset: str, key: str, value: str | list[str]):
+    preset_models: dict = shared.opts.data.get("forge_preset_models", {})
+    models: dict = preset_models.setdefault(preset, {})
+    models.update({key: value})
+    shared.opts.set("forge_preset_models", preset_models)
+
+
 def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> bool:
     """`ckpt_name` accepts valid aliases; returns `True` if checkpoint changed"""
     new_ckpt_info = sd_models.get_closet_checkpoint_match(ckpt_name)
@@ -172,7 +186,7 @@ def checkpoint_change(ckpt_name: str, preset: str, save=True, refresh=True) -> b
 
     shared.opts.set("sd_model_checkpoint", ckpt_name)
     if preset is not None:
-        shared.opts.set(f"forge_checkpoint_{preset}", ckpt_name)
+        _save_models_to_preset(preset, "checkpoint", ckpt_name)
 
     if save:
         shared.opts.save(shared.config_filename)
@@ -195,7 +209,7 @@ def modules_change(module_values: list, preset: str, save=True, refresh=True) ->
 
     shared.opts.set("forge_additional_modules", modules)
     if preset is not None:
-        shared.opts.set(f"forge_additional_modules_{preset}", modules)
+        _save_models_to_preset(preset, "modules", modules)
 
     if save:
         shared.opts.save(shared.config_filename)
@@ -206,7 +220,7 @@ def modules_change(module_values: list, preset: str, save=True, refresh=True) ->
 def dtype_change(dtype: str, preset: str, save=True, refresh=True) -> bool:
     shared.opts.set("forge_unet_storage_dtype", dtype)
     if preset is not None:
-        shared.opts.set(f"forge_unet_storage_dtype_{preset}", dtype)
+        _save_models_to_preset(preset, "dtype", dtype)
 
     if save:
         shared.opts.save(shared.config_filename)
@@ -287,60 +301,84 @@ def forge_main_entry():
 def _load_presets(ui_checkpoint: str, ui_vae: list[str], ui_forge_unet_dtype: str, ui_forge_preset: str):
     dtype_change(ui_forge_unet_dtype, ui_forge_preset, save=False, refresh=False)
     modules_change(ui_vae, ui_forge_preset, save=False, refresh=False)
-    checkpoint_change(ui_checkpoint, ui_forge_preset, save=True, refresh=True)
+    checkpoint_change(ui_checkpoint, ui_forge_preset, save=False, refresh=False)
+    shared.opts.save(shared.config_filename)
+    refresh_model_loading_parameters()
 
 
-def on_preset_change(preset: str):
-    assert preset is not None
-    shared.opts.set("forge_preset", preset)
+def _parse_value(preset: "Preset", default: "Preset", *, s: str, k: str):
+    v1, v2 = getattr(getattr(preset, s), k), getattr(getattr(default, s), k)
+    v: int | float = v1 if v1 is not None else v2
+    return gr.skip() if v is None or v <= 0 else gr.update(value=v)
+
+
+def _parse_cfg2(preset: "Preset", default: "Preset", *, s: str):
+    if use_distill(preset, default):
+        args = {"visible": True, "label": "Distilled CFG Scale"}
+        v1, v2 = getattr(preset, s).dcfg, getattr(default, s).dcfg
+    elif use_shift(preset, default):
+        args = {"visible": True, "label": "Shift"}
+        v1, v2 = getattr(preset, s).shift, getattr(default, s).shift
+    else:
+        return gr.update(visible=False)
+
+    v: float = v1 if v1 is not None else v2
+    val = {} if v is None or v <= 0 else {"value": v}
+    return gr.update(**val, **args)
+
+
+def on_preset_change(preset_name: str):
+    assert preset_name is not None
+    shared.opts.set("forge_preset", preset_name)
     shared.opts.save(shared.config_filename)
 
-    if use_shift(preset):
-        d_args = {"visible": getattr(shared.opts, f"{preset}_show_shift", True), "label": "Shift"}
-    elif use_distill(preset):
-        d_args = {"visible": True, "label": "Distilled CFG Scale"}
-    else:
-        d_args = {"visible": False}
+    preset: Preset = ALL_PRESETS[preset_name]
+    default: Preset = DEFAULTS[preset.arch]
 
-    if (fps := is_video(preset)) > 1:
-        batch_args_t2i = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": getattr(shared.opts, f"{preset}_t2i_batch_size", 1)}
+    models: dict[str, str | list[str]] = shared.opts.forge_preset_models.get(preset.name, {})
+    checkpoint = models.get("checkpoint", shared.opts.sd_model_checkpoint)
+    modules = models.get("modules", [])
+    dtype = models.get("dtype", "Automatic")
+
+    if (fps := is_video(preset, default)) > 1:
+        batch_args_t2i = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": preset.t2i.batch_size or 1}
     else:
-        batch_args_t2i = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": getattr(shared.opts, f"{preset}_t2i_batch_size", 1)}
+        batch_args_t2i = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": preset.t2i.batch_size or 1}
 
     batch_args_i2i = batch_args_t2i.copy()
-    batch_args_i2i["value"] = getattr(shared.opts, f"{preset}_i2i_batch_size", 1)
+    batch_args_i2i["value"] = preset.i2i.batch_size or 1
 
-    modules_value = [os.path.basename(m) for m in getattr(shared.opts, f"forge_additional_modules_{preset}", [])]
+    modules_value = [os.path.basename(m) for m in modules]
     if not shared.opts.sd_modules_dropdown_use_short:
         modules_value = [module_map[m] for m in modules_value if m in module_map]
 
     return [
         # ui_checkpoint, ui_vae, ui_forge_unet_dtype
-        gr.update(value=getattr(shared.opts, f"forge_checkpoint_{preset}", shared.opts.sd_model_checkpoint)),
+        gr.update(value=checkpoint),
         gr.update(value=modules_value),
-        gr.update(value=getattr(shared.opts, f"forge_unet_storage_dtype_{preset}", "Automatic")),
+        gr.update(value=dtype),
         # ui_txt2img_steps, ui_txt2img_hr_steps, ui_img2img_steps
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_step", 20)) > 0 else gr.skip(),
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_hr_step", 20)) > 0 else gr.skip(),
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_step", 20)) > 0 else gr.skip(),
+        _parse_value(preset, default, s="t2i", k="step"),
+        _parse_value(preset, default, s="hr", k="step"),
+        _parse_value(preset, default, s="i2i", k="step"),
         # ui_txt2img_sampler, ui_img2img_sampler, ui_txt2img_scheduler, ui_img2img_scheduler
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_sampler", "Euler")),
-        gr.update(value=getattr(shared.opts, f"{preset}_i2i_sampler", "Euler")),
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_scheduler", "Simple")),
-        gr.update(value=getattr(shared.opts, f"{preset}_i2i_scheduler", "Simple")),
+        gr.update(value=preset.t2i.sampler or default.t2i.sampler),
+        gr.update(value=preset.i2i.sampler or default.i2i.sampler),
+        gr.update(value=preset.t2i.scheduler or default.t2i.scheduler),
+        gr.update(value=preset.i2i.scheduler or default.i2i.scheduler),
         # ui_txt2img_width, ui_img2img_width, ui_txt2img_height, ui_img2img_height
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_width", 1024)) > 0 else gr.skip(),
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_width", 1024)) > 0 else gr.skip(),
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_height", 1024)) > 0 else gr.skip(),
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_height", 1024)) > 0 else gr.skip(),
+        _parse_value(preset, default, s="t2i", k="width"),
+        _parse_value(preset, default, s="i2i", k="width"),
+        _parse_value(preset, default, s="t2i", k="height"),
+        _parse_value(preset, default, s="i2i", k="height"),
         # ui_txt2img_cfg, ui_txt2img_hr_cfg, ui_img2img_cfg
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_cfg", 1.0)) > 0 else gr.skip(),
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_t2i_hr_cfg", 1.0)) > 0 else gr.skip(),
-        gr.update(value=v) if (v := getattr(shared.opts, f"{preset}_i2i_cfg", 1.0)) > 0 else gr.skip(),
-        # ui_txt2img_distilled_cfg, ui_img2img_distilled_cfg, ui_txt2img_hr_distilled_cfg
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_dcfg", 3.0), **d_args),
-        gr.update(value=getattr(shared.opts, f"{preset}_t2i_hr_dcfg", 3.0), **d_args),
-        gr.update(value=getattr(shared.opts, f"{preset}_i2i_dcfg", 3.0), **d_args),
+        _parse_value(preset, default, s="t2i", k="cfg"),
+        _parse_value(preset, default, s="hr", k="cfg"),
+        _parse_value(preset, default, s="i2i", k="cfg"),
+        # ui_txt2img_distilled_cfg, ui_txt2img_hr_distilled_cfg, ui_img2img_distilled_cfg
+        _parse_cfg2(preset, default, s="t2i"),
+        _parse_cfg2(preset, default, s="hr"),
+        _parse_cfg2(preset, default, s="i2i"),
         # ui_txt2img_batch_size, ui_img2img_batch_size
         gr.update(**batch_args_t2i),
         gr.update(**batch_args_i2i),
