@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
@@ -49,18 +49,18 @@ class Sampling:
 class Preset:
     name: str
     arch: str
-    t2i: Sampling
-    hr: Sampling
-    i2i: Sampling
-    distill: Optional[bool] = False
-    shift: Optional[bool] = False
+    t2i: Sampling = field(default_factory=Sampling)
+    hr: Sampling = field(default_factory=Sampling)
+    i2i: Sampling = field(default_factory=Sampling)
+    distill: Optional[bool] = None
+    shift: Optional[bool] = None
     fps: int = 0
 
     def __post_init__(self):
-        for field in ("t2i", "hr", "i2i"):
-            value = getattr(self, field)
+        for name in ("t2i", "hr", "i2i"):
+            value = getattr(self, name)
             if isinstance(value, dict):
-                setattr(self, field, Sampling(**value))
+                setattr(self, name, Sampling(**value))
 
 
 def use_distill(preset: "Preset", default: "Preset") -> bool:

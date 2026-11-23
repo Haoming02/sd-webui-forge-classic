@@ -32,6 +32,7 @@ ui_checkpoint: gr.Dropdown
 ui_vae: gr.Dropdown
 ui_forge_unet_dtype: gr.Dropdown
 _event_refresh: Dependency
+_event_load: Dependency
 
 forge_unet_storage_dtype_options: dict[str, tuple[torch.dtype, bool]] = {
     "Automatic": (None, False),
@@ -48,7 +49,7 @@ module_map: OrderedDict[str, str] = OrderedDict()
 
 
 def make_checkpoint_manager_ui():
-    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype, _event_refresh
+    global ui_forge_preset, ui_checkpoint, ui_vae, ui_forge_unet_dtype, _event_refresh, _event_load
     global DEFAULTS, ALL_PRESETS
 
     if shared.opts.sd_model_checkpoint in [None, "None", "none", ""]:
@@ -76,7 +77,7 @@ def make_checkpoint_manager_ui():
 
     refresh_button = ui_common.ToolButton(value=ui_common.refresh_symbol, elem_id="forge_refresh_checkpoint", tooltip="Refresh")
     _event_refresh = refresh_button.click(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
-    Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
+    _event_load = Context.root_block.load(fn=refresh_model_list, outputs=[ui_checkpoint, ui_vae], queue=False)
 
     ui_forge_unet_dtype = gr.Dropdown(label="Diffusion in Low Bits", value=None, choices=list(forge_unet_storage_dtype_options.keys()), elem_id="forge_ui_dtype")
 
@@ -292,7 +293,7 @@ def forge_main_entry():
         queue=False,
         show_progress=False,
     ).then(js="clickLoraRefresh", fn=None, queue=False, show_progress=False)
-    Context.root_block.load(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False)
+    _event_load.then(on_preset_change, inputs=[ui_forge_preset], outputs=output_targets, queue=False, show_progress=False)
 
     refresh_model_loading_parameters()
     _refreshed_callback()
@@ -341,12 +342,12 @@ def on_preset_change(preset_name: str):
     dtype = models.get("dtype", "Automatic")
 
     if (fps := is_video(preset, default)) > 1:
-        batch_args_t2i = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": preset.t2i.batch_size or 1}
+        batch_args_t2i = {"minimum": 1, "maximum": fps * 15 + 1, "step": fps, "label": "Frames", "value": preset.t2i.batch_size or default.t2i.batch_size or 1}
     else:
-        batch_args_t2i = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": preset.t2i.batch_size or 1}
+        batch_args_t2i = {"minimum": 1, "maximum": 8, "step": 1, "label": "Batch Size", "value": preset.t2i.batch_size or default.t2i.batch_size or 1}
 
     batch_args_i2i = batch_args_t2i.copy()
-    batch_args_i2i["value"] = preset.i2i.batch_size or 1
+    batch_args_i2i["value"] = preset.i2i.batch_size or default.i2i.batch_size or 1
 
     modules_value = [os.path.basename(m) for m in modules]
     if not shared.opts.sd_modules_dropdown_use_short:
