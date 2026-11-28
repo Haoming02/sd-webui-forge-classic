@@ -124,7 +124,7 @@ def check_updates(id_task, disable_list):
             shared.state.textinfo = ext.name
             shared.state.nextjob()
 
-    with ThreadPoolExecutor(max_workers=int(os.cpu_count() / 2)) as executor:
+    with ThreadPoolExecutor(max_workers=max(1, (os.cpu_count() or 1) // 2)) as executor:
         [executor.submit(_check_update, ext) for ext in exts]
 
     return extension_table(), ""
